@@ -1,0 +1,55 @@
+# =============================================================================
+# .htaccess para Hostinger (clonado desde GitHub a public_html/)
+#
+# Este repo es el ERP (Next.js). El sitio publico estatico vive en
+# /public/web/. Para que joyeriaartesanos.com/ sirva la landing sin
+# que se vean los archivos del ERP, reescribimos todo silenciosamente
+# a /public/web/ y bloqueamos lo que no debe verse.
+# =============================================================================
+
+Options -Indexes
+
+# --- 1. Bloquear directorios sensibles del repo --------------------------------
+RedirectMatch 404 ^/(src|scripts|supabase|docs|public/brand|public/sorteos-ticket-fonts|node_modules|\.next|\.claude|\.cursor|\.git)(/|$)
+
+# --- 2. Bloquear archivos sensibles -------------------------------------------
+<FilesMatch "^\.">
+  Require all denied
+</FilesMatch>
+<FilesMatch "^(package(-lock)?\.json|tsconfig\.json|next\.config\.(ts|js|mjs)|postcss\.config\.(mjs|js)|eslint\.config\.mjs|README\.md|DOCUMENTACION_TECNICA\.md|.*\.(ts|tsx|cjs|map))$">
+  Require all denied
+</FilesMatch>
+
+# --- 3. Servir el sitio estatico desde /public/web/ silenciosamente -----------
+RewriteEngine On
+RewriteBase /
+
+# Caso especial: raiz -> landing (silencioso, sin cambiar URL).
+# Apache NO decodifica %20 al hacer rewrite — hay que usar espacios literales
+# entre comillas para que matchee el nombre real del archivo en disco.
+RewriteRule ^$ "public/web/Joyeria Artesanos v2.dc.html" [L]
+
+# Pretty URLs
+RewriteRule ^privacidad/?$ public/web/privacidad.html [L]
+RewriteRule ^catalogo/?$ public/web/catalogo.html [L]
+
+# Si ya viene a /public/web/, dejar pasar (evita loop)
+RewriteRule ^public/web/ - [L]
+
+# Cualquier otro request: si existe en /public/web/, servirlo silenciosamente
+RewriteCond %{DOCUMENT_ROOT}/public/web/$1 -f
+RewriteRule ^(.+)$ public/web/$1 [L]
+
+# --- 4. Cache control para assets ---------------------------------------------
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresByType image/jpeg "access plus 30 days"
+  ExpiresByType image/png  "access plus 30 days"
+  ExpiresByType image/webp "access plus 30 days"
+  ExpiresByType image/svg+xml "access plus 30 days"
+  ExpiresByType font/woff2 "access plus 365 days"
+  ExpiresByType font/woff  "access plus 365 days"
+  ExpiresByType text/css   "access plus 7 days"
+  ExpiresByType application/javascript "access plus 7 days"
+  ExpiresByType text/html  "access plus 1 hour"
+</IfModule>
