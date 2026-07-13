@@ -303,12 +303,17 @@ export async function createVentaTransaccionalPg(
     const ventaId = insVenta.rows[0].id;
 
     // Descontar crédito del cliente (modelo Pronim consignación).
+    // 1) Registrar el asiento SALIDA.
+    // 2) Distribuir FIFO entre las ENTRADAs vivas del cliente y guardar
+    //    las asignaciones en cliente_creditos_consumos (ledger por lote).
     if (creditoUsado > 0) {
-      await client.query(
+      const consumosT = qTable(params.schema, "cliente_creditos_consumos");
+      const salidaIns = await client.query<{ id: string }>(
         `INSERT INTO ${creditosT} (
            empresa_id, cliente_id, tipo, monto, origen, referencia_id,
            referencia_tipo, referencia_numero, observaciones
-         ) VALUES ($1, $2, 'SALIDA', $3, 'venta', $4, 'venta', $5, $6)`,
+         ) VALUES ($1, $2, 'SALIDA', $3, 'venta', $4, 'venta', $5, $6)
+         RETURNING id`,
         [
           params.empresaId,
           params.clienteId,
@@ -318,6 +323,46 @@ export async function createVentaTransaccionalPg(
           "Aplicado como pago en venta " + numeroControl,
         ],
       );
+      const salidaId = salidaIns.rows[0].id;
+
+      // FIFO: traer ENTRADAs vivas ordenadas ASC por fecha,
+      // con FOR UPDATE para bloquear cambios concurrentes.
+      const lotesQ = await client.query<{ id: string; saldo: string }>(
+        `SELECT e.id,
+                (e.monto - COALESCE((
+                   SELECT SUM(c.monto_aplicado)
+                   FROM ${consumosT} c
+                   WHERE c.entrada_id = e.id
+                 ), 0))::text AS saldo
+         FROM ${creditosT} e
+         WHERE e.empresa_id = $1
+           AND e.cliente_id = $2
+           AND e.tipo IN ('ENTRADA','AJUSTE')
+         ORDER BY e.fecha ASC, e.created_at ASC
+         FOR UPDATE`,
+        [params.empresaId, params.clienteId],
+      );
+
+      let restante = creditoUsado;
+      for (const lote of lotesQ.rows) {
+        if (restante <= 0) break;
+        const saldo = Number(lote.saldo);
+        if (saldo <= 0) continue;
+        const aplicar = Math.min(saldo, restante);
+        await client.query(
+          `INSERT INTO ${consumosT}
+             (empresa_id, entrada_id, salida_id, monto_aplicado)
+           VALUES ($1, $2, $3, $4)`,
+          [params.empresaId, lote.id, salidaId, aplicar],
+        );
+        restante -= aplicar;
+      }
+      if (restante > TOL) {
+        // No debería pasar (validamos saldo antes), pero por defensa:
+        throw new Error(
+          `No se pudo distribuir todo el crédito solicitado (faltan Gs. ${Math.round(restante)}).`,
+        );
+      }
     }
 
     for (const line of items) {

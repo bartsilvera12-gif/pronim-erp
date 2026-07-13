@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
@@ -51,6 +51,33 @@ type Nota = {
   created_at: string;
 };
 
+type LoteUso = {
+  fecha: string;
+  monto_aplicado: number;
+  referencia_numero: string | null;
+  origen_salida: string;
+};
+
+type LoteCredito = {
+  entrada_id: string;
+  origen: string;
+  fecha_ingreso: string;
+  referencia_numero: string | null;
+  referencia_tipo: string | null;
+  observaciones: string | null;
+  monto_inicial: number;
+  monto_consumido: number;
+  saldo_restante: number;
+  usos: LoteUso[];
+};
+
+const ORIGEN_LABEL: Record<string, string> = {
+  recepcion: "Recepción de prendas",
+  venta: "Venta",
+  ajuste_manual: "Ajuste manual",
+  nota_credito: "Nota de crédito",
+};
+
 const TIPO_LABEL: Record<TimelineEvent["tipo"], { label: string; color: string }> = {
   venta: { label: "Venta", color: "bg-sky-100 text-sky-700" },
   pago: { label: "Pago", color: "bg-emerald-100 text-emerald-700" },
@@ -68,6 +95,8 @@ export default function ConsultasClientePage() {
   const [kpis, setKpis] = useState<KPIs | null>(null);
   const [timeline, setTimeline] = useState<TimelineEvent[]>([]);
   const [notas, setNotas] = useState<Nota[]>([]);
+  const [lotes, setLotes] = useState<LoteCredito[]>([]);
+  const [loteAbierto, setLoteAbierto] = useState<string | null>(null);
   const [nuevaNota, setNuevaNota] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -78,10 +107,11 @@ export default function ConsultasClientePage() {
   const cargar = useCallback(async () => {
     setError(null);
     try {
-      const [rConsultas, rNotas, rRol] = await Promise.all([
+      const [rConsultas, rNotas, rRol, rLotes] = await Promise.all([
         fetchWithSupabaseSession(`/api/clientes/${clienteId}/consultas`, { cache: "no-store" }),
         fetchWithSupabaseSession(`/api/clientes/${clienteId}/notas`, { cache: "no-store" }),
         fetchWithSupabaseSession(`/api/me/rol`, { cache: "no-store" }),
+        fetchWithSupabaseSession(`/api/clientes/${clienteId}/creditos/lotes`, { cache: "no-store" }),
       ]);
       const jc = await rConsultas.json();
       if (!rConsultas.ok || !jc.success) throw new Error(jc?.error ?? "Error consultas");
@@ -91,6 +121,8 @@ export default function ConsultasClientePage() {
       if (rNotas.ok && jn.success) setNotas(jn.data.notas ?? []);
       const jr = await rRol.json();
       if (rRol.ok && jr.success) setSoySuperAdmin(jr.data.isSuperAdmin === true);
+      const jl = await rLotes.json();
+      if (rLotes.ok && jl.success) setLotes(jl.data.lotes ?? []);
 
       // usuario actual (para saber quién puede borrar sus notas)
       const rMe = await fetchWithSupabaseSession(`/api/usuarios/me`, { cache: "no-store" });
@@ -232,6 +264,109 @@ export default function ConsultasClientePage() {
             value={formatGs(kpis.total_consignado_historico)}
             hint="prendas entregadas"
           />
+        </div>
+      )}
+
+      {lotes.length > 0 && (
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
+            Créditos por lote (FIFO)
+          </h2>
+          <p className="mb-3 text-xs text-slate-500">
+            Cada crédito ingresado se muestra por separado con su saldo actual.
+            Las ventas consumen los créditos más viejos primero.
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[720px] text-sm">
+              <thead>
+                <tr className="text-left text-[11px] uppercase tracking-wide text-slate-500">
+                  <th className="pb-2 pr-3">Origen</th>
+                  <th className="pb-2 pr-3">Fecha</th>
+                  <th className="pb-2 pr-3">Referencia</th>
+                  <th className="pb-2 pr-3 text-right">Monto inicial</th>
+                  <th className="pb-2 pr-3 text-right">Consumido</th>
+                  <th className="pb-2 pr-3 text-right">Saldo restante</th>
+                  <th className="pb-2"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {lotes.map((l) => {
+                  const abierto = loteAbierto === l.entrada_id;
+                  const agotado = l.saldo_restante <= 0;
+                  return (
+                    <Fragment key={l.entrada_id}>
+                      <tr
+                        className={`border-t border-slate-100 ${agotado ? "opacity-60" : ""}`}
+                      >
+                        <td className="py-2 pr-3">
+                          <span className="text-xs font-medium text-slate-700">
+                            {ORIGEN_LABEL[l.origen] ?? l.origen}
+                          </span>
+                        </td>
+                        <td className="py-2 pr-3 text-xs text-slate-600">
+                          {formatFecha(l.fecha_ingreso)}
+                        </td>
+                        <td className="py-2 pr-3 text-xs font-mono text-slate-500">
+                          {l.referencia_numero ?? "—"}
+                        </td>
+                        <td className="py-2 pr-3 text-right tabular-nums font-medium">
+                          {formatGs(l.monto_inicial)}
+                        </td>
+                        <td className="py-2 pr-3 text-right tabular-nums text-purple-700">
+                          {l.monto_consumido > 0 ? formatGs(l.monto_consumido) : "—"}
+                        </td>
+                        <td
+                          className={`py-2 pr-3 text-right tabular-nums font-semibold ${
+                            agotado ? "text-slate-400" : "text-emerald-700"
+                          }`}
+                        >
+                          {formatGs(l.saldo_restante)}
+                        </td>
+                        <td className="py-2 text-right">
+                          {l.usos.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setLoteAbierto(abierto ? null : l.entrada_id)}
+                              className="text-xs text-[#3F8E91] hover:underline"
+                            >
+                              {abierto ? "Ocultar usos" : `Ver ${l.usos.length} uso${l.usos.length === 1 ? "" : "s"}`}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                      {abierto && l.usos.length > 0 && (
+                        <tr>
+                          <td colSpan={7} className="bg-slate-50 px-3 pb-3 pt-1">
+                            <div className="rounded-lg border border-slate-200 bg-white p-2">
+                              <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                                Usos de este crédito
+                              </p>
+                              <ul className="space-y-1">
+                                {l.usos.map((u, i) => (
+                                  <li
+                                    key={i}
+                                    className="flex items-center justify-between text-xs"
+                                  >
+                                    <span className="text-slate-600">
+                                      {formatFecha(u.fecha)} · {u.origen_salida === "venta" ? "Venta" : u.origen_salida}
+                                      {u.referencia_numero ? ` ${u.referencia_numero}` : ""}
+                                    </span>
+                                    <span className="tabular-nums font-semibold text-purple-700">
+                                      −{formatGs(u.monto_aplicado)}
+                                    </span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
