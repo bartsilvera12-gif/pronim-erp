@@ -25,11 +25,41 @@ const FRANJA_COLS =
   "id,empresa_id,nombre,sku,precio_venta,stock_actual,stock_minimo," +
   "activo,es_franja_precio,unidad_medida,categoria_principal_id,created_at,updated_at";
 
-function franjaLabel(precio: number): { nombre: string; sku: string } {
+function nombrePorDefecto(precio: number): string {
   const p = Math.round(precio);
-  const nombre = "Prenda - Categoría Gs. " + p.toLocaleString("es-PY").replace(/,/g, ".");
-  const sku = "FRJ-" + p;
-  return { nombre, sku };
+  return "Prenda - Categoría Gs. " + p.toLocaleString("es-PY").replace(/,/g, ".");
+}
+
+/** Slug ASCII-friendly a partir del nombre (para el SKU). */
+function slugify(input: string): string {
+  return input
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
+}
+
+/** SKU único dentro de la empresa. Prueba variantes con sufijo -2, -3, … */
+async function siguienteSkuLibre(
+  client: import("pg").PoolClient,
+  productosT: string,
+  empresaId: string,
+  base: string,
+): Promise<string> {
+  let candidato = base;
+  let intento = 1;
+  while (true) {
+    const q = await client.query(
+      `SELECT 1 FROM ${productosT} WHERE empresa_id = $1 AND sku = $2 LIMIT 1`,
+      [empresaId, candidato],
+    );
+    if (q.rows.length === 0) return candidato;
+    intento += 1;
+    candidato = `${base}-${intento}`;
+    if (intento > 200) throw new Error("No se pudo generar un SKU único.");
+  }
 }
 
 export async function GET(request: NextRequest) {
@@ -91,6 +121,11 @@ export async function POST(request: NextRequest) {
     if (!Number.isFinite(precio) || precio <= 0) {
       return NextResponse.json(errorResponse("Precio inválido: debe ser mayor a 0."), { status: 400 });
     }
+    const nombreInput =
+      typeof body.nombre === "string" && body.nombre.trim()
+        ? body.nombre.trim().slice(0, 120)
+        : "";
+    const nombre = nombreInput || nombrePorDefecto(precio);
 
     const schema = await fetchDataSchemaForEmpresaId(empresaId);
     assertAllowedChatDataSchema(schema);
@@ -104,10 +139,15 @@ export async function POST(request: NextRequest) {
     const stockSucT = quoteSchemaTable(schema, "producto_stock_sucursal");
     const sucursalesT = quoteSchemaTable(schema, "sucursales");
 
-    const { nombre, sku } = franjaLabel(precio);
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
+      // SKU: si viene nombre libre, usar slug del nombre + sufijo si colisiona.
+      // Si no viene nombre, usar FRJ-{precio} (compat con seed).
+      const skuBase = nombreInput
+        ? "CAT-" + slugify(nombreInput)
+        : "FRJ-" + Math.round(precio);
+      const sku = await siguienteSkuLibre(client, productosT, empresaId, skuBase);
       // Categoría FRANJA (por empresa). Si no existe, crearla.
       let catId: string;
       const catQ = await client.query<{ id: string }>(
@@ -132,7 +172,6 @@ export async function POST(request: NextRequest) {
            stock_actual, stock_minimo, unidad_medida, metodo_valuacion,
            activo, es_franja_precio, visible_web, categoria_principal_id
          ) VALUES ($1, $2, $3, $4, 0, 0, 0, 'Unidad', 'CPP', true, true, false, $5)
-         ON CONFLICT (empresa_id, sku) DO UPDATE SET activo = true
          RETURNING id`,
         [empresaId, nombre, sku, precio, catId],
       );
