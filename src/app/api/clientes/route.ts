@@ -217,6 +217,7 @@ export async function POST(request: NextRequest) {
       plan_comercial_id,
       vendedor_asignado,
       vendedor_usuario_id,
+      como_conocio,
     } = body;
 
     const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -270,6 +271,7 @@ export async function POST(request: NextRequest) {
       estado:               estado === "inactivo" ? "inactivo" : "activo",
       vendedor_asignado:    typeof vendedor_asignado === "string" && vendedor_asignado.trim() ? vendedor_asignado.trim() : null,
       vendedor_usuario_id:  vendedorUsuarioId,
+      como_conocio:         typeof como_conocio === "string" && como_conocio.trim() ? como_conocio.trim().slice(0, 200) : null,
     };
 
     if (typeof sifen_receptor_extranjero === "boolean") {

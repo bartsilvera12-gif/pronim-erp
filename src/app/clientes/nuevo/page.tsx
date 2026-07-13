@@ -79,6 +79,7 @@ function NuevoClienteForm() {
     condicion_pago:      "CONTADO",
     moneda_preferida:    "GS" as "GS" | "USD",
     vendedor_asignado:   "",
+    como_conocio:        "",
     vendedor_usuario_id: "",
     origen:              "MANUAL" as OrigenCliente,
     prospecto_id:          null as string | null,
@@ -327,6 +328,7 @@ function NuevoClienteForm() {
       usa_nota_remision: form.usa_nota_remision,
       plan_comercial_id: formSusc.plan_id.trim() || null,
       vendedor_asignado: form.vendedor_asignado.trim().toUpperCase() || undefined,
+      como_conocio: form.como_conocio.trim() || undefined,
       vendedor_usuario_id: form.vendedor_usuario_id.trim() || null,
       ...sifenManualCreate,
     });
@@ -759,6 +761,23 @@ function NuevoClienteForm() {
                 />
               </div>
               )}
+              <div>
+                <label className={labelClass}>¿Cómo conoció la tienda?</label>
+                <select
+                  name="como_conocio"
+                  value={form.como_conocio}
+                  onChange={handleChange}
+                  className={inputClass}
+                >
+                  <option value="">Seleccioná una opción…</option>
+                  <option value="Recomendación">Recomendación</option>
+                  <option value="Redes sociales">Redes sociales</option>
+                  <option value="Publicidad">Publicidad</option>
+                  <option value="Pasó por la tienda">Pasó por la tienda</option>
+                  <option value="Volanteo / cartel">Volanteo / cartel</option>
+                  <option value="Otro">Otro</option>
+                </select>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

@@ -7,7 +7,21 @@ import { getChatPostgresPool, quoteSchemaTable } from "@/lib/supabase/chat-pg-po
 import { assertAllowedChatDataSchema } from "@/lib/supabase/chat-data-schema";
 
 interface TimelineEvent {
-  tipo: "venta" | "pago" | "recepcion" | "credito_uso" | "credito_entrada" | "nota_credito" | "nota";
+  tipo:
+    | "venta"
+    | "pago"
+    | "recepcion"
+    | "credito_uso"
+    | "credito_entrada"
+    | "nota_credito"
+    | "nota"
+    | "reclamo"
+    | "elogio"
+    | "beneficio"
+    | "descuento"
+    | "cashback"
+    | "cambio"
+    | "otro";
   fecha: string;
   monto: number | null;
   referencia: string | null;
@@ -52,6 +66,7 @@ export async function GET(
     const recepT = quoteSchemaTable(schema, "cliente_recepciones");
     const creditosT = quoteSchemaTable(schema, "cliente_creditos_movimientos");
     const facturasT = quoteSchemaTable(schema, "facturas");
+    const eventosT = quoteSchemaTable(schema, "cliente_eventos");
 
     const client = await pool.connect();
     try {
@@ -219,6 +234,48 @@ export async function GET(
           referencia: r.referencia_numero,
           detalle: r.observaciones ?? `${r.tipo} · ${r.origen}`,
         });
+      }
+
+      // Eventos manuales (reclamos, elogios, beneficios, descuentos, cashback, cambios, otros).
+      try {
+        const evEv = await client.query<{
+          fecha: string;
+          tipo: string;
+          titulo: string | null;
+          descripcion: string;
+          monto: string | null;
+          referencia_numero: string | null;
+        }>(
+          `SELECT fecha, tipo, titulo, descripcion, monto::text, referencia_numero
+           FROM ${eventosT}
+           WHERE empresa_id = $1 AND cliente_id = $2 AND deleted_at IS NULL
+           ORDER BY fecha DESC LIMIT 100`,
+          [empresaId, clienteId],
+        );
+        for (const r of evEv.rows) {
+          const tipo = (
+            [
+              "reclamo",
+              "elogio",
+              "beneficio",
+              "descuento",
+              "cashback",
+              "cambio",
+              "otro",
+            ].includes(r.tipo)
+              ? r.tipo
+              : "otro"
+          ) as TimelineEvent["tipo"];
+          eventos.push({
+            tipo,
+            fecha: r.fecha,
+            monto: r.monto == null ? null : Number(r.monto),
+            referencia: r.referencia_numero,
+            detalle: r.titulo ? `${r.titulo} — ${r.descripcion}` : r.descripcion,
+          });
+        }
+      } catch {
+        /* tabla cliente_eventos no existe todavía (migración pendiente) */
       }
 
       eventos.sort((a, b) => (a.fecha < b.fecha ? 1 : -1));

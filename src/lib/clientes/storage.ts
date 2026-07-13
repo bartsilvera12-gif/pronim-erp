@@ -50,6 +50,7 @@ interface SupabaseRow {
   condicion_pago:     string | null;
   moneda_preferida:   string | null;
   vendedor_asignado:  string | null;
+  como_conocio?:      string | null;
   vendedor_usuario_id?: string | null;
   vendedor_usuario_nombre?: string | null;
   vendedor_usuario_email?: string | null;
@@ -103,6 +104,7 @@ function rowToCliente(row: SupabaseRow): Cliente {
     condicion_pago:      row.condicion_pago ?? undefined,
     moneda_preferida:    (row.moneda_preferida === "USD" ? "USD" : "GS") as "GS" | "USD",
     vendedor_asignado:   row.vendedor_asignado ?? undefined,
+    como_conocio:        row.como_conocio ?? undefined,
     vendedor_usuario_id: row.vendedor_usuario_id ?? undefined,
     vendedor_usuario_nombre: row.vendedor_usuario_nombre ?? undefined,
     vendedor_usuario_email:  row.vendedor_usuario_email ?? undefined,
@@ -438,6 +440,12 @@ export function construirPatchActualizacionCliente(datos: ActualizarClienteInput
   if (datos.condicion_pago !== undefined) patch.condicion_pago = datos.condicion_pago ?? null;
   if (datos.moneda_preferida !== undefined) patch.moneda_preferida = datos.moneda_preferida ?? null;
   if (datos.vendedor_asignado !== undefined) patch.vendedor_asignado = datos.vendedor_asignado ?? null;
+  if (datos.como_conocio !== undefined) {
+    patch.como_conocio =
+      typeof datos.como_conocio === "string" && datos.como_conocio.trim()
+        ? datos.como_conocio.trim().slice(0, 200)
+        : null;
+  }
   if (datos.vendedor_usuario_id !== undefined) {
     patch.vendedor_usuario_id =
       datos.vendedor_usuario_id === null || datos.vendedor_usuario_id === ""

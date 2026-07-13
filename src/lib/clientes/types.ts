@@ -53,6 +53,8 @@ export interface Cliente {
   condicion_pago?:     string;          // CONTADO / 30 DÍAS / 60 DÍAS…
   moneda_preferida?:   "GS" | "USD";
   vendedor_asignado?:  string;
+  /** Cómo llegó el cliente a la tienda (modelo Pronim consignación). */
+  como_conocio?:       string;
   /** Usuario ERP responsable comercial (FK zentra_erp.usuarios); el texto libre sigue en vendedor_asignado. */
   vendedor_usuario_id?: string | null;
   /** Display enriquecido desde `zentra_erp.usuarios` para listados; no reemplaza la FK. */

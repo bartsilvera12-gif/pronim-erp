@@ -100,6 +100,7 @@ export async function apiCreateCliente(data: {
   usa_nota_remision?: boolean;
   plan_comercial_id?: string | null;
   vendedor_asignado?: string;
+  como_conocio?: string;
   vendedor_usuario_id?: string | null;
   sifen_receptor_extranjero?: boolean;
   sifen_codigo_pais?: string | null;

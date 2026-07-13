@@ -36,7 +36,21 @@ type KPIs = {
 };
 
 type TimelineEvent = {
-  tipo: "venta" | "pago" | "recepcion" | "credito_uso" | "credito_entrada" | "nota_credito" | "nota";
+  tipo:
+    | "venta"
+    | "pago"
+    | "recepcion"
+    | "credito_uso"
+    | "credito_entrada"
+    | "nota_credito"
+    | "nota"
+    | "reclamo"
+    | "elogio"
+    | "beneficio"
+    | "descuento"
+    | "cashback"
+    | "cambio"
+    | "otro";
   fecha: string;
   monto: number | null;
   referencia: string | null;
@@ -79,14 +93,23 @@ const ORIGEN_LABEL: Record<string, string> = {
 };
 
 const TIPO_LABEL: Record<TimelineEvent["tipo"], { label: string; color: string }> = {
-  venta: { label: "Venta", color: "bg-sky-100 text-sky-700" },
+  venta: { label: "Compró", color: "bg-sky-100 text-sky-700" },
   pago: { label: "Pago", color: "bg-emerald-100 text-emerald-700" },
-  recepcion: { label: "Recepción de prendas", color: "bg-amber-100 text-amber-700" },
-  credito_uso: { label: "Uso de crédito", color: "bg-purple-100 text-purple-700" },
+  recepcion: { label: "Vendió a la tienda", color: "bg-amber-100 text-amber-700" },
+  credito_uso: { label: "Utilizó crédito", color: "bg-purple-100 text-purple-700" },
   credito_entrada: { label: "Ingreso de crédito", color: "bg-emerald-100 text-emerald-700" },
   nota_credito: { label: "Nota crédito", color: "bg-rose-100 text-rose-700" },
   nota: { label: "Nota", color: "bg-slate-100 text-slate-600" },
+  reclamo: { label: "Reclamo", color: "bg-red-100 text-red-700" },
+  elogio: { label: "Elogio", color: "bg-sky-100 text-sky-700" },
+  beneficio: { label: "Beneficio", color: "bg-emerald-100 text-emerald-700" },
+  descuento: { label: "Descuento", color: "bg-indigo-100 text-indigo-700" },
+  cashback: { label: "Cashback", color: "bg-emerald-100 text-emerald-700" },
+  cambio: { label: "Cambio", color: "bg-purple-100 text-purple-700" },
+  otro: { label: "Evento", color: "bg-slate-100 text-slate-600" },
 };
+
+type TipoEvento = "reclamo" | "elogio" | "beneficio" | "descuento" | "cashback" | "cambio" | "otro";
 
 export default function ConsultasClientePage() {
   const params = useParams<{ id: string }>();
@@ -98,6 +121,14 @@ export default function ConsultasClientePage() {
   const [lotes, setLotes] = useState<LoteCredito[]>([]);
   const [loteAbierto, setLoteAbierto] = useState<string | null>(null);
   const [nuevaNota, setNuevaNota] = useState("");
+  // Registro rápido de evento manual (reclamo/elogio/beneficio/etc).
+  const [evTipo, setEvTipo] = useState<TipoEvento>("reclamo");
+  const [evTitulo, setEvTitulo] = useState("");
+  const [evDescripcion, setEvDescripcion] = useState("");
+  const [evMonto, setEvMonto] = useState("");
+  const [evGenerarCredito, setEvGenerarCredito] = useState(false);
+  const [evPosteando, setEvPosteando] = useState(false);
+  const [evPanelAbierto, setEvPanelAbierto] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [posteandoNota, setPosteandoNota] = useState(false);
@@ -168,6 +199,50 @@ export default function ConsultasClientePage() {
     }
   }
 
+  async function registrarEvento() {
+    const descripcion = evDescripcion.trim();
+    if (!descripcion) {
+      setError("La descripción del evento es obligatoria.");
+      return;
+    }
+    setEvPosteando(true);
+    setError(null);
+    try {
+      const body: Record<string, unknown> = {
+        tipo: evTipo,
+        titulo: evTitulo.trim() || null,
+        descripcion,
+      };
+      const monto = parseFloat(evMonto);
+      if (Number.isFinite(monto) && monto > 0) {
+        body.monto = monto;
+        if (evTipo === "cashback" && evGenerarCredito) {
+          body.generar_credito = true;
+        }
+      }
+      const r = await fetchWithSupabaseSession(
+        `/api/clientes/${clienteId}/eventos`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        },
+      );
+      const j = await r.json();
+      if (!r.ok || !j.success) throw new Error(j?.error ?? "Error");
+      setEvTitulo("");
+      setEvDescripcion("");
+      setEvMonto("");
+      setEvGenerarCredito(false);
+      setEvPanelAbierto(false);
+      await cargar();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error inesperado.");
+    } finally {
+      setEvPosteando(false);
+    }
+  }
+
   async function borrarNota(id: string) {
     if (!window.confirm("¿Eliminar esta nota?")) return;
     try {
@@ -195,7 +270,14 @@ export default function ConsultasClientePage() {
             Vista consolidada: crédito, historial, frecuencia, anotaciones y beneficios.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setEvPanelAbierto((v) => !v)}
+            className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700"
+          >
+            + Registrar evento
+          </button>
           <Link
             href={`/clientes/${clienteId}/recibir-prendas`}
             className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700"
@@ -210,6 +292,91 @@ export default function ConsultasClientePage() {
           </Link>
         </div>
       </div>
+
+      {evPanelAbierto && (
+        <div className="rounded-xl border border-indigo-200 bg-indigo-50/50 p-4">
+          <h2 className="mb-3 text-sm font-semibold text-indigo-900">Registrar evento en el historial</h2>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <label className="text-xs font-medium text-slate-600">Tipo</label>
+              <select
+                value={evTipo}
+                onChange={(e) => setEvTipo(e.target.value as TipoEvento)}
+                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400/40"
+              >
+                <option value="reclamo">Reclamo</option>
+                <option value="elogio">Elogio</option>
+                <option value="beneficio">Beneficio otorgado</option>
+                <option value="descuento">Descuento otorgado</option>
+                <option value="cashback">Cashback</option>
+                <option value="cambio">Cambio de mercadería</option>
+                <option value="otro">Otro</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-600">Título (opcional)</label>
+              <input
+                type="text"
+                value={evTitulo}
+                onChange={(e) => setEvTitulo(e.target.value)}
+                placeholder="Ej: Devolución tardía…"
+                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400/40"
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="text-xs font-medium text-slate-600">Descripción *</label>
+              <textarea
+                value={evDescripcion}
+                onChange={(e) => setEvDescripcion(e.target.value)}
+                rows={3}
+                placeholder="Contá lo sucedido…"
+                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400/40"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-600">Monto (opcional, Gs.)</label>
+              <input
+                type="number"
+                min={0}
+                value={evMonto}
+                onChange={(e) => setEvMonto(e.target.value)}
+                placeholder="0"
+                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-indigo-400/40"
+              />
+            </div>
+            {evTipo === "cashback" && parseFloat(evMonto) > 0 && (
+              <div className="flex items-end">
+                <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={evGenerarCredito}
+                    onChange={(e) => setEvGenerarCredito(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                  />
+                  Generar crédito a favor por este monto
+                </label>
+              </div>
+            )}
+          </div>
+          <div className="mt-3 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setEvPanelAbierto(false)}
+              className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={registrarEvento}
+              disabled={evPosteando || !evDescripcion.trim()}
+              className="rounded-lg bg-indigo-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-40"
+            >
+              {evPosteando ? "Guardando…" : "Registrar en el historial"}
+            </button>
+          </div>
+        </div>
+      )}
 
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
