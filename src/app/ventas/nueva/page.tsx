@@ -936,9 +936,9 @@ export default function NuevaVentaPage() {
         {/* ── SECCIÓN 2: Grilla POS por franja de precio (modelo Pronim) ── */}
         {isFranjaMode && (
           <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 sm:p-6">
-            <SectionTitle>Cargá cantidad por franja de precio</SectionTitle>
+            <SectionTitle>Cargá cantidad por categoría</SectionTitle>
             <p className="mb-3 text-xs text-slate-500">
-              Ingresá cuántas prendas se venden por cada franja. El subtotal se calcula solo.
+              Ingresá cuántas prendas se venden por cada categoría de precio. El subtotal se calcula solo.
             </p>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
               {franjas.map((f) => {

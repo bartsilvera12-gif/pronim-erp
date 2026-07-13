@@ -411,10 +411,10 @@ export default function InventarioPage() {
             )}
             {isSuperAdmin && (
               <Link
-                href="/admin/franjas"
+                href="/admin/categorias"
                 className="rounded-lg border border-[#4FAEB2]/60 px-3 py-1.5 text-xs font-semibold text-[#3F8E91] transition-colors hover:bg-[#4FAEB2]/10 active:scale-95"
               >
-                Administrar franjas
+                Administrar categorías
               </Link>
             )}
             <input

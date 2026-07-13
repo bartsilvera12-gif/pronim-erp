@@ -606,7 +606,7 @@ export default function NuevaCompraPage() {
             {isFranjaMode && (
               <div className="rounded-xl border border-slate-200 bg-white p-4">
                 <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-600">
-                  Cargá cantidad recibida y costo unitario por franja
+                  Cargá cantidad recibida y costo unitario por categoría
                 </p>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                   {franjas.map((f) => {

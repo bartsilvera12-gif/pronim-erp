@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
     const auth = await getAuthWithRol(request);
     if (!isSuperAdmin(auth)) {
       return NextResponse.json(
-        errorResponse("Solo super_admin puede consultar la administración de franjas."),
+        errorResponse("Solo super_admin puede consultar la administración de categorías."),
         { status: 403 },
       );
     }
@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
     const auth = await getAuthWithRol(request);
     if (!isSuperAdmin(auth)) {
       return NextResponse.json(
-        errorResponse("Solo super_admin puede crear franjas."),
+        errorResponse("Solo super_admin puede crear categorías."),
         { status: 403 },
       );
     }

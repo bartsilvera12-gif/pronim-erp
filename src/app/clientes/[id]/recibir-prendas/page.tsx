@@ -81,7 +81,7 @@ export default function RecibirPrendasPage() {
     setError(null);
     setOk(null);
     if (!items.length) {
-      setError("Cargá al menos una franja con cantidad > 0.");
+      setError("Cargá al menos una categoría con cantidad > 0.");
       return;
     }
     setEnviando(true);
@@ -123,7 +123,7 @@ export default function RecibirPrendasPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Recibir prendas</h1>
           <p className="text-sm text-slate-600">
-            Cliente: <strong>{nombreCliente}</strong>. Indicá cuántas prendas entra por cada franja.
+            Cliente: <strong>{nombreCliente}</strong>. Indicá cuántas prendas entra por cada categoría de precio.
             El crédito a favor se genera automáticamente.
           </p>
         </div>
@@ -148,13 +148,13 @@ export default function RecibirPrendasPage() {
 
       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-          Cargá cantidad por franja
+          Cargá cantidad por categoría
         </p>
         {franjas.length === 0 ? (
           <p className="text-sm text-slate-500">
-            No hay franjas cargadas. Andá a{" "}
-            <Link href="/admin/franjas" className="text-[#3F8E91] underline">
-              /admin/franjas
+            No hay categorías cargadas. Andá a{" "}
+            <Link href="/admin/categorias" className="text-[#3F8E91] underline">
+              /admin/categorias
             </Link>{" "}
             para sembrar el catálogo.
           </p>

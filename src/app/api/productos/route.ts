@@ -184,7 +184,7 @@ export async function POST(request: NextRequest) {
     if (!isSuperAdmin(authRol)) {
       return NextResponse.json(
         errorResponse(
-          "Solo super_admin puede crear productos. Para franjas de precio usá /admin/franjas.",
+          "Solo super_admin puede crear productos. Para categorías de precio usá /admin/categorias.",
         ),
         { status: 403 },
       );
