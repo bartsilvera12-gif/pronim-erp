@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import MontoInput from "@/components/ui/MontoInput";
 import ProductPickerModal, { type ProductoPickerItem, type AgregarVentaPayload } from "@/components/inventario/ProductPickerModal";
 import { saveVenta, type FaltanteStock } from "@/lib/ventas/storage";
+import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { getProductos } from "@/lib/inventario/storage";
 import { generarYAbrirRecibo } from "@/lib/recibos/client";
 import type { TipoIvaVenta, TipoVenta, MonedaVenta, LineaVenta, MetodoPago, TipoPrecioVenta } from "@/lib/ventas/types";
@@ -154,6 +155,9 @@ export default function NuevaVentaPage() {
   // ── Cobro (solo CONTADO, no se persiste — solo ayuda al cajero) ───────────
   const [montoRecibido, setMontoRecibido] = useState("");
   const [metodoPago, setMetodoPago] = useState<MetodoPago>("efectivo");
+  // Crédito del cliente disponible (modelo Pronim consignación).
+  const [saldoCredito, setSaldoCredito] = useState<number>(0);
+  const [creditoUsado, setCreditoUsado] = useState<string>("");
 
   // ── Detalle de cobro (conciliación bancaria) ──────────────────────────────
   const [entidades, setEntidades] = useState<{ id: string; codigo: string | null; nombre: string; tipo: string | null }[]>([]);
@@ -400,6 +404,24 @@ export default function NuevaVentaPage() {
     return () => { cancelled = true; };
   }, []);
 
+  // Cargar saldo de crédito del cliente seleccionado (modelo Pronim).
+  useEffect(() => {
+    if (!clienteId) {
+      setSaldoCredito(0);
+      setCreditoUsado("");
+      return;
+    }
+    let cancelled = false;
+    fetchWithSupabaseSession(`/api/clientes/${clienteId}/creditos`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        if (cancelled || !j?.success) return;
+        setSaldoCredito(Math.max(0, Number(j.data?.saldo ?? 0)));
+      })
+      .catch(() => { /* opcional */ });
+    return () => { cancelled = true; };
+  }, [clienteId]);
+
   // UX rápida: abrir el buscador de productos al entrar (carrito vacío).
   // Si el usuario lo cierra, sigue usando el formulario normal (no queda atrapado).
   // EXCEPCIÓN: al facturar un pedido (?pedido_id=...) NO se auto-abre, porque el
@@ -470,9 +492,10 @@ export default function NuevaVentaPage() {
   const plazoDiasNum = parseInt(plazoDias) || 0;
   // Crédito exige cliente seleccionado Y plazo/vencimiento (≥1 día). Genera cuenta por cobrar.
   const creditoValido = tipoVenta === "CONTADO" || (plazoDiasNum >= 1 && !!clienteId);
-  const ventaValida   = items.length > 0 && creditoValido;
+  // Cliente ahora es obligatorio: no se pueden registrar ventas sin cliente.
+  const ventaValida   = items.length > 0 && creditoValido && !!clienteId;
 
-  // Cliente (opcional) — selección + filtrado del buscador.
+  // Cliente (obligatorio) — selección + filtrado del buscador.
   const clienteSel = clientes.find((c) => c.id === clienteId) ?? null;
   const clientesFiltrados = (clienteQuery.trim() === ""
     ? clientes
@@ -495,6 +518,54 @@ export default function NuevaVentaPage() {
   // Vuelto (solo informativo, no se persiste)
   const montoRecibidoNum = parseFloat(montoRecibido) || 0;
   const vuelto           = montoRecibidoNum - totalGeneral;
+
+  // ── Modo Franjas (Pronim) ────────────────────────────────────────────────
+  // Si el catálogo activo contiene franjas de precio, la UI muestra una
+  // grilla POS simplificada (precio, stock, cantidad, subtotal por franja)
+  // y oculta el buscador tradicional + botón "Agregar producto".
+  const franjas = productos
+    .filter((p) => p.es_franja_precio === true && p.activo !== false)
+    .sort((a, b) => (a.precio_venta ?? 0) - (b.precio_venta ?? 0));
+  const isFranjaMode = franjas.length > 0;
+
+  /** Cantidad actual asignada a la franja `franjaId` en el carrito. */
+  function cantidadEnCarrito(franjaId: string): number {
+    return items
+      .filter((i) => i.producto_id === franjaId)
+      .reduce((s, i) => s + i.cantidad, 0);
+  }
+
+  /** Upsert de una franja en el carrito con la cantidad indicada.
+   *  Si cantidad == 0, la remueve. Si ya existe, la reemplaza (única línea
+   *  por franja para evitar duplicados en la grilla). */
+  function setCantidadFranja(franja: Producto, cantidad: number) {
+    const idx = items.findIndex((i) => i.producto_id === franja.id);
+    if (cantidad <= 0) {
+      if (idx >= 0) setItems((prev) => prev.filter((_, i) => i !== idx));
+      return;
+    }
+    const precio = Number(franja.precio_venta) || 0;
+    const subtotal = cantidad * precio;
+    const linea: LineaVenta = {
+      producto_id: franja.id,
+      producto_nombre: franja.nombre,
+      sku: franja.sku,
+      cantidad,
+      precio_venta_original: precio,
+      precio_venta: precio,
+      tipo_iva: "EXENTA",
+      tipo_precio: "minorista",
+      subtotal,
+      monto_iva: 0,
+      total_linea: subtotal,
+    };
+    if (idx >= 0) {
+      setItems((prev) => prev.map((it, i) => (i === idx ? linea : it)));
+    } else {
+      setItems((prev) => [...prev, linea]);
+    }
+    setErrorVenta(null);
+  }
 
   // ── Productos filtrados para el combobox ──────────────────────────────────
   // Solo vendibles (Reventa + Menú). Excluye materia prima / insumos.
@@ -640,6 +711,11 @@ export default function NuevaVentaPage() {
           metodo_pago:  metodoPago,
           cliente_id:   clienteId || null,
           genera_nota_remision: !!clienteId && generaNotaRemision,
+          credito_cliente_usado: Math.min(
+            Math.max(0, parseFloat(creditoUsado) || 0),
+            saldoCredito,
+            totalGeneral,
+          ),
         },
         undefined,
         {
@@ -706,13 +782,15 @@ export default function NuevaVentaPage() {
             Agregá productos de reventa o del catálogo. Al confirmar se registra la venta.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setPickerOpen(true)}
-          className="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-[#4FAEB2] px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-[#3F8E91] active:scale-95"
-        >
-          + Agregar producto
-        </button>
+        {!isFranjaMode && (
+          <button
+            type="button"
+            onClick={() => setPickerOpen(true)}
+            className="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-[#4FAEB2] px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-[#3F8E91] active:scale-95"
+          >
+            + Agregar producto
+          </button>
+        )}
       </div>
 
       {pedidoId && (
@@ -731,15 +809,15 @@ export default function NuevaVentaPage() {
 
       <form onSubmit={handleSubmit} className="space-y-6 max-w-7xl">
 
-        {/* ── SECCIÓN 0: Datos de la venta (cliente opcional + condición) ────── */}
+        {/* ── SECCIÓN 0: Datos de la venta (cliente obligatorio + condición) ────── */}
         <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 sm:p-6">
           <SectionTitle>Datos de la venta</SectionTitle>
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
 
-            {/* Cliente (opcional) */}
+            {/* Cliente (obligatorio) */}
             <div ref={clienteContainerRef} className="relative">
               <label className={labelClass}>
-                Cliente <span className="text-xs font-normal text-gray-400">(opcional)</span>
+                Cliente <span className="text-xs font-normal text-red-500">*</span>
               </label>
               <div className="flex gap-2">
                 <input
@@ -780,9 +858,23 @@ export default function NuevaVentaPage() {
                   )}
                 </div>
               )}
-              <p className="mt-1 text-[11px] text-gray-400">
-                Si no seleccionás cliente, la venta se registra sin cliente.
-              </p>
+              <div className={`mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] ${clienteSel ? "text-gray-400" : "text-red-600"}`}>
+                <span>
+                  {clienteSel
+                    ? "Cliente seleccionado."
+                    : "Debés seleccionar un cliente para poder registrar la venta."}
+                </span>
+                {!clienteSel && (
+                  <a
+                    href="/gestion-clientes"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-medium text-[#4FAEB2] underline decoration-dotted underline-offset-2 hover:text-[#37888c]"
+                  >
+                    Crear cliente nuevo
+                  </a>
+                )}
+              </div>
 
               {/* Nota de remisión: solo con cliente. Si el cliente la usa, viene activada. */}
               {clienteSel && (
@@ -840,6 +932,79 @@ export default function NuevaVentaPage() {
 
           </div>
         </div>
+
+        {/* ── SECCIÓN 2: Grilla POS por franja de precio (modelo Pronim) ── */}
+        {isFranjaMode && (
+          <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 sm:p-6">
+            <SectionTitle>Cargá cantidad por franja de precio</SectionTitle>
+            <p className="mb-3 text-xs text-slate-500">
+              Ingresá cuántas prendas se venden por cada franja. El subtotal se calcula solo.
+            </p>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+              {franjas.map((f) => {
+                const cant = cantidadEnCarrito(f.id);
+                const stock = Number(f.stock_actual ?? 0);
+                const subtotal = cant * (Number(f.precio_venta) || 0);
+                const stockRestante = stock - cant;
+                const stockColor =
+                  stockRestante < 0
+                    ? "text-red-600"
+                    : stockRestante === 0 && cant > 0
+                    ? "text-amber-600"
+                    : "text-slate-500";
+                return (
+                  <div
+                    key={f.id}
+                    className={`flex flex-col rounded-xl border p-3 transition-colors ${
+                      cant > 0 ? "border-[#4FAEB2] bg-[#4FAEB2]/[0.05]" : "border-slate-200 bg-white"
+                    }`}
+                  >
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-lg font-bold tabular-nums text-slate-900">
+                        {formatGs(Number(f.precio_venta) || 0)}
+                      </span>
+                      <span className={`text-[10px] font-medium ${stockColor}`}>
+                        stock {stock}
+                      </span>
+                    </div>
+                    <div className="mt-2 flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setCantidadFranja(f, Math.max(0, cant - 1))}
+                        className="h-9 w-9 rounded-lg border border-slate-200 text-lg font-semibold text-slate-600 hover:bg-slate-50 active:scale-95"
+                        aria-label="Restar 1"
+                      >
+                        −
+                      </button>
+                      <input
+                        type="number"
+                        min={0}
+                        value={cant === 0 ? "" : cant}
+                        onChange={(e) => {
+                          const v = parseInt(e.target.value, 10);
+                          setCantidadFranja(f, Number.isFinite(v) && v >= 0 ? v : 0);
+                        }}
+                        placeholder="0"
+                        className="h-9 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-2 text-center text-base font-semibold tabular-nums text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]/40"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setCantidadFranja(f, cant + 1)}
+                        className="h-9 w-9 rounded-lg border border-slate-200 text-lg font-semibold text-slate-600 hover:bg-slate-50 active:scale-95"
+                        aria-label="Sumar 1"
+                      >
+                        +
+                      </button>
+                    </div>
+                    <div className={`mt-2 text-right text-xs tabular-nums ${cant > 0 ? "text-slate-800 font-semibold" : "text-slate-400"}`}>
+                      {cant > 0 ? formatGs(subtotal) : "—"}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* ── SECCIÓN 3: Carrito + totales + confirmar ─────────────────────── */}
         <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 sm:p-6">
@@ -938,6 +1103,32 @@ export default function NuevaVentaPage() {
                         {totalIva > 0 ? formatGs(totalIva) : "—"}
                       </span>
                     </div>
+                    {!!clienteId && saldoCredito > 0 && (
+                      <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-2 space-y-1">
+                        <div className="flex items-center justify-between text-[11px] text-emerald-800">
+                          <span className="font-semibold">Crédito disponible del cliente</span>
+                          <span className="tabular-nums">{formatGs(saldoCredito)}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            min={0}
+                            max={Math.min(saldoCredito, totalGeneral)}
+                            value={creditoUsado}
+                            onChange={(e) => setCreditoUsado(e.target.value)}
+                            placeholder="Monto a aplicar"
+                            className="h-8 w-full rounded-md border border-emerald-200 bg-white px-2 text-xs tabular-nums focus:outline-none focus:ring-2 focus:ring-emerald-400/40"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setCreditoUsado(String(Math.min(saldoCredito, totalGeneral)))}
+                            className="h-8 rounded-md border border-emerald-300 px-2 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100"
+                          >
+                            Máx
+                          </button>
+                        </div>
+                      </div>
+                    )}
                     <div className="flex justify-between text-base font-bold text-gray-900 pt-2 border-t border-gray-200">
                       <span>TOTAL</span>
                       <span className="tabular-nums">{formatGs(totalGeneral)}</span>

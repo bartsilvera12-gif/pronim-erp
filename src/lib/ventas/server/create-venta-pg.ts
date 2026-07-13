@@ -35,6 +35,9 @@ export interface CreateVentaPgParams {
   totalDeclarado: number;
   /** Método de pago (módulo caja). Opcional; default null/efectivo. */
   metodoPago?: "efectivo" | "tarjeta" | "transferencia" | null;
+  /** Monto en Gs. aplicado desde el crédito a favor del cliente (modelo
+   *  Pronim consignación). Se descuenta del saldo antes de calcular vuelto. */
+  creditoClienteUsado?: number | null;
   /**
    * Sucursal en la que se materializa la venta (Joyería Artesanos
    * multi-sucursal). Si viene, el descuento de stock se hace en
@@ -104,19 +107,49 @@ export async function createVentaTransaccionalPg(
   const prodT = qTable(params.schema, "productos");
   const stockSucT = qTable(params.schema, "producto_stock_sucursal");
   const cliT = qTable(params.schema, "clientes");
+  const creditosT = qTable(params.schema, "cliente_creditos_movimientos");
   const sucursalId = params.sucursalId ?? null;
+  const creditoUsado = Math.max(0, Number(params.creditoClienteUsado ?? 0));
 
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
 
-    if (params.clienteId) {
+    if (!params.clienteId) {
+      throw new Error("Cliente requerido: seleccioná un cliente antes de registrar la venta.");
+    }
+    {
       const ck = await client.query<{ ok: number }>(
         `SELECT 1 AS ok FROM ${cliT} WHERE id = $1 AND empresa_id = $2 LIMIT 1`,
         [params.clienteId, params.empresaId]
       );
       if (ck.rows.length === 0) {
         throw new Error("Cliente no encontrado en esta empresa.");
+      }
+    }
+
+    // Validar que el crédito solicitado no supere el saldo actual del cliente
+    // ni el total de la venta. Se descuenta el saldo *dentro* de la transacción.
+    if (creditoUsado > 0) {
+      if (creditoUsado > calc.total + TOL) {
+        throw new Error("El crédito aplicado supera el total de la venta.");
+      }
+      const saldoQ = await client.query<{ saldo: string }>(
+        `SELECT COALESCE(SUM(
+           CASE WHEN tipo = 'ENTRADA' THEN monto
+                WHEN tipo = 'SALIDA' THEN -monto
+                WHEN tipo = 'AJUSTE' THEN monto
+                ELSE 0 END
+         ), 0)::text AS saldo
+         FROM ${creditosT}
+         WHERE empresa_id = $1 AND cliente_id = $2`,
+        [params.empresaId, params.clienteId],
+      );
+      const saldoActual = Number(saldoQ.rows[0]?.saldo ?? 0);
+      if (creditoUsado > saldoActual + TOL) {
+        throw new Error(
+          `Saldo insuficiente: disponible Gs. ${Math.round(saldoActual)}, solicitado Gs. ${Math.round(creditoUsado)}.`,
+        );
       }
     }
 
@@ -268,6 +301,24 @@ export async function createVentaTransaccionalPg(
     );
 
     const ventaId = insVenta.rows[0].id;
+
+    // Descontar crédito del cliente (modelo Pronim consignación).
+    if (creditoUsado > 0) {
+      await client.query(
+        `INSERT INTO ${creditosT} (
+           empresa_id, cliente_id, tipo, monto, origen, referencia_id,
+           referencia_tipo, referencia_numero, observaciones
+         ) VALUES ($1, $2, 'SALIDA', $3, 'venta', $4, 'venta', $5, $6)`,
+        [
+          params.empresaId,
+          params.clienteId,
+          creditoUsado,
+          ventaId,
+          numeroControl,
+          "Aplicado como pago en venta " + numeroControl,
+        ],
+      );
+    }
 
     for (const line of items) {
       const p = stockMap.get(line.producto_id)!;

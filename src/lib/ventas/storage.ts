@@ -62,7 +62,11 @@ export async function getVentas(): Promise<Venta[]> {
  * Crea una venta en base de datos (transacción servidor: ítems, stock, movimientos).
  */
 export async function saveVenta(
-  datos: Omit<Venta, "id" | "numero_control" | "fecha"> & { cliente_id?: string | null; genera_nota_remision?: boolean },
+  datos: Omit<Venta, "id" | "numero_control" | "fecha"> & {
+    cliente_id?: string | null;
+    genera_nota_remision?: boolean;
+    credito_cliente_usado?: number | null;
+  },
   pedidoCocina?: PedidoCocinaInput,
   pagoDetalle?: PagoDetalleInput | null,
   opts?: { permitirSinStock?: boolean; pedidoId?: string | null; pedidoCajaId?: string | null }
@@ -86,6 +90,7 @@ export async function saveVenta(
         plazo_dias: datos.plazo_dias,
         metodo_pago: datos.metodo_pago,
         cliente_id: datos.cliente_id ?? null,
+        credito_cliente_usado: datos.credito_cliente_usado ?? 0,
         observaciones: null,
         pedido_cocina: pedidoCocina ?? null,
         pago_detalle: pagoDetalle ?? null,

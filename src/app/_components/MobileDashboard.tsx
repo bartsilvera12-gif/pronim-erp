@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useIsSuperAdmin } from "@/lib/auth/use-is-admin";
 import {
   Calendar,
   Plus,
@@ -165,6 +166,7 @@ export default function MobileDashboard({
   const [periodo, setPeriodo] = useState<Periodo>("hoy");
   const [seccion, setSeccion] = useState<Seccion>("ventas");
   const { desde, hasta } = useMemo(() => getRangoFechas(periodo), [periodo]);
+  const { isSuperAdmin } = useIsSuperAdmin();
 
   // ── Cálculos memoizados ──────────────────────────────────────────────────
   const ncPorFactura = useMemo(
@@ -769,7 +771,9 @@ export default function MobileDashboard({
             Acciones
           </p>
           <div className="grid grid-cols-2 gap-3">
-            <QuickAction href="/inventario/nuevo" icon={Plus} label="Nuevo producto" color="emerald" />
+            {isSuperAdmin && (
+              <QuickAction href="/inventario/nuevo" icon={Plus} label="Nuevo producto" color="emerald" />
+            )}
             <QuickAction href="/inventario/movimientos/nuevo" icon={Package} label="Movimiento" color="sky" />
           </div>
         </div>

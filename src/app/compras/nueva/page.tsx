@@ -152,6 +152,60 @@ export default function NuevaCompraPage() {
   function recargarProductos() { getProductos().then(setProductos); }
   useEffect(() => { recargarProveedores(); recargarProductos(); }, []);
 
+  // ── Modo Franjas (Pronim) ───────────────────────────────────────────────
+  // Si el catálogo contiene franjas de precio, la UI muestra una grilla:
+  // por cada franja el usuario indica cantidad recibida + costo unitario.
+  const franjas = productos
+    .filter((p) => p.es_franja_precio === true && p.activo !== false)
+    .sort((a, b) => (a.precio_venta ?? 0) - (b.precio_venta ?? 0));
+  const isFranjaMode = franjas.length > 0;
+  // Estado local por franja: cantidad y costo unitario (en moneda cabecera).
+  const [franjaEditor, setFranjaEditor] = useState<
+    Record<string, { cantidad: string; costo: string }>
+  >({});
+
+  /** Recalcula LineaCompra para una franja a partir de su editor state. */
+  function upsertFranjaLinea(franja: Producto, cantidadStr: string, costoStr: string) {
+    setFranjaEditor((prev) => ({
+      ...prev,
+      [franja.id]: { cantidad: cantidadStr, costo: costoStr },
+    }));
+    const cant = parseFloat(cantidadStr) || 0;
+    const costoInput = parseFloat(costoStr) || 0;
+    const tc = cab.moneda === "USD" ? parseFloat(cab.tipo_cambio) || 0 : 1;
+    const costoPyg = costoInput * tc;
+    const precio = Number(franja.precio_venta) || 0;
+    setLineas((prev) => {
+      const idx = prev.findIndex((l) => l.producto_id === franja.id);
+      if (cant <= 0) {
+        return idx >= 0 ? prev.filter((_, i) => i !== idx) : prev;
+      }
+      const subtotal = cant * costoPyg;
+      // IVA 10% por defecto en franjas (típico ropa).
+      const ivaTipo = "10" as TipoIva;
+      const iva = ivaMonto(subtotal, ivaTipo);
+      const total = subtotal + iva;
+      const margen =
+        precio > 0 && costoPyg > 0 ? ((precio - costoPyg) / precio) * 100 : null;
+      const linea: LineaCompra = {
+        producto_id: franja.id,
+        producto_nombre: franja.nombre,
+        sku: franja.sku,
+        cantidad: cant,
+        costo_unitario_input: costoInput,
+        costo_unitario_pyg: costoPyg,
+        iva_tipo: ivaTipo,
+        precio_venta: precio,
+        subtotal,
+        monto_iva: iva,
+        total,
+        margen_venta: margen,
+      };
+      if (idx >= 0) return prev.map((l, i) => (i === idx ? linea : l));
+      return [...prev, linea];
+    });
+  }
+
   // ── Cálculos de la línea en curso ──────────────────────────────────────────
   const tipoCambioNum = cab.moneda === "USD" ? parseFloat(cab.tipo_cambio) || 0 : 1;
   const nlCant = parseFloat(nl.cantidad) || 0;
@@ -548,7 +602,75 @@ export default function NuevaCompraPage() {
               </div>
             )}
 
-            {/* Editor de nueva línea */}
+            {/* Grilla de franjas (modelo Pronim) */}
+            {isFranjaMode && (
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-600">
+                  Cargá cantidad recibida y costo unitario por franja
+                </p>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {franjas.map((f) => {
+                    const st = franjaEditor[f.id] ?? { cantidad: "", costo: "" };
+                    const cant = parseFloat(st.cantidad) || 0;
+                    const costo = parseFloat(st.costo) || 0;
+                    const tc = cab.moneda === "USD" ? parseFloat(cab.tipo_cambio) || 0 : 1;
+                    const subtotal = cant * costo * tc;
+                    return (
+                      <div
+                        key={f.id}
+                        className={`rounded-lg border p-3 ${
+                          cant > 0 ? "border-[#4FAEB2] bg-[#4FAEB2]/[0.05]" : "border-slate-200 bg-white"
+                        }`}
+                      >
+                        <div className="flex items-baseline justify-between">
+                          <span className="text-base font-bold tabular-nums text-slate-900">
+                            {formatGs(Number(f.precio_venta) || 0)}
+                          </span>
+                          <span className="text-[10px] text-slate-500">
+                            stock {Number(f.stock_actual ?? 0)}
+                          </span>
+                        </div>
+                        <div className="mt-2 grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[10px] font-medium uppercase tracking-wide text-slate-500">
+                              Cantidad
+                            </label>
+                            <input
+                              type="number"
+                              min={0}
+                              value={st.cantidad}
+                              onChange={(e) => upsertFranjaLinea(f, e.target.value, st.costo)}
+                              placeholder="0"
+                              className="mt-1 w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]/40"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-medium uppercase tracking-wide text-slate-500">
+                              Costo unit. ({cab.moneda})
+                            </label>
+                            <input
+                              type="number"
+                              min={0}
+                              step="any"
+                              value={st.costo}
+                              onChange={(e) => upsertFranjaLinea(f, st.cantidad, e.target.value)}
+                              placeholder="0"
+                              className="mt-1 w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]/40"
+                            />
+                          </div>
+                        </div>
+                        <div className={`mt-2 text-right text-xs tabular-nums ${cant > 0 ? "text-slate-800 font-semibold" : "text-slate-400"}`}>
+                          Subtotal: {cant > 0 ? formatGs(subtotal) : "—"}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Editor de nueva línea (oculto en modo franjas) */}
+            {!isFranjaMode && (
             <div className="rounded-xl border border-dashed border-slate-300 p-4 space-y-4 bg-slate-50/40">
               <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Agregar producto</p>
 
@@ -691,6 +813,7 @@ export default function NuevaCompraPage() {
                 + Agregar producto a la compra
               </button>
             </div>
+            )}
           </section>
 
           {/* ── Totales generales ────────────────────────────────────────────── */}

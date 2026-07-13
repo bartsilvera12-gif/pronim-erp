@@ -144,6 +144,12 @@ export async function POST(request: NextRequest) {
       clienteRaw === null || clienteRaw === undefined || clienteRaw === ""
         ? null
         : String(clienteRaw);
+    if (!clienteId) {
+      return NextResponse.json(
+        errorResponse("Cliente requerido: no se pueden registrar ventas sin cliente."),
+        { status: 400 },
+      );
+    }
     const observaciones =
       o.observaciones === null || o.observaciones === undefined
         ? null
@@ -154,6 +160,12 @@ export async function POST(request: NextRequest) {
       metodoPagoRaw === "efectivo" || metodoPagoRaw === "tarjeta" || metodoPagoRaw === "transferencia"
         ? metodoPagoRaw
         : null;
+
+    const creditoUsadoRaw = o.credito_cliente_usado;
+    const creditoClienteUsado =
+      creditoUsadoRaw == null || creditoUsadoRaw === ""
+        ? 0
+        : Math.max(0, Math.round(Number(creditoUsadoRaw) || 0));
 
     const subtotalDeclarado = Number(o.subtotal);
     const montoIvaDeclarado = Number(o.monto_iva);
@@ -210,6 +222,7 @@ export async function POST(request: NextRequest) {
       totalDeclarado,
       metodoPago,
       sucursalId,
+      creditoClienteUsado,
     });
 
     let sub = 0;
@@ -258,6 +271,9 @@ export async function POST(request: NextRequest) {
       msg.includes("Stock insuficiente") ||
       msg.includes("no existen") ||
       msg.includes("Cliente no encontrado") ||
+      msg.includes("Cliente requerido") ||
+      msg.includes("Saldo insuficiente") ||
+      msg.includes("crédito aplicado supera") ||
       msg.includes("Totales no coinciden") ||
       msg.includes("al menos un")
         ? 400

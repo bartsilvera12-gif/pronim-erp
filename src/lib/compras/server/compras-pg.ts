@@ -215,9 +215,11 @@ export async function insertCompraConImpacto(
         "La compra se guardó pero no se pudo registrar el movimiento de entrada en inventario.";
     }
 
-    // Actualizar producto: stock + costo_promedio + precio_venta
+    // Actualizar producto: stock + costo_promedio (+ precio_venta si no es franja).
     // Multi-sucursal: el stock se suma a la sucursal donde se recibió la compra
     // (resta del path UPDATE productos.stock_actual; trigger sincroniza el agregado).
+    // Modelo Pronim: si el producto es una franja de precio (es_franja_precio=true)
+    // NO se pisa `precio_venta` — el precio de la franja está fijo por definición.
     if (sucursalId) {
       await client.query(
         `INSERT INTO ${tSS} (producto_id, sucursal_id, stock_actual, updated_at)
@@ -230,7 +232,7 @@ export async function insertCompraConImpacto(
       await client.query(
         `UPDATE ${tP}
             SET costo_promedio = $1::numeric,
-                precio_venta = $2::numeric,
+                precio_venta = CASE WHEN es_franja_precio THEN precio_venta ELSE $2::numeric END,
                 updated_at = now()
           WHERE id = $3::uuid AND empresa_id = $4::uuid`,
         [d.costo_unitario, d.precio_venta, d.producto_id, empresaId]
@@ -240,7 +242,7 @@ export async function insertCompraConImpacto(
         `UPDATE ${tP}
             SET stock_actual = stock_actual + $1::numeric,
                 costo_promedio = $2::numeric,
-                precio_venta = $3::numeric,
+                precio_venta = CASE WHEN es_franja_precio THEN precio_venta ELSE $3::numeric END,
                 updated_at = now()
           WHERE id = $4::uuid AND empresa_id = $5::uuid`,
         [d.cantidad, d.costo_unitario, d.precio_venta, d.producto_id, empresaId]

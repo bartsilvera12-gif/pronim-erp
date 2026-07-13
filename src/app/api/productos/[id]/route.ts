@@ -14,7 +14,7 @@ import {
 } from "@/lib/inventario/server/productos-postgrest";
 import { postgrestGet, postgrestDelete, getAccessTokenForRequest } from "@/lib/supabase/postgrest-runtime";
 import { syncCatalogoExtras } from "@/lib/inventario/server/catalogo-web-extras";
-import { getAuthWithRol, isAdmin } from "@/lib/middleware/auth";
+import { getAuthWithRol, isAdmin, isSuperAdmin } from "@/lib/middleware/auth";
 
 /**
  * Campos del producto que afectan la página web pública (catálogo, ofertas,
@@ -44,7 +44,7 @@ const PRODUCTO_COLS_PRIV =
   // con los campos del catálogo web / promo vacíos aunque estuvieran guardados
   // en DB (el PATCH sí los persistía; solo el GET no los traía de vuelta).
   "precio_oferta,oferta_hasta,nuevo_hasta,concentracion,volumen_ml,genero," +
-  "proximamente,orden_web,familia_olfativa_id,tiene_presentaciones,es_decant";
+  "proximamente,orden_web,familia_olfativa_id,tiene_presentaciones,es_decant,es_franja_precio";
 
 type ProductoRow = Record<string, unknown> & { id?: string };
 
@@ -131,6 +131,17 @@ export async function PATCH(
     const empresaId = ctx.auth.empresa_id;
     const jwt = await getAccessTokenForRequest(request);
 
+    // Guard: edición de productos SOLO super_admin (aplica tanto a productos
+    // tradicionales como a franjas de precio). Ajustes de stock via ventas/
+    // compras usan sus propias transacciones y no pasan por este PATCH.
+    const auth = await getAuthWithRol(request);
+    if (!isSuperAdmin(auth)) {
+      return NextResponse.json(
+        errorResponse("Solo super_admin puede editar productos."),
+        { status: 403 },
+      );
+    }
+
     let body: Record<string, unknown>;
     try {
       body = (await request.json()) as Record<string, unknown>;
@@ -138,11 +149,6 @@ export async function PATCH(
       return NextResponse.json(errorResponse("JSON inválido."), { status: 400 });
     }
 
-    // Guard: solo admin modifica campos de la página web pública. Los demás
-    // pueden tocar stock/precios/categoría pero no la presencia/aspecto del
-    // producto en el catálogo público. Si vienen, los descartamos silenciosamente
-    // (no rompemos el PATCH del operativo por un campo extra que no debería tocar).
-    const auth = await getAuthWithRol(request);
     if (!isAdmin(auth)) {
       for (const k of WEB_ONLY_FIELDS) {
         if (k in body) delete body[k];
@@ -463,6 +469,13 @@ export async function DELETE(
     const ctx = await getTenantSupabaseFromAuth(request);
     if (!ctx) {
       return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
+    }
+    const auth = await getAuthWithRol(request);
+    if (!isSuperAdmin(auth)) {
+      return NextResponse.json(
+        errorResponse("Solo super_admin puede borrar productos."),
+        { status: 403 },
+      );
     }
     const empresaId = ctx.auth.empresa_id;
     const jwt = await getAccessTokenForRequest(request);

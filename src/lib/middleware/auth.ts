@@ -42,6 +42,17 @@ export function isAdmin(auth: UsuarioConEmpresaYRol | null): boolean {
 }
 
 /**
+ * Estricto: SOLO usuarios con rol `super_admin` (o alias). Se usa para
+ * gatear acciones críticas del catálogo (crear/editar/borrar productos)
+ * que no deben quedar disponibles para admins de empresa.
+ */
+export function isSuperAdmin(auth: UsuarioConEmpresaYRol | null): boolean {
+  if (!auth) return false;
+  const r = (auth.rol ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+  return r === "super_admin" || r === "super admin" || r === "superadmin";
+}
+
+/**
  * Obtiene el usuario autenticado y su empresa_id.
  * Requerido para rutas API multiempresa. Misma resolución de catálogo que `getAuthWithRol` / `resolveApiAuthContext`.
  * Para `empresa_id` + `data_schema` + cliente RLS en un solo paso, usá `resolveUsuarioEmpresaContextFromAuth`.

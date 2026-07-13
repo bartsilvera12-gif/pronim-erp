@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { AlertTriangle, Plus, Package, Search } from "lucide-react";
 import { useProductos } from "@/shared/hooks/useInventario";
+import { useIsSuperAdmin } from "@/lib/auth/use-is-admin";
 import type { Producto } from "@/lib/inventario/types";
 
 /**
@@ -20,6 +21,7 @@ type StockFilter = "todos" | "bajo";
 
 export default function InventarioMobile() {
   const { productos, isLoading, error } = useProductos();
+  const { isSuperAdmin } = useIsSuperAdmin();
   const [query, setQuery] = useState("");
   const [stockFilter, setStockFilter] = useState<StockFilter>("todos");
 
@@ -57,13 +59,15 @@ export default function InventarioMobile() {
               )}
             </p>
           </div>
-          <Link
-            href="/inventario/nuevo"
-            className="flex shrink-0 items-center gap-1.5 rounded-full bg-[#4FAEB2] px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors active:bg-[#3F8E91]"
-          >
-            <Plus className="h-4 w-4" />
-            Nuevo
-          </Link>
+          {isSuperAdmin && (
+            <Link
+              href="/inventario/nuevo"
+              className="flex shrink-0 items-center gap-1.5 rounded-full bg-[#4FAEB2] px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors active:bg-[#3F8E91]"
+            >
+              <Plus className="h-4 w-4" />
+              Nuevo
+            </Link>
+          )}
         </div>
       </header>
 

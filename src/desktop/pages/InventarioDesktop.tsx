@@ -10,7 +10,7 @@ import ExportExcelButton from "@/components/ui/ExportExcelButton";
 import ImportExcelButton from "@/components/ui/ImportExcelButton";
 import EdgeScrollArea from "@/components/ui/EdgeScrollArea";
 import StatCard from "@/components/ui/StatCard";
-import { useIsAdmin } from "@/lib/auth/use-is-admin";
+import { useIsAdmin, useIsSuperAdmin } from "@/lib/auth/use-is-admin";
 
 const inputFilterClass =
   "border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-[#4FAEB2] focus:outline-none";
@@ -49,6 +49,7 @@ interface UbicacionMin { id: string; nombre: string; tipo: string }
 
 export default function InventarioPage() {
   const { isAdmin } = useIsAdmin();
+  const { isSuperAdmin } = useIsSuperAdmin();
   const [todos, setTodos] = useState<Producto[]>([]);
   const [ubicaciones, setUbicaciones] = useState<UbicacionMin[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -400,12 +401,22 @@ export default function InventarioPage() {
         <div className="flex flex-wrap justify-between items-center gap-3 mb-5">
           <div className="flex items-center gap-3 flex-wrap">
             <h2 className="text-xl font-semibold">Productos</h2>
-            <Link
-              href="/inventario/nuevo"
-              className="rounded-lg bg-[#4FAEB2] px-3 py-1.5 text-xs font-semibold text-white shadow-sm shadow-[#4FAEB2]/25 transition-colors hover:bg-[#3F8E91] active:scale-95"
-            >
-              Nuevo producto
-            </Link>
+            {isSuperAdmin && (
+              <Link
+                href="/inventario/nuevo"
+                className="rounded-lg bg-[#4FAEB2] px-3 py-1.5 text-xs font-semibold text-white shadow-sm shadow-[#4FAEB2]/25 transition-colors hover:bg-[#3F8E91] active:scale-95"
+              >
+                Nuevo producto
+              </Link>
+            )}
+            {isSuperAdmin && (
+              <Link
+                href="/admin/franjas"
+                className="rounded-lg border border-[#4FAEB2]/60 px-3 py-1.5 text-xs font-semibold text-[#3F8E91] transition-colors hover:bg-[#4FAEB2]/10 active:scale-95"
+              >
+                Administrar franjas
+              </Link>
+            )}
             <input
               type="text"
               placeholder="Buscar por nombre..."

@@ -29,6 +29,7 @@ interface ProductoRowEmbed {
   proveedor: EmbeddedNamed | null;
   ubicacion: EmbeddedUbicacion | null;
   es_decant: boolean | null;
+  es_franja_precio: boolean | null;
 }
 
 interface ProductoSearchHit {
@@ -57,6 +58,8 @@ interface ProductoSearchHit {
   ubicacion_tipo: string | null;
   /** Fase Decants: producto marcado como decant — puede entregarse como obsequio. */
   es_decant: boolean;
+  /** Modelo Pronim: producto virtual "franja de precio". */
+  es_franja_precio: boolean;
 }
 
 const DEFAULT_LIMIT = 30;
@@ -66,7 +69,7 @@ const SELECT_COLS =
   "id,nombre,sku,codigo_barras,codigo_barras_interno," +
   "precio_venta,precio_oferta,oferta_hasta," +
   "costo_promedio,stock_actual,stock_minimo," +
-  "unidad_medida,metodo_valuacion,imagen_path,imagen_url,es_decant," +
+  "unidad_medida,metodo_valuacion,imagen_path,imagen_url,es_decant,es_franja_precio," +
   "categoria:categoria_principal_id(nombre)," +
   "proveedor:proveedor_principal_id(nombre)," +
   "ubicacion:ubicacion_principal_id(nombre,tipo)";
@@ -229,6 +232,7 @@ export async function GET(request: NextRequest) {
         ubicacion_nombre: row.ubicacion?.nombre ?? null,
         ubicacion_tipo: row.ubicacion?.tipo ?? null,
         es_decant: row.es_decant === true,
+        es_franja_precio: row.es_franja_precio === true,
       };
     });
 

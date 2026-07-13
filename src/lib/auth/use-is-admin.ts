@@ -21,3 +21,22 @@ export function useIsAdmin(): { isAdmin: boolean; loaded: boolean } {
   }, []);
   return { isAdmin, loaded };
 }
+
+/** Hook estricto: devuelve true SOLO si el usuario es super_admin. */
+export function useIsSuperAdmin(): { isSuperAdmin: boolean; loaded: boolean } {
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  useEffect(() => {
+    let cancel = false;
+    fetchWithSupabaseSession("/api/me/rol", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        if (cancel) return;
+        setIsSuperAdmin(j?.success && j.data?.isSuperAdmin === true);
+        setLoaded(true);
+      })
+      .catch(() => { if (!cancel) setLoaded(true); });
+    return () => { cancel = true; };
+  }, []);
+  return { isSuperAdmin, loaded };
+}

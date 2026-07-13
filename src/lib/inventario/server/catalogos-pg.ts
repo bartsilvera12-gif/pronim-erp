@@ -45,7 +45,19 @@ export interface CategoriaProductoRow {
 async function seedCategoriasFromProveedor(schema: string, empresaId: string): Promise<void> {
   const tProd = quoteSchemaTable(schema, "categorias_productos");
   const tProv = quoteSchemaTable(schema, "proveedor_categorias");
+  const tEmp = quoteSchemaTable(schema, "empresas");
   try {
+    // Respetar el flag por empresa: si autoseed_categorias_desde_proveedor
+    // está en false, no importar rubros automáticamente. Default true
+    // preserva comportamiento anterior para otros clientes.
+    const cfg = await pool().query<{ enabled: boolean | null }>(
+      `SELECT COALESCE(autoseed_categorias_desde_proveedor, true) AS enabled
+       FROM ${tEmp} WHERE id = $1::uuid LIMIT 1`,
+      [empresaId],
+    );
+    if (cfg.rows[0]?.enabled === false) {
+      return;
+    }
     await pool().query(
       `INSERT INTO ${tProd} (empresa_id, nombre, activo)
        SELECT pc.empresa_id, pc.nombre, true
@@ -61,8 +73,13 @@ async function seedCategoriasFromProveedor(schema: string, empresaId: string): P
     );
   } catch (err) {
     // Si proveedor_categorias no existe en este schema, ignorar.
+    // Idem si empresas.autoseed_categorias_desde_proveedor aún no fue
+    // agregada por la migración de franjas.
     const msg = err instanceof Error ? err.message : "";
-    if (!/proveedor_categorias.*does not exist|relation .* does not exist/i.test(msg)) {
+    if (
+      !/proveedor_categorias.*does not exist|relation .* does not exist/i.test(msg) &&
+      !/autoseed_categorias_desde_proveedor.*does not exist|column .* does not exist/i.test(msg)
+    ) {
       console.error("[catalogos-pg] seedCategoriasFromProveedor", { schema, message: msg });
     }
   }

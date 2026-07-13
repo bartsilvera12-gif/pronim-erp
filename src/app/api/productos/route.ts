@@ -18,7 +18,7 @@ import { postgrestGet, getAccessTokenForRequest } from "@/lib/supabase/postgrest
 import { syncCatalogoExtras } from "@/lib/inventario/server/catalogo-web-extras";
 import { getChatPostgresPool, quoteSchemaTable } from "@/lib/supabase/chat-pg-pool";
 import { assertAllowedChatDataSchema } from "@/lib/supabase/chat-data-schema";
-import { getAuthWithRol, isAdmin } from "@/lib/middleware/auth";
+import { getAuthWithRol, isAdmin, isSuperAdmin } from "@/lib/middleware/auth";
 
 /** Campos de presentación en la página web pública — solo admin los maneja. */
 const WEB_ONLY_FIELDS = [
@@ -40,7 +40,7 @@ const PRODUCTOS_COLS_PRIV =
   "categoria_principal_id,ubicacion_principal_id,proveedor_principal_id," +
   "slug_web,visible_web,destacado_web,descripcion_corta,descripcion_web,marca,marca_id,precio_web,precio_mayorista,cantidad_minima_mayorista,visible_mayorista_web," +
   "precio_oferta,oferta_hasta,nuevo_hasta,concentracion,volumen_ml,genero," +
-  "proximamente,orden_web,familia_olfativa_id,tiene_presentaciones,es_decant";
+  "proximamente,orden_web,familia_olfativa_id,tiene_presentaciones,es_decant,es_franja_precio";
 
 /**
  * GET /api/productos — lista de productos activos.
@@ -177,6 +177,19 @@ export async function POST(request: NextRequest) {
     const empresaId = ctx.auth.empresa_id;
     const jwt = await getAccessTokenForRequest(request);
 
+    // Alta manual de productos tradicionales: SOLO super_admin. Otros
+    // usuarios (incluido admin de empresa) no pueden crear productos
+    // fuera del esquema de franjas de precio de Pronim.
+    const authRol = await getAuthWithRol(request);
+    if (!isSuperAdmin(authRol)) {
+      return NextResponse.json(
+        errorResponse(
+          "Solo super_admin puede crear productos. Para franjas de precio usá /admin/franjas.",
+        ),
+        { status: 403 },
+      );
+    }
+
     let body: Record<string, unknown>;
     try {
       body = (await request.json()) as Record<string, unknown>;
@@ -185,7 +198,6 @@ export async function POST(request: NextRequest) {
     }
 
     // Guard: operativos de sucursal no pueden tocar campos de la página web.
-    const authRol = await getAuthWithRol(request);
     if (!isAdmin(authRol)) {
       for (const k of WEB_ONLY_FIELDS) {
         if (k in body) delete body[k];

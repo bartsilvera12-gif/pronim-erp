@@ -69,6 +69,11 @@ export interface Producto {
   /** Fase Decants: si true, este producto puede entregarse como obsequio
    *  sin cargo en una venta del ERP. */
   es_decant?: boolean;
+  /** Modelo Pronim: si true, el producto es una "franja de precio"
+   *  virtual (no representa una prenda concreta). Se usa para
+   *  ocultarlo de flujos tradicionales de catálogo y para reglas
+   *  especiales (compras no pisan precio_venta, POS por grilla). */
+  es_franja_precio?: boolean;
 
   /* ─────────────────────────────────────────────────────────────────
    * Campos opcionales heredados del ERP base (gastro/autopartes).

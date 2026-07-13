@@ -21,8 +21,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Joyería Artesanos",
-  description: "Sistema de gestión Joyería Artesanos",
+  title: "Pronim Consultoría",
+  description: "Sistema de gestión Pronim Consultoría",
 };
 
 export default function RootLayout({
