@@ -21,8 +21,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Pronim Consultoría",
-  description: "Sistema de gestión Pronim Consultoría",
+  title: "Akakua'a",
+  description: "Sistema de gestión Akakua'a",
 };
 
 export default function RootLayout({

@@ -13,7 +13,7 @@ config({ path: path.join(process.cwd(), ".env.local") });
 
 const EMAIL = "admin@pronimconsultoria.com";
 const PASSWORD = "Pronimconsultoria2026";
-const NOMBRE = "Admin Pronim";
+const NOMBRE = "Admin Akakua'a";
 const SCHEMA = "pronimerp";
 
 async function main() {
