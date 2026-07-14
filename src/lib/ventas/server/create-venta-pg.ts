@@ -115,8 +115,7 @@ function qTable(schema: string, table: string): string {
  *   - producto no existe
  *   - no pertenece a la empresa
  *   - activo=false
- * NO valida es_franja_precio (el modelo Pronim permite convivencia con
- * franjas por precio y otros productos si en algún momento se agregan).
+ *   - no es una franja de precio (Pronim vende cantidades por categoría/precio)
  */
 async function lockProductosServerSide(
   client: import("pg").PoolClient,
@@ -165,6 +164,11 @@ async function lockProductosServerSide(
   for (const p of r.rows) {
     if (!p.activo) {
       throw new Error(`El producto ${p.nombre} (${p.sku}) está inactivo y no puede venderse.`);
+    }
+    if (!p.es_franja_precio) {
+      throw new Error(
+        `El producto ${p.nombre} (${p.sku}) no es una categoría de precio válida para Pronim.`,
+      );
     }
     out.set(p.id, {
       id: p.id,
@@ -223,6 +227,7 @@ export async function createVentaTransaccionalPg(
   const cxcT = qTable(params.schema, "cuentas_por_cobrar");
   const pagosDetT = qTable(params.schema, "ventas_pagos_detalle");
   const eventosT = qTable(params.schema, "cliente_eventos");
+  const entidadesT = qTable(params.schema, "entidades_bancarias");
 
   const client = await pool.connect();
   try {
@@ -240,6 +245,25 @@ export async function createVentaTransaccionalPg(
     );
     if (!sc.rows.length) {
       throw new Error("Sucursal inválida: no pertenece a la empresa autenticada.");
+    }
+
+    // Toda entidad bancaria recibida desde la UI debe pertenecer al tenant.
+    const entidadIds = [
+      ...new Set(
+        pagosInmediatos
+          .map((pg) => pg.entidad_bancaria_id)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+    if (entidadIds.length > 0) {
+      const eq = await client.query<{ id: string }>(
+        `SELECT id FROM ${entidadesT}
+         WHERE empresa_id = $1 AND id = ANY($2::uuid[])`,
+        [params.empresaId, entidadIds],
+      );
+      if (eq.rows.length !== entidadIds.length) {
+        throw new Error("Una o más entidades bancarias no pertenecen a esta empresa.");
+      }
     }
 
     // ── Lock productos server-side ────────────────────────────────────
@@ -372,29 +396,19 @@ export async function createVentaTransaccionalPg(
     const totalEfectivo = pagosInmediatos
       .filter((pg) => pg.metodo_pago === "efectivo")
       .reduce((s, pg) => s + Number(pg.monto), 0);
-    let cajaIdActual: string | null = null;
-    const buscarCaja = pagosInmediatos.length > 0 || params.tipoVenta === "CREDITO";
-    if (buscarCaja) {
-      const cq = await client.query<{ id: string }>(
-        `SELECT id FROM ${cajasT}
-         WHERE empresa_id=$1 AND sucursal_id=$2 AND estado='abierta'
-         LIMIT 1`,
-        [params.empresaId, params.sucursalId],
+    // Toda venta pertenece a un turno de caja, incluso si se paga íntegramente
+    // con crédito del cliente o queda financiada sin entrega inicial.
+    const cq = await client.query<{ id: string }>(
+      `SELECT id FROM ${cajasT}
+       WHERE empresa_id=$1 AND sucursal_id=$2 AND estado='abierta'
+       LIMIT 1`,
+      [params.empresaId, params.sucursalId],
+    );
+    const cajaIdActual = cq.rows[0]?.id ?? null;
+    if (!cajaIdActual) {
+      throw new Error(
+        "No hay caja abierta en la sucursal; toda venta debe asociarse a una caja/turno.",
       );
-      cajaIdActual = cq.rows[0]?.id ?? null;
-      if (totalEfectivo > TOL && !cajaIdActual) {
-        throw new Error(
-          "No hay caja abierta en la sucursal para registrar el ingreso en efectivo.",
-        );
-      }
-      // Para métodos no-efectivo, si no hay caja abierta se acepta pero
-      // el pago no aparecerá atribuido a ningún turno. Es preferible
-      // exigirla también, así que:
-      if (pagosInmediatos.length > 0 && !cajaIdActual) {
-        throw new Error(
-          "No hay caja abierta en la sucursal; todos los pagos inmediatos deben asociarse a una caja/turno.",
-        );
-      }
     }
 
     // ── Lock stock por sucursal + validar suficiencia ─────────────────

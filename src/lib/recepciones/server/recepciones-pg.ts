@@ -91,13 +91,20 @@ async function lockProductosRecep(
   schema: string,
   empresaId: string,
   productoIds: string[],
-): Promise<Map<string, { nombre: string; sku: string; precio_venta: number; activo: boolean }>> {
+): Promise<Map<string, {
+  nombre: string;
+  sku: string;
+  precio_venta: number;
+  activo: boolean;
+  es_franja_precio: boolean;
+}>> {
   if (productoIds.length === 0) return new Map();
   const prodT = quoteSchemaTable(schema, "productos");
   const r = await client.query<{
-    id: string; nombre: string; sku: string; precio_venta: string; activo: boolean;
+    id: string; nombre: string; sku: string; precio_venta: string;
+    activo: boolean; es_franja_precio: boolean;
   }>(
-    `SELECT id, nombre, sku, precio_venta::text, activo
+    `SELECT id, nombre, sku, precio_venta::text, activo, es_franja_precio
      FROM ${prodT}
      WHERE empresa_id = $1 AND id = ANY($2::uuid[])
      FOR UPDATE`,
@@ -106,16 +113,28 @@ async function lockProductosRecep(
   if (r.rows.length !== productoIds.length) {
     throw new Error("Uno o más productos no existen en la empresa.");
   }
-  const out = new Map<string, { nombre: string; sku: string; precio_venta: number; activo: boolean }>();
+  const out = new Map<string, {
+    nombre: string;
+    sku: string;
+    precio_venta: number;
+    activo: boolean;
+    es_franja_precio: boolean;
+  }>();
   for (const p of r.rows) {
     if (!p.activo) {
       throw new Error(`El producto ${p.nombre} (${p.sku}) está inactivo.`);
+    }
+    if (!p.es_franja_precio) {
+      throw new Error(
+        `El producto ${p.nombre} (${p.sku}) no es una categoría de precio válida para Pronim.`,
+      );
     }
     out.set(p.id, {
       nombre: p.nombre,
       sku: p.sku,
       precio_venta: Number(p.precio_venta),
       activo: p.activo,
+      es_franja_precio: p.es_franja_precio === true,
     });
   }
   return out;
@@ -198,6 +217,7 @@ export async function crearRecepcionPg(
   const recepPagosT = quoteSchemaTable(schema, "cliente_recepciones_pagos");
   const creditosT = quoteSchemaTable(schema, "cliente_creditos_movimientos");
   const eventosT = quoteSchemaTable(schema, "cliente_eventos");
+  const entidadesT = quoteSchemaTable(schema, "entidades_bancarias");
 
   const client = await pool.connect();
   try {
@@ -210,6 +230,25 @@ export async function crearRecepcionPg(
     );
     if (!cl.rows.length) throw new Error("Cliente no encontrado en esta empresa.");
     await validarSucursalEmpresa(client, schema, p.empresaId, p.sucursalId);
+
+    // Validación tenant-safe de entidades bancarias.
+    const entidadIds = [
+      ...new Set(
+        p.pagos
+          .map((pg) => pg.entidad_bancaria_id)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+    if (entidadIds.length > 0) {
+      const eq = await client.query<{ id: string }>(
+        `SELECT id FROM ${entidadesT}
+         WHERE empresa_id = $1 AND id = ANY($2::uuid[])`,
+        [p.empresaId, entidadIds],
+      );
+      if (eq.rows.length !== entidadIds.length) {
+        throw new Error("Una o más entidades bancarias no pertenecen a esta empresa.");
+      }
+    }
 
     // Lock productos server-side
     const uniqueIds = [...new Set(p.items.map((i) => i.producto_id))];
@@ -736,14 +775,10 @@ export async function anularRecepcionPg(p: RecepcionAnularInput): Promise<Recepc
         if (stockNuevo <= 0) {
           costoNuevo = 0;
         } else if (valorReducido < 0) {
-          // Puede pasar si el costo original era mayor al costo actual
-          // (ej: hubo compras posteriores más baratas que bajaron el WACP).
-          // Clamp a 0 para no dejar valor negativo. Logueamos.
-          console.warn(
-            `[anular-recepcion] WACP inverso resultó negativo para producto ${it.sku}; ` +
-              `valorActual=${valorActual}, restar=${qty * costoOriginal}. Costo nuevo → 0.`,
+          throw new Error(
+            `No se puede anular la recepción: el WACP inverso de ${it.sku} ` +
+              `produciría una valuación negativa. Requiere un ajuste de inventario previo.`,
           );
-          costoNuevo = 0;
         } else {
           costoNuevo = Math.round(valorReducido / stockNuevo);
         }

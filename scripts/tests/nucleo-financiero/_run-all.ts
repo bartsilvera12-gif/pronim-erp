@@ -70,6 +70,26 @@ async function loadServerFns() {
 // Pool para queries directas (setup/cleanup)
 const localPool = new Pool({ connectionString: TEST_DB_URL });
 
+async function assertDisposableTestDatabase(): Promise<void> {
+  if (process.env.ALLOW_DESTRUCTIVE_TEST_DB !== "true") {
+    throw new Error(
+      "Falta ALLOW_DESTRUCTIVE_TEST_DB=true. El runner elimina y reconstruye el schema pronimerp.",
+    );
+  }
+  const c = await localPool.connect();
+  try {
+    const r = await c.query<{ db: string }>("SELECT current_database() AS db");
+    const db = r.rows[0]?.db ?? "";
+    if (!/test/i.test(db)) {
+      throw new Error(
+        `Base rechazada: "${db}". El nombre debe contener "test" para permitir el bootstrap destructivo.`,
+      );
+    }
+  } finally {
+    c.release();
+  }
+}
+
 // ═════════════════════════════════════════════════════════════════════
 // Bootstrap: dropea schema + aplica todas las migraciones desde cero
 // ═════════════════════════════════════════════════════════════════════
@@ -599,10 +619,11 @@ async function run(name: string, fn: (ctx: TestCtx) => Promise<void>) {
 }
 
 async function main() {
-  console.log(`[bootstrap] TEST_DB_URL=${TEST_DB_URL?.slice(0, 40)}...`);
+  console.log("[bootstrap] validando base descartable y reconstruyendo pronimerp...");
+  await assertDisposableTestDatabase();
+  await dropSchemaAndReapply();
 
-  // Test K primero: verifica que migraciones aplican desde cero.
-  // NOTA: no dropea el schema (destructivo). Solo verifica estructura actual.
+  // Test K primero: verifica la estructura obtenida de migraciones reales.
   await loadServerFns();
   try {
     await testK_reconstruccionSchema();
