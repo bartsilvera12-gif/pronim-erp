@@ -1,45 +1,55 @@
 /**
  * Núcleo transaccional de VENTAS para pronimerp.
  *
- * Rediseño 20260810:
- *   - Todo dentro de UNA transacción PostgreSQL: venta + items + stock +
- *     movimientos_inventario + consumo FIFO de crédito + pago_detalle +
- *     movimiento de caja (solo por efectivo) + CxC (si aplica) + evento
- *     historial del cliente.
- *   - Advisory lock por (empresa_id, cliente_id) antes de tocar el saldo
- *     de crédito. Serializa ventas concurrentes al mismo cliente.
- *   - El crédito aplicado NUNCA cuenta como ingreso de caja.
- *   - Stock insuficiente ⇒ ERROR (sin fallback "permitir_sin_stock").
- *   - Sucursal obligatoria, validada contra empresa.
- *   - CxC se crea SOLO por el saldo_restante en ventas a crédito.
- *   - Suma de crédito + efectivo + tarjeta + transferencia + otros DEBE
- *     ser igual al total.
- *   - Ninguna operación es best-effort: si algo falla, ROLLBACK completo.
+ * Rediseño 20260811 (correcciones críticas):
+ *
+ *   1) Ecuación única:
+ *        total = credito_aplicado + pagos_inmediatos + monto_financiado
+ *      - CONTADO ⇒ monto_financiado = 0
+ *      - CREDITO ⇒ CxC = monto_financiado (SOLO la parte no pagada)
+ *      - Nunca se genera un pago efectivo ficticio por el total.
+ *
+ *   2) Fuente de verdad única para pagos = ventas_pagos_detalle.
+ *      NO se inserta caja_movimientos (eso es solo para ajustes manuales).
+ *      Cada pago en efectivo lleva caja_id + sucursal_id para atribución.
+ *
+ *   3) No se confía en precio_venta / nombre / sku / subtotales del cliente.
+ *      Se resuelven server-side leyendo `productos` con FOR UPDATE.
+ *
+ *   4) Sucursal ESTRICTA (rechaza si no coincide con la del usuario).
+ *
+ *   5) numero_control vía pronimerp.siguiente_numero_control(RPC atómica).
+ *
+ *   6) Advisory lock por (empresa_id, cliente_id) para serializar
+ *      operaciones concurrentes sobre el mismo saldo de crédito.
+ *
+ *   7) Stock insuficiente ⇒ rechazo (no hay flag "permitir_sin_stock").
+ *
+ *   8) Toda la operación es una sola transacción. Ninguna fase best-effort.
  */
-import { getChatPostgresPool } from "@/lib/supabase/chat-pg-pool";
-import { quoteSchemaTable } from "@/lib/supabase/chat-pg-pool";
+import { getChatPostgresPool, quoteSchemaTable } from "@/lib/supabase/chat-pg-pool";
 import { confirmarCambioPg } from "@/lib/cambios/server/cambio-pg";
 
-const TOL = 2; // guaraníes — tolerancia redondeo
+const TOL = 2; // guaraníes — tolerancia de redondeo
 
 // ═════════════════════════════════════════════════════════════════════
 // Tipos
 // ═════════════════════════════════════════════════════════════════════
 
+/** Ítem del cliente. Solo `producto_id` y `cantidad` son autoritativos;
+ *  el resto se ignora en el server y se resuelve desde la DB. `tipo_iva`
+ *  se acepta como sugerencia pero se recalcula si el producto tiene
+ *  regla distinta. */
 export interface CreateVentaItemInput {
   producto_id: string;
-  producto_nombre: string;
-  sku: string;
   cantidad: number;
-  precio_venta_original: number;
-  precio_venta: number;
-  tipo_iva: "EXENTA" | "5%" | "10%";
-  subtotal: number;
-  monto_iva: number;
-  total_linea: number;
-  /** Fase Decants: si true, el ítem se entrega como obsequio. */
+  /** Solo para líneas es_sin_cargo=true (decants). */
   es_sin_cargo?: boolean;
   motivo_sin_cargo?: string | null;
+  /** Sugerencia del cliente. Server valida y usa siempre EXENTA para franjas. */
+  tipo_iva?: "EXENTA" | "5%" | "10%";
+  /** Snapshot del carrito (informativo, se usa solo para validar coincidencia). */
+  precio_venta_sugerido?: number;
 }
 
 export type MetodoPagoVenta =
@@ -71,37 +81,109 @@ export interface CreateVentaPgParams {
   tipoVenta: "CONTADO" | "CREDITO";
   plazoDias: number | null;
   items: CreateVentaItemInput[];
-  subtotalDeclarado: number;
-  montoIvaDeclarado: number;
-  totalDeclarado: number;
-  /** Sucursal donde se materializa la venta (OBLIGATORIA en pronimerp). */
+  /** OBLIGATORIA. */
   sucursalId: string;
-  /** Monto aplicado del saldo a favor del cliente. Descuenta FIFO. */
+  /** Monto aplicado del saldo a favor. Distribución FIFO server-side. */
   creditoClienteUsado?: number | null;
-  /** Formas de pago no-crédito. La suma + creditoClienteUsado debe = total. */
-  pagosDetalle?: PagoDetalleVentaInput[];
-  /** Actor. */
+  /** Pagos inmediatos (no incluir crédito acá). */
+  pagosInmediatos?: PagoDetalleVentaInput[];
   createdBy?: string | null;
   usuarioNombre?: string | null;
-  /** Vincula a operación de cambio, si aplica. */
+  /** Vincula a operación de cambio. */
   cambioId?: string | null;
 }
+
+export interface CreateVentaResult {
+  ventaId: string;
+  numeroControl: string;
+  fechaIso: string;
+  total: number;
+  creditoAplicado: number;
+  pagosInmediatosTotal: number;
+  montoFinanciado: number;
+  cxcId: string | null;
+}
+
+// ═════════════════════════════════════════════════════════════════════
 
 function qTable(schema: string, table: string): string {
   return quoteSchemaTable(schema, table);
 }
 
-function recalcTotals(items: CreateVentaItemInput[]) {
-  let subtotal = 0;
-  let montoIva = 0;
-  let total = 0;
-  for (const it of items) {
-    if (it.es_sin_cargo === true) continue;
-    subtotal += it.subtotal;
-    montoIva += it.monto_iva;
-    total += it.total_linea;
+/**
+ * Bloquea y devuelve info de productos desde la DB. Rechaza si:
+ *   - producto no existe
+ *   - no pertenece a la empresa
+ *   - activo=false
+ * NO valida es_franja_precio (el modelo Pronim permite convivencia con
+ * franjas por precio y otros productos si en algún momento se agregan).
+ */
+async function lockProductosServerSide(
+  client: import("pg").PoolClient,
+  schema: string,
+  empresaId: string,
+  productoIds: string[],
+): Promise<
+  Map<string, {
+    id: string;
+    nombre: string;
+    sku: string;
+    precio_venta: number;
+    costo_promedio: number;
+    es_decant: boolean;
+    es_franja_precio: boolean;
+    activo: boolean;
+  }>
+> {
+  if (productoIds.length === 0) return new Map();
+  const prodT = qTable(schema, "productos");
+  const r = await client.query<{
+    id: string;
+    nombre: string;
+    sku: string;
+    precio_venta: string;
+    costo_promedio: string;
+    es_decant: boolean;
+    es_franja_precio: boolean;
+    activo: boolean;
+  }>(
+    `SELECT id, nombre, sku, precio_venta::text, costo_promedio::text,
+            es_decant, es_franja_precio, activo
+     FROM ${prodT}
+     WHERE empresa_id = $1 AND id = ANY($2::uuid[])
+     FOR UPDATE`,
+    [empresaId, productoIds],
+  );
+  if (r.rows.length !== productoIds.length) {
+    throw new Error("Uno o más productos no existen en la empresa.");
   }
-  return { subtotal, montoIva, total };
+  const out = new Map<string, {
+    id: string; nombre: string; sku: string;
+    precio_venta: number; costo_promedio: number;
+    es_decant: boolean; es_franja_precio: boolean; activo: boolean;
+  }>();
+  for (const p of r.rows) {
+    if (!p.activo) {
+      throw new Error(`El producto ${p.nombre} (${p.sku}) está inactivo y no puede venderse.`);
+    }
+    out.set(p.id, {
+      id: p.id,
+      nombre: p.nombre,
+      sku: p.sku,
+      precio_venta: Number(p.precio_venta),
+      costo_promedio: Number(p.costo_promedio),
+      es_decant: p.es_decant === true,
+      es_franja_precio: p.es_franja_precio === true,
+      activo: p.activo,
+    });
+  }
+  return out;
+}
+
+function computeIva(tipoIva: "EXENTA" | "5%" | "10%", subtotal: number): number {
+  if (tipoIva === "5%") return Math.round(subtotal / 21);   // 5/105 aproximado
+  if (tipoIva === "10%") return Math.round(subtotal / 11);  // 10/110 aproximado
+  return 0;
 }
 
 // ═════════════════════════════════════════════════════════════════════
@@ -110,80 +192,32 @@ function recalcTotals(items: CreateVentaItemInput[]) {
 
 export async function createVentaTransaccionalPg(
   params: CreateVentaPgParams,
-): Promise<{
-  ventaId: string;
-  numeroControl: string;
-  fechaIso: string;
-  saldoRestante: number;
-  creditoAplicado: number;
-  cxcId: string | null;
-}> {
+): Promise<CreateVentaResult> {
   const pool = getChatPostgresPool();
   if (!pool) throw new Error("Sin conexión directa a Postgres (SUPABASE_DB_URL).");
 
-  // ── Validaciones básicas ──────────────────────────────────────────
+  // ── Validaciones sintácticas ────────────────────────────────────────
   if (!params.clienteId) {
     throw new Error("Cliente requerido: no se pueden registrar ventas sin cliente.");
   }
   if (!params.sucursalId) {
-    throw new Error(
-      "Sucursal requerida: no se pudo determinar la sucursal para la venta.",
-    );
+    throw new Error("Sucursal requerida: no se pudo determinar la sucursal.");
   }
   if (!params.items.length) {
     throw new Error("La venta debe tener al menos un ítem.");
   }
-
-  const calc = recalcTotals(params.items);
-  if (
-    Math.abs(calc.subtotal - params.subtotalDeclarado) > TOL ||
-    Math.abs(calc.montoIva - params.montoIvaDeclarado) > TOL ||
-    Math.abs(calc.total - params.totalDeclarado) > TOL
-  ) {
-    throw new Error("Los totales no coinciden con los ítems; revisá el carrito.");
-  }
-
   const creditoUsado = Math.max(0, Number(params.creditoClienteUsado ?? 0));
-  const saldoRestanteEsperado = Math.max(0, calc.total - creditoUsado);
+  const pagosInmediatos = (params.pagosInmediatos ?? []).filter(
+    (pg) => Number(pg.monto) > 0,
+  );
 
-  // Suma de pagos_detalle DEBE cubrir el saldo restante exactamente.
-  const pagos = params.pagosDetalle ?? [];
-  if (saldoRestanteEsperado > TOL) {
-    const totalPagos = pagos.reduce((s, pg) => s + Number(pg.monto), 0);
-    if (Math.abs(totalPagos - saldoRestanteEsperado) > TOL) {
-      throw new Error(
-        `La suma de las formas de pago (${totalPagos}) no coincide con el saldo restante (${saldoRestanteEsperado}). Total ${calc.total}, crédito aplicado ${creditoUsado}.`,
-      );
-    }
-  } else if (pagos.length > 0) {
-    const totalPagos = pagos.reduce((s, pg) => s + Number(pg.monto), 0);
-    if (totalPagos > TOL) {
-      throw new Error(
-        "La venta está cubierta 100% con crédito del cliente; no se aceptan pagos adicionales.",
-      );
-    }
-  }
-
-  // Cuánto de los pagos es EFECTIVO (para movimiento de caja)
-  const totalEfectivo = pagos
-    .filter((pg) => pg.metodo_pago === "efectivo")
-    .reduce((s, pg) => s + Number(pg.monto), 0);
-
-  const qtyByProduct = new Map<string, number>();
-  for (const it of params.items) {
-    const prev = qtyByProduct.get(it.producto_id) ?? 0;
-    qtyByProduct.set(it.producto_id, prev + it.cantidad);
-  }
-
-  const ventasT = qTable(params.schema, "ventas");
-  const cajasT = qTable(params.schema, "cajas");
-  const cajaMovT = qTable(params.schema, "caja_movimientos");
-  const itemsT = qTable(params.schema, "ventas_items");
-  const movT = qTable(params.schema, "movimientos_inventario");
-  const prodT = qTable(params.schema, "productos");
-  const stockSucT = qTable(params.schema, "producto_stock_sucursal");
   const cliT = qTable(params.schema, "clientes");
   const sucT = qTable(params.schema, "sucursales");
+  const cajasT = qTable(params.schema, "cajas");
+  const ventasT = qTable(params.schema, "ventas");
+  const itemsT = qTable(params.schema, "ventas_items");
+  const movT = qTable(params.schema, "movimientos_inventario");
+  const stockSucT = qTable(params.schema, "producto_stock_sucursal");
   const creditosT = qTable(params.schema, "cliente_creditos_movimientos");
   const consumosT = qTable(params.schema, "cliente_creditos_consumos");
   const cxcT = qTable(params.schema, "cuentas_por_cobrar");
@@ -194,39 +228,127 @@ export async function createVentaTransaccionalPg(
   try {
     await client.query("BEGIN");
 
-    // ── Cliente + sucursal pertenecen a la empresa ──────────────────
+    // ── Cliente + sucursal pertenecen a la empresa ────────────────────
     const ck = await client.query(
       `SELECT 1 FROM ${cliT} WHERE id = $1 AND empresa_id = $2 LIMIT 1`,
       [params.clienteId, params.empresaId],
     );
     if (!ck.rows.length) throw new Error("Cliente no encontrado en esta empresa.");
-
     const sc = await client.query(
       `SELECT 1 FROM ${sucT} WHERE id = $1 AND empresa_id = $2 LIMIT 1`,
       [params.sucursalId, params.empresaId],
     );
     if (!sc.rows.length) {
-      throw new Error(
-        "Sucursal inválida: no existe o no pertenece a la empresa autenticada.",
-      );
+      throw new Error("Sucursal inválida: no pertenece a la empresa autenticada.");
     }
 
-    // ── Advisory lock sobre crédito del cliente ─────────────────────
+    // ── Lock productos server-side ────────────────────────────────────
+    const uniqueIds = [...new Set(params.items.map((i) => i.producto_id))];
+    const productosInfo = await lockProductosServerSide(
+      client,
+      params.schema,
+      params.empresaId,
+      uniqueIds,
+    );
+
+    // ── Recalcular subtotales / totals SERVER-SIDE ────────────────────
+    // - producto_nombre, sku, precio_venta ← DB
+    // - subtotal, monto_iva, total_linea ← calculados
+    // - IVA: si el sugerido != al calculable se usa el server; para franjas → EXENTA
+    interface ItemResuelto {
+      producto_id: string;
+      producto_nombre: string;
+      sku: string;
+      cantidad: number;
+      precio_venta_original: number;
+      precio_venta: number;
+      tipo_iva: "EXENTA" | "5%" | "10%";
+      subtotal: number;
+      monto_iva: number;
+      total_linea: number;
+      es_sin_cargo: boolean;
+      motivo_sin_cargo: string | null;
+      costo_unitario_snapshot: number;
+    }
+    const itemsResueltos: ItemResuelto[] = [];
+    for (const it of params.items) {
+      const info = productosInfo.get(it.producto_id);
+      if (!info) throw new Error(`Producto ${it.producto_id} no resuelto server-side.`);
+      const cantidad = Number(it.cantidad);
+      if (!(cantidad > 0)) {
+        throw new Error(`Cantidad inválida en línea (${info.sku}): ${cantidad}.`);
+      }
+      const esSinCargo = it.es_sin_cargo === true;
+      if (esSinCargo && !info.es_decant) {
+        throw new Error(`El producto ${info.sku} no permite entrega sin cargo.`);
+      }
+      // Franjas siempre EXENTA. Para otros productos, aceptar sugerencia.
+      const tipoIva: "EXENTA" | "5%" | "10%" = info.es_franja_precio
+        ? "EXENTA"
+        : (it.tipo_iva === "5%" || it.tipo_iva === "10%") ? it.tipo_iva : "EXENTA";
+      const precioVenta = esSinCargo ? 0 : info.precio_venta;
+      const subtotal = cantidad * precioVenta;
+      const montoIva = esSinCargo ? 0 : computeIva(tipoIva, subtotal);
+      const totalLinea = subtotal; // el IVA es informativo en el modelo Pronim
+      itemsResueltos.push({
+        producto_id: info.id,
+        producto_nombre: info.nombre,
+        sku: info.sku,
+        cantidad,
+        precio_venta_original: precioVenta,
+        precio_venta: precioVenta,
+        tipo_iva: tipoIva,
+        subtotal,
+        monto_iva: montoIva,
+        total_linea: totalLinea,
+        es_sin_cargo: esSinCargo,
+        motivo_sin_cargo: esSinCargo ? (it.motivo_sin_cargo ?? "decant_obsequio") : null,
+        costo_unitario_snapshot: info.costo_promedio,
+      });
+    }
+
+    const subtotal = itemsResueltos.reduce((s, i) => s + i.subtotal, 0);
+    const montoIva = itemsResueltos.reduce((s, i) => s + i.monto_iva, 0);
+    const total = itemsResueltos.reduce((s, i) => s + i.total_linea, 0);
+
+    // ── Ecuación única ────────────────────────────────────────────────
+    const totalPagosInmediatos = pagosInmediatos.reduce(
+      (s, pg) => s + Number(pg.monto), 0);
+    // monto_financiado = lo que queda pendiente (CxC en venta a CREDITO)
+    const montoFinanciado = Math.max(0, total - creditoUsado - totalPagosInmediatos);
+
+    // Validaciones semánticas
+    if (creditoUsado > total + TOL) {
+      throw new Error("El crédito aplicado supera el total de la venta.");
+    }
+    if (totalPagosInmediatos > total - creditoUsado + TOL) {
+      throw new Error("Los pagos inmediatos superan el saldo restante de la venta.");
+    }
+    if (params.tipoVenta === "CONTADO" && montoFinanciado > TOL) {
+      throw new Error(
+        `Venta CONTADO no puede quedar con saldo financiado. Total ${total}, crédito ${creditoUsado}, pagos ${totalPagosInmediatos}, financiado ${montoFinanciado}.`,
+      );
+    }
+    if (params.tipoVenta === "CREDITO" && montoFinanciado <= TOL) {
+      throw new Error(
+        "Venta CREDITO debe tener saldo financiado > 0; si no, usar CONTADO.",
+      );
+    }
+    if (params.tipoVenta === "CREDITO" && (!params.plazoDias || params.plazoDias < 1)) {
+      throw new Error("Venta a crédito requiere plazo de al menos 1 día.");
+    }
+
+    // ── Advisory lock crédito + validación de saldo ───────────────────
     if (creditoUsado > 0) {
       await client.query(
         `SELECT pronimerp.lock_cliente_credito($1::uuid, $2::uuid)`,
         [params.empresaId, params.clienteId],
       );
-
-      // Recalcular saldo real DESPUÉS de tomar el lock (importante para
-      // concurrencia: dos ventas simultáneas al mismo cliente esperan
-      // acá; la segunda ve el saldo actualizado).
       const saldoQ = await client.query<{ saldo: string }>(
         `SELECT COALESCE(SUM(
-           CASE WHEN tipo = 'ENTRADA' THEN monto
-                WHEN tipo = 'SALIDA' THEN -monto
-                WHEN tipo = 'AJUSTE' THEN monto
-                ELSE 0 END
+           CASE WHEN tipo='ENTRADA' THEN monto
+                WHEN tipo='SALIDA' THEN -monto
+                WHEN tipo='AJUSTE' THEN monto ELSE 0 END
          ), 0)::text AS saldo
          FROM ${creditosT}
          WHERE empresa_id = $1 AND cliente_id = $2`,
@@ -240,16 +362,19 @@ export async function createVentaTransaccionalPg(
       }
     }
 
-    // ── Caja abierta si hay efectivo ────────────────────────────────
+    // ── Caja abierta si hay pagos en efectivo ─────────────────────────
+    const totalEfectivo = pagosInmediatos
+      .filter((pg) => pg.metodo_pago === "efectivo")
+      .reduce((s, pg) => s + Number(pg.monto), 0);
     let cajaIdActual: string | null = null;
     if (totalEfectivo > TOL) {
-      const cajaQ = await client.query<{ id: string }>(
+      const cq = await client.query<{ id: string }>(
         `SELECT id FROM ${cajasT}
-         WHERE empresa_id = $1 AND sucursal_id = $2 AND estado = 'abierta'
+         WHERE empresa_id=$1 AND sucursal_id=$2 AND estado='abierta'
          LIMIT 1`,
         [params.empresaId, params.sucursalId],
       );
-      cajaIdActual = cajaQ.rows[0]?.id ?? null;
+      cajaIdActual = cq.rows[0]?.id ?? null;
       if (!cajaIdActual) {
         throw new Error(
           "No hay caja abierta en la sucursal para registrar el ingreso en efectivo.",
@@ -257,82 +382,53 @@ export async function createVentaTransaccionalPg(
       }
     }
 
-    // ── Lock + descuento de stock por sucursal ──────────────────────
-    const ids = [...qtyByProduct.keys()];
-    const locked = await client.query<{
-      id: string;
-      stock_actual: string;
-      costo_promedio: string;
-      nombre: string;
-      sku: string;
-      es_decant: boolean;
-    }>(
-      `SELECT id, stock_actual, costo_promedio, nombre, sku, es_decant
-       FROM ${prodT}
-       WHERE empresa_id = $1 AND id = ANY($2::uuid[])
-       FOR UPDATE`,
-      [params.empresaId, ids],
-    );
-    if (locked.rows.length !== ids.length) {
-      throw new Error("Algún producto de la venta ya no existe.");
+    // ── Lock stock por sucursal + validar suficiencia ─────────────────
+    const qtyByProduct = new Map<string, number>();
+    for (const it of itemsResueltos) {
+      qtyByProduct.set(
+        it.producto_id,
+        (qtyByProduct.get(it.producto_id) ?? 0) + it.cantidad,
+      );
     }
-
-    // Stock de la sucursal
     const stockSuc = await client.query<{ producto_id: string; stock_actual: string }>(
-      `SELECT producto_id, stock_actual FROM ${stockSucT}
-        WHERE sucursal_id = $1 AND producto_id = ANY($2::uuid[])
-        FOR UPDATE`,
-      [params.sucursalId, ids],
+      `SELECT producto_id, stock_actual::text
+       FROM ${stockSucT}
+       WHERE sucursal_id = $1 AND producto_id = ANY($2::uuid[])
+       FOR UPDATE`,
+      [params.sucursalId, [...qtyByProduct.keys()]],
     );
-    const stockByProd = new Map(stockSuc.rows.map((r) => [r.producto_id, Number(r.stock_actual)]));
-
-    const productoInfo = new Map<
-      string,
-      { nombre: string; sku: string; costo_promedio: number; es_decant: boolean }
-    >();
-    for (const p of locked.rows) {
-      productoInfo.set(p.id, {
-        nombre: p.nombre,
-        sku: p.sku,
-        costo_promedio: Number(p.costo_promedio),
-        es_decant: p.es_decant === true,
-      });
-    }
-
-    // Validar stock suficiente por producto (pronimerp: NO se permite negativo)
+    const stockByProd = new Map(
+      stockSuc.rows.map((r) => [r.producto_id, Number(r.stock_actual)]),
+    );
     for (const [prodId, qty] of qtyByProduct) {
+      const info = productosInfo.get(prodId);
       const disp = stockByProd.get(prodId) ?? 0;
-      if (qty > disp) {
-        const inf = productoInfo.get(prodId);
+      if (qty > disp + TOL) {
         throw new Error(
-          `Stock insuficiente para ${inf?.nombre ?? prodId} (SKU ${inf?.sku ?? "?"}): disponible ${disp} en la sucursal, solicitado ${qty}.`,
+          `Stock insuficiente para ${info?.nombre ?? prodId} (SKU ${info?.sku ?? "?"}): disponible ${disp} en sucursal, solicitado ${qty}.`,
         );
       }
     }
 
-    // ── Insertar cabecera de venta ──────────────────────────────────
-    // numero_control
-    const numQ = await client.query<{ maxn: number | null }>(
-      `SELECT COALESCE(MAX(
-         CASE WHEN numero_control ~ '^V-[0-9]+$'
-              THEN (substring(numero_control from 3))::int
-              ELSE 0 END
-       ), 0) AS maxn
-       FROM ${ventasT} WHERE empresa_id = $1`,
+    // ── numero_control (RPC atómica) ──────────────────────────────────
+    const nc = await client.query<{ n: string }>(
+      `SELECT pronimerp.siguiente_numero_control($1::uuid, 'venta') AS n`,
       [params.empresaId],
     );
-    const numeroControl = `V-${String(Number(numQ.rows[0]?.maxn ?? 0) + 1).padStart(6, "0")}`;
+    const numeroControl = nc.rows[0].n;
 
+    // ── Insertar cabecera ────────────────────────────────────────────
+    // metodo_pago legacy: guardamos "efectivo" si hubo efectivo, sino el primero
+    // (informativo; la fuente de verdad son ventas_pagos_detalle).
+    const metodoPagoLegacy = totalEfectivo > 0 ? "efectivo"
+      : (pagosInmediatos[0]?.metodo_pago ?? "efectivo");
     const insVenta = await client.query<{ id: string; fecha: string }>(
       `INSERT INTO ${ventasT} (
          empresa_id, cliente_id, numero_control, moneda, tipo_cambio,
          subtotal, monto_iva, total, estado, tipo_venta, plazo_dias, fecha,
          observaciones, caja_id, metodo_pago, sucursal_id, cambio_id
-       ) VALUES (
-         $1, $2, $3, $4, $5,
-         $6, $7, $8, 'completada', $9, $10, now(),
-         $11, $12, $13, $14, $15
-       )
+       ) VALUES ($1,$2,$3,$4,$5, $6,$7,$8,'completada',$9,$10,now(),
+                 $11,$12,$13,$14,$15)
        RETURNING id, fecha`,
       [
         params.empresaId,
@@ -340,15 +436,14 @@ export async function createVentaTransaccionalPg(
         numeroControl,
         params.moneda,
         params.tipoCambio,
-        calc.subtotal,
-        calc.montoIva,
-        calc.total,
+        subtotal,
+        montoIva,
+        total,
         params.tipoVenta,
         params.plazoDias,
         params.observaciones,
         cajaIdActual,
-        // metodo_pago legacy en la fila: el primer método distinto o 'efectivo'
-        pagos[0]?.metodo_pago ?? (creditoUsado > 0 ? "efectivo" : "efectivo"),
+        metodoPagoLegacy,
         params.sucursalId,
         params.cambioId ?? null,
       ],
@@ -356,38 +451,25 @@ export async function createVentaTransaccionalPg(
     const ventaId = insVenta.rows[0].id;
     const fechaIso = insVenta.rows[0].fecha;
 
-    // ── Insertar items + descontar stock + movimientos SALIDA ──────
-    for (const it of params.items) {
-      const info = productoInfo.get(it.producto_id);
-      const costoUnit = info?.costo_promedio ?? 0;
+    // ── Items ────────────────────────────────────────────────────────
+    for (const it of itemsResueltos) {
       await client.query(
         `INSERT INTO ${itemsT} (
            empresa_id, venta_id, producto_id, producto_nombre, sku,
            cantidad, precio_venta_original, precio_venta, tipo_iva,
            subtotal, monto_iva, total_linea, es_sin_cargo, motivo_sin_cargo,
            costo_unitario_snapshot
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+         ) VALUES ($1,$2,$3,$4,$5, $6,$7,$8,$9, $10,$11,$12,$13,$14, $15)`,
         [
-          params.empresaId,
-          ventaId,
-          it.producto_id,
-          it.producto_nombre,
-          it.sku,
-          it.cantidad,
-          it.precio_venta_original,
-          it.precio_venta,
-          it.tipo_iva,
-          it.subtotal,
-          it.monto_iva,
-          it.total_linea,
-          it.es_sin_cargo === true,
-          it.motivo_sin_cargo ?? null,
-          costoUnit,
+          params.empresaId, ventaId, it.producto_id, it.producto_nombre, it.sku,
+          it.cantidad, it.precio_venta_original, it.precio_venta, it.tipo_iva,
+          it.subtotal, it.monto_iva, it.total_linea, it.es_sin_cargo, it.motivo_sin_cargo,
+          it.costo_unitario_snapshot,
         ],
       );
     }
 
-    // Descuento agrupado por producto
+    // ── Descontar stock + movimientos SALIDA ─────────────────────────
     for (const [prodId, qty] of qtyByProduct) {
       await client.query(
         `UPDATE ${stockSucT}
@@ -395,30 +477,22 @@ export async function createVentaTransaccionalPg(
           WHERE producto_id = $2 AND sucursal_id = $3`,
         [qty, prodId, params.sucursalId],
       );
-      const inf = productoInfo.get(prodId);
+      const inf = productosInfo.get(prodId)!;
       await client.query(
         `INSERT INTO ${movT} (
            empresa_id, producto_id, producto_nombre, producto_sku,
            tipo, cantidad, costo_unitario, origen, referencia, fecha,
            venta_id, created_by, usuario_nombre
-         ) VALUES ($1, $2, $3, $4, 'SALIDA', $5, $6, 'venta', $7, now(),
-                   $8, $9, $10)`,
+         ) VALUES ($1,$2,$3,$4,'SALIDA',$5,$6,'venta',$7,now(),$8,$9,$10)`,
         [
-          params.empresaId,
-          prodId,
-          inf?.nombre ?? "",
-          inf?.sku ?? "",
-          qty,
-          inf?.costo_promedio ?? 0,
-          numeroControl,
-          ventaId,
-          params.createdBy ?? null,
-          params.usuarioNombre ?? null,
+          params.empresaId, prodId, inf.nombre, inf.sku, qty,
+          inf.costo_promedio, numeroControl, ventaId,
+          params.createdBy ?? null, params.usuarioNombre ?? null,
         ],
       );
     }
 
-    // ── Crédito aplicado FIFO ───────────────────────────────────────
+    // ── Consumo FIFO de crédito ──────────────────────────────────────
     let salidaCredId: string | null = null;
     if (creditoUsado > 0) {
       const salidaIns = await client.query<{ id: string }>(
@@ -426,22 +500,16 @@ export async function createVentaTransaccionalPg(
            empresa_id, cliente_id, tipo, monto, origen, referencia_id,
            referencia_tipo, referencia_numero, observaciones,
            created_by, usuario_nombre
-         ) VALUES ($1, $2, 'SALIDA', $3, 'venta', $4, 'venta', $5, $6, $7, $8)
+         ) VALUES ($1,$2,'SALIDA',$3,'venta',$4,'venta',$5,$6,$7,$8)
          RETURNING id`,
         [
-          params.empresaId,
-          params.clienteId,
-          creditoUsado,
-          ventaId,
-          numeroControl,
-          `Aplicado como pago en venta ${numeroControl}`,
-          params.createdBy ?? null,
-          params.usuarioNombre ?? null,
+          params.empresaId, params.clienteId, creditoUsado, ventaId,
+          numeroControl, `Aplicado como pago en venta ${numeroControl}`,
+          params.createdBy ?? null, params.usuarioNombre ?? null,
         ],
       );
       salidaCredId = salidaIns.rows[0].id;
 
-      // FIFO
       const lotesQ = await client.query<{ id: string; saldo: string }>(
         `SELECT e.id,
                 (e.monto - COALESCE((
@@ -464,165 +532,114 @@ export async function createVentaTransaccionalPg(
         const aplicar = Math.min(saldo, restante);
         await client.query(
           `INSERT INTO ${consumosT} (empresa_id, entrada_id, salida_id, monto_aplicado)
-           VALUES ($1, $2, $3, $4)`,
+           VALUES ($1,$2,$3,$4)`,
           [params.empresaId, lote.id, salidaCredId, aplicar],
         );
         restante -= aplicar;
       }
       if (restante > TOL) {
         throw new Error(
-          `El crédito disponible del cliente cambió porque fue utilizado en otra operación. Faltaron Gs. ${Math.round(restante)}.`,
+          `El crédito del cliente cambió durante la operación. Faltaron Gs. ${Math.round(restante)}.`,
         );
       }
     }
 
-    // ── Pago detalle (todos los métodos no-crédito) ─────────────────
-    for (const pg of pagos) {
+    // ── Pagos inmediatos: ventas_pagos_detalle (fuente única) ────────
+    // NO se inserta en caja_movimientos: eso duplica el conteo.
+    // El efectivo aparece en el arqueo vía ventas_pagos_detalle.metodo_pago='efectivo' + caja_id.
+    for (const pg of pagosInmediatos) {
+      const cajaParaEsteMov =
+        pg.metodo_pago === "efectivo" ? cajaIdActual : null;
       await client.query(
         `INSERT INTO ${pagosDetT} (
-           empresa_id, venta_id, sucursal_id, metodo_pago,
+           empresa_id, venta_id, sucursal_id, caja_id, metodo_pago,
            entidad_bancaria_id, entidad_nombre_snapshot, monto, referencia,
            titular, fecha_acreditacion, observacion
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
         [
-          params.empresaId,
-          ventaId,
-          params.sucursalId,
-          pg.metodo_pago,
-          pg.entidad_bancaria_id ?? null,
-          pg.entidad_nombre_snapshot ?? null,
-          pg.monto,
-          pg.referencia ?? null,
-          pg.titular ?? null,
-          pg.fecha_acreditacion ?? null,
-          pg.observacion ?? null,
+          params.empresaId, ventaId, params.sucursalId, cajaParaEsteMov,
+          pg.metodo_pago, pg.entidad_bancaria_id ?? null,
+          pg.entidad_nombre_snapshot ?? null, pg.monto,
+          pg.referencia ?? null, pg.titular ?? null,
+          pg.fecha_acreditacion ?? null, pg.observacion ?? null,
         ],
       );
     }
 
-    // Registro del crédito aplicado como una línea de pago detalle (para
-    // conciliación posterior). No afecta caja.
-    if (creditoUsado > 0) {
-      await client.query(
-        `INSERT INTO ${pagosDetT} (
-           empresa_id, venta_id, sucursal_id, metodo_pago, monto, observacion
-         ) VALUES ($1, $2, $3, 'credito_cliente', $4, $5)`,
-        [
-          params.empresaId,
-          ventaId,
-          params.sucursalId,
-          creditoUsado,
-          `Crédito a favor aplicado (SALIDA ${salidaCredId ?? ""})`,
-        ],
-      );
-    }
+    // El crédito aplicado NO va como pago_detalle (no es efectivo/banco).
+    // Queda representado en cliente_creditos_movimientos + consumos FIFO.
 
-    // ── Movimiento de caja (SOLO efectivo — nunca crédito) ─────────
-    if (totalEfectivo > TOL && cajaIdActual) {
-      await client.query(
-        `INSERT INTO ${cajaMovT} (
-           empresa_id, caja_id, tipo, concepto, monto, medio_pago,
-           usuario_id, observacion
-         ) VALUES ($1, $2, 'ingreso', $3, $4, 'efectivo', $5, $6)`,
-        [
-          params.empresaId,
-          cajaIdActual,
-          `Venta ${numeroControl}`,
-          totalEfectivo,
-          params.createdBy ?? null,
-          null,
-        ],
-      );
-    }
-
-    // ── CxC solo por saldo_restante en venta a CREDITO ─────────────
+    // ── CxC solo por monto_financiado (venta CREDITO) ─────────────────
     let cxcId: string | null = null;
-    if (params.tipoVenta === "CREDITO" && saldoRestanteEsperado > TOL) {
+    if (params.tipoVenta === "CREDITO" && montoFinanciado > TOL) {
       const vencimiento = params.plazoDias && params.plazoDias > 0
-        ? new Date(Date.now() + params.plazoDias * 86400000)
-            .toISOString()
-            .slice(0, 10)
+        ? new Date(Date.now() + params.plazoDias * 86400000).toISOString().slice(0, 10)
         : null;
       const cxcIns = await client.query<{ id: string }>(
         `INSERT INTO ${cxcT} (
            empresa_id, cliente_id, venta_id, sucursal_id, numero_venta,
            moneda, total, saldo, estado, fecha_emision, fecha_vencimiento
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pendiente', now(), $9)
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pendiente',now(),$9)
          RETURNING id`,
         [
-          params.empresaId,
-          params.clienteId,
-          ventaId,
-          params.sucursalId,
-          numeroControl,
-          params.moneda,
-          saldoRestanteEsperado,
-          saldoRestanteEsperado,
-          vencimiento,
+          params.empresaId, params.clienteId, ventaId, params.sucursalId,
+          numeroControl, params.moneda, montoFinanciado, montoFinanciado, vencimiento,
         ],
       );
       cxcId = cxcIns.rows[0].id;
     }
 
-    // ── Evento historial cliente ────────────────────────────────────
+    // ── Evento historial ─────────────────────────────────────────────
     try {
-      const tipoEv = creditoUsado > 0 && saldoRestanteEsperado <= TOL
-        ? "credito_uso"
-        : creditoUsado > 0
-        ? "cambio"
-        : "beneficio"; // fallback tipo genérico
-      const titulo = params.tipoVenta === "CREDITO"
-        ? "Compró (crédito)"
-        : "Compró";
+      const tipoEv: "cambio" | "credito_uso" | "beneficio" =
+        params.cambioId ? "cambio"
+        : creditoUsado > 0 ? "credito_uso"
+        : "beneficio";
       const detalle = [
-        `Venta ${numeroControl} — total Gs. ${Math.round(calc.total)}.`,
+        `Venta ${numeroControl} — total Gs. ${Math.round(total)}.`,
         creditoUsado > 0 ? `Crédito aplicado: Gs. ${Math.round(creditoUsado)}.` : "",
-        saldoRestanteEsperado > TOL ? `Saldo pagado: Gs. ${Math.round(saldoRestanteEsperado)}.` : "",
+        totalPagosInmediatos > 0 ? `Pagos inmediatos: Gs. ${Math.round(totalPagosInmediatos)}.` : "",
+        montoFinanciado > 0 ? `Financiado (CxC): Gs. ${Math.round(montoFinanciado)}.` : "",
       ].filter(Boolean).join(" ");
       await client.query(
         `INSERT INTO ${eventosT} (
            empresa_id, cliente_id, tipo, titulo, descripcion, monto,
            referencia_tipo, referencia_id, referencia_numero,
            autor_id, autor_nombre
-         ) VALUES ($1, $2, $3, $4, $5, $6, 'venta', $7, $8, $9, $10)`,
+         ) VALUES ($1,$2,$3,$4,$5,$6,'venta',$7,$8,$9,$10)`,
         [
-          params.empresaId,
-          params.clienteId,
-          tipoEv,
-          titulo,
-          detalle,
-          calc.total,
-          ventaId,
-          numeroControl,
-          params.createdBy ?? null,
-          params.usuarioNombre ?? null,
+          params.empresaId, params.clienteId, tipoEv,
+          params.tipoVenta === "CREDITO" ? "Compró (crédito)" : "Compró",
+          detalle, total, ventaId, numeroControl,
+          params.createdBy ?? null, params.usuarioNombre ?? null,
         ],
       );
     } catch {
-      /* tabla puede no existir en instancias viejas */
+      /* cliente_eventos puede no existir en instancias viejas */
     }
 
-    // ── Cerrar cambio si aplica ─────────────────────────────────────
+    // ── Cerrar cambio si aplica ──────────────────────────────────────
     if (params.cambioId) {
       await confirmarCambioPg(client, {
         schema: params.schema,
         empresaId: params.empresaId,
         cambioId: params.cambioId,
         ventaId,
-        ventaTotal: calc.total,
+        ventaTotal: total,
         creditoAplicado: creditoUsado,
-        saldoRestantePagado: saldoRestanteEsperado,
+        saldoRestantePagado: totalPagosInmediatos,
       });
     }
 
     await client.query("COMMIT");
-
     return {
       ventaId,
       numeroControl,
       fechaIso,
-      saldoRestante: saldoRestanteEsperado,
+      total,
       creditoAplicado: creditoUsado,
+      pagosInmediatosTotal: totalPagosInmediatos,
+      montoFinanciado,
       cxcId,
     };
   } catch (e) {

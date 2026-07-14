@@ -9,58 +9,60 @@ import { createServiceRoleClientWithDbSchema } from "@/lib/supabase/empresa-data
 import { marcarPedidoFacturado } from "@/lib/pedidos-caja/server";
 import type { Venta, LineaVenta } from "@/lib/ventas/types";
 
-function asItems(body: unknown): CreateVentaItemInput[] | null {
+/**
+ * Wire format del ítem que envía el cliente. El server IGNORA los
+ * campos autoritativos (nombre, sku, precios, subtotales, IVA calculado)
+ * y los resuelve desde la DB. Solo respeta producto_id, cantidad,
+ * es_sin_cargo y motivo_sin_cargo.
+ */
+interface ItemWire {
+  producto_id: string;
+  cantidad: number;
+  tipo_iva?: "EXENTA" | "5%" | "10%";
+  es_sin_cargo?: boolean;
+  motivo_sin_cargo?: string | null;
+}
+
+function asItems(body: unknown): ItemWire[] | null {
   if (!body || typeof body !== "object") return null;
   const raw = (body as { items?: unknown }).items;
   if (!Array.isArray(raw) || raw.length === 0) return null;
-  const out: CreateVentaItemInput[] = [];
+  const out: ItemWire[] = [];
   for (const x of raw) {
     if (!x || typeof x !== "object") return null;
     const r = x as Record<string, unknown>;
+    const producto_id = String(r.producto_id ?? "");
+    const cantidad = Number(r.cantidad);
+    if (!producto_id || !(cantidad > 0)) return null;
     const tipoIva = r.tipo_iva;
-    if (tipoIva !== "EXENTA" && tipoIva !== "5%" && tipoIva !== "10%") return null;
+    const tipoIvaValido =
+      tipoIva === "EXENTA" || tipoIva === "5%" || tipoIva === "10%"
+        ? tipoIva
+        : undefined;
     const esSinCargo = r.es_sin_cargo === true;
     const motivoRaw = r.motivo_sin_cargo;
     const motivoSinCargo =
-      esSinCargo
-        ? (typeof motivoRaw === "string" && motivoRaw.trim()
-            ? motivoRaw.trim().slice(0, 120)
-            : "decant_obsequio")
-        : null;
+      esSinCargo && typeof motivoRaw === "string" && motivoRaw.trim()
+        ? motivoRaw.trim().slice(0, 120)
+        : esSinCargo ? "decant_obsequio" : null;
     out.push({
-      producto_id: String(r.producto_id ?? ""),
-      producto_nombre: String(r.producto_nombre ?? ""),
-      sku: String(r.sku ?? ""),
-      cantidad: Number(r.cantidad),
-      precio_venta_original: Number(r.precio_venta_original),
-      precio_venta: Number(r.precio_venta),
-      tipo_iva: tipoIva,
-      subtotal: Number(r.subtotal),
-      monto_iva: Number(r.monto_iva),
-      total_linea: Number(r.total_linea),
+      producto_id,
+      cantidad,
+      tipo_iva: tipoIvaValido,
       es_sin_cargo: esSinCargo,
       motivo_sin_cargo: motivoSinCargo,
     });
   }
-  if (out.some((i) => !i.producto_id || !(i.cantidad > 0))) return null;
-  // Normalización: para ítems sin_cargo forzamos precios a 0 antes de la
-  // validación de totales, así el recálculo declarado vs server coincide
-  // sin depender de lo que mande el cliente.
-  for (const it of out) {
-    if (it.es_sin_cargo === true) {
-      it.precio_venta_original = 0;
-      it.precio_venta = 0;
-      it.subtotal = 0;
-      it.monto_iva = 0;
-      it.total_linea = 0;
-      it.tipo_iva = "EXENTA";
-    }
-  }
   return out;
 }
 
+/**
+ * Construye la respuesta mínima para el cliente. Los datos autoritativos
+ * (precios, subtotales, nombre) se ignoraron del input y no se devuelven
+ * en esta versión — el cliente debe re-consultar la venta si los necesita.
+ */
 function toVentaResponse(
-  items: CreateVentaItemInput[],
+  items: ItemWire[],
   meta: {
     id: string;
     numero_control: string;
@@ -76,15 +78,15 @@ function toVentaResponse(
 ): Venta {
   const lineas: LineaVenta[] = items.map((i) => ({
     producto_id: i.producto_id,
-    producto_nombre: i.producto_nombre,
-    sku: i.sku,
+    producto_nombre: "",  // resuelto server-side, no viaja de vuelta acá
+    sku: "",
     cantidad: i.cantidad,
-    precio_venta_original: i.precio_venta_original,
-    precio_venta: i.precio_venta,
-    tipo_iva: i.tipo_iva,
-    subtotal: i.subtotal,
-    monto_iva: i.monto_iva,
-    total_linea: i.total_linea,
+    precio_venta_original: 0,
+    precio_venta: 0,
+    tipo_iva: i.tipo_iva ?? "EXENTA",
+    subtotal: 0,
+    monto_iva: 0,
+    total_linea: 0,
     es_sin_cargo: i.es_sin_cargo === true,
     motivo_sin_cargo: i.motivo_sin_cargo ?? null,
   }));
@@ -250,18 +252,28 @@ export async function POST(request: NextRequest) {
         });
       }
     }
-    // Si no vino array pero vino metodoPago simple con el saldo restante, armar 1 línea.
-    if (pagosDetalle.length === 0 && metodoPago && totalDeclarado > 0) {
-      pagosDetalle.push({
-        metodo_pago: metodoPago as import("@/lib/ventas/server/create-venta-pg").MetodoPagoVenta,
-        monto: Math.max(0, totalDeclarado - creditoClienteUsado),
-      });
+    // CONTADO: si no vino array de pagos pero vino metodoPago legacy y hay
+    // saldo restante no cubierto por crédito, armar 1 línea de pago.
+    // CREDITO: NO se auto-genera pago inmediato — el saldo va a CxC.
+    if (
+      pagosDetalle.length === 0
+      && metodoPago
+      && tipoVenta === "CONTADO"
+      && totalDeclarado > 0
+    ) {
+      const saldoRestante = Math.max(0, totalDeclarado - creditoClienteUsado);
+      if (saldoRestante > 0) {
+        pagosDetalle.push({
+          metodo_pago: metodoPago as import("@/lib/ventas/server/create-venta-pg").MetodoPagoVenta,
+          monto: saldoRestante,
+        });
+      }
     }
 
     const cambioIdRaw = o.cambio_id;
     const cambioId = typeof cambioIdRaw === "string" && cambioIdRaw ? cambioIdRaw : null;
 
-    const { ventaId, numeroControl, fechaIso } = await createVentaTransaccionalPg({
+    const resultVenta = await createVentaTransaccionalPg({
       schema,
       empresaId: auth.empresa_id,
       clienteId,
@@ -270,26 +282,22 @@ export async function POST(request: NextRequest) {
       tipoCambio,
       tipoVenta,
       plazoDias: Number.isFinite(plazoDias as number) ? plazoDias : null,
-      items,
-      subtotalDeclarado,
-      montoIvaDeclarado,
-      totalDeclarado,
+      // Solo pasamos producto_id + cantidad; el server resuelve el resto.
+      items: items.map((it) => ({
+        producto_id: it.producto_id,
+        cantidad: it.cantidad,
+        es_sin_cargo: it.es_sin_cargo === true,
+        motivo_sin_cargo: it.motivo_sin_cargo ?? null,
+        tipo_iva: it.tipo_iva,
+      })),
       sucursalId,
       creditoClienteUsado,
-      pagosDetalle,
+      pagosInmediatos: pagosDetalle,
       createdBy: auth.user.id ?? null,
       cambioId,
     });
 
-    let sub = 0;
-    let iv = 0;
-    let tot = 0;
-    for (const it of items) {
-      sub += it.subtotal;
-      iv += it.monto_iva;
-      tot += it.total_linea;
-    }
-
+    const { ventaId, numeroControl, fechaIso, total: totServer } = resultVenta;
     const venta = toVentaResponse(items, {
       id: ventaId,
       numero_control: numeroControl,
@@ -298,9 +306,9 @@ export async function POST(request: NextRequest) {
       tipo_cambio: tipoCambio,
       tipo_venta: tipoVenta,
       plazo_dias: tipoVenta === "CREDITO" ? plazoDias ?? undefined : undefined,
-      subtotal: sub,
-      monto_iva: iv,
-      total: tot,
+      subtotal: totServer,
+      monto_iva: 0,  // el server calcula IVA informativo por línea
+      total: totServer,
     });
 
     // Si la venta facturó un pedido del salón (módulo Consulta), marcarlo como
@@ -317,7 +325,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    console.log(`[diag-venta] success numero=${numeroControl} total=${tot} ms=${Date.now() - t0}`);
+    console.log(`[diag-venta] success numero=${numeroControl} total=${totServer} ms=${Date.now() - t0}`);
     return NextResponse.json(successResponse({ venta }));
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Error al crear la venta.";

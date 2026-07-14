@@ -1,24 +1,38 @@
 /**
  * Núcleo transaccional de RECEPCIONES (compras al cliente) para pronimerp.
  *
- * Rediseño 20260810:
- *   - Cada línea lleva precio_compra_unitario (lo que pagamos al cliente) y
- *     precio_venta_snapshot (precio de la franja al momento). El margen bruto
- *     se calcula por línea y se guarda como referencia.
- *   - La recepción se paga con una combinación de: crédito a favor,
- *     efectivo (egreso de caja), y transferencia. La suma de las formas de
- *     pago debe coincidir exactamente con el total_compra.
- *   - Estados: pendiente_ingreso → ingresada | anulada.
- *   - Sucursal obligatoria. La caja abierta usada para el egreso efectivo
- *     debe ser de la misma sucursal.
- *   - Advisory lock por (empresa_id, cliente_id) cuando se registra crédito.
- *   - Registra evento en cliente_eventos para el historial.
- *   - "Ingresar ahora" corre ingresarRecepcionPg en la misma transacción.
+ * Rediseño 20260811 (correcciones críticas):
+ *
+ *   1) total_compra ≠ total_credito.
+ *      - total_compra = SUM(cantidad * precio_compra_unitario) por líneas.
+ *      - total_credito = SUM(pagos WHERE metodo='credito'). SOLO la parte
+ *        entregada como crédito genera ENTRADA en el ledger del cliente.
+ *      - suma de pagos = total_compra (crédito + efectivo + transferencia).
+ *
+ *   2) Fuente única de pagos = cliente_recepciones_pagos.
+ *      - Los pagos en efectivo llevan caja_id + sucursal_id.
+ *      - NO se inserta en caja_movimientos (esa tabla es solo para
+ *        ajustes/apertura/cierre manuales).
+ *      - computeResumen de caja calcula egresos por efectivo desde acá.
+ *
+ *   3) No se confía en nombres/SKU/precio_venta_snapshot del cliente.
+ *      Se resuelve server-side desde `productos`.
+ *
+ *   4) Sucursal obligatoria; se valida contra empresa.
+ *
+ *   5) numero_control vía pronimerp.siguiente_numero_control RPC.
+ *
+ *   6) Al INGRESAR: se calcula costo_promedio ponderado (WACP) por
+ *      producto usando stock previo + entrada nueva.
+ *
+ *   7) ANULAR: dentro de la misma tx con FOR UPDATE.
+ *      - Bloquea si el crédito generado ya fue consumido (parcial o total).
+ *      - Reversa saldo, movimientos y stock (si ya estaba ingresada).
  */
 import { getChatPostgresPool, quoteSchemaTable } from "@/lib/supabase/chat-pg-pool";
 import { assertAllowedChatDataSchema } from "@/lib/supabase/chat-data-schema";
 
-const TOL = 2; // guaraníes — tolerancia de redondeo
+const TOL = 2;
 
 // ═════════════════════════════════════════════════════════════════════
 // Tipos
@@ -26,13 +40,9 @@ const TOL = 2; // guaraníes — tolerancia de redondeo
 
 export interface RecepcionItemInput {
   producto_id: string;
-  producto_nombre: string;
-  sku: string;
   cantidad: number;
-  /** Lo que la tienda paga al cliente por cada unidad. */
+  /** Lo que la tienda paga al cliente por cada unidad. Autoritativo. */
   precio_compra_unitario: number;
-  /** Snapshot del precio de venta de la franja al momento (para margen). */
-  precio_venta_snapshot: number;
 }
 
 export type MetodoPagoRecepcion = "credito" | "efectivo" | "transferencia";
@@ -53,13 +63,10 @@ export interface RecepcionCreateInput {
   sucursalId: string;
   items: RecepcionItemInput[];
   pagos: RecepcionPagoInput[];
-  totalDeclarado: number;
   observaciones: string | null;
   createdBy: string | null;
   usuarioNombre: string | null;
-  /** Si true, dentro de la misma tx llama a ingresarRecepcionPg. */
   ingresarAhora?: boolean;
-  /** Opcional: vincula la recepción a un cambio existente. */
   cambioId?: string | null;
 }
 
@@ -68,7 +75,9 @@ export interface RecepcionCreated {
   numero_control: string;
   fecha: string;
   total_compra: number;
-  credito_generado: number;
+  total_credito: number;
+  total_efectivo: number;
+  total_transferencia: number;
   estado: "pendiente_ingreso" | "ingresada";
   ingresada_at: string | null;
 }
@@ -77,31 +86,41 @@ export interface RecepcionCreated {
 // Helpers
 // ═════════════════════════════════════════════════════════════════════
 
-async function nextRecepcionNumero(
+async function lockProductosRecep(
   client: import("pg").PoolClient,
   schema: string,
   empresaId: string,
-): Promise<string> {
-  const t = quoteSchemaTable(schema, "cliente_recepciones");
-  const { rows } = await client.query<{ maxn: number | null }>(
-    `SELECT COALESCE(MAX(
-       CASE WHEN numero_control ~ '^REC-[0-9]+$'
-            THEN (substring(numero_control from 5))::int
-            ELSE 0 END
-     ), 0) AS maxn
-     FROM ${t} WHERE empresa_id = $1::uuid`,
-    [empresaId],
+  productoIds: string[],
+): Promise<Map<string, { nombre: string; sku: string; precio_venta: number; activo: boolean }>> {
+  if (productoIds.length === 0) return new Map();
+  const prodT = quoteSchemaTable(schema, "productos");
+  const r = await client.query<{
+    id: string; nombre: string; sku: string; precio_venta: string; activo: boolean;
+  }>(
+    `SELECT id, nombre, sku, precio_venta::text, activo
+     FROM ${prodT}
+     WHERE empresa_id = $1 AND id = ANY($2::uuid[])
+     FOR UPDATE`,
+    [empresaId, productoIds],
   );
-  const next = Number(rows[0]?.maxn ?? 0) + 1;
-  return `REC-${String(next).padStart(6, "0")}`;
+  if (r.rows.length !== productoIds.length) {
+    throw new Error("Uno o más productos no existen en la empresa.");
+  }
+  const out = new Map<string, { nombre: string; sku: string; precio_venta: number; activo: boolean }>();
+  for (const p of r.rows) {
+    if (!p.activo) {
+      throw new Error(`El producto ${p.nombre} (${p.sku}) está inactivo.`);
+    }
+    out.set(p.id, {
+      nombre: p.nombre,
+      sku: p.sku,
+      precio_venta: Number(p.precio_venta),
+      activo: p.activo,
+    });
+  }
+  return out;
 }
 
-function margenBrutoPct(precioCompra: number, precioVenta: number): number | null {
-  if (!Number.isFinite(precioVenta) || precioVenta <= 0) return null;
-  return ((precioVenta - precioCompra) / precioVenta) * 100;
-}
-
-/** Valida que la sucursal exista y pertenezca a la empresa. */
 async function validarSucursalEmpresa(
   client: import("pg").PoolClient,
   schema: string,
@@ -114,13 +133,10 @@ async function validarSucursalEmpresa(
     [sucursalId, empresaId],
   );
   if (!r.rows.length) {
-    throw new Error(
-      "Sucursal inválida: no existe o no pertenece a la empresa autenticada.",
-    );
+    throw new Error("Sucursal inválida: no pertenece a la empresa autenticada.");
   }
 }
 
-/** Retorna id de la caja abierta en la sucursal. Null si no hay. */
 async function cajaAbiertaSucursal(
   client: import("pg").PoolClient,
   schema: string,
@@ -138,7 +154,7 @@ async function cajaAbiertaSucursal(
 }
 
 // ═════════════════════════════════════════════════════════════════════
-// CREAR recepción (pendiente_ingreso por default)
+// CREAR recepción
 // ═════════════════════════════════════════════════════════════════════
 
 export async function crearRecepcionPg(
@@ -151,47 +167,25 @@ export async function crearRecepcionPg(
   if (!p.items.length) throw new Error("La recepción debe tener al menos una prenda.");
   if (!p.pagos.length) throw new Error("La recepción debe tener al menos una forma de pago.");
   if (!p.sucursalId) {
-    throw new Error(
-      "Sucursal requerida: no se pudo determinar dónde se registra la compra.",
-    );
+    throw new Error("Sucursal requerida: no se pudo determinar la sucursal.");
   }
 
-  // Validar montos > 0 y sumas coherentes.
+  // Validación básica de líneas
   for (const it of p.items) {
-    if (!(it.cantidad > 0)) throw new Error("Cantidad de línea inválida (debe ser > 0).");
-    if (!(it.precio_compra_unitario >= 0)) {
-      throw new Error("precio_compra_unitario inválido (debe ser >= 0).");
-    }
-    if (!(it.precio_venta_snapshot > 0)) {
-      throw new Error("precio_venta_snapshot inválido (debe ser > 0).");
+    if (!(Number(it.cantidad) > 0)) throw new Error("Cantidad de línea inválida.");
+    if (!(Number(it.precio_compra_unitario) >= 0)) {
+      throw new Error("precio_compra_unitario inválido (>= 0).");
     }
   }
 
-  const totalCompraCalc = p.items.reduce(
-    (s, it) => s + it.cantidad * it.precio_compra_unitario,
-    0,
-  );
-  if (Math.abs(totalCompraCalc - p.totalDeclarado) > TOL) {
-    throw new Error(
-      `El total de compra no coincide con las líneas: esperado ${totalCompraCalc}, recibido ${p.totalDeclarado}.`,
-    );
-  }
-
-  const totalPagosCalc = p.pagos.reduce((s, pg) => s + pg.monto, 0);
-  if (Math.abs(totalPagosCalc - totalCompraCalc) > TOL) {
-    throw new Error(
-      `La suma de las formas de pago (${totalPagosCalc}) no coincide con el total de compra (${totalCompraCalc}).`,
-    );
-  }
-
-  // Validar que cada método sea único (no se permiten dos "crédito" o dos "efectivo").
+  // Métodos únicos + montos > 0
   const metodosVistos = new Set<string>();
   for (const pg of p.pagos) {
     if (metodosVistos.has(pg.metodo)) {
-      throw new Error(`Método de pago duplicado: ${pg.metodo}. Consolidalo en una sola línea.`);
+      throw new Error(`Método de pago duplicado: ${pg.metodo}.`);
     }
     metodosVistos.add(pg.metodo);
-    if (!(pg.monto > 0)) throw new Error(`Monto de pago inválido para ${pg.metodo}.`);
+    if (!(Number(pg.monto) > 0)) throw new Error(`Monto inválido para ${pg.metodo}.`);
   }
 
   const creditoInput = p.pagos.find((x) => x.metodo === "credito");
@@ -203,25 +197,55 @@ export async function crearRecepcionPg(
   const recepItemsT = quoteSchemaTable(schema, "cliente_recepciones_items");
   const recepPagosT = quoteSchemaTable(schema, "cliente_recepciones_pagos");
   const creditosT = quoteSchemaTable(schema, "cliente_creditos_movimientos");
-  const cajaMovT = quoteSchemaTable(schema, "caja_movimientos");
   const eventosT = quoteSchemaTable(schema, "cliente_eventos");
 
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
 
-    // Cliente pertenece a la empresa
+    // Cliente + sucursal
     const cl = await client.query(
       `SELECT 1 FROM ${cliT} WHERE id = $1 AND empresa_id = $2 LIMIT 1`,
       [p.clienteId, p.empresaId],
     );
     if (!cl.rows.length) throw new Error("Cliente no encontrado en esta empresa.");
-
-    // Sucursal pertenece a la empresa
     await validarSucursalEmpresa(client, schema, p.empresaId, p.sucursalId);
 
-    // Advisory lock sobre el crédito del cliente (aunque no haya crédito acá,
-    // futuras concurrencias con ventas/otras recepciones se serializan).
+    // Lock productos server-side
+    const uniqueIds = [...new Set(p.items.map((i) => i.producto_id))];
+    const productosInfo = await lockProductosRecep(client, schema, p.empresaId, uniqueIds);
+
+    // Recalcular total_compra server-side
+    let totalCompra = 0;
+    const itemsResueltos = p.items.map((it) => {
+      const info = productosInfo.get(it.producto_id)!;
+      const cantidad = Number(it.cantidad);
+      const precioCompra = Number(it.precio_compra_unitario);
+      const subtotal = cantidad * precioCompra;
+      totalCompra += subtotal;
+      const precioVenta = info.precio_venta;
+      const margen = precioVenta > 0 ? ((precioVenta - precioCompra) / precioVenta) * 100 : null;
+      return {
+        producto_id: it.producto_id,
+        producto_nombre: info.nombre,
+        sku: info.sku,
+        cantidad,
+        precio_compra_unitario: precioCompra,
+        precio_venta_snapshot: precioVenta,
+        subtotal,
+        margen_bruto_pct: margen,
+      };
+    });
+
+    // Ecuación: suma pagos = total_compra
+    const totalPagos = p.pagos.reduce((s, pg) => s + Number(pg.monto), 0);
+    if (Math.abs(totalPagos - totalCompra) > TOL) {
+      throw new Error(
+        `La suma de las formas de pago (${totalPagos}) no coincide con el total de compra (${totalCompra}).`,
+      );
+    }
+
+    // Advisory lock crédito si hay porción crédito
     if (creditoInput) {
       await client.query(
         `SELECT pronimerp.lock_cliente_credito($1::uuid, $2::uuid)`,
@@ -229,167 +253,117 @@ export async function crearRecepcionPg(
       );
     }
 
-    // Caja abierta si hay pago en efectivo
+    // Caja abierta si hay pago efectivo
     let cajaIdEfectivo: string | null = null;
     if (efectivoInput) {
       cajaIdEfectivo = await cajaAbiertaSucursal(client, schema, p.empresaId, p.sucursalId);
       if (!cajaIdEfectivo) {
-        throw new Error(
-          "No hay caja abierta en la sucursal para registrar el egreso en efectivo.",
-        );
+        throw new Error("No hay caja abierta en la sucursal para registrar el egreso en efectivo.");
       }
     }
 
-    const numero = await nextRecepcionNumero(client, schema, p.empresaId);
+    // numero_control atómico
+    const nc = await client.query<{ n: string }>(
+      `SELECT pronimerp.siguiente_numero_control($1::uuid, 'recepcion') AS n`,
+      [p.empresaId],
+    );
+    const numero = nc.rows[0].n;
 
     // Cabecera
-    const ins = await client.query<{ id: string; fecha: string; estado: string }>(
+    const ins = await client.query<{ id: string; fecha: string }>(
       `INSERT INTO ${recepT} (
          empresa_id, cliente_id, sucursal_id, numero_control,
-         total_credito, observaciones, estado, cambio_id, origen_datos,
-         created_by, usuario_nombre
-       ) VALUES ($1, $2, $3, $4, $5, $6, 'pendiente_ingreso', $7, 'nuevo_modelo', $8, $9)
-       RETURNING id, fecha, estado`,
+         total_compra, total_credito, observaciones, estado, cambio_id,
+         origen_datos, created_by, usuario_nombre
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,'pendiente_ingreso',$8,'nuevo_modelo',$9,$10)
+       RETURNING id, fecha`,
       [
-        p.empresaId,
-        p.clienteId,
-        p.sucursalId,
-        numero,
-        totalCompraCalc,
-        p.observaciones,
-        p.cambioId ?? null,
-        p.createdBy,
-        p.usuarioNombre,
+        p.empresaId, p.clienteId, p.sucursalId, numero,
+        totalCompra, creditoInput ? Number(creditoInput.monto) : 0,
+        p.observaciones, p.cambioId ?? null, p.createdBy, p.usuarioNombre,
       ],
     );
     const recepcionId = ins.rows[0].id;
     const fecha = ins.rows[0].fecha;
 
-    // Items
-    for (const it of p.items) {
-      const subtotal = it.cantidad * it.precio_compra_unitario;
-      const margen = margenBrutoPct(it.precio_compra_unitario, it.precio_venta_snapshot);
+    // Items (con datos resueltos server-side)
+    for (const it of itemsResueltos) {
       await client.query(
         `INSERT INTO ${recepItemsT} (
            empresa_id, recepcion_id, producto_id, producto_nombre, sku,
-           cantidad, precio_compra_unitario, precio_venta_snapshot, subtotal,
-           margen_bruto_pct, costo_historico_incompleto
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, false)`,
+           cantidad, precio_compra_unitario, precio_venta_snapshot,
+           subtotal, margen_bruto_pct, costo_historico_incompleto
+         ) VALUES ($1,$2,$3,$4,$5, $6,$7,$8, $9,$10,false)`,
         [
-          p.empresaId,
-          recepcionId,
-          it.producto_id,
-          it.producto_nombre,
-          it.sku,
-          it.cantidad,
-          it.precio_compra_unitario,
-          it.precio_venta_snapshot,
-          subtotal,
-          margen,
+          p.empresaId, recepcionId, it.producto_id, it.producto_nombre, it.sku,
+          it.cantidad, it.precio_compra_unitario, it.precio_venta_snapshot,
+          it.subtotal, it.margen_bruto_pct,
         ],
       );
     }
 
-    // Pagos: 1..N filas en cliente_recepciones_pagos
+    // Pagos — fuente única de verdad. Efectivo lleva caja_id + sucursal_id.
     for (const pg of p.pagos) {
+      const cajaParaPago = pg.metodo === "efectivo" ? cajaIdEfectivo : null;
       await client.query(
         `INSERT INTO ${recepPagosT} (
            empresa_id, recepcion_id, metodo, monto,
-           entidad_bancaria_id, entidad_nombre_snapshot, referencia, observacion
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+           entidad_bancaria_id, entidad_nombre_snapshot, referencia, observacion,
+           caja_id, sucursal_id
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
         [
-          p.empresaId,
-          recepcionId,
-          pg.metodo,
-          pg.monto,
-          pg.entidad_bancaria_id ?? null,
-          pg.entidad_nombre_snapshot ?? null,
-          pg.referencia ?? null,
-          pg.observacion ?? null,
+          p.empresaId, recepcionId, pg.metodo, Number(pg.monto),
+          pg.entidad_bancaria_id ?? null, pg.entidad_nombre_snapshot ?? null,
+          pg.referencia ?? null, pg.observacion ?? null,
+          cajaParaPago, p.sucursalId,
         ],
       );
     }
 
-    // Efecto financiero: crédito ENTRADA por la porción "crédito"
+    // Solo el crédito genera ENTRADA en el ledger del cliente
     if (creditoInput) {
       await client.query(
         `INSERT INTO ${creditosT} (
            empresa_id, cliente_id, tipo, monto, origen, referencia_id,
            referencia_tipo, referencia_numero, observaciones,
            created_by, usuario_nombre
-         ) VALUES ($1, $2, 'ENTRADA', $3, 'recepcion', $4, 'recepcion', $5, $6, $7, $8)`,
+         ) VALUES ($1,$2,'ENTRADA',$3,'recepcion',$4,'recepcion',$5,$6,$7,$8)`,
         [
-          p.empresaId,
-          p.clienteId,
-          creditoInput.monto,
-          recepcionId,
-          numero,
-          `Recepción ${numero}: crédito a favor por compra`,
-          p.createdBy,
-          p.usuarioNombre,
+          p.empresaId, p.clienteId, Number(creditoInput.monto), recepcionId, numero,
+          `Recepción ${numero}: crédito a favor`,
+          p.createdBy, p.usuarioNombre,
         ],
       );
     }
 
-    // Efecto financiero: egreso de caja por la porción "efectivo"
-    if (efectivoInput && cajaIdEfectivo) {
-      await client.query(
-        `INSERT INTO ${cajaMovT} (
-           empresa_id, caja_id, tipo, concepto, monto, medio_pago,
-           usuario_id, observacion
-         ) VALUES ($1, $2, 'egreso', $3, $4, 'efectivo', $5, $6)`,
-        [
-          p.empresaId,
-          cajaIdEfectivo,
-          `Compra a cliente ${numero}`,
-          efectivoInput.monto,
-          p.createdBy,
-          efectivoInput.observacion ?? null,
-        ],
-      );
-    }
-
-    // Transferencia: solo registro (no toca caja efectivo)
-    // Ya quedó en cliente_recepciones_pagos con referencia/entidad.
-
-    // Evento en historial del cliente (tipo=otro, para que aparezca en timeline)
+    // Evento historial
     try {
+      const desc = [
+        `Recepción ${numero} — total Gs. ${Math.round(totalCompra)}.`,
+        creditoInput ? `Crédito generado: Gs. ${Math.round(creditoInput.monto)}.` : "",
+        efectivoInput ? `Efectivo pagado: Gs. ${Math.round(efectivoInput.monto)}.` : "",
+        transfInput ? `Transferencia: Gs. ${Math.round(transfInput.monto)}.` : "",
+      ].filter(Boolean).join(" ");
       await client.query(
         `INSERT INTO ${eventosT} (
            empresa_id, cliente_id, tipo, titulo, descripcion, monto,
            referencia_tipo, referencia_id, referencia_numero,
            autor_id, autor_nombre
-         ) VALUES ($1, $2, 'otro', $3, $4, $5, 'recepcion', $6, $7, $8, $9)`,
+         ) VALUES ($1,$2,'otro',$3,$4,$5,'recepcion',$6,$7,$8,$9)`,
         [
-          p.empresaId,
-          p.clienteId,
-          "Compra al cliente",
-          `Recepción ${numero} — total Gs. ${Math.round(totalCompraCalc)}.` +
-            (creditoInput ? ` Crédito generado: Gs. ${Math.round(creditoInput.monto)}.` : "") +
-            (efectivoInput ? ` Efectivo pagado: Gs. ${Math.round(efectivoInput.monto)}.` : "") +
-            (transfInput ? ` Transferencia: Gs. ${Math.round(transfInput.monto)}.` : ""),
-          totalCompraCalc,
-          recepcionId,
-          numero,
-          p.createdBy,
-          p.usuarioNombre,
+          p.empresaId, p.clienteId, "Compra al cliente", desc,
+          totalCompra, recepcionId, numero, p.createdBy, p.usuarioNombre,
         ],
       );
-    } catch {
-      // tabla cliente_eventos puede no existir en instancias viejas — no bloquea
-    }
+    } catch { /* opcional */ }
 
     let estadoFinal: "pendiente_ingreso" | "ingresada" = "pendiente_ingreso";
     let ingresadaAt: string | null = null;
 
-    // Opción: ingresar ahora (mismo request → misma tx)
     if (p.ingresarAhora) {
       const r = await ingresarRecepcionPgInternal(client, {
-        schema,
-        empresaId: p.empresaId,
-        recepcionId,
-        actorId: p.createdBy,
-        actorNombre: p.usuarioNombre,
+        schema, empresaId: p.empresaId, recepcionId,
+        actorId: p.createdBy, actorNombre: p.usuarioNombre,
       });
       estadoFinal = "ingresada";
       ingresadaAt = r.ingresada_at;
@@ -400,13 +374,15 @@ export async function crearRecepcionPg(
       id: recepcionId,
       numero_control: numero,
       fecha,
-      total_compra: totalCompraCalc,
-      credito_generado: creditoInput?.monto ?? 0,
+      total_compra: totalCompra,
+      total_credito: creditoInput ? Number(creditoInput.monto) : 0,
+      total_efectivo: efectivoInput ? Number(efectivoInput.monto) : 0,
+      total_transferencia: transfInput ? Number(transfInput.monto) : 0,
       estado: estadoFinal,
       ingresada_at: ingresadaAt,
     };
   } catch (e) {
-    await client.query("ROLLBACK");
+    await client.query("ROLLBACK").catch(() => null);
     throw e;
   } finally {
     client.release();
@@ -414,7 +390,7 @@ export async function crearRecepcionPg(
 }
 
 // ═════════════════════════════════════════════════════════════════════
-// INGRESAR recepción (pendiente_ingreso → ingresada)
+// INGRESAR recepción — actualiza WACP (costo promedio ponderado)
 // ═════════════════════════════════════════════════════════════════════
 
 export interface RecepcionIngresarInput {
@@ -432,14 +408,10 @@ export interface RecepcionIngresada {
   ingresada_at: string;
 }
 
-/** Wrapper transaccional. Llamable desde API. */
-export async function ingresarRecepcionPg(
-  p: RecepcionIngresarInput,
-): Promise<RecepcionIngresada> {
+export async function ingresarRecepcionPg(p: RecepcionIngresarInput): Promise<RecepcionIngresada> {
   const schema = assertAllowedChatDataSchema(p.schema);
   const pool = getChatPostgresPool();
   if (!pool) throw new Error("Sin conexión Postgres.");
-
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -447,14 +419,13 @@ export async function ingresarRecepcionPg(
     await client.query("COMMIT");
     return r;
   } catch (e) {
-    await client.query("ROLLBACK");
+    await client.query("ROLLBACK").catch(() => null);
     throw e;
   } finally {
     client.release();
   }
 }
 
-/** Lógica interna reutilizable — asume que ya estás en una transacción. */
 async function ingresarRecepcionPgInternal(
   client: import("pg").PoolClient,
   p: RecepcionIngresarInput,
@@ -463,9 +434,9 @@ async function ingresarRecepcionPgInternal(
   const recepT = quoteSchemaTable(schema, "cliente_recepciones");
   const recepItemsT = quoteSchemaTable(schema, "cliente_recepciones_items");
   const stockSucT = quoteSchemaTable(schema, "producto_stock_sucursal");
+  const prodT = quoteSchemaTable(schema, "productos");
   const movT = quoteSchemaTable(schema, "movimientos_inventario");
 
-  // Bloqueo optimista sobre la cabecera
   const cab = await client.query<{
     id: string;
     numero_control: string;
@@ -478,13 +449,10 @@ async function ingresarRecepcionPgInternal(
      FOR UPDATE`,
     [p.recepcionId, p.empresaId],
   );
-  if (!cab.rows.length) {
-    throw new Error("Recepción no encontrada.");
-  }
+  if (!cab.rows.length) throw new Error("Recepción no encontrada.");
   const rec = cab.rows[0];
 
   if (rec.estado === "ingresada") {
-    // idempotente: si ya está ingresada, no hacemos nada
     const q = await client.query<{ ingresada_at: string }>(
       `SELECT ingresada_at FROM ${recepT} WHERE id = $1`,
       [p.recepcionId],
@@ -500,7 +468,6 @@ async function ingresarRecepcionPgInternal(
     throw new Error(`No se puede ingresar una recepción en estado '${rec.estado}'.`);
   }
 
-  // Items de la recepción
   const items = await client.query<{
     producto_id: string;
     producto_nombre: string;
@@ -518,6 +485,29 @@ async function ingresarRecepcionPgInternal(
     const qty = Number(it.cantidad);
     const costo = Number(it.precio_compra_unitario ?? 0);
 
+    // ── WACP: costo promedio ponderado ──────────────────────────────
+    // stock_prev * costo_prev + qty * costo_nuevo = (stock_prev + qty) * WACP
+    // WACP = (stock_prev*costo_prev + qty*costo) / (stock_prev + qty)
+    // Se lockea productos.stock_actual + costo_promedio con FOR UPDATE.
+    const prevQ = await client.query<{ stock_actual: string; costo_promedio: string }>(
+      `SELECT stock_actual::text, costo_promedio::text
+       FROM ${prodT} WHERE id = $1 AND empresa_id = $2 FOR UPDATE`,
+      [it.producto_id, p.empresaId],
+    );
+    const stockPrev = Number(prevQ.rows[0]?.stock_actual ?? 0);
+    const costoPrev = Number(prevQ.rows[0]?.costo_promedio ?? 0);
+    const stockNew = stockPrev + qty;
+    const wacp = stockNew > 0
+      ? Math.round(((stockPrev * costoPrev) + (qty * costo)) / stockNew)
+      : costo;
+
+    await client.query(
+      `UPDATE ${prodT}
+          SET costo_promedio = $1, updated_at = now()
+        WHERE id = $2 AND empresa_id = $3`,
+      [wacp, it.producto_id, p.empresaId],
+    );
+
     // Aumentar stock por sucursal (trigger sincroniza productos.stock_actual)
     await client.query(
       `INSERT INTO ${stockSucT} (producto_id, sucursal_id, stock_actual, updated_at)
@@ -528,29 +518,20 @@ async function ingresarRecepcionPgInternal(
       [it.producto_id, rec.sucursal_id, qty],
     );
 
-    // Movimiento de inventario ENTRADA con costo unitario real (nunca cero
-    // si tenemos precio_compra_unitario; si es null histórico, va 0 con marca)
+    // Movimiento ENTRADA con costo unitario real
     await client.query(
       `INSERT INTO ${movT} (
          empresa_id, producto_id, producto_nombre, producto_sku,
          tipo, cantidad, costo_unitario, origen, referencia, fecha,
          created_by, usuario_nombre
-       ) VALUES ($1, $2, $3, $4, 'ENTRADA', $5, $6, 'compra', $7, now(), $8, $9)`,
+       ) VALUES ($1,$2,$3,$4,'ENTRADA',$5,$6,'compra',$7,now(),$8,$9)`,
       [
-        p.empresaId,
-        it.producto_id,
-        it.producto_nombre,
-        it.sku,
-        qty,
-        costo,
-        rec.numero_control,
-        p.actorId,
-        p.actorNombre,
+        p.empresaId, it.producto_id, it.producto_nombre, it.sku,
+        qty, costo, rec.numero_control, p.actorId, p.actorNombre,
       ],
     );
   }
 
-  // Marcar estado ingresada
   const upd = await client.query<{ ingresada_at: string }>(
     `UPDATE ${recepT}
         SET estado = 'ingresada',
@@ -572,7 +553,7 @@ async function ingresarRecepcionPgInternal(
 }
 
 // ═════════════════════════════════════════════════════════════════════
-// ANULAR recepción (reversión transaccional)
+// ANULAR recepción — BLOQUEA si crédito consumido
 // ═════════════════════════════════════════════════════════════════════
 
 export interface RecepcionAnularInput {
@@ -591,9 +572,7 @@ export interface RecepcionAnulada {
   anulada_at: string;
 }
 
-export async function anularRecepcionPg(
-  p: RecepcionAnularInput,
-): Promise<RecepcionAnulada> {
+export async function anularRecepcionPg(p: RecepcionAnularInput): Promise<RecepcionAnulada> {
   const schema = assertAllowedChatDataSchema(p.schema);
   const pool = getChatPostgresPool();
   if (!pool) throw new Error("Sin conexión Postgres.");
@@ -604,7 +583,7 @@ export async function anularRecepcionPg(
   const stockSucT = quoteSchemaTable(schema, "producto_stock_sucursal");
   const movT = quoteSchemaTable(schema, "movimientos_inventario");
   const creditosT = quoteSchemaTable(schema, "cliente_creditos_movimientos");
-  const cajaMovT = quoteSchemaTable(schema, "caja_movimientos");
+  const consumosT = quoteSchemaTable(schema, "cliente_creditos_consumos");
   const eventosT = quoteSchemaTable(schema, "cliente_eventos");
 
   const client = await pool.connect();
@@ -620,7 +599,7 @@ export async function anularRecepcionPg(
       sucursal_id: string;
       total_credito: string;
     }>(
-      `SELECT id, numero_control, estado, cliente_id, sucursal_id, total_credito
+      `SELECT id, numero_control, estado, cliente_id, sucursal_id, total_credito::text
        FROM ${recepT}
        WHERE id = $1 AND empresa_id = $2
        FOR UPDATE`,
@@ -629,93 +608,69 @@ export async function anularRecepcionPg(
     if (!cab.rows.length) throw new Error("Recepción no encontrada.");
     const rec = cab.rows[0];
     if (rec.estado === "anulada") throw new Error("La recepción ya está anulada.");
+    const estadoPrev = rec.estado;
 
-    // Lock advisory sobre crédito del cliente antes de agregar la SALIDA reversal
+    // Advisory lock crédito antes de leer/tocar consumos
     await client.query(
       `SELECT pronimerp.lock_cliente_credito($1::uuid, $2::uuid)`,
       [p.empresaId, rec.cliente_id],
     );
 
-    // Reversión de crédito: si hubo ENTRADA de crédito por esta recepción,
-    // registramos SALIDA reversal por el mismo monto (asiento append-only).
-    const cred = await client.query<{ id: string; monto: string }>(
-      `SELECT id, monto FROM ${creditosT}
+    // ── Chequear si el crédito de esta recepción fue consumido ──────
+    // Buscar la(s) ENTRADA de crédito por origen=recepcion + referencia_id=recepcion
+    const entradas = await client.query<{ id: string; monto: string }>(
+      `SELECT id, monto::text FROM ${creditosT}
         WHERE empresa_id = $1 AND cliente_id = $2
-          AND origen = 'recepcion' AND referencia_id = $3
-          AND tipo = 'ENTRADA'
-        ORDER BY created_at ASC`,
+          AND tipo = 'ENTRADA' AND origen = 'recepcion' AND referencia_id = $3
+        FOR UPDATE`,
       [p.empresaId, rec.cliente_id, p.recepcionId],
     );
-    for (const row of cred.rows) {
-      // Verificar que el saldo del cliente no quede negativo tras la reversión.
-      // Si ya se consumió parte del crédito, la reversión sigue siendo válida
-      // pero el saldo puede quedar negativo — permitido acá porque es un
-      // asiento contable de anulación. El operativo debe reconciliar aparte.
+    if (entradas.rows.length) {
+      const entradaIds = entradas.rows.map((r) => r.id);
+      const consumidoQ = await client.query<{
+        entrada_id: string;
+        monto_consumido: string;
+        ventas: string;
+      }>(
+        `SELECT c.entrada_id,
+                SUM(c.monto_aplicado)::text AS monto_consumido,
+                COALESCE(string_agg(DISTINCT s.referencia_numero, ', '), '') AS ventas
+         FROM ${consumosT} c
+         LEFT JOIN ${creditosT} s ON s.id = c.salida_id
+         WHERE c.entrada_id = ANY($1::uuid[])
+         GROUP BY c.entrada_id
+         HAVING SUM(c.monto_aplicado) > 0`,
+        [entradaIds],
+      );
+      if (consumidoQ.rows.length) {
+        const totalConsumido = consumidoQ.rows.reduce(
+          (s, r) => s + Number(r.monto_consumido), 0);
+        const ventas = consumidoQ.rows.map((r) => r.ventas).filter(Boolean).join(", ");
+        throw new Error(
+          `No se puede anular la recepción ${rec.numero_control}: el crédito ya fue consumido (Gs. ${Math.round(totalConsumido)}${ventas ? ` en ventas ${ventas}` : ""}). Reversá primero esas ventas.`,
+        );
+      }
+    }
+
+    // ── Reversión de crédito: SALIDA por el mismo monto ──────────────
+    for (const row of entradas.rows) {
       await client.query(
         `INSERT INTO ${creditosT} (
            empresa_id, cliente_id, tipo, monto, origen, referencia_id,
            referencia_tipo, referencia_numero, observaciones,
            created_by, usuario_nombre
-         ) VALUES ($1, $2, 'SALIDA', $3, 'ajuste_manual', $4,
-                   'recepcion_anulacion', $5, $6, $7, $8)`,
+         ) VALUES ($1,$2,'SALIDA',$3,'ajuste_manual',$4,'recepcion_anulacion',$5,$6,$7,$8)`,
         [
-          p.empresaId,
-          rec.cliente_id,
-          Number(row.monto),
-          p.recepcionId,
+          p.empresaId, rec.cliente_id, Number(row.monto), p.recepcionId,
           rec.numero_control,
-          `Reversión de crédito por anulación de ${rec.numero_control}` +
-            (p.motivo ? ` — ${p.motivo}` : ""),
-          p.actorId,
-          p.actorNombre,
+          `Reversión anulación de ${rec.numero_control}` + (p.motivo ? ` — ${p.motivo}` : ""),
+          p.actorId, p.actorNombre,
         ],
       );
     }
 
-    // Reversión de caja: si hubo egreso efectivo por esta recepción,
-    // registrar un ingreso compensatorio en la MISMA caja abierta.
-    const cajaMovs = await client.query<{ caja_id: string; monto: string }>(
-      `SELECT caja_id, monto FROM ${cajaMovT}
-        WHERE empresa_id = $1 AND tipo = 'egreso'
-          AND concepto = $2`,
-      [p.empresaId, `Compra a cliente ${rec.numero_control}`],
-    );
-    for (const row of cajaMovs.rows) {
-      // Buscar si la caja original sigue abierta; si no, usar la abierta actual
-      // de la sucursal.
-      const cajaAbierta = await client.query<{ id: string }>(
-        `SELECT id FROM ${quoteSchemaTable(schema, "cajas")}
-          WHERE id = $1 AND estado = 'abierta'`,
-        [row.caja_id],
-      );
-      let cajaTarget = cajaAbierta.rows[0]?.id;
-      if (!cajaTarget) {
-        cajaTarget = (await cajaAbiertaSucursal(client, schema, p.empresaId, rec.sucursal_id))
-          ?? undefined as unknown as string;
-      }
-      if (!cajaTarget) {
-        throw new Error(
-          "No hay caja abierta para revertir el egreso en efectivo. Abrí una caja en la sucursal antes de anular.",
-        );
-      }
-      await client.query(
-        `INSERT INTO ${cajaMovT} (
-           empresa_id, caja_id, tipo, concepto, monto, medio_pago,
-           usuario_id, observacion
-         ) VALUES ($1, $2, 'ingreso', $3, $4, 'efectivo', $5, $6)`,
-        [
-          p.empresaId,
-          cajaTarget,
-          `Reversión anulación ${rec.numero_control}`,
-          Number(row.monto),
-          p.actorId,
-          p.motivo ?? null,
-        ],
-      );
-    }
-
-    // Reversión de stock: solo si la recepción estaba INGRESADA.
-    if (rec.estado === "ingresada") {
+    // ── Reversión de stock si estaba ingresada ───────────────────────
+    if (estadoPrev === "ingresada") {
       const items = await client.query<{
         producto_id: string;
         producto_nombre: string;
@@ -724,23 +679,20 @@ export async function anularRecepcionPg(
         precio_compra_unitario: string | null;
       }>(
         `SELECT producto_id, producto_nombre, sku, cantidad, precio_compra_unitario
-         FROM ${recepItemsT}
-         WHERE recepcion_id = $1`,
+         FROM ${recepItemsT} WHERE recepcion_id = $1`,
         [p.recepcionId],
       );
       for (const it of items.rows) {
         const qty = Number(it.cantidad);
-        // Verificar que no queda stock negativo tras la reversión
         const stockActual = await client.query<{ stock_actual: string }>(
-          `SELECT stock_actual FROM ${stockSucT}
-            WHERE producto_id = $1 AND sucursal_id = $2
-            FOR UPDATE`,
+          `SELECT stock_actual::text FROM ${stockSucT}
+            WHERE producto_id = $1 AND sucursal_id = $2 FOR UPDATE`,
           [it.producto_id, rec.sucursal_id],
         );
         const disponible = Number(stockActual.rows[0]?.stock_actual ?? 0);
         if (disponible < qty) {
           throw new Error(
-            `No se puede anular: el producto ${it.producto_nombre} ya no tiene stock suficiente para revertir (disponible ${disponible}, necesario ${qty}). Reponer stock primero o anular manualmente.`,
+            `No se puede anular: producto ${it.producto_nombre} no tiene stock suficiente (disp ${disponible}, necesita ${qty}).`,
           );
         }
         await client.query(
@@ -754,17 +706,12 @@ export async function anularRecepcionPg(
              empresa_id, producto_id, producto_nombre, producto_sku,
              tipo, cantidad, costo_unitario, origen, referencia, fecha,
              created_by, usuario_nombre
-           ) VALUES ($1, $2, $3, $4, 'AJUSTE', $5, $6, 'ajuste_manual', $7, now(), $8, $9)`,
+           ) VALUES ($1,$2,$3,$4,'AJUSTE',$5,$6,'ajuste_manual',$7,now(),$8,$9)`,
           [
-            p.empresaId,
-            it.producto_id,
-            it.producto_nombre,
-            it.sku,
-            -qty,
-            Number(it.precio_compra_unitario ?? 0),
+            p.empresaId, it.producto_id, it.producto_nombre, it.sku,
+            -qty, Number(it.precio_compra_unitario ?? 0),
             `Anulación ${rec.numero_control}`,
-            p.actorId,
-            p.actorNombre,
+            p.actorId, p.actorNombre,
           ],
         );
       }
@@ -784,34 +731,23 @@ export async function anularRecepcionPg(
       [p.actorId, p.actorNombre, p.motivo, p.recepcionId, p.empresaId],
     );
 
-    // Evento en historial
+    // Evento
     try {
       await client.query(
         `INSERT INTO ${eventosT} (
            empresa_id, cliente_id, tipo, titulo, descripcion,
            referencia_tipo, referencia_id, referencia_numero,
            autor_id, autor_nombre
-         ) VALUES ($1, $2, 'otro', 'Recepción anulada', $3,
-                   'recepcion', $4, $5, $6, $7)`,
+         ) VALUES ($1,$2,'otro','Recepción anulada',$3,'recepcion',$4,$5,$6,$7)`,
         [
-          p.empresaId,
-          rec.cliente_id,
-          `Recepción ${rec.numero_control} anulada.` +
-            (p.motivo ? ` Motivo: ${p.motivo}` : ""),
-          p.recepcionId,
-          rec.numero_control,
-          p.actorId,
-          p.actorNombre,
+          p.empresaId, rec.cliente_id,
+          `Recepción ${rec.numero_control} anulada.` + (p.motivo ? ` Motivo: ${p.motivo}` : ""),
+          p.recepcionId, rec.numero_control, p.actorId, p.actorNombre,
         ],
       );
-    } catch {
-      /* opcional */
-    }
+    } catch { /* opcional */ }
 
-    // Pagos: quedan como registro histórico, NO se borran (append-only).
-    // (Referencia informativa: se pueden marcar mediante update, pero no es
-    // necesario porque el estado de la cabecera es la fuente de verdad.)
-    void recepPagosT;
+    void recepPagosT; // append-only, no borramos filas
 
     await client.query("COMMIT");
     return {
@@ -821,7 +757,7 @@ export async function anularRecepcionPg(
       anulada_at: upd.rows[0].anulada_at,
     };
   } catch (e) {
-    await client.query("ROLLBACK");
+    await client.query("ROLLBACK").catch(() => null);
     throw e;
   } finally {
     client.release();

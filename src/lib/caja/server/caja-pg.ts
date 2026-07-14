@@ -338,33 +338,95 @@ async function attachUsuarioNombres(sb: Sb, resumenes: CajaResumen[]): Promise<v
 }
 
 /**
- * Calcula los totales de una caja a partir de sus ventas (por metodo_pago) y de
- * sus movimientos manuales. El efectivo esperado es la verdad del arqueo:
- *   apertura + ventas efectivo + ingresos efectivo − egresos efectivo
- *   − retiros efectivo + ajustes efectivo.
- * Tarjeta y transferencia suman al total vendido pero NO al efectivo esperado.
+ * Calcula los totales de una caja para el arqueo (rediseño pronimerp 20260811):
+ *
+ * FUENTES DE VERDAD:
+ *   - Ventas: se cuentan por METODO DE PAGO desde ventas_pagos_detalle
+ *     (NO desde ventas.total + ventas.metodo_pago, que no soporta pagos
+ *     mixtos y contaba el crédito a favor como efectivo).
+ *   - Recepciones: egreso EN EFECTIVO de compras al cliente desde
+ *     cliente_recepciones_pagos WHERE metodo='efectivo'.
+ *   - Movimientos manuales: caja_movimientos (apertura/cierre/ajustes).
+ *
+ * EL CRÉDITO A FAVOR DEL CLIENTE NO ENTRA EN CAJA (no es efectivo ni banco).
+ *
+ * Efectivo esperado = apertura
+ *   + ventas efectivo (ventas_pagos_detalle)
+ *   − recepciones efectivo (cliente_recepciones_pagos)
+ *   + ingresos manuales efectivo
+ *   − egresos manuales efectivo
+ *   − retiros manuales efectivo
+ *   + ajustes manuales efectivo (signados).
  */
 async function computeResumen(sb: Sb, empresaId: string, caja: Caja): Promise<CajaResumen> {
-  // Ventas de la caja (excluye anuladas).
-  const vQ = await sb
-    .from("ventas")
-    .select("total, metodo_pago, estado")
+  // ── Ventas: totales por método desde ventas_pagos_detalle ─────────
+  // Solo cuentan las líneas de venta NO anulada.
+  const vPagQ = await sb
+    .from("ventas_pagos_detalle")
+    .select("metodo_pago, monto, venta:venta_id(estado, id)")
     .eq("empresa_id", empresaId)
-    .eq("caja_id", caja.id)
-    .neq("estado", "anulada");
-  if (vQ.error) throw new Error(vQ.error.message);
-  const ventas = (vQ.data ?? []) as unknown as Array<{ total: number | string; metodo_pago: string | null }>;
+    .eq("caja_id", caja.id);
+  if (vPagQ.error) throw new Error(vPagQ.error.message);
+  const vPagos = (vPagQ.data ?? []) as unknown as Array<{
+    metodo_pago: string;
+    monto: number | string;
+    venta: { estado: string; id: string } | null;
+  }>;
 
-  let totalVendido = 0;
   let totalEfectivo = 0;
   let totalTarjeta = 0;
   let totalTransferencia = 0;
-  for (const v of ventas) {
-    const t = num(v.total);
-    totalVendido += t;
-    if (v.metodo_pago === "tarjeta") totalTarjeta += t;
-    else if (v.metodo_pago === "transferencia") totalTransferencia += t;
-    else totalEfectivo += t; // efectivo o método no especificado → efectivo
+  const ventasIdsSet = new Set<string>();
+  for (const pg of vPagos) {
+    if (pg.venta?.estado === "anulada") continue;
+    if (pg.venta?.id) ventasIdsSet.add(pg.venta.id);
+    const m = Number(pg.monto);
+    switch (pg.metodo_pago) {
+      case "efectivo": totalEfectivo += m; break;
+      case "tarjeta": totalTarjeta += m; break;
+      case "transferencia": totalTransferencia += m; break;
+      // qr, billetera, otro, credito_cliente (legacy) → no suman
+    }
+  }
+
+  // Total vendido bruto = suma de todos los totales de las ventas NO anuladas
+  // que tuvieron algún pago en esta caja. Esto sirve como métrica.
+  let totalVendido = 0;
+  if (ventasIdsSet.size > 0) {
+    const vQ = await sb
+      .from("ventas")
+      .select("total")
+      .in("id", [...ventasIdsSet])
+      .neq("estado", "anulada");
+    if (!vQ.error) {
+      for (const v of ((vQ.data ?? []) as unknown as Array<{ total: number | string }>)) {
+        totalVendido += Number(v.total);
+      }
+    }
+  }
+  const ventas = { length: ventasIdsSet.size };
+
+  // ── Recepciones: egreso efectivo por compras al cliente ───────────
+  let egresosRecepcion = 0;
+  try {
+    const rPagQ = await sb
+      .from("cliente_recepciones_pagos")
+      .select("monto, recepcion:recepcion_id(estado)")
+      .eq("empresa_id", empresaId)
+      .eq("caja_id", caja.id)
+      .eq("metodo", "efectivo");
+    if (!rPagQ.error) {
+      const rPagos = (rPagQ.data ?? []) as unknown as Array<{
+        monto: number | string;
+        recepcion: { estado: string } | null;
+      }>;
+      for (const pg of rPagos) {
+        if (pg.recepcion?.estado === "anulada") continue;
+        egresosRecepcion += Number(pg.monto);
+      }
+    }
+  } catch {
+    /* tabla puede no existir en instancias viejas */
   }
 
   // Movimientos manuales.
@@ -415,7 +477,10 @@ async function computeResumen(sb: Sb, empresaId: string, caja: Caja): Promise<Ca
   });
 
   const efectivoEsperado =
-    caja.monto_apertura + totalEfectivo + ingresosEf - egresosEf - retirosEf + ajustesEf;
+    caja.monto_apertura
+    + totalEfectivo
+    - egresosRecepcion
+    + ingresosEf - egresosEf - retirosEf + ajustesEf;
 
   return {
     caja,

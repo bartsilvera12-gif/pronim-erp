@@ -13,7 +13,7 @@ import { getTenantSupabaseFromAuth } from "@/lib/supabase/tenant-api";
 import { getChatPostgresPool, quoteSchemaTable } from "@/lib/supabase/chat-pg-pool";
 
 const RECEP_COLS =
-  "id,numero_control,fecha,total_credito,observaciones,estado,sucursal_id," +
+  "id,numero_control,fecha,total_compra,total_credito,observaciones,estado,sucursal_id," +
   "cambio_id,ingresada_at,ingresada_by_nombre,anulada_at,anulada_by_nombre,anulacion_motivo," +
   "created_by,usuario_nombre";
 const RECEP_ITEMS_COLS =
@@ -31,17 +31,13 @@ function parseItems(body: unknown): RecepcionItemInput[] | null {
     const r = x as Record<string, unknown>;
     const cantidad = Number(r.cantidad);
     const precioCompra = Number(r.precio_compra_unitario);
-    const precioVenta = Number(r.precio_venta_snapshot);
     if (!Number.isFinite(cantidad) || cantidad <= 0) return null;
     if (!Number.isFinite(precioCompra) || precioCompra < 0) return null;
-    if (!Number.isFinite(precioVenta) || precioVenta <= 0) return null;
     out.push({
       producto_id: String(r.producto_id ?? ""),
-      producto_nombre: String(r.producto_nombre ?? ""),
-      sku: String(r.sku ?? ""),
       cantidad,
       precio_compra_unitario: precioCompra,
-      precio_venta_snapshot: precioVenta,
+      // producto_nombre, sku, precio_venta_snapshot se resuelven server-side
     });
   }
   if (out.some((i) => !i.producto_id)) return null;
@@ -208,7 +204,6 @@ export async function POST(
     const o = body as Record<string, unknown>;
     const observaciones =
       typeof o.observaciones === "string" ? o.observaciones.slice(0, 4000) : null;
-    const totalDeclarado = Number(o.total_compra) || items.reduce((s, i) => s + i.cantidad * i.precio_compra_unitario, 0);
     const ingresarAhora = o.ingresar_ahora === true;
     const cambioId = typeof o.cambio_id === "string" ? o.cambio_id : null;
     const sucursalBody = typeof o.sucursal_id === "string" ? o.sucursal_id : null;
@@ -221,6 +216,7 @@ export async function POST(
       schema,
     );
 
+    // total_compra y total_credito se recalculan server-side.
     const result = await crearRecepcionPg({
       schema,
       empresaId: auth.empresa_id,
@@ -228,7 +224,6 @@ export async function POST(
       sucursalId,
       items,
       pagos,
-      totalDeclarado,
       observaciones,
       createdBy: auth.user.id ?? null,
       usuarioNombre: null,
