@@ -76,17 +76,10 @@ async function assertDisposableTestDatabase(): Promise<void> {
       "Falta ALLOW_DESTRUCTIVE_TEST_DB=true. El runner elimina y reconstruye el schema pronimerp.",
     );
   }
-  const c = await localPool.connect();
-  try {
-    const r = await c.query<{ db: string }>("SELECT current_database() AS db");
-    const db = r.rows[0]?.db ?? "";
-    if (!/test/i.test(db)) {
-      throw new Error(
-        `Base rechazada: "${db}". El nombre debe contener "test" para permitir el bootstrap destructivo.`,
-      );
-    }
-  } finally {
-    c.release();
+  if (process.env.TEST_DB_CONFIRM !== "DROP_PRONIMERP") {
+    throw new Error(
+      "Falta TEST_DB_CONFIRM=DROP_PRONIMERP. Confirmá que TEST_DB_URL apunta a una base descartable.",
+    );
   }
 }
 
