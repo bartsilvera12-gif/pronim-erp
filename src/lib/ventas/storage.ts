@@ -66,6 +66,7 @@ export async function saveVenta(
     cliente_id?: string | null;
     genera_nota_remision?: boolean;
     credito_cliente_usado?: number | null;
+    cambio_id?: string | null;
   },
   pedidoCocina?: PedidoCocinaInput,
   pagoDetalle?: PagoDetalleInput | null,
@@ -91,6 +92,7 @@ export async function saveVenta(
         metodo_pago: datos.metodo_pago,
         cliente_id: datos.cliente_id ?? null,
         credito_cliente_usado: datos.credito_cliente_usado ?? 0,
+        cambio_id: datos.cambio_id ?? null,
         observaciones: null,
         pedido_cocina: pedidoCocina ?? null,
         pago_detalle: pagoDetalle ?? null,

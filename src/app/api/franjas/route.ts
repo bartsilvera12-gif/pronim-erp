@@ -9,57 +9,26 @@ import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema"
 import { assertAllowedChatDataSchema } from "@/lib/supabase/chat-data-schema";
 
 /**
- * /api/franjas — CRUD acotado de "franjas de precio" (modelo Pronim).
+ * /api/franjas — CRUD de "categorías de precio" (modelo Pronim).
  *
- * Todas las operaciones requieren rol super_admin. Las franjas son
- * productos con `es_franja_precio=true`, categoría `FRANJA`, SKU
- * `FRJ-<precio>` y nombre `Prenda Gs. <precio>`. No exponen los campos
- * web/catalogo; el usuario solo maneja precio, activo, stock (por
- * sucursal — si querés ajustes usá /api/franjas/[id]/stock).
+ * Reglas canónicas:
+ *   - UNA franja activa por precio (garantía DB: uq_franjas_activas_precio).
+ *   - Nombre y SKU se generan automáticamente desde el precio: no se
+ *     permite nombre libre. El vendedor solo tipea cantidad por precio.
  *
- * GET  → lista de franjas de la empresa activa (activas + inactivas).
- * POST → crea una nueva franja (precio numérico obligatorio).
+ * Solo super_admin puede crear/editar. GET también restringido a super_admin
+ * porque es la pantalla de administración.
  */
 
 const FRANJA_COLS =
   "id,empresa_id,nombre,sku,precio_venta,stock_actual,stock_minimo," +
   "activo,es_franja_precio,unidad_medida,categoria_principal_id,created_at,updated_at";
 
-function nombrePorDefecto(precio: number): string {
+function franjaLabel(precio: number): { nombre: string; sku: string } {
   const p = Math.round(precio);
-  return "Prenda - Categoría Gs. " + p.toLocaleString("es-PY").replace(/,/g, ".");
-}
-
-/** Slug ASCII-friendly a partir del nombre (para el SKU). */
-function slugify(input: string): string {
-  return input
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toUpperCase()
-    .replace(/[^A-Z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 40);
-}
-
-/** SKU único dentro de la empresa. Prueba variantes con sufijo -2, -3, … */
-async function siguienteSkuLibre(
-  client: import("pg").PoolClient,
-  productosT: string,
-  empresaId: string,
-  base: string,
-): Promise<string> {
-  let candidato = base;
-  let intento = 1;
-  while (true) {
-    const q = await client.query(
-      `SELECT 1 FROM ${productosT} WHERE empresa_id = $1 AND sku = $2 LIMIT 1`,
-      [empresaId, candidato],
-    );
-    if (q.rows.length === 0) return candidato;
-    intento += 1;
-    candidato = `${base}-${intento}`;
-    if (intento > 200) throw new Error("No se pudo generar un SKU único.");
-  }
+  const nombre = "Prenda - Categoría Gs. " + p.toLocaleString("es-PY").replace(/,/g, ".");
+  const sku = "FRJ-" + p;
+  return { nombre, sku };
 }
 
 export async function GET(request: NextRequest) {
@@ -121,11 +90,6 @@ export async function POST(request: NextRequest) {
     if (!Number.isFinite(precio) || precio <= 0) {
       return NextResponse.json(errorResponse("Precio inválido: debe ser mayor a 0."), { status: 400 });
     }
-    const nombreInput =
-      typeof body.nombre === "string" && body.nombre.trim()
-        ? body.nombre.trim().slice(0, 120)
-        : "";
-    const nombre = nombreInput || nombrePorDefecto(precio);
 
     const schema = await fetchDataSchemaForEmpresaId(empresaId);
     assertAllowedChatDataSchema(schema);
@@ -139,16 +103,10 @@ export async function POST(request: NextRequest) {
     const stockSucT = quoteSchemaTable(schema, "producto_stock_sucursal");
     const sucursalesT = quoteSchemaTable(schema, "sucursales");
 
+    const { nombre, sku } = franjaLabel(precio);
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
-      // SKU: si viene nombre libre, usar slug del nombre + sufijo si colisiona.
-      // Si no viene nombre, usar FRJ-{precio} (compat con seed).
-      const skuBase = nombreInput
-        ? "CAT-" + slugify(nombreInput)
-        : "FRJ-" + Math.round(precio);
-      const sku = await siguienteSkuLibre(client, productosT, empresaId, skuBase);
-      // Categoría FRANJA (por empresa). Si no existe, crearla.
       let catId: string;
       const catQ = await client.query<{ id: string }>(
         `SELECT id FROM ${categoriasT} WHERE empresa_id = $1 AND codigo = 'FRANJA' LIMIT 1`,
@@ -166,18 +124,20 @@ export async function POST(request: NextRequest) {
         catId = insCat.rows[0].id;
       }
 
+      // Insertar: si ya existe una franja con ese SKU (=precio), reactivarla.
       const ins = await client.query<{ id: string }>(
         `INSERT INTO ${productosT} (
            empresa_id, nombre, sku, precio_venta, costo_promedio,
            stock_actual, stock_minimo, unidad_medida, metodo_valuacion,
            activo, es_franja_precio, visible_web, categoria_principal_id
          ) VALUES ($1, $2, $3, $4, 0, 0, 0, 'Unidad', 'CPP', true, true, false, $5)
+         ON CONFLICT (empresa_id, sku) DO UPDATE
+           SET activo = true, nombre = EXCLUDED.nombre, precio_venta = EXCLUDED.precio_venta
          RETURNING id`,
         [empresaId, nombre, sku, precio, catId],
       );
       const productoId = ins.rows[0].id;
 
-      // Backfill stock por sucursal en 0.
       await client.query(
         `INSERT INTO ${stockSucT} (producto_id, sucursal_id, stock_actual, stock_minimo)
          SELECT $1, s.id, 0, 0
@@ -200,6 +160,12 @@ export async function POST(request: NextRequest) {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[/api/franjas POST]", msg);
-    return NextResponse.json(errorResponse("No se pudo crear la franja."), { status: 500 });
+    if (msg.includes("uq_franjas_activas_precio") || msg.includes("uq_franjas") || msg.includes("duplicate")) {
+      return NextResponse.json(
+        errorResponse("Ya existe una categoría activa con ese precio."),
+        { status: 409 },
+      );
+    }
+    return NextResponse.json(errorResponse("No se pudo crear la categoría."), { status: 500 });
   }
 }

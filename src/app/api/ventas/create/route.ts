@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUserAndEmpresa } from "@/lib/middleware/auth";
 import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema";
 import { createVentaTransaccionalPg } from "@/lib/ventas/server/create-venta-pg";
-import { resolveSucursalIdForUserPg } from "@/lib/sucursales/server";
 import type { CreateVentaItemInput } from "@/lib/ventas/server/create-venta-pg";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
@@ -180,32 +179,87 @@ export async function POST(request: NextRequest) {
     }
 
     const schema = await fetchDataSchemaForEmpresaId(auth.empresa_id);
-    // Sucursal efectiva de la venta:
-    //   1) si el usuario tiene sucursal fijada, esa manda.
-    //   2) sino (admin global), usar la sucursal de la caja abierta actual
-    //      (si el admin abrio caja en Sucursal 2, las ventas van a Sucursal 2).
-    //   3) fallback a Principal.
-    let sucursalId = auth.sucursal_id ?? null;
-    if (!sucursalId) {
+    // Sucursal ESTRICTA (pronimerp):
+    //   1) usuario con sucursal fija → esa manda; body no puede pedir otra.
+    //   2) admin global → sucursal_id del body o la de la caja abierta única.
+    //   3) si nada resuelve → 400 con mensaje claro.
+    const sucursalBody = typeof o.sucursal_id === "string" ? o.sucursal_id : null;
+    let sucursalId: string | null = null;
+    if (auth.sucursal_id) {
+      if (sucursalBody && sucursalBody !== auth.sucursal_id) {
+        return NextResponse.json(
+          errorResponse(
+            "Tu usuario está asignado a una sucursal específica; no podés registrar ventas para otra.",
+          ),
+          { status: 400 },
+        );
+      }
+      sucursalId = auth.sucursal_id;
+    } else if (sucursalBody) {
+      sucursalId = sucursalBody;
+    } else {
       const sb0 = createServiceRoleClientWithDbSchema(schema);
-      const { data: cajaAbierta } = await sb0
+      const { data: cajasAbiertas } = await sb0
         .from("cajas")
-        .select("sucursal_id")
+        .select("sucursal_id, fecha_apertura")
         .eq("empresa_id", auth.empresa_id)
         .eq("estado", "abierta")
         .not("sucursal_id", "is", null)
         .order("fecha_apertura", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      sucursalId = (cajaAbierta as { sucursal_id?: string } | null)?.sucursal_id ?? null;
+        .limit(2);
+      const arr = (cajasAbiertas ?? []) as { sucursal_id: string }[];
+      if (arr.length === 1) sucursalId = arr[0].sucursal_id;
+      else if (arr.length > 1) {
+        return NextResponse.json(
+          errorResponse(
+            "Hay más de una caja abierta; especificá sucursal_id en el body.",
+          ),
+          { status: 400 },
+        );
+      }
     }
     if (!sucursalId) {
-      sucursalId = await resolveSucursalIdForUserPg(
-        schema,
-        auth.empresa_id,
-        null,
+      return NextResponse.json(
+        errorResponse(
+          "Sucursal requerida: no se pudo determinar dónde se registra la venta. Especificá sucursal_id o abrí una caja.",
+        ),
+        { status: 400 },
       );
     }
+
+    // pago_detalle: array de formas de pago no-crédito
+    const pagosDetalleRaw = o.pago_detalle;
+    const pagosDetalle: import("@/lib/ventas/server/create-venta-pg").PagoDetalleVentaInput[] = [];
+    if (Array.isArray(pagosDetalleRaw)) {
+      for (const raw of pagosDetalleRaw) {
+        if (!raw || typeof raw !== "object") continue;
+        const r = raw as Record<string, unknown>;
+        const metodo = String(r.metodo_pago ?? "");
+        if (!["efectivo","transferencia","tarjeta","qr","billetera","otro"].includes(metodo)) continue;
+        const monto = Number(r.monto);
+        if (!Number.isFinite(monto) || monto <= 0) continue;
+        pagosDetalle.push({
+          metodo_pago: metodo as import("@/lib/ventas/server/create-venta-pg").MetodoPagoVenta,
+          monto,
+          entidad_bancaria_id: typeof r.entidad_bancaria_id === "string" ? r.entidad_bancaria_id : null,
+          entidad_nombre_snapshot: typeof r.entidad_nombre_snapshot === "string" ? r.entidad_nombre_snapshot : null,
+          referencia: typeof r.referencia === "string" ? r.referencia : null,
+          titular: typeof r.titular === "string" ? r.titular : null,
+          fecha_acreditacion: typeof r.fecha_acreditacion === "string" ? r.fecha_acreditacion : null,
+          observacion: typeof r.observacion === "string" ? r.observacion : null,
+        });
+      }
+    }
+    // Si no vino array pero vino metodoPago simple con el saldo restante, armar 1 línea.
+    if (pagosDetalle.length === 0 && metodoPago && totalDeclarado > 0) {
+      pagosDetalle.push({
+        metodo_pago: metodoPago as import("@/lib/ventas/server/create-venta-pg").MetodoPagoVenta,
+        monto: Math.max(0, totalDeclarado - creditoClienteUsado),
+      });
+    }
+
+    const cambioIdRaw = o.cambio_id;
+    const cambioId = typeof cambioIdRaw === "string" && cambioIdRaw ? cambioIdRaw : null;
 
     const { ventaId, numeroControl, fechaIso } = await createVentaTransaccionalPg({
       schema,
@@ -220,9 +274,11 @@ export async function POST(request: NextRequest) {
       subtotalDeclarado,
       montoIvaDeclarado,
       totalDeclarado,
-      metodoPago,
       sucursalId,
       creditoClienteUsado,
+      pagosDetalle,
+      createdBy: auth.user.id ?? null,
+      cambioId,
     });
 
     let sub = 0;

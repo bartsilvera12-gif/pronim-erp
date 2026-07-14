@@ -1,19 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTenantSupabaseFromAuth } from "@/lib/supabase/tenant-api";
+import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
-import { postgrestGet, getAccessTokenForRequest } from "@/lib/supabase/postgrest-runtime";
-
-const MOV_COLS =
-  "id,cliente_id,tipo,monto,origen,referencia_id,referencia_tipo,referencia_numero," +
-  "observaciones,fecha,created_by,usuario_nombre";
+import { getChatPostgresPool, quoteSchemaTable } from "@/lib/supabase/chat-pg-pool";
+import { assertAllowedChatDataSchema } from "@/lib/supabase/chat-data-schema";
 
 /**
- * GET /api/clientes/[id]/creditos — saldo actual + últimos 200 movimientos.
+ * GET /api/clientes/[id]/creditos
  *
- * El saldo se computa server-side (SUM CASE) para evitar depender de una
- * view expuesta a PostgREST (que podría no tener grants correctos en
- * clonados anteriores). Los movimientos vienen ordenados por fecha DESC.
+ * Devuelve:
+ *   - saldo: SUM sobre TODOS los movimientos del cliente en Postgres
+ *     (nunca calculado desde un subconjunto). Corrige el bug del bloque
+ *     limitado a 200 filas que producía saldos incorrectos con historial
+ *     largo.
+ *   - movimientos: últimos 200 para display, ordenados DESC por fecha.
  */
 export async function GET(
   request: NextRequest,
@@ -24,34 +25,48 @@ export async function GET(
     const ctx = await getTenantSupabaseFromAuth(request);
     if (!ctx) return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
     const empresaId = ctx.auth.empresa_id;
-    const jwt = await getAccessTokenForRequest(request);
 
-    const qs = new URLSearchParams({
-      select: MOV_COLS,
-      empresa_id: `eq.${empresaId}`,
-      cliente_id: `eq.${clienteId}`,
-      order: "fecha.desc",
-      limit: "200",
-    });
-    const r = await postgrestGet<Record<string, unknown>>(
-      "cliente_creditos_movimientos",
-      qs.toString(),
-      { role: "jwt", jwt, noStore: true },
-    );
-    if (!r.ok) {
-      return NextResponse.json(errorResponse("No se pudieron cargar los créditos."), { status: 502 });
+    const schema = await fetchDataSchemaForEmpresaId(empresaId);
+    assertAllowedChatDataSchema(schema);
+    const pool = getChatPostgresPool();
+    if (!pool) return NextResponse.json(errorResponse("Sin conexión Postgres."), { status: 500 });
+
+    const creditosT = quoteSchemaTable(schema, "cliente_creditos_movimientos");
+
+    const client = await pool.connect();
+    try {
+      // Saldo: SUM sobre TODOS los movimientos (fuente de verdad)
+      const saldoQ = await client.query<{ saldo: string }>(
+        `SELECT COALESCE(SUM(
+           CASE WHEN tipo = 'ENTRADA' THEN monto
+                WHEN tipo = 'SALIDA' THEN -monto
+                WHEN tipo = 'AJUSTE' THEN monto
+                ELSE 0 END
+         ), 0)::text AS saldo
+         FROM ${creditosT}
+         WHERE empresa_id = $1 AND cliente_id = $2`,
+        [empresaId, clienteId],
+      );
+      const saldo = Number(saldoQ.rows[0]?.saldo ?? 0);
+
+      // Últimos 200 movimientos para display
+      const movQ = await client.query<Record<string, unknown>>(
+        `SELECT id, cliente_id, tipo, monto, origen, referencia_id,
+                referencia_tipo, referencia_numero, observaciones, fecha,
+                created_by, usuario_nombre
+         FROM ${creditosT}
+         WHERE empresa_id = $1 AND cliente_id = $2
+         ORDER BY fecha DESC, created_at DESC
+         LIMIT 200`,
+        [empresaId, clienteId],
+      );
+
+      return NextResponse.json(
+        successResponse({ saldo, movimientos: movQ.rows }),
+      );
+    } finally {
+      client.release();
     }
-    const movimientos = r.rows;
-    const saldo = movimientos.reduce((acc: number, m) => {
-      const tipo = String((m as { tipo?: string }).tipo ?? "");
-      const monto = Number((m as { monto?: unknown }).monto ?? 0);
-      if (tipo === "ENTRADA") return acc + monto;
-      if (tipo === "SALIDA") return acc - monto;
-      if (tipo === "AJUSTE") return acc + monto;
-      return acc;
-    }, 0);
-
-    return NextResponse.json(successResponse({ saldo, movimientos }));
   } catch (err) {
     console.error("[/api/clientes/[id]/creditos GET]", err);
     return NextResponse.json(errorResponse("Error inesperado."), { status: 500 });

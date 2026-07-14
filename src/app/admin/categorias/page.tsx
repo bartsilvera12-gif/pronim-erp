@@ -34,7 +34,6 @@ export default function AdminCategoriasPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [nuevoPrecio, setNuevoPrecio] = useState("");
-  const [nuevoNombre, setNuevoNombre] = useState("");
   const [creando, setCreando] = useState(false);
   const [sembrando, setSembrando] = useState(false);
   const [ajusteAbierto, setAjusteAbierto] = useState<Categoria | null>(null);
@@ -88,50 +87,22 @@ export default function AdminCategoriasPage() {
       setError("Precio inválido.");
       return;
     }
-    const nombre = nuevoNombre.trim();
-    if (!nombre) {
-      setError("Cargá un nombre para la categoría.");
-      return;
-    }
     setCreando(true);
     setError(null);
     try {
       const r = await fetchWithSupabaseSession("/api/franjas", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ precio_venta: precio, nombre }),
+        body: JSON.stringify({ precio_venta: precio }),
       });
       const j = await r.json();
       if (!r.ok || !j.success) throw new Error(j?.error ?? "Error al crear");
       setNuevoPrecio("");
-      setNuevoNombre("");
       await cargar();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error inesperado");
     } finally {
       setCreando(false);
-    }
-  }
-
-  async function editarNombre(c: Categoria) {
-    const nuevo = window.prompt(`Nuevo nombre para "${c.nombre}":`, c.nombre);
-    if (nuevo == null) return;
-    const n = nuevo.trim();
-    if (!n) {
-      setError("El nombre no puede quedar vacío.");
-      return;
-    }
-    try {
-      const r = await fetchWithSupabaseSession(`/api/franjas/${c.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nombre: n }),
-      });
-      const j = await r.json();
-      if (!r.ok || !j.success) throw new Error(j?.error ?? "Error");
-      await cargar();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Error inesperado");
     }
   }
 
@@ -237,45 +208,30 @@ export default function AdminCategoriasPage() {
       )}
 
       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
           Crear nueva categoría
         </p>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[2fr,1fr,auto]">
-          <div>
-            <label className="text-[11px] font-medium text-slate-600">Nombre</label>
-            <input
-              type="text"
-              value={nuevoNombre}
-              onChange={(e) => setNuevoNombre(e.target.value)}
-              placeholder="Ej: Blusas de verano"
-              className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]/40"
-            />
-          </div>
-          <div>
-            <label className="text-[11px] font-medium text-slate-600">Precio (Gs.)</label>
-            <input
-              type="number"
-              min={1}
-              value={nuevoPrecio}
-              onChange={(e) => setNuevoPrecio(e.target.value)}
-              placeholder="Ej: 14000"
-              className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]/40"
-            />
-          </div>
-          <div className="flex items-end">
-            <button
-              type="button"
-              onClick={crearCategoria}
-              disabled={creando || !nuevoPrecio || !nuevoNombre.trim()}
-              className="w-full rounded-lg bg-[#4FAEB2] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#3F8E91] disabled:opacity-40 sm:w-auto"
-            >
-              {creando ? "Creando…" : "Crear categoría"}
-            </button>
-          </div>
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            min={1}
+            value={nuevoPrecio}
+            onChange={(e) => setNuevoPrecio(e.target.value)}
+            placeholder="Precio en Gs. (ej: 104000)"
+            className="w-full max-w-sm rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]/40"
+          />
+          <button
+            type="button"
+            onClick={crearCategoria}
+            disabled={creando || !nuevoPrecio}
+            className="rounded-lg bg-[#4FAEB2] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#3F8E91] disabled:opacity-40"
+          >
+            {creando ? "Creando…" : "Crear categoría"}
+          </button>
         </div>
         <p className="mt-2 text-[11px] text-slate-400">
-          El nombre lo elegís vos (Ej: Blusas, Vestidos verano). Podés tener varias categorías
-          con el mismo precio pero distinto nombre.
+          Cada categoría se identifica solo por su precio. Nombre y código se generan
+          automáticamente. Solo puede haber una categoría activa por precio.
         </p>
       </div>
 
@@ -321,13 +277,6 @@ export default function AdminCategoriasPage() {
                       </button>
                     </td>
                     <td className="py-2 text-right space-x-1">
-                      <button
-                        type="button"
-                        onClick={() => editarNombre(c)}
-                        className="rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
-                      >
-                        Editar nombre
-                      </button>
                       <button
                         type="button"
                         onClick={() => editarPrecio(c)}

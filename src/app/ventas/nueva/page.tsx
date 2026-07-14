@@ -133,6 +133,10 @@ export default function NuevaVentaPage() {
   // Facturación de un pedido del salón (módulo Consulta) — ?pedido_caja_id=...
   const [pedidoCajaId, setPedidoCajaId] = useState<string | null>(null);
   const [pedidoCajaTitulo, setPedidoCajaTitulo] = useState<string | null>(null);
+  // Operación de cambio — ?cambio_id=<uuid>&cliente_id=<uuid>. Al confirmar la
+  // venta con este cambio_id, el backend cierra la fila `cambios` vinculando
+  // recepción + venta + crédito + diferencia.
+  const [cambioId, setCambioIdState] = useState<string | null>(null);
 
   // ── Condiciones de la venta ───────────────────────────────────────────────
   // Instancia dedicada: siempre Guaraníes.
@@ -402,6 +406,16 @@ export default function NuevaVentaPage() {
       })
       .catch(() => { /* el buscador de cliente es opcional, no bloquea la venta */ });
     return () => { cancelled = true; };
+  }, []);
+
+  // Precargar cambio_id + cliente_id desde la URL (viene de "Continuar como cambio").
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const sp = new URLSearchParams(window.location.search);
+    const cId = sp.get("cambio_id");
+    const cliId = sp.get("cliente_id");
+    if (cId) setCambioIdState(cId);
+    if (cliId) setClienteId(cliId);
   }, []);
 
   // Cargar saldo de crédito del cliente seleccionado (modelo Pronim).
@@ -716,6 +730,7 @@ export default function NuevaVentaPage() {
             saldoCredito,
             totalGeneral,
           ),
+          cambio_id: cambioId ?? null,
         },
         undefined,
         {
@@ -1353,11 +1368,13 @@ export default function NuevaVentaPage() {
 
             <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end">
               <button type="button" onClick={() => setConfirmSinStockOpen(false)} className="rounded-lg border border-slate-200 px-4 py-2 text-sm hover:bg-slate-50">
-                Cancelar
+                Cerrar
               </button>
-              <button type="button" disabled={guardando} aria-busy={guardando} onClick={() => void confirmarVentaSinStock()} className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed">
-                {guardando ? "Guardando…" : "Confirmar venta de todos modos"}
-              </button>
+              {/*
+                En pronimerp NO se permite venta con stock insuficiente.
+                El botón "Confirmar venta de todos modos" fue removido.
+                El backend ya rechaza estas ventas; acá solo mostramos el detalle.
+              */}
             </div>
           </div>
         </div>
