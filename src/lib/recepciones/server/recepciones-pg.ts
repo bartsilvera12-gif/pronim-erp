@@ -253,12 +253,16 @@ export async function crearRecepcionPg(
       );
     }
 
-    // Caja abierta si hay pago efectivo
+    // Caja abierta si hay pagos que no sean crédito
+    // (efectivo y transferencia se asocian al turno para el arqueo).
     let cajaIdEfectivo: string | null = null;
-    if (efectivoInput) {
+    const necesitaCaja = efectivoInput || transfInput;
+    if (necesitaCaja) {
       cajaIdEfectivo = await cajaAbiertaSucursal(client, schema, p.empresaId, p.sucursalId);
       if (!cajaIdEfectivo) {
-        throw new Error("No hay caja abierta en la sucursal para registrar el egreso en efectivo.");
+        throw new Error(
+          "No hay caja abierta en la sucursal para registrar el pago; todos los pagos que no sean crédito deben asociarse a una caja/turno.",
+        );
       }
     }
 
@@ -302,15 +306,19 @@ export async function crearRecepcionPg(
       );
     }
 
-    // Pagos — fuente única de verdad. Efectivo lleva caja_id + sucursal_id.
+    // Pagos — fuente única de verdad. Todos los pagos "reales" de la
+    // recepción (efectivo y transferencia) se asocian a caja/turno; el
+    // "crédito" es un asiento contable interno (no toca dinero físico)
+    // por eso no exige caja_id.
+    // direccion='egreso' porque en una recepción la tienda paga al cliente.
     for (const pg of p.pagos) {
-      const cajaParaPago = pg.metodo === "efectivo" ? cajaIdEfectivo : null;
+      const cajaParaPago = pg.metodo === "credito" ? null : cajaIdEfectivo;
       await client.query(
         `INSERT INTO ${recepPagosT} (
            empresa_id, recepcion_id, metodo, monto,
            entidad_bancaria_id, entidad_nombre_snapshot, referencia, observacion,
-           caja_id, sucursal_id
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+           caja_id, sucursal_id, direccion
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'egreso')`,
         [
           p.empresaId, recepcionId, pg.metodo, Number(pg.monto),
           pg.entidad_bancaria_id ?? null, pg.entidad_nombre_snapshot ?? null,
@@ -581,6 +589,7 @@ export async function anularRecepcionPg(p: RecepcionAnularInput): Promise<Recepc
   const recepItemsT = quoteSchemaTable(schema, "cliente_recepciones_items");
   const recepPagosT = quoteSchemaTable(schema, "cliente_recepciones_pagos");
   const stockSucT = quoteSchemaTable(schema, "producto_stock_sucursal");
+  const prodT = quoteSchemaTable(schema, "productos");
   const movT = quoteSchemaTable(schema, "movimientos_inventario");
   const creditosT = quoteSchemaTable(schema, "cliente_creditos_movimientos");
   const consumosT = quoteSchemaTable(schema, "cliente_creditos_consumos");
@@ -669,7 +678,18 @@ export async function anularRecepcionPg(p: RecepcionAnularInput): Promise<Recepc
       );
     }
 
-    // ── Reversión de stock si estaba ingresada ───────────────────────
+    // ── Reversión de stock + WACP inverso ────────────────────────────
+    // Al anular una recepción ingresada:
+    //   1) Retirar stock por sucursal (validando que hay suficiente).
+    //   2) Recalcular costo_promedio bajo lock transaccional:
+    //        valor_actual = stock_actual * costo_promedio
+    //        valor_nuevo  = valor_actual - qty * precio_compra_original
+    //        stock_nuevo  = stock_actual - qty
+    //        costo_nuevo  = valor_nuevo / stock_nuevo  (si stock_nuevo > 0)
+    //        costo_nuevo  = 0                          (si stock_nuevo == 0)
+    //   3) Si valor_nuevo < 0 (raro; puede pasar por ajustes o compras
+    //      posteriores a menor costo), lo clampeamos a 0 y logueamos.
+    //   4) Movimiento AJUSTE en movimientos_inventario para trazabilidad.
     if (estadoPrev === "ingresada") {
       const items = await client.query<{
         producto_id: string;
@@ -684,23 +704,68 @@ export async function anularRecepcionPg(p: RecepcionAnularInput): Promise<Recepc
       );
       for (const it of items.rows) {
         const qty = Number(it.cantidad);
-        const stockActual = await client.query<{ stock_actual: string }>(
+        const costoOriginal = Number(it.precio_compra_unitario ?? 0);
+
+        // Lock stock de sucursal + productos global
+        const stockActualQ = await client.query<{ stock_actual: string }>(
           `SELECT stock_actual::text FROM ${stockSucT}
             WHERE producto_id = $1 AND sucursal_id = $2 FOR UPDATE`,
           [it.producto_id, rec.sucursal_id],
         );
-        const disponible = Number(stockActual.rows[0]?.stock_actual ?? 0);
-        if (disponible < qty) {
+        const stockSucursal = Number(stockActualQ.rows[0]?.stock_actual ?? 0);
+        if (stockSucursal < qty) {
           throw new Error(
-            `No se puede anular: producto ${it.producto_nombre} no tiene stock suficiente (disp ${disponible}, necesita ${qty}).`,
+            `No se puede anular: producto ${it.producto_nombre} no tiene stock suficiente en la sucursal (disp ${stockSucursal}, necesita ${qty}).`,
           );
         }
+
+        // Lock global productos (para WACP)
+        const prodQ = await client.query<{ stock_actual: string; costo_promedio: string }>(
+          `SELECT stock_actual::text, costo_promedio::text FROM ${prodT}
+            WHERE id = $1 AND empresa_id = $2 FOR UPDATE`,
+          [it.producto_id, p.empresaId],
+        );
+        const stockGlobal = Number(prodQ.rows[0]?.stock_actual ?? 0);
+        const costoGlobal = Number(prodQ.rows[0]?.costo_promedio ?? 0);
+
+        // WACP inverso
+        const valorActual = stockGlobal * costoGlobal;
+        const valorReducido = valorActual - qty * costoOriginal;
+        const stockNuevo = stockGlobal - qty;
+        let costoNuevo: number;
+        if (stockNuevo <= 0) {
+          costoNuevo = 0;
+        } else if (valorReducido < 0) {
+          // Puede pasar si el costo original era mayor al costo actual
+          // (ej: hubo compras posteriores más baratas que bajaron el WACP).
+          // Clamp a 0 para no dejar valor negativo. Logueamos.
+          console.warn(
+            `[anular-recepcion] WACP inverso resultó negativo para producto ${it.sku}; ` +
+              `valorActual=${valorActual}, restar=${qty * costoOriginal}. Costo nuevo → 0.`,
+          );
+          costoNuevo = 0;
+        } else {
+          costoNuevo = Math.round(valorReducido / stockNuevo);
+        }
+
+        // Aplicar cambio de costo (el stock global se actualiza por el
+        // trigger de sync desde producto_stock_sucursal).
+        await client.query(
+          `UPDATE ${prodT}
+              SET costo_promedio = $1, updated_at = now()
+            WHERE id = $2 AND empresa_id = $3`,
+          [costoNuevo, it.producto_id, p.empresaId],
+        );
+
+        // Retirar stock de la sucursal (el trigger sincroniza el global).
         await client.query(
           `UPDATE ${stockSucT}
               SET stock_actual = stock_actual - $1, updated_at = now()
             WHERE producto_id = $2 AND sucursal_id = $3`,
           [qty, it.producto_id, rec.sucursal_id],
         );
+
+        // Movimiento AJUSTE
         await client.query(
           `INSERT INTO ${movT} (
              empresa_id, producto_id, producto_nombre, producto_sku,
@@ -709,9 +774,79 @@ export async function anularRecepcionPg(p: RecepcionAnularInput): Promise<Recepc
            ) VALUES ($1,$2,$3,$4,'AJUSTE',$5,$6,'ajuste_manual',$7,now(),$8,$9)`,
           [
             p.empresaId, it.producto_id, it.producto_nombre, it.sku,
-            -qty, Number(it.precio_compra_unitario ?? 0),
-            `Anulación ${rec.numero_control}`,
+            -qty, costoOriginal,
+            `Anulación ${rec.numero_control} (WACP ${costoGlobal} → ${costoNuevo})`,
             p.actorId, p.actorNombre,
+          ],
+        );
+      }
+    }
+
+    // ── Reversión de pagos originales (append-only, direccion opuesta) ──
+    // Los pagos originales de la recepción son direccion='egreso' (sale
+    // dinero al cliente). La reversión inserta filas nuevas con
+    // direccion='ingreso' y reversa_de_id apuntando al original.
+    // La reversión va a la caja abierta ACTUAL de la sucursal.
+    const pagosOriginales = await client.query<{
+      id: string; metodo: string; monto: string; caja_id: string | null;
+      sucursal_id: string | null; entidad_bancaria_id: string | null;
+      entidad_nombre_snapshot: string | null; direccion: string | null;
+      reversa_de_id: string | null; recepcion_id: string; empresa_id: string;
+    }>(
+      `SELECT id, metodo, monto::text, caja_id, sucursal_id,
+              entidad_bancaria_id, entidad_nombre_snapshot,
+              direccion, reversa_de_id, recepcion_id, empresa_id
+       FROM ${recepPagosT}
+       WHERE recepcion_id = $1 AND empresa_id = $2
+         AND direccion = 'egreso'
+         AND reversa_de_id IS NULL
+         AND metodo IN ('efectivo','transferencia')  -- crédito ya se reversó arriba
+       FOR UPDATE`,
+      [p.recepcionId, p.empresaId],
+    );
+    if (pagosOriginales.rows.length > 0) {
+      // Buscar caja abierta ACTUAL para atribuir la reversión
+      const cajasT = quoteSchemaTable(schema, "cajas");
+      const cajaActualQ = await client.query<{ id: string }>(
+        `SELECT id FROM ${cajasT}
+         WHERE empresa_id = $1 AND sucursal_id = $2 AND estado = 'abierta'
+         LIMIT 1`,
+        [p.empresaId, rec.sucursal_id],
+      );
+      const cajaTarget = cajaActualQ.rows[0]?.id ?? null;
+      if (!cajaTarget) {
+        throw new Error(
+          "No hay caja abierta en la sucursal para registrar la reversión de pagos de la recepción.",
+        );
+      }
+      for (const orig of pagosOriginales.rows) {
+        if (orig.recepcion_id !== p.recepcionId) {
+          throw new Error("Pago no corresponde a esta recepción.");
+        }
+        if (orig.empresa_id !== p.empresaId) throw new Error("Empresa mismatch en pago.");
+
+        const existeQ = await client.query<{ id: string }>(
+          `SELECT id FROM ${recepPagosT} WHERE reversa_de_id = $1 LIMIT 1`,
+          [orig.id],
+        );
+        if (existeQ.rows.length > 0) {
+          throw new Error(
+            `El pago ${orig.id} ya tiene una reversión; no se puede revertir dos veces.`,
+          );
+        }
+
+        await client.query(
+          `INSERT INTO ${recepPagosT} (
+             empresa_id, recepcion_id, metodo, monto,
+             entidad_bancaria_id, entidad_nombre_snapshot,
+             observacion, caja_id, sucursal_id, direccion, reversa_de_id
+           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'ingreso',$10)`,
+          [
+            p.empresaId, p.recepcionId, orig.metodo, Number(orig.monto),
+            orig.entidad_bancaria_id, orig.entidad_nombre_snapshot,
+            `Reversión de pago ${orig.metodo} en anulación de ${rec.numero_control}` +
+              (p.motivo ? ` — ${p.motivo}` : ""),
+            cajaTarget, rec.sucursal_id, orig.id,
           ],
         );
       }

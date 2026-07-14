@@ -145,6 +145,9 @@ export default function NuevaVentaPage() {
   // Contado / Crédito (campos ya existentes en `ventas`: tipo_venta + plazo_dias).
   const [tipoVenta, setTipoVenta] = useState<TipoVenta>("CONTADO");
   const [plazoDias, setPlazoDias] = useState("");
+  // Entrega inicial (solo aplica en venta CREDITO): monto que el cliente
+  // paga al momento; el resto queda como CxC.
+  const [entregaInicial, setEntregaInicial] = useState("");
 
   // Cliente (opcional). Si se selecciona, se envía cliente_id al crear la venta.
   type ClienteLite = { id: string; label: string; ruc: string | null; usa_nota_remision: boolean };
@@ -712,6 +715,29 @@ export default function NuevaVentaPage() {
     isSubmittingRef.current = true;
     setGuardando(true);
     try {
+      // Armar array de pagos inmediatos:
+      // - CONTADO: 1 línea por el saldo restante (total - crédito aplicado).
+      // - CREDITO: 0 líneas si no hay entrega, o 1 línea con la entrega inicial
+      //   (el resto va a CxC automáticamente).
+      const creditoAplicado = Math.min(
+        Math.max(0, parseFloat(creditoUsado) || 0),
+        saldoCredito,
+        totalGeneral,
+      );
+      const entradaEfectiva = tipoVenta === "CREDITO"
+        ? Math.max(0, parseFloat(entregaInicial) || 0)
+        : Math.max(0, totalGeneral - creditoAplicado);
+      const entidadNombre = entidades.find((e) => e.id === pagoEntidadId)?.nombre ?? null;
+      const pagos = entradaEfectiva > 0 ? [{
+        metodo_pago: (metodoPago ?? "efectivo") as "efectivo" | "tarjeta" | "transferencia" | "qr" | "billetera" | "otro",
+        monto: entradaEfectiva,
+        entidad_bancaria_id: pagoEntidadId || null,
+        entidad_nombre_snapshot: entidadNombre,
+        referencia: pagoReferencia.trim() || null,
+        titular: metodoPago === "transferencia" ? pagoTitular.trim() || null : null,
+        observacion: pagoObservacion.trim() || null,
+      }] : [];
+
       const resultado = await saveVenta(
         {
           items,
@@ -725,21 +751,11 @@ export default function NuevaVentaPage() {
           metodo_pago:  metodoPago,
           cliente_id:   clienteId || null,
           genera_nota_remision: !!clienteId && generaNotaRemision,
-          credito_cliente_usado: Math.min(
-            Math.max(0, parseFloat(creditoUsado) || 0),
-            saldoCredito,
-            totalGeneral,
-          ),
+          credito_cliente_usado: creditoAplicado,
           cambio_id: cambioId ?? null,
         },
         undefined,
-        {
-          entidad_bancaria_id: pagoEntidadId || null,
-          entidad_nombre_snapshot: entidades.find((e) => e.id === pagoEntidadId)?.nombre ?? null,
-          referencia: pagoReferencia.trim() || null,
-          titular: metodoPago === "transferencia" ? pagoTitular.trim() || null : null,
-          observacion: pagoObservacion.trim() || null,
-        },
+        pagos,
         { permitirSinStock, pedidoId, pedidoCajaId }
       );
 
@@ -924,7 +940,7 @@ export default function NuevaVentaPage() {
                 onChange={(v) => { setTipoVenta(v); if (v === "CONTADO") setPlazoDias(""); }}
               />
               {tipoVenta === "CREDITO" && (
-                <div className="mt-3">
+                <div className="mt-3 space-y-2">
                   <label className={labelClass}>Plazo de crédito (días)</label>
                   <input
                     type="number"
@@ -940,7 +956,18 @@ export default function NuevaVentaPage() {
                   {!clienteId && (
                     <p className="mt-1 text-[11px] text-red-600">La venta a crédito requiere un cliente seleccionado.</p>
                   )}
-                  <p className="mt-1 text-[11px] text-slate-500">Al confirmar se genera una cuenta por cobrar por el total.</p>
+                  <label className={labelClass}>Entrega inicial (opcional)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={entregaInicial}
+                    onChange={(e) => setEntregaInicial(e.target.value)}
+                    placeholder="0"
+                    className={inputClass}
+                  />
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    Si el cliente paga una parte al momento, cargá el monto acá. El saldo restante va a Cuentas por Cobrar.
+                  </p>
                 </div>
               )}
             </div>

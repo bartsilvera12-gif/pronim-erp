@@ -26,7 +26,48 @@ export type PedidoCocinaInput = {
   observacion?: string | null;
 };
 
-/** Detalle de cobro (conciliación bancaria) — opcional, 1 por venta. */
+/**
+ * Detalle de cobro (conciliación bancaria).
+ *
+ * Rediseño 20260812: `saveVenta` acepta un ARRAY de pagos. Cada elemento
+ * describe UNA forma de pago (metodo_pago + monto + campos opcionales
+ * de entidad/referencia). La suma de los `monto` DEBE cubrir el saldo
+ * restante de la venta (total − credito_cliente_usado).
+ *
+ * Ejemplos:
+ *   - Efectivo puro:
+ *       [{ metodo_pago: 'efectivo', monto: 100000 }]
+ *   - Mixto efectivo + transferencia:
+ *       [
+ *         { metodo_pago: 'efectivo', monto: 40000 },
+ *         { metodo_pago: 'transferencia', monto: 60000,
+ *           entidad_bancaria_id: '...', referencia: '12345', titular: 'Juan' },
+ *       ]
+ *   - Venta a crédito sin entrega inicial:
+ *       []           (o simplemente no pasar el array)
+ */
+export type MetodoPagoDetalle =
+  | "efectivo"
+  | "tarjeta"
+  | "transferencia"
+  | "qr"
+  | "billetera"
+  | "otro";
+
+export type PagoDetalleLinea = {
+  metodo_pago: MetodoPagoDetalle;
+  monto: number;
+  entidad_bancaria_id?: string | null;
+  entidad_nombre_snapshot?: string | null;
+  referencia?: string | null;
+  titular?: string | null;
+  observacion?: string | null;
+  fecha_acreditacion?: string | null;
+};
+
+/** @deprecated: usar array de PagoDetalleLinea. Retro-compat: si viene
+ *  un objeto único sin `metodo_pago`, se toma `datos.metodo_pago` como
+ *  método y el monto = saldo restante de la venta. */
 export type PagoDetalleInput = {
   entidad_bancaria_id?: string | null;
   entidad_nombre_snapshot?: string | null;
@@ -69,11 +110,49 @@ export async function saveVenta(
     cambio_id?: string | null;
   },
   pedidoCocina?: PedidoCocinaInput,
-  pagoDetalle?: PagoDetalleInput | null,
-  opts?: { permitirSinStock?: boolean; pedidoId?: string | null; pedidoCajaId?: string | null }
+  /**
+   * pagos: array de {metodo_pago, monto, ...opcionales}. Cada línea es
+   * un pago inmediato. En CREDITO puede venir vacío (todo va a CxC) o
+   * con una entrega inicial parcial.
+   *
+   * Retro-compat: si viene el objeto legacy PagoDetalleInput (sin
+   * metodo_pago), se convierte a UNA línea usando datos.metodo_pago
+   * como método y el saldo restante como monto.
+   */
+  pagos?: PagoDetalleLinea[] | PagoDetalleInput | null,
+  opts?: {
+    pedidoId?: string | null;
+    pedidoCajaId?: string | null;
+    /** @deprecated: en pronimerp el server siempre rechaza sin stock. Se ignora. */
+    permitirSinStock?: boolean;
+  }
 ): Promise<ResultadoGuardarVenta> {
   if (!datos.items || datos.items.length === 0) {
     return { success: false, error: "La venta debe tener al menos un producto." };
+  }
+
+  // Normalizar pagos a array
+  let pagoDetalleArr: PagoDetalleLinea[] = [];
+  if (Array.isArray(pagos)) {
+    pagoDetalleArr = pagos;
+  } else if (pagos && typeof pagos === "object") {
+    // Legacy: convertir a 1 línea con el metodo_pago de datos + saldo restante
+    const saldo = Math.max(
+      0,
+      (datos.total ?? 0) - (datos.credito_cliente_usado ?? 0),
+    );
+    if (saldo > 0) {
+      pagoDetalleArr = [{
+        metodo_pago: (datos.metodo_pago ?? "efectivo") as MetodoPagoDetalle,
+        monto: saldo,
+        entidad_bancaria_id: pagos.entidad_bancaria_id ?? null,
+        entidad_nombre_snapshot: pagos.entidad_nombre_snapshot ?? null,
+        referencia: pagos.referencia ?? null,
+        titular: pagos.titular ?? null,
+        observacion: pagos.observacion ?? null,
+        fecha_acreditacion: pagos.fecha_acreditacion ?? null,
+      }];
+    }
   }
 
   try {
@@ -95,8 +174,8 @@ export async function saveVenta(
         cambio_id: datos.cambio_id ?? null,
         observaciones: null,
         pedido_cocina: pedidoCocina ?? null,
-        pago_detalle: pagoDetalle ?? null,
-        permitir_sin_stock: opts?.permitirSinStock === true,
+        // pago_detalle es SIEMPRE array (server-side el parser también acepta array)
+        pago_detalle: pagoDetalleArr,
         genera_nota_remision: datos.genera_nota_remision === true,
         pedido_id: opts?.pedidoId ?? null,
         pedido_caja_id: opts?.pedidoCajaId ?? null,

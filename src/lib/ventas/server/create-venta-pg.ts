@@ -362,12 +362,19 @@ export async function createVentaTransaccionalPg(
       }
     }
 
-    // ── Caja abierta si hay pagos en efectivo ─────────────────────────
+    // ── Caja abierta: se usa para TODOS los pagos inmediatos ────────
+    // Todos los pagos inmediatos (efectivo, tarjeta, transferencia, etc)
+    // se asocian a la caja/turno para que aparezcan en su resumen. Solo
+    // efectivo modifica efectivo_esperado; los otros aparecen en su
+    // total por método.
+    // La venta misma también se asocia a la caja para que se cuente en
+    // total_vendido del turno, incluso si es a crédito sin pago inmediato.
     const totalEfectivo = pagosInmediatos
       .filter((pg) => pg.metodo_pago === "efectivo")
       .reduce((s, pg) => s + Number(pg.monto), 0);
     let cajaIdActual: string | null = null;
-    if (totalEfectivo > TOL) {
+    const buscarCaja = pagosInmediatos.length > 0 || params.tipoVenta === "CREDITO";
+    if (buscarCaja) {
       const cq = await client.query<{ id: string }>(
         `SELECT id FROM ${cajasT}
          WHERE empresa_id=$1 AND sucursal_id=$2 AND estado='abierta'
@@ -375,9 +382,17 @@ export async function createVentaTransaccionalPg(
         [params.empresaId, params.sucursalId],
       );
       cajaIdActual = cq.rows[0]?.id ?? null;
-      if (!cajaIdActual) {
+      if (totalEfectivo > TOL && !cajaIdActual) {
         throw new Error(
           "No hay caja abierta en la sucursal para registrar el ingreso en efectivo.",
+        );
+      }
+      // Para métodos no-efectivo, si no hay caja abierta se acepta pero
+      // el pago no aparecerá atribuido a ningún turno. Es preferible
+      // exigirla también, así que:
+      if (pagosInmediatos.length > 0 && !cajaIdActual) {
+        throw new Error(
+          "No hay caja abierta en la sucursal; todos los pagos inmediatos deben asociarse a una caja/turno.",
         );
       }
     }
@@ -545,19 +560,20 @@ export async function createVentaTransaccionalPg(
     }
 
     // ── Pagos inmediatos: ventas_pagos_detalle (fuente única) ────────
-    // NO se inserta en caja_movimientos: eso duplica el conteo.
-    // El efectivo aparece en el arqueo vía ventas_pagos_detalle.metodo_pago='efectivo' + caja_id.
+    // NO se inserta en caja_movimientos (esa tabla es solo ajustes manuales).
+    // TODOS los métodos (efectivo, tarjeta, transferencia, qr, billetera) se
+    // asocian a la caja/turno con caja_id. Solo efectivo modifica
+    // efectivo_esperado; los demás aparecen en sus totales por método.
+    // direccion='ingreso' porque es un pago recibido por la venta.
     for (const pg of pagosInmediatos) {
-      const cajaParaEsteMov =
-        pg.metodo_pago === "efectivo" ? cajaIdActual : null;
       await client.query(
         `INSERT INTO ${pagosDetT} (
            empresa_id, venta_id, sucursal_id, caja_id, metodo_pago,
            entidad_bancaria_id, entidad_nombre_snapshot, monto, referencia,
-           titular, fecha_acreditacion, observacion
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+           titular, fecha_acreditacion, observacion, direccion
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'ingreso')`,
         [
-          params.empresaId, ventaId, params.sucursalId, cajaParaEsteMov,
+          params.empresaId, ventaId, params.sucursalId, cajaIdActual,
           pg.metodo_pago, pg.entidad_bancaria_id ?? null,
           pg.entidad_nombre_snapshot ?? null, pg.monto,
           pg.referencia ?? null, pg.titular ?? null,

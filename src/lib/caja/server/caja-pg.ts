@@ -359,70 +359,90 @@ async function attachUsuarioNombres(sb: Sb, resumenes: CajaResumen[]): Promise<v
  *   + ajustes manuales efectivo (signados).
  */
 async function computeResumen(sb: Sb, empresaId: string, caja: Caja): Promise<CajaResumen> {
-  // ── Ventas: totales por método desde ventas_pagos_detalle ─────────
-  // Solo cuentan las líneas de venta NO anulada.
+  // ── total_vendido: SUMA de ventas.total cuya caja_id = esta caja ──
+  // Incluye ventas a crédito sin pago inmediato (sin filas en pagos_detalle),
+  // pero excluye anuladas. La atribución al turno se hace vía ventas.caja_id.
+  const vTotQ = await sb
+    .from("ventas")
+    .select("total")
+    .eq("empresa_id", empresaId)
+    .eq("caja_id", caja.id)
+    .neq("estado", "anulada");
+  if (vTotQ.error) throw new Error(vTotQ.error.message);
+  let totalVendido = 0;
+  const cantidadVentas = (vTotQ.data ?? []).length;
+  for (const v of ((vTotQ.data ?? []) as unknown as Array<{ total: number | string }>)) {
+    totalVendido += Number(v.total);
+  }
+  const ventas = { length: cantidadVentas };
+
+  // ── Totales por método desde ventas_pagos_detalle ─────────────────
+  // Aplicamos signo por `direccion`: 'ingreso' suma, 'egreso' (reversas)
+  // resta. Solo se cuentan pagos de ventas NO anuladas.
   const vPagQ = await sb
     .from("ventas_pagos_detalle")
-    .select("metodo_pago, monto, venta:venta_id(estado, id)")
+    .select("metodo_pago, monto, direccion, venta:venta_id(estado)")
     .eq("empresa_id", empresaId)
     .eq("caja_id", caja.id);
   if (vPagQ.error) throw new Error(vPagQ.error.message);
   const vPagos = (vPagQ.data ?? []) as unknown as Array<{
     metodo_pago: string;
     monto: number | string;
-    venta: { estado: string; id: string } | null;
+    direccion: "ingreso" | "egreso" | null;
+    venta: { estado: string } | null;
   }>;
 
   let totalEfectivo = 0;
   let totalTarjeta = 0;
   let totalTransferencia = 0;
-  const ventasIdsSet = new Set<string>();
   for (const pg of vPagos) {
-    if (pg.venta?.estado === "anulada") continue;
-    if (pg.venta?.id) ventasIdsSet.add(pg.venta.id);
-    const m = Number(pg.monto);
+    // Nota: las reversiones (direccion='egreso' con reversa_de_id) se aplican
+    // a la caja actual donde se anula. Se cuentan igual acá (afectan al
+    // resumen del turno actual, no del histórico).
+    if (pg.venta?.estado === "anulada" && (pg.direccion ?? "ingreso") === "ingreso") {
+      // Pago ORIGINAL de venta anulada: NO se descuenta de esta caja
+      // (la reversión se registró en otra fila, en la caja donde se anuló).
+      continue;
+    }
+    const signo = (pg.direccion ?? "ingreso") === "ingreso" ? 1 : -1;
+    const m = Number(pg.monto) * signo;
     switch (pg.metodo_pago) {
       case "efectivo": totalEfectivo += m; break;
       case "tarjeta": totalTarjeta += m; break;
       case "transferencia": totalTransferencia += m; break;
-      // qr, billetera, otro, credito_cliente (legacy) → no suman
+      // qr, billetera, otro → suman al vendido pero no a método específico
     }
   }
 
-  // Total vendido bruto = suma de todos los totales de las ventas NO anuladas
-  // que tuvieron algún pago en esta caja. Esto sirve como métrica.
-  let totalVendido = 0;
-  if (ventasIdsSet.size > 0) {
-    const vQ = await sb
-      .from("ventas")
-      .select("total")
-      .in("id", [...ventasIdsSet])
-      .neq("estado", "anulada");
-    if (!vQ.error) {
-      for (const v of ((vQ.data ?? []) as unknown as Array<{ total: number | string }>)) {
-        totalVendido += Number(v.total);
-      }
-    }
-  }
-  const ventas = { length: ventasIdsSet.size };
-
-  // ── Recepciones: egreso efectivo por compras al cliente ───────────
+  // ── Recepciones: pagos que salieron/entraron por esta caja ────────
+  // egreso: pago original en efectivo al cliente (dirección='egreso').
+  // ingreso: reversión (dirección='ingreso' con reversa_de_id) por
+  //   anulación de recepción, si aplica a esta caja.
   let egresosRecepcion = 0;
   try {
     const rPagQ = await sb
       .from("cliente_recepciones_pagos")
-      .select("monto, recepcion:recepcion_id(estado)")
+      .select("monto, direccion, recepcion:recepcion_id(estado)")
       .eq("empresa_id", empresaId)
       .eq("caja_id", caja.id)
       .eq("metodo", "efectivo");
     if (!rPagQ.error) {
       const rPagos = (rPagQ.data ?? []) as unknown as Array<{
         monto: number | string;
+        direccion: "ingreso" | "egreso" | null;
         recepcion: { estado: string } | null;
       }>;
       for (const pg of rPagos) {
-        if (pg.recepcion?.estado === "anulada") continue;
-        egresosRecepcion += Number(pg.monto);
+        // Pago original de recepción anulada: NO se descuenta acá
+        // (la reversión ya está en otra fila con direccion opuesta).
+        if (pg.recepcion?.estado === "anulada" && (pg.direccion ?? "egreso") === "egreso") {
+          continue;
+        }
+        // egreso = sale de caja → resta al efectivo (positivo en la métrica)
+        // ingreso = reversión → resta al egreso acumulado
+        const dir = pg.direccion ?? "egreso";
+        const m = Number(pg.monto);
+        egresosRecepcion += dir === "egreso" ? m : -m;
       }
     }
   } catch {

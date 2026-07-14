@@ -164,55 +164,78 @@ export async function anularVentaPg(p: AnularVentaInput): Promise<VentaAnulada> 
       );
     }
 
-    // ── Reversar pagos en efectivo ───────────────────────────────────
-    // ventas_pagos_detalle es append-only. Registramos filas con monto
-    // negativo y observación de reversión. La caja abierta actual es la
-    // atribución (si la original ya se cerró, va a la vigente).
-    // metodo_pago='efectivo' de esta venta:
-    const efQ = await client.query<{ monto: string; caja_id: string | null }>(
-      `SELECT monto::text, caja_id FROM ${pagosDetT}
-        WHERE venta_id = $1 AND empresa_id = $2 AND metodo_pago = 'efectivo'`,
+    // ── Reversar pagos originales (append-only con direccion) ─────
+    // La caja HISTÓRICA no se toca: el pago original queda con
+    // direccion='ingreso' en su caja original.
+    // Se inserta una fila nueva con direccion='egreso', reversa_de_id
+    // apuntando al original, monto positivo, en la CAJA ABIERTA ACTUAL.
+    //
+    // Validaciones invariantes:
+    //   - Solo se revierten pagos originales (direccion='ingreso').
+    //   - No se puede revertir dos veces (UNIQUE parcial sobre reversa_de_id).
+    //   - No se puede apuntar a una reversión (reversa_de_id.reversa_de_id IS NULL).
+    //   - La reversión debe ser de la MISMA venta.
+    //   - empresa_id de reversión = empresa_id del original.
+    const pagosOriginales = await client.query<{
+      id: string; metodo_pago: string; monto: string; caja_id: string | null;
+      sucursal_id: string | null; entidad_bancaria_id: string | null;
+      entidad_nombre_snapshot: string | null; direccion: string | null;
+      reversa_de_id: string | null; venta_id: string; empresa_id: string;
+    }>(
+      `SELECT id, metodo_pago, monto::text, caja_id, sucursal_id,
+              entidad_bancaria_id, entidad_nombre_snapshot,
+              direccion, reversa_de_id, venta_id, empresa_id
+       FROM ${pagosDetT}
+       WHERE venta_id = $1 AND empresa_id = $2
+         AND direccion = 'ingreso'
+         AND reversa_de_id IS NULL
+       FOR UPDATE`,
       [p.ventaId, p.empresaId],
     );
-    if (efQ.rows.length) {
-      // Determinar caja destino de la reversión: original si sigue abierta,
-      // sino la abierta actual en la misma sucursal.
-      const primeraCaja = efQ.rows[0].caja_id ?? v.caja_id;
-      let cajaTarget: string | null = null;
-      if (primeraCaja) {
-        const check = await client.query<{ id: string }>(
-          `SELECT id FROM ${cajasT} WHERE id = $1 AND estado = 'abierta'`,
-          [primeraCaja],
-        );
-        if (check.rows.length) cajaTarget = check.rows[0].id;
-      }
-      if (!cajaTarget) {
-        const otra = await client.query<{ id: string }>(
-          `SELECT id FROM ${cajasT}
-           WHERE empresa_id = $1 AND sucursal_id = $2 AND estado = 'abierta'
-           LIMIT 1`,
-          [p.empresaId, v.sucursal_id],
-        );
-        cajaTarget = otra.rows[0]?.id ?? null;
-      }
+    if (pagosOriginales.rows.length > 0) {
+      // Buscar caja abierta ACTUAL en la sucursal de la venta.
+      const cajaActualQ = await client.query<{ id: string }>(
+        `SELECT id FROM ${cajasT}
+         WHERE empresa_id = $1 AND sucursal_id = $2 AND estado = 'abierta'
+         LIMIT 1`,
+        [p.empresaId, v.sucursal_id],
+      );
+      const cajaTarget = cajaActualQ.rows[0]?.id;
       if (!cajaTarget) {
         throw new Error(
-          "No hay caja abierta en la sucursal para revertir el efectivo. Abrí una caja antes de anular.",
+          "No hay caja abierta en la sucursal para registrar la reversión. Abrí una caja antes de anular.",
         );
       }
-      for (const row of efQ.rows) {
-        // pago negativo (constraint monto > 0 aplica → usamos otra estrategia)
-        // Como pagos_detalle exige monto > 0, insertamos como "reversión"
-        // con metodo_pago='otro' y monto positivo, observación explícita.
+      for (const orig of pagosOriginales.rows) {
+        // Sanity checks (defense-in-depth):
+        if (orig.venta_id !== p.ventaId) throw new Error("Pago no corresponde a esta venta.");
+        if (orig.empresa_id !== p.empresaId) throw new Error("Empresa mismatch en pago.");
+        if (orig.direccion !== "ingreso") continue;
+        if (orig.reversa_de_id) continue; // ya es una reversión
+
+        // Verificar que no exista ya una reversión (append-only real)
+        const existeQ = await client.query<{ id: string }>(
+          `SELECT id FROM ${pagosDetT} WHERE reversa_de_id = $1 LIMIT 1`,
+          [orig.id],
+        );
+        if (existeQ.rows.length > 0) {
+          throw new Error(
+            `El pago ${orig.id} ya tiene una reversión (${existeQ.rows[0].id}); no se puede revertir dos veces.`,
+          );
+        }
+
         await client.query(
           `INSERT INTO ${pagosDetT} (
              empresa_id, venta_id, sucursal_id, caja_id, metodo_pago,
-             monto, observacion
-           ) VALUES ($1,$2,$3,$4,'otro',$5,$6)`,
+             entidad_bancaria_id, entidad_nombre_snapshot,
+             monto, direccion, reversa_de_id, observacion
+           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'egreso',$9,$10)`,
           [
             p.empresaId, p.ventaId, v.sucursal_id, cajaTarget,
-            Number(row.monto),
-            `REVERSIÓN efectivo por anulación de ${v.numero_control}` +
+            orig.metodo_pago,
+            orig.entidad_bancaria_id, orig.entidad_nombre_snapshot,
+            Number(orig.monto), orig.id,
+            `Reversión de pago ${orig.metodo_pago} de venta ${v.numero_control}` +
               (p.motivo ? ` — ${p.motivo}` : ""),
           ],
         );
