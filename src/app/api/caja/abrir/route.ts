@@ -47,6 +47,18 @@ export async function POST(request: NextRequest) {
     const sucursalId =
       enforce.sucursal_id ??
       (await resolveSucursalIdForUserPg(schema, auth.empresa_id, null));
+
+    // punto_caja_id es obligatorio: cada punto abre su propio turno.
+    const puntoCajaId =
+      typeof o.punto_caja_id === "string" && o.punto_caja_id.trim()
+        ? o.punto_caja_id.trim()
+        : null;
+    if (!puntoCajaId) {
+      return NextResponse.json(
+        errorResponse("Elegí un punto de caja (Caja 1, Caja 2 …) antes de abrir."),
+        { status: 400 },
+      );
+    }
     const caja = await abrirCajaPg({
       schema,
       empresaId: auth.empresa_id,
@@ -54,6 +66,7 @@ export async function POST(request: NextRequest) {
       observacion,
       usuarioId: auth.usuarioCatalogId ?? null,
       sucursalId,
+      puntoCajaId,
     });
     return NextResponse.json(successResponse({ caja }));
   } catch (err) {

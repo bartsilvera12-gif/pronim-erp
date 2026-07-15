@@ -297,6 +297,7 @@ export async function POST(request: NextRequest) {
         tipo_iva: it.tipo_iva,
       })),
       sucursalId,
+      cajaId: typeof o.caja_id === "string" && o.caja_id.trim() ? o.caja_id.trim() : null,
       creditoClienteUsado,
       pagosInmediatos: pagosDetalle,
       createdBy: auth.user.id ?? null,

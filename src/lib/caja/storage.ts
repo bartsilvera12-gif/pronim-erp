@@ -44,12 +44,46 @@ export function abrirCaja(
   montoApertura: number,
   observacion: string | null,
   sucursalId?: string | null,
+  puntoCajaId?: string | null,
 ) {
   return postJson<{ caja: Caja }>("/api/caja/abrir", {
     monto_apertura: montoApertura,
     observacion,
     sucursal_id: sucursalId ?? null,
+    punto_caja_id: puntoCajaId ?? null,
   });
+}
+
+export type PuntoCajaLite = {
+  id: string;
+  empresa_id: string;
+  sucursal_id: string;
+  nombre: string;
+  orden: number;
+  activo: boolean;
+};
+
+export async function getPuntosCaja(sucursalId?: string | null): Promise<PuntoCajaLite[]> {
+  try {
+    const qs = sucursalId ? `?sucursal_id=${encodeURIComponent(sucursalId)}` : "";
+    const res = await fetchWithSupabaseSession(`/api/puntos-caja${qs}`, { cache: "no-store" });
+    const json = (await res.json()) as { success?: boolean; data?: { puntos: PuntoCajaLite[] }; error?: string };
+    if (!res.ok || !json.success) return [];
+    return json.data?.puntos ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export async function getCajasAbiertas(): Promise<Caja[]> {
+  try {
+    const res = await fetchWithSupabaseSession("/api/caja/abierta", { cache: "no-store" });
+    const json = (await res.json()) as { success?: boolean; data?: { cajas: Caja[] }; error?: string };
+    if (!res.ok || !json.success) return [];
+    return json.data?.cajas ?? [];
+  } catch {
+    return [];
+  }
 }
 
 export function cerrarCaja(montoCierreContado: number, observacion: string | null, cajaId?: string) {

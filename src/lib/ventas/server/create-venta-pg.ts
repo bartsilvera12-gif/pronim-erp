@@ -83,6 +83,13 @@ export interface CreateVentaPgParams {
   items: CreateVentaItemInput[];
   /** OBLIGATORIA. */
   sucursalId: string;
+  /**
+   * Caja/turno explícito. Si viene, la venta se registra en esa caja
+   * (previa verificación de sucursal + estado abierta). Si es null, el
+   * server intenta resolverla: falla si hay 0 abiertas en la sucursal o
+   * si hay más de una (multi-punto: hay que elegir).
+   */
+  cajaId?: string | null;
   /** Monto aplicado del saldo a favor. Distribución FIFO server-side. */
   creditoClienteUsado?: number | null;
   /** Pagos inmediatos (no incluir crédito acá). */
@@ -397,18 +404,45 @@ export async function createVentaTransaccionalPg(
       .filter((pg) => pg.metodo_pago === "efectivo")
       .reduce((s, pg) => s + Number(pg.monto), 0);
     // Toda venta pertenece a un turno de caja, incluso si se paga íntegramente
-    // con crédito del cliente o queda financiada sin entrega inicial.
-    const cq = await client.query<{ id: string }>(
-      `SELECT id FROM ${cajasT}
-       WHERE empresa_id=$1 AND sucursal_id=$2 AND estado='abierta'
-       LIMIT 1`,
-      [params.empresaId, params.sucursalId],
-    );
-    const cajaIdActual = cq.rows[0]?.id ?? null;
-    if (!cajaIdActual) {
-      throw new Error(
-        "No hay caja abierta en la sucursal; toda venta debe asociarse a una caja/turno.",
+    // con crédito del cliente o queda financiada sin entrega inicial. Multi-
+    // punto: si el cliente eligió `cajaId` en el body, se valida; si no, se
+    // resuelve automáticamente cuando hay exactamente una abierta en la
+    // sucursal.
+    let cajaIdActual: string | null = null;
+    if (params.cajaId) {
+      const cq = await client.query<{ id: string; sucursal_id: string | null; estado: string }>(
+        `SELECT id, sucursal_id, estado FROM ${cajasT}
+          WHERE empresa_id=$1 AND id=$2 LIMIT 1`,
+        [params.empresaId, params.cajaId],
       );
+      const row = cq.rows[0];
+      if (!row) throw new Error("La caja indicada no existe en esta empresa.");
+      if (row.sucursal_id !== params.sucursalId) {
+        throw new Error("La caja indicada no pertenece a la sucursal de la venta.");
+      }
+      if (row.estado !== "abierta") {
+        throw new Error("La caja indicada está cerrada; abrí una nueva o elegí otra.");
+      }
+      cajaIdActual = row.id;
+    } else {
+      const cq = await client.query<{ id: string }>(
+        `SELECT id FROM ${cajasT}
+         WHERE empresa_id=$1 AND sucursal_id=$2 AND estado='abierta'
+         ORDER BY fecha_apertura DESC
+         LIMIT 2`,
+        [params.empresaId, params.sucursalId],
+      );
+      if (cq.rows.length === 0) {
+        throw new Error(
+          "No hay caja abierta en la sucursal. Abrí un punto de caja antes de vender.",
+        );
+      }
+      if (cq.rows.length > 1) {
+        throw new Error(
+          "Hay más de una caja abierta en la sucursal. Especificá caja_id para elegir el turno.",
+        );
+      }
+      cajaIdActual = cq.rows[0].id;
     }
 
     // ── Lock stock por sucursal + validar suficiencia ─────────────────

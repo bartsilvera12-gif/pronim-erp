@@ -198,6 +198,8 @@ function ErrorBanner({ msg }: { msg: string | null }) {
 
 type SucursalOpt = { id: string; nombre: string; es_principal: boolean };
 
+type PuntoCajaOpt = { id: string; nombre: string; sucursal_id: string; orden?: number };
+
 function AbrirCajaModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
   const [monto, setMonto] = useState("");
   const [obs, setObs] = useState("");
@@ -205,6 +207,8 @@ function AbrirCajaModal({ onClose, onDone }: { onClose: () => void; onDone: () =
   const [saving, setSaving] = useState(false);
   const [sucursales, setSucursales] = useState<SucursalOpt[]>([]);
   const [sucursalId, setSucursalId] = useState<string>("");
+  const [puntos, setPuntos] = useState<PuntoCajaOpt[]>([]);
+  const [puntoId, setPuntoId] = useState<string>("");
 
   // Cargar sucursales activas de la empresa. Si hay 2+, mostrar el picker.
   useEffect(() => {
@@ -222,13 +226,37 @@ function AbrirCajaModal({ onClose, onDone }: { onClose: () => void; onDone: () =
     return () => { cancel = true; };
   }, []);
 
+  // Cargar puntos de caja de la sucursal elegida.
+  useEffect(() => {
+    if (!sucursalId) { setPuntos([]); setPuntoId(""); return; }
+    let cancel = false;
+    fetch(`/api/puntos-caja?sucursal_id=${encodeURIComponent(sucursalId)}`, {
+      credentials: "include", cache: "no-store",
+    })
+      .then((r) => r.json())
+      .then((j) => {
+        if (cancel || !j?.success) return;
+        const list = (j.data?.puntos ?? []) as PuntoCajaOpt[];
+        setPuntos(list);
+        if (list.length > 0) setPuntoId(list[0].id);
+        else setPuntoId("");
+      })
+      .catch(() => undefined);
+    return () => { cancel = true; };
+  }, [sucursalId]);
+
   async function submit() {
     setError(null);
+    if (!puntoId) {
+      setError("No hay puntos de caja configurados para esta sucursal. Pedile al admin que cree uno.");
+      return;
+    }
     setSaving(true);
     const r = await abrirCaja(
       parseFloat(monto) || 0,
       obs.trim() || null,
       sucursalId || null,
+      puntoId,
     );
     setSaving(false);
     if (!r.success) { setError(r.error); return; }
@@ -236,6 +264,7 @@ function AbrirCajaModal({ onClose, onDone }: { onClose: () => void; onDone: () =
   }
 
   const mostrarSucursal = sucursales.length >= 2;
+  const mostrarPuntos = puntos.length >= 2;
 
   return (
     <ModalShell title="Abrir caja" onClose={onClose}>
@@ -253,10 +282,33 @@ function AbrirCajaModal({ onClose, onDone }: { onClose: () => void; onDone: () =
               </option>
             ))}
           </select>
-          <p className="mt-1 text-xs text-slate-400">Podés tener una caja abierta por sucursal a la vez.</p>
+          <p className="mt-1 text-xs text-slate-400">Podés tener múltiples cajas abiertas por sucursal, una por punto de caja.</p>
         </>
       )}
-      <label className={`mb-1.5 block text-sm font-medium text-slate-700 ${mostrarSucursal ? "mt-3" : ""}`}>Monto de apertura (Gs.)</label>
+      {mostrarPuntos ? (
+        <>
+          <label className="mt-3 mb-1.5 block text-sm font-medium text-slate-700">Punto de caja</label>
+          <select
+            value={puntoId}
+            onChange={(e) => setPuntoId(e.target.value)}
+            className={inputClass}
+          >
+            {puntos.map((p) => (
+              <option key={p.id} value={p.id}>{p.nombre}</option>
+            ))}
+          </select>
+          <p className="mt-1 text-xs text-slate-400">Cada punto abre/cierra su propio turno y arqueo.</p>
+        </>
+      ) : puntos.length === 1 ? (
+        <p className={`${mostrarSucursal ? "mt-2" : ""} text-xs text-slate-500`}>
+          Punto de caja: <span className="font-medium text-slate-700">{puntos[0].nombre}</span>
+        </p>
+      ) : sucursalId ? (
+        <p className={`${mostrarSucursal ? "mt-2" : ""} text-xs text-amber-700`}>
+          Esta sucursal no tiene puntos de caja configurados. Un administrador debe crear uno antes de abrir caja.
+        </p>
+      ) : null}
+      <label className={`mb-1.5 block text-sm font-medium text-slate-700 ${mostrarSucursal || puntos.length > 0 ? "mt-3" : ""}`}>Monto de apertura (Gs.)</label>
       <MontoInput value={monto} onChange={(n) => setMonto(String(n))} placeholder="Ej: 300.000" className={inputClass} decimals={false} />
       <label className="mb-1.5 mt-3 block text-sm font-medium text-slate-700">Observación (opcional)</label>
       <textarea value={obs} onChange={(e) => setObs(e.target.value)} rows={2} className={inputClass} placeholder="Ej: turno noche" />

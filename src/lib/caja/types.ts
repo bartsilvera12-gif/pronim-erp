@@ -27,6 +27,20 @@ export interface Caja {
   observacion_cierre: string | null;
   /** Sucursal a la que pertenece la caja (Joyería Artesanos multi-sucursal). */
   sucursal_id: string | null;
+  /** Punto de caja (Caja 1, Caja 2 …) dentro de la sucursal. */
+  punto_caja_id?: string | null;
+  /** Nombre del punto de caja (denormalizado para UI). */
+  punto_caja_nombre?: string | null;
+}
+
+export interface PuntoCaja {
+  id: string;
+  empresa_id: string;
+  sucursal_id: string;
+  nombre: string;
+  orden: number;
+  activo: boolean;
+  created_at: string;
 }
 
 export interface CajaMovimiento {

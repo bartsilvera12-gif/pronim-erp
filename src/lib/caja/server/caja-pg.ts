@@ -33,6 +33,7 @@ interface CajaRow {
   observacion_apertura: string | null;
   observacion_cierre: string | null;
   sucursal_id?: string | null;
+  punto_caja_id?: string | null;
 }
 
 function mapCaja(r: CajaRow): Caja {
@@ -51,6 +52,7 @@ function mapCaja(r: CajaRow): Caja {
     observacion_apertura: r.observacion_apertura,
     observacion_cierre: r.observacion_cierre,
     sucursal_id: r.sucursal_id ?? null,
+    punto_caja_id: r.punto_caja_id ?? null,
   };
 }
 
@@ -59,7 +61,7 @@ function emptySucursalInfo(): { sucursal_id: string | null; sucursal_nombre: str
 }
 
 const CAJA_COLS =
-  "id, numero_caja, estado, abierta_por, cerrada_por, fecha_apertura, fecha_cierre, monto_apertura, monto_cierre_contado, monto_esperado_efectivo, diferencia, observacion_apertura, observacion_cierre";
+  "id, numero_caja, estado, abierta_por, cerrada_por, fecha_apertura, fecha_cierre, monto_apertura, monto_cierre_contado, monto_esperado_efectivo, diferencia, observacion_apertura, observacion_cierre, punto_caja_id";
 
 /**
  * Lookup best-effort: ids de caja → sucursal_id + nombre. Si el schema no
@@ -92,12 +94,35 @@ async function fetchSucursalesParaCajasBestEffort(
 // ── Lecturas ──────────────────────────────────────────────────────────────────
 
 /**
- * Caja abierta actual.
+ * Todas las cajas abiertas de la empresa (opcionalmente filtradas por
+ * sucursal o punto). Con multi-caja (varios puntos por sucursal) puede
+ * devolver más de una fila.
+ */
+export async function getCajasAbiertasPg(
+  schema: string,
+  empresaId: string,
+  opts?: { sucursalId?: string | null; puntoCajaId?: string | null },
+): Promise<Caja[]> {
+  const sb = createServiceRoleClientWithDbSchema(schema);
+  let q = sb
+    .from("cajas")
+    .select(CAJA_COLS + ", sucursal_id")
+    .eq("empresa_id", empresaId)
+    .eq("estado", "abierta");
+  if (opts?.sucursalId) q = q.eq("sucursal_id", opts.sucursalId);
+  if (opts?.puntoCajaId) q = q.eq("punto_caja_id", opts.puntoCajaId);
+  const r = await q.order("fecha_apertura", { ascending: false });
+  if (r.error) throw new Error(r.error.message);
+  const rows = (r.data ?? []) as unknown as CajaRow[];
+  return rows.map(mapCaja);
+}
+
+/**
+ * Caja abierta actual (legacy — devuelve la primera cuando hay varias).
  *
- * Multi-sucursal: si `sucursalId` viene, filtra por esa sucursal (una caja
- * abierta por sucursal). Si viene null, comportamiento legacy (cualquier caja
- * abierta de la empresa). Sucursal2 ve solo su caja; admin (sucursal_id=NULL
- * en el usuario) debería pasar la principal por arriba si quiere acotar.
+ * Con multi-caja por sucursal se recomienda usar `getCajasAbiertasPg` y
+ * dejar que el caller elija por `punto_caja_id` o por `caja_id` explícito.
+ * Se mantiene esta firma para compat con endpoints antiguos.
  */
 export async function getCajaAbiertaPg(
   schema: string,
@@ -507,8 +532,8 @@ async function computeResumen(sb: Sb, empresaId: string, caja: Caja): Promise<Ca
 // ── Escrituras ────────────────────────────────────────────────────────────────
 
 /**
- * Abre una caja. Falla si ya hay una abierta en la misma sucursal
- * (cada sucursal tiene su propia caja independiente).
+ * Abre una caja para un punto específico. Falla si ya hay una caja
+ * abierta en ese punto — cada punto opera su propio turno.
  */
 export async function abrirCajaPg(params: {
   schema: string;
@@ -516,17 +541,37 @@ export async function abrirCajaPg(params: {
   montoApertura: number;
   observacion: string | null;
   usuarioId: string | null;
-  sucursalId?: string | null;
+  sucursalId: string | null;
+  puntoCajaId: string;
 }): Promise<Caja> {
   const sb = createServiceRoleClientWithDbSchema(params.schema);
 
-  const yaAbierta = await getCajaAbiertaPg(
-    params.schema,
-    params.empresaId,
-    params.sucursalId ?? null,
-  );
-  if (yaAbierta) {
-    throw new Error("Ya hay una caja abierta. Cerrala antes de abrir una nueva.");
+  // Validar que el punto pertenezca a la empresa y (si sucursalId viene)
+  // a esa sucursal, y que esté activo.
+  const pQ = await sb
+    .from("puntos_caja")
+    .select("id, empresa_id, sucursal_id, activo")
+    .eq("id", params.puntoCajaId)
+    .maybeSingle();
+  if (pQ.error) throw new Error(pQ.error.message);
+  const pRow = pQ.data as { empresa_id: string; sucursal_id: string; activo: boolean } | null;
+  if (!pRow || pRow.empresa_id !== params.empresaId) {
+    throw new Error("El punto de caja no pertenece a tu empresa.");
+  }
+  if (pRow.activo !== true) {
+    throw new Error("El punto de caja está inactivo.");
+  }
+  if (params.sucursalId && pRow.sucursal_id !== params.sucursalId) {
+    throw new Error("El punto de caja no corresponde a tu sucursal.");
+  }
+
+  const yaAbiertas = await getCajasAbiertasPg(params.schema, params.empresaId, {
+    puntoCajaId: params.puntoCajaId,
+  });
+  if (yaAbiertas.length > 0) {
+    throw new Error(
+      "Ya hay una caja abierta en este punto de caja. Cerrala antes de abrir una nueva.",
+    );
   }
 
   // numero_caja secuencial por empresa (best-effort; el índice único protege duplicados).
@@ -544,7 +589,8 @@ export async function abrirCajaPg(params: {
     .from("cajas")
     .insert({
       empresa_id: params.empresaId,
-      sucursal_id: params.sucursalId ?? null,
+      sucursal_id: params.sucursalId ?? pRow.sucursal_id,
+      punto_caja_id: params.puntoCajaId,
       numero_caja: numeroCaja,
       estado: "abierta",
       abierta_por: params.usuarioId,
