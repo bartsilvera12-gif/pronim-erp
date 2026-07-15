@@ -63,11 +63,15 @@ export default function TransferenciasStockPage() {
 
   async function cargarHistorial() {
     try {
-      const d = await unwrap<{ transferencias: TransferenciaRow[]; items: TransferenciaItem[] }>(
+      const d = await unwrap<{ transferencias: TransferenciaRow[]; items: TransferenciaItem[]; warning?: string }>(
         await fetchWithSupabaseSession("/api/inventario/transferencias", { cache: "no-store" }),
       );
       setHistoria(d.transferencias ?? []);
       setHistoriaItems(d.items ?? []);
+      // El endpoint devuelve `warning` cuando la tabla todavía no existe en
+      // este deploy — mostramos ese aviso en lugar de un rojo de error.
+      if (d.warning) setError(d.warning);
+      else setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo cargar el historial.");
     }

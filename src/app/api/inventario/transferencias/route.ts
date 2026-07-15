@@ -75,7 +75,17 @@ export async function GET(request: NextRequest) {
     }
     return NextResponse.json(successResponse({ transferencias, items }));
   } catch (e) {
-    console.error("[transferencias GET]", e instanceof Error ? e.message : e);
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[transferencias GET]", msg);
+    // Si la tabla no existe (migración no aplicada), degradar suavemente
+    // en vez de tirar 500: devolvemos array vacío + un warning entendible.
+    if (/does not exist|no existe|42P01|relation .* does not exist/i.test(msg)) {
+      return NextResponse.json(successResponse({
+        transferencias: [],
+        items: [],
+        warning: "La tabla pronimerp.transferencias_stock no existe todavía. Aplicá la migración 20260814000000_pronimerp_transferencias_stock.sql en Supabase para habilitar el módulo.",
+      }));
+    }
     return NextResponse.json(errorResponse("No se pudieron cargar las transferencias."), { status: 500 });
   }
 }
