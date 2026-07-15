@@ -180,6 +180,13 @@ export default function ClienteDetailPage() {
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabId>("informacion");
   const [esAdmin, setEsAdmin] = useState(false);
+  // Badges automáticos derivados de KPIs (Nuevo / Frecuente / VIP / Inactivo).
+  // Solo se cargan en SIMPLE_CLIENTE (Pronim/Akakua'a/Reserva).
+  const [badgesKpis, setBadgesKpis] = useState<{
+    diasDesdeUltimaCompra: number | null;
+    comprasUltimos90d: number;
+    totalHistorico: number;
+  } | null>(null);
   const [confirmarEliminar, setConfirmarEliminar] = useState(false);
   const [deletionReason, setDeletionReason] = useState("");
   const [eliminando, setEliminando] = useState(false);
@@ -520,6 +527,26 @@ export default function ClienteDetailPage() {
       getFacturas(id).then(setFacturas);
     }
   }, [form.condicion_pago, id]);
+
+  // Cargar KPIs para badges automáticos (solo Pronim/Reserva/simple client).
+  useEffect(() => {
+    if (!SIMPLE_CLIENTE || !id) return;
+    let cancel = false;
+    fetch(`/api/clientes/${id}/consultas`, { credentials: "include", cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        if (cancel || !j?.success) return;
+        const k = j.data?.kpis;
+        if (!k) return;
+        setBadgesKpis({
+          diasDesdeUltimaCompra: typeof k.dias_desde_ultima_compra === "number" ? k.dias_desde_ultima_compra : null,
+          comprasUltimos90d: Number(k.compras_ultimos_90d ?? 0),
+          totalHistorico: Number(k.total_comprado_historico ?? 0),
+        });
+      })
+      .catch(() => { /* tolerar */ });
+    return () => { cancel = true; };
+  }, [id]);
 
   const upper = ["empresa", "nombre_contacto", "ciudad", "pais", "vendedor_asignado", "condicion_pago", "direccion", "sifen_codigo_pais"];
   const lower = ["email", "email_secundario"];
@@ -998,6 +1025,39 @@ export default function ClienteDetailPage() {
                       Tributario
                     </span>
                   )}
+                  {/* Badges automáticos (Pronim/Akakua'a). Se derivan de KPIs. */}
+                  {SIMPLE_CLIENTE && (() => {
+                    const tags: { label: string; className: string; title: string }[] = [];
+                    // "Nuevo" si creado hace ≤30 días.
+                    const createdMs = cliente.created_at ? new Date(cliente.created_at).getTime() : 0;
+                    const diasDesdeAlta = createdMs ? Math.floor((Date.now() - createdMs) / (86400 * 1000)) : Infinity;
+                    if (diasDesdeAlta <= 30) {
+                      tags.push({ label: "✨ Nuevo", className: "bg-blue-50 text-blue-700 border-blue-200", title: `Cliente desde hace ${diasDesdeAlta} día(s)` });
+                    }
+                    if (badgesKpis) {
+                      // "Frecuente" si ≥3 compras en 90d.
+                      if (badgesKpis.comprasUltimos90d >= 3) {
+                        tags.push({ label: "⭐ Frecuente", className: "bg-emerald-50 text-emerald-700 border-emerald-200", title: `${badgesKpis.comprasUltimos90d} compras en los últimos 90 días` });
+                      }
+                      // "VIP" si total histórico ≥ 5M Gs.
+                      if (badgesKpis.totalHistorico >= 5_000_000) {
+                        tags.push({ label: "👑 VIP", className: "bg-amber-50 text-amber-800 border-amber-300", title: `Total histórico Gs. ${Math.round(badgesKpis.totalHistorico).toLocaleString("es-PY")}` });
+                      }
+                      // "Inactivo" si última compra >90 días.
+                      if (badgesKpis.diasDesdeUltimaCompra != null && badgesKpis.diasDesdeUltimaCompra > 90) {
+                        tags.push({ label: "💤 Inactivo", className: "bg-slate-100 text-slate-600 border-slate-200", title: `Sin compras hace ${badgesKpis.diasDesdeUltimaCompra} días` });
+                      }
+                    }
+                    return tags.map((t) => (
+                      <span
+                        key={t.label}
+                        title={t.title}
+                        className={`text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full border ${t.className}`}
+                      >
+                        {t.label}
+                      </span>
+                    ));
+                  })()}
                   <span className="text-xs text-slate-500">
                     Cliente desde <span className="font-medium text-slate-700">{formatFecha(cliente.created_at)}</span>
                   </span>

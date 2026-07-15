@@ -1144,6 +1144,7 @@ function NuevoClienteRapidoModal({
   const [razonSocial, setRazonSocial] = useState("");
   const [ruc, setRuc] = useState("");
   const [telefono, setTelefono] = useState("");
+  const [comoConocio, setComoConocio] = useState("");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -1163,6 +1164,7 @@ function NuevoClienteRapidoModal({
         empresa: tipo === "empresa" ? razonSocial.trim().toUpperCase() : null,
         ruc: ruc.trim() || null,
         telefono: telefono.trim() || null,
+        como_conocio: comoConocio.trim() || null,
         estado: "activo",
       };
       const res = await fetch("/api/clientes", {
@@ -1278,6 +1280,18 @@ function NuevoClienteRapidoModal({
               value={telefono}
               onChange={(e) => setTelefono(e.target.value)}
               placeholder="Ej: 0991 234 567"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+              ¿Cómo conoció la tienda? <span className="font-normal text-slate-400">(opcional)</span>
+            </label>
+            <input
+              type="text"
+              value={comoConocio}
+              onChange={(e) => setComoConocio(e.target.value)}
+              placeholder="Ej: Instagram, referida por María, pasó por la puerta…"
               className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
             />
           </div>
