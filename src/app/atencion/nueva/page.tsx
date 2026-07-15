@@ -83,7 +83,17 @@ export default function NuevaAtencionPage() {
   // hacer una atención. Si no hay caja abierta al confirmar, la abrimos
   // en el primer punto disponible con monto 0.
   const [cajaAbiertaId, setCajaAbiertaId] = useState<string | null>(null);
+  const [cajaNumero, setCajaNumero] = useState<number | null>(null);
+  const [cajaAperturaHora, setCajaAperturaHora] = useState<string | null>(null);
+  const [cajaChecked, setCajaChecked] = useState(false);
   const [puntoCajaId, setPuntoCajaId] = useState<string | null>(null);
+  const [puntoCajaNombre, setPuntoCajaNombre] = useState<string | null>(null);
+
+  // ── Apertura de caja (gate) ───────────────────────────────────────────
+  const [aperturaMonto, setAperturaMonto] = useState<string>("");
+  const [aperturaObs, setAperturaObs] = useState<string>("");
+  const [abriendo, setAbriendo] = useState(false);
+  const [aperturaError, setAperturaError] = useState<string | null>(null);
 
   // Detecta caja abierta y primer punto disponible en la sucursal actual.
   // Silencioso: solo guarda ids, no bloquea la pantalla si no hay nada.
@@ -95,12 +105,54 @@ export default function NuevaAtencionPage() {
       ]);
       const jc = await rc.json().catch(() => ({}));
       const jp = await rp.json().catch(() => ({}));
-      const cajas = (jc?.data?.cajas as { id: string }[] | undefined) ?? [];
-      setCajaAbiertaId(cajas[0]?.id ?? (jc?.data?.caja?.id ?? null));
-      const puntos = (jp?.data?.puntos as { id: string }[] | undefined) ?? [];
+      const cajas = (jc?.data?.cajas as { id: string; numero_caja?: number; fecha_apertura?: string }[] | undefined) ?? [];
+      const c0 = cajas[0] ?? (jc?.data?.caja as { id: string; numero_caja?: number; fecha_apertura?: string } | null | undefined) ?? null;
+      setCajaAbiertaId(c0?.id ?? null);
+      setCajaNumero(c0?.numero_caja ?? null);
+      setCajaAperturaHora(c0?.fecha_apertura ?? null);
+      const puntos = (jp?.data?.puntos as { id: string; nombre?: string }[] | undefined) ?? [];
       setPuntoCajaId(puntos[0]?.id ?? null);
+      setPuntoCajaNombre(puntos[0]?.nombre ?? null);
     } catch {
       /* tolerar */
+    } finally {
+      setCajaChecked(true);
+    }
+  }
+
+  async function abrirCajaAhora() {
+    setAperturaError(null);
+    if (!puntoCajaId) {
+      setAperturaError("No hay puntos de caja configurados en esta sucursal. Un administrador debe crear al menos uno.");
+      return;
+    }
+    const monto = Number(aperturaMonto) || 0;
+    if (monto < 0) {
+      setAperturaError("El monto de apertura no puede ser negativo.");
+      return;
+    }
+    setAbriendo(true);
+    try {
+      const r = await fetchWithSupabaseSession("/api/caja/abrir", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          monto_apertura: monto,
+          observacion: aperturaObs.trim() || null,
+          punto_caja_id: puntoCajaId,
+        }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || j?.success === false) {
+        throw new Error(j?.error ?? `No se pudo abrir la caja (${r.status}).`);
+      }
+      setAperturaMonto("");
+      setAperturaObs("");
+      await refrescarCajaEstado();
+    } catch (e) {
+      setAperturaError(e instanceof Error ? e.message : "Error al abrir la caja.");
+    } finally {
+      setAbriendo(false);
     }
   }
 
@@ -270,30 +322,10 @@ export default function NuevaAtencionPage() {
 
     setEnviando(true);
     try {
-      // ── 0. Caja: si no hay una abierta, abrirla en silencio con
-      //    monto 0 en el primer punto disponible. La cajera no debería
-      //    tener que gestionar turnos para hacer una atención.
+      // La caja se abre explícitamente antes de arrancar (gate al entrar
+      // a la pantalla). Acá asumimos que ya hay una abierta.
       if (!cajaAbiertaId) {
-        if (!puntoCajaId) {
-          throw new Error(
-            "No hay puntos de caja configurados en esta sucursal. Pedile al admin que cree uno en Configuración → Sucursales.",
-          );
-        }
-        const ra = await fetchWithSupabaseSession("/api/caja/abrir", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            monto_apertura: 0,
-            observacion: "Apertura automática (Nueva atención)",
-            punto_caja_id: puntoCajaId,
-          }),
-        });
-        const ja = await ra.json().catch(() => ({}));
-        if (!ra.ok || ja?.success === false) {
-          throw new Error(ja?.error ?? "No se pudo abrir la caja automáticamente. Revisá permisos o abrila desde Configuración.");
-        }
-        const nuevaId = (ja?.data?.caja as { id: string } | undefined)?.id;
-        if (nuevaId) setCajaAbiertaId(nuevaId);
+        throw new Error("Abrí la caja antes de confirmar la atención.");
       }
 
       // ── 1. Recepción (si trae algo) ────────────────────────────────
@@ -399,25 +431,96 @@ export default function NuevaAtencionPage() {
             Cargá lo que el cliente <span className="font-medium text-slate-700">trae</span> y lo que <span className="font-medium text-slate-700">lleva</span>. El sistema calcula el resto.
           </p>
         </div>
-        <div className="flex gap-2 shrink-0">
-          <Link
-            href="/ventas"
-            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
-            title="Abrir/cerrar caja, arqueo y movimientos manuales"
-          >
-            🧾 Caja / Arqueo ↗
-          </Link>
-          <Link
-            href="/ventas"
-            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
-          >
-            Historial ↗
-          </Link>
-        </div>
+        <Link
+          href="/ventas"
+          className="shrink-0 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+        >
+          Historial ↗
+        </Link>
       </div>
 
       {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
       {okMsg && <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{okMsg}</div>}
+
+      {/* Gate: no hay caja abierta → mostrar panel de apertura y bloquear la atención */}
+      {cajaChecked && !cajaAbiertaId ? (
+        <div className="bg-white rounded-xl border border-amber-300 shadow-sm p-6 sm:p-8 max-w-2xl">
+          <div className="flex items-start gap-3 mb-4">
+            <span className="text-2xl">🔒</span>
+            <div>
+              <h2 className="text-lg font-bold text-slate-900">Abrí la caja para empezar el turno</h2>
+              <p className="text-sm text-slate-500 mt-0.5">
+                Ingresá el efectivo con el que arrancás la caja (podés dejar 0). Todas las atenciones del día quedarán registradas en este turno.
+              </p>
+              {puntoCajaNombre && (
+                <p className="text-xs text-slate-400 mt-2">Punto de caja: <strong>{puntoCajaNombre}</strong></p>
+              )}
+            </div>
+          </div>
+
+          {aperturaError && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 mb-3">{aperturaError}</div>
+          )}
+
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
+                Monto inicial en efectivo (Gs.)
+              </label>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                step="1000"
+                value={aperturaMonto}
+                onChange={(e) => setAperturaMonto(e.target.value)}
+                placeholder="Ej: 200000"
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-lg font-semibold focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
+                Observación <span className="font-normal text-slate-400">(opcional)</span>
+              </label>
+              <input
+                type="text"
+                value={aperturaObs}
+                onChange={(e) => setAperturaObs(e.target.value)}
+                placeholder="Ej: turno mañana"
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
+              />
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={abrirCajaAhora}
+            disabled={abriendo || !puntoCajaId}
+            className="mt-5 w-full rounded-lg bg-[#4FAEB2] hover:bg-[#3F8E91] disabled:bg-slate-200 disabled:text-slate-500 disabled:cursor-not-allowed text-white text-sm font-semibold py-3 transition-colors shadow-sm active:scale-95"
+          >
+            {abriendo ? "Abriendo caja…" : "Abrir caja y empezar"}
+          </button>
+        </div>
+      ) : null}
+
+      {/* Chip informativo cuando la caja está abierta */}
+      {cajaChecked && cajaAbiertaId && (
+        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 font-semibold text-emerald-700">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            Caja abierta{cajaNumero ? ` · N° ${cajaNumero}` : ""}{puntoCajaNombre ? ` · ${puntoCajaNombre}` : ""}
+          </span>
+          {cajaAperturaHora && (
+            <span>desde {new Date(cajaAperturaHora).toLocaleTimeString("es-PY", { hour: "2-digit", minute: "2-digit" })}</span>
+          )}
+          <Link href="/ventas" className="ml-auto text-slate-400 hover:text-slate-700 underline decoration-dotted underline-offset-2">
+            Cerrar turno / arqueo
+          </Link>
+        </div>
+      )}
+
+      {/* Todo el resto de la atención solo cuando la caja está abierta */}
+      {cajaChecked && cajaAbiertaId && (<>
 
       {/* ─── Cliente ─── */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 sm:p-5">
@@ -735,6 +838,8 @@ export default function NuevaAtencionPage() {
           </button>
         </div>
       </div>
+
+      </>)}
 
       {nuevoClienteOpen && (
         <NuevoClienteRapidoModal
