@@ -61,8 +61,12 @@ import { ClienteDatosSifenReceptorForm } from "@/components/clientes/ClienteDato
 import { SUPABASE_APP_SCHEMA as NEURA_CLIENT_SCHEMA } from "@/lib/supabase/schema";
 import ClienteVehiculoEditor from "@/components/clientes/ClienteVehiculoEditor";
 
-/** Instancia monocliente Reserva: formulario/detalle de clientes simplificado (sin campos SaaS/Neura). */
-const SIMPLE_CLIENTE = NEURA_CLIENT_SCHEMA === "reservacaacupe";
+/** Detalle de clientes simplificado (sin campos SaaS/Neura como Tipo de
+ *  servicio, Plan, Facturación al contado). Aplica a instancias monocliente
+ *  cuyo rubro no requiere esos campos: Reserva Caacupé y Akakua'a/Pronim. */
+const SIMPLE_CLIENTE =
+  NEURA_CLIENT_SCHEMA === "reservacaacupe" ||
+  NEURA_CLIENT_SCHEMA === "pronimerp";
 // ── Estilos ────────────────────────────────────────────────────────────────────
 
 const inputClass =
