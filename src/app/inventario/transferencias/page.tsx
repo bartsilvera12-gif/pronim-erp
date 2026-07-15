@@ -82,23 +82,37 @@ export default function TransferenciasStockPage() {
     cargarHistorial();
   }, []);
 
+  // Cargar catálogo completo al montar (Pronim usa franjas de precio, no
+  // SKUs individuales — traerlas todas de una y filtrar client-side es más
+  // usable que un buscador con mínimo 2 caracteres).
   useEffect(() => {
-    const q = busqueda.trim();
-    if (q.length < 2) { setResultados([]); return; }
-    const ctrl = new AbortController();
+    let cancel = false;
     setBuscando(true);
-    fetchWithSupabaseSession(`/api/productos/search?q=${encodeURIComponent(q)}&limit=15`, {
-      signal: ctrl.signal, cache: "no-store",
-    })
-      .then((r) => r.json())
-      .then((j) => {
-        const arr = (j?.data?.productos as Producto[] | undefined) ?? (j?.productos as Producto[] | undefined) ?? [];
-        setResultados(arr);
+    Promise.all([
+      fetchWithSupabaseSession(`/api/franjas/publicas`, { cache: "no-store" }).then((r) => r.json()).catch(() => ({})),
+      fetchWithSupabaseSession(`/api/productos`, { cache: "no-store" }).then((r) => r.json()).catch(() => ({})),
+    ])
+      .then(([jf, jp]) => {
+        if (cancel) return;
+        const franjas = (jf?.data?.franjas as Producto[] | undefined) ?? [];
+        const otros = ((jp?.data?.productos as Producto[] | undefined) ?? [])
+          .filter((p) => !franjas.some((f) => f.id === p.id));
+        setResultados([...franjas, ...otros]);
       })
-      .catch(() => { /* ignorar aborts */ })
-      .finally(() => setBuscando(false));
-    return () => ctrl.abort();
-  }, [busqueda]);
+      .finally(() => { if (!cancel) setBuscando(false); });
+    return () => { cancel = true; };
+  }, []);
+
+  const resultadosFiltrados = useMemo(() => {
+    const q = busqueda.trim().toLowerCase();
+    if (!q) return resultados.slice(0, 30);
+    return resultados
+      .filter((p) => {
+        const hay = [p.nombre, p.sku ?? ""].join(" ").toLowerCase();
+        return hay.includes(q);
+      })
+      .slice(0, 30);
+  }, [busqueda, resultados]);
 
   function agregarProducto(p: Producto) {
     setItems((prev) => {
@@ -219,18 +233,21 @@ export default function TransferenciasStockPage() {
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Buscar producto</label>
+          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Elegí producto o franja</label>
           <input
             type="text"
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
-            placeholder="Escribí nombre, SKU o código de barras…"
+            placeholder="Filtrar por nombre o SKU (ej: 19.000, FRJ-19000)…"
             className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#4FAEB2] bg-white"
           />
-          {buscando && <p className="text-xs text-gray-400 mt-1">Buscando…</p>}
-          {resultados.length > 0 && (
-            <ul className="mt-2 border border-slate-200 rounded-lg divide-y divide-slate-100 max-h-56 overflow-y-auto">
-              {resultados.map((p) => (
+          {buscando ? (
+            <p className="text-xs text-gray-400 mt-2 animate-pulse">Cargando catálogo…</p>
+          ) : resultadosFiltrados.length === 0 ? (
+            <p className="text-xs text-gray-400 mt-2">Sin resultados. Verificá el filtro o que existan franjas/productos activos.</p>
+          ) : (
+            <ul className="mt-2 border border-slate-200 rounded-lg divide-y divide-slate-100 max-h-64 overflow-y-auto">
+              {resultadosFiltrados.map((p) => (
                 <li key={p.id}>
                   <button
                     type="button"
