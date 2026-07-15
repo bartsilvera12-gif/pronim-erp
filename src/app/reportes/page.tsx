@@ -78,6 +78,15 @@ export default function ReportesPage() {
             href="/reportes/rotacion"
           />
         </li>
+        <li>
+          <ReportCard
+            title="Ranking de clientes"
+            subtitle="Mejores compradores, vendedores e inactivos"
+            icon={Repeat}
+            description="Los que más gastaron, los que más aportaron mercadería y los que hace tiempo no vuelven a la tienda."
+            href="/reportes/ranking-clientes"
+          />
+        </li>
       </ul>
     </div>
   );

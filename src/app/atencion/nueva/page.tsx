@@ -77,6 +77,9 @@ export default function NuevaAtencionPage() {
   // destildar y la recepción queda pendiente de ingreso.
   const [ingresarAlStock, setIngresarAlStock] = useState<boolean>(true);
 
+  // ── Meta del día ────────────────────────────────────────────────────
+  const [metaDia, setMetaDia] = useState<{ meta_diaria: number; vendido_dia: number; pct: number } | null>(null);
+
   // ── Promoción / cupón ────────────────────────────────────────────────
   const [cuponInput, setCuponInput] = useState<string>("");
   const [promoAplicada, setPromoAplicada] = useState<{
@@ -280,6 +283,19 @@ export default function NuevaAtencionPage() {
     } catch { /* tolerar */ }
   }
 
+  async function refrescarMetaDia() {
+    try {
+      const r = await fetchWithSupabaseSession("/api/metas", { cache: "no-store" });
+      const j = await r.json().catch(() => ({}));
+      const arr = (j?.data?.sucursales as { meta_diaria: number; vendido_dia: number; pct: number }[] | undefined) ?? [];
+      // Sumar meta e importes para todas las sucursales visibles (una si operativo, todas si admin).
+      const meta = arr.reduce((s, x) => s + (Number(x.meta_diaria) || 0), 0);
+      const vendido = arr.reduce((s, x) => s + (Number(x.vendido_dia) || 0), 0);
+      const pct = meta > 0 ? Math.min(100, Math.round((vendido / meta) * 100)) : 0;
+      setMetaDia(meta > 0 ? { meta_diaria: meta, vendido_dia: vendido, pct } : null);
+    } catch { /* tolerar */ }
+  }
+
   // Cargar franjas + clientes iniciales + estado de caja
   useEffect(() => {
     let cancel = false;
@@ -291,6 +307,7 @@ export default function NuevaAtencionPage() {
         ]);
         refrescarCajaEstado();
         refrescarPendientesIngreso();
+        refrescarMetaDia();
         const jf = await rf.json().catch(() => ({}));
         const jc = await rc.json().catch(() => ({}));
         if (cancel) return;
@@ -641,6 +658,8 @@ export default function NuevaAtencionPage() {
       reset();
       // Re-contar pendientes por si la nueva recepción quedó sin ingresar.
       refrescarPendientesIngreso();
+      // Actualizar el chip de meta del día — la venta que acaba de entrar suma.
+      refrescarMetaDia();
       // recargar saldo de crédito
       const rc = await fetchWithSupabaseSession(`/api/clientes/${cliente.id}/creditos`, { cache: "no-store" });
       const jcr = await rc.json().catch(() => ({}));
@@ -665,6 +684,21 @@ export default function NuevaAtencionPage() {
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          {metaDia && (
+            <Link
+              href="/admin/metas"
+              className={`rounded-lg border px-3 py-1.5 text-xs font-medium ${
+                metaDia.pct >= 100
+                  ? "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+                  : metaDia.pct >= 50
+                    ? "border-sky-200 bg-sky-50 text-sky-800 hover:bg-sky-100"
+                    : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+              }`}
+              title={`Meta hoy: Gs. ${Math.round(metaDia.vendido_dia).toLocaleString("es-PY")} de ${Math.round(metaDia.meta_diaria).toLocaleString("es-PY")}`}
+            >
+              🎯 Meta hoy: <strong>{metaDia.pct}%</strong>
+            </Link>
+          )}
           {pendientesIngresoCount > 0 && (
             <Link
               href="/atencion/pendientes-ingreso"
