@@ -93,7 +93,6 @@ function adminEmpresasMatchesQuery(queryRaw: string): boolean {
  *  aparecen en familias, aunque sigan en MENU_STRUCTURE. */
 const HIDDEN_MENU_KEYS = new Set<string>([
   "gerencia",
-  "usuarios",
   "planes",
   "comisiones",
   "crm",
@@ -149,6 +148,7 @@ const MENU_STRUCTURE_FULL: MenuItem[] = [
   { key: "inventario", slug: "inventario", label: "Inventario", href: "/inventario", icon: Package, children: [
     { label: "Productos", href: "/inventario" },
     { label: "Movimientos", href: "/inventario/movimientos" },
+    { label: "Transferencias", href: "/inventario/transferencias" },
     { label: "Categorías", href: "/inventario/categorias" },
   ]},
   { key: "clientes", slug: "clientes", label: "Clientes", href: "/clientes", icon: Users },

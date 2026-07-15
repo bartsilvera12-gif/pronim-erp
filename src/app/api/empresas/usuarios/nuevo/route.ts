@@ -113,6 +113,41 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Solo un administrador de empresa puede crear usuarios." }, { status: 403 });
     }
 
+    // ── Cupo del plan: máximo 4 usuarios activos por empresa ──────────
+    // Se cuentan activos para esta empresa; los desactivados (activo=false) no suman.
+    // Excepción: si el email ya existe para esta empresa (re-alta), no choca
+    // con el límite — el endpoint hace UPDATE en vez de INSERT.
+    const LIMITE_USUARIOS_EMPRESA = 4;
+    {
+      const { count: usuariosActuales, error: countErr } = await supabase
+        .from("usuarios")
+        .select("id", { count: "exact", head: true })
+        .eq("empresa_id", empresaId)
+        .eq("estado", "activo");
+      if (countErr) {
+        return NextResponse.json(
+          { error: `No se pudo verificar el cupo de usuarios: ${countErr.message}` },
+          { status: 500 },
+        );
+      }
+      if ((usuariosActuales ?? 0) >= LIMITE_USUARIOS_EMPRESA) {
+        const { data: yaExiste } = await supabase
+          .from("usuarios")
+          .select("id")
+          .eq("empresa_id", empresaId)
+          .eq("email", email)
+          .maybeSingle();
+        if (!yaExiste) {
+          return NextResponse.json(
+            {
+              error: `Límite de usuarios alcanzado (${LIMITE_USUARIOS_EMPRESA}). Desactivá un usuario antes de crear uno nuevo.`,
+            },
+            { status: 409 },
+          );
+        }
+      }
+    }
+
     // Sucursal: obligatoria para no-administradores. Si vino, debe pertenecer
     // a la empresa del admin y estar activa. Nunca aceptar sucursales de otra empresa.
     if (!esAdminRol && !sucursalId) {
