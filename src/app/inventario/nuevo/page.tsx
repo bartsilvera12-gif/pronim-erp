@@ -790,7 +790,10 @@ export default function NuevoProductoPage() {
 
             </div>
 
-            {showPrecioVenta && (
+            {/* Precios por canal (mayorista / proveedor) ocultos en Pronim:
+                el rubro trabaja por franjas de precio fijas por categoría,
+                sin canales diferenciados. */}
+            {false && showPrecioVenta && (
               <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                   <label className={labelClass}>Precio mayorista (Gs.) <span className="text-gray-400 font-normal">(opcional)</span></label>

@@ -432,16 +432,18 @@ export async function PATCH(
       if (err instanceof DuplicadoError) {
         return NextResponse.json(errorResponse(err.message), { status: 409 });
       }
-      console.error("[/api/productos/[id] PATCH]", {
-        empresaId,
-        id,
-        message: err instanceof Error ? err.message : String(err),
-        code: (err as { code?: string })?.code,
-      });
-      return NextResponse.json(
-        errorResponse("No se pudo actualizar el producto. Revisá los datos e intentá nuevamente."),
-        { status: 500 }
-      );
+      const msgErr = err instanceof Error ? err.message : String(err);
+      const codeErr = (err as { code?: string })?.code;
+      console.error("[/api/productos/[id] PATCH]", { empresaId, id, message: msgErr, code: codeErr });
+      // Sacar a la UI la causa real: si es un unique violation, FK,
+      // check constraint, etc., que la cajera/admin pueda entender qué
+      // arreglar en vez de leer siempre el mensaje genérico.
+      let userMsg = "No se pudo actualizar el producto. Revisá los datos e intentá nuevamente.";
+      if (codeErr === "23505") userMsg = `Ya existe otro producto con ese dato único (${msgErr.slice(0, 140)}).`;
+      else if (codeErr === "23503") userMsg = `Referencia inválida: ${msgErr.slice(0, 140)}.`;
+      else if (codeErr === "23514") userMsg = `Regla de validación no cumplida: ${msgErr.slice(0, 140)}.`;
+      else if (msgErr) userMsg = `No se pudo actualizar el producto: ${msgErr.slice(0, 200)}`;
+      return NextResponse.json(errorResponse(userMsg), { status: 500 });
     }
   } catch (err) {
     console.error("[/api/productos/[id] PATCH] outer", err instanceof Error ? err.message : err);
