@@ -250,10 +250,26 @@ export async function POST(req: Request) {
         .select("modulo_id")
         .eq("empresa_id", empresaId)
         .eq("activo", true);
-      if (emActivos && emActivos.length > 0) {
-        const umRows = emActivos.map((r) => ({
+
+      let moduloIdsAAsignar: string[] = (emActivos ?? [])
+        .map((r) => (r.modulo_id != null ? String(r.modulo_id) : ""))
+        .filter((x): x is string => x.length > 0);
+
+      // Fallback: si la empresa no tiene filas en `empresa_modulos` (típico en
+      // empresas legadas o recién migradas), asignamos el catálogo completo.
+      // Sin esto, el usuario nuevo queda con 0 módulos y el AuthGuard lo rebota
+      // al /login como si se hubiera cerrado sesión.
+      if (moduloIdsAAsignar.length === 0) {
+        const { data: catalogo } = await supabase.from("modulos").select("id");
+        moduloIdsAAsignar = (catalogo ?? [])
+          .map((r: { id?: unknown }) => (r.id != null ? String(r.id) : ""))
+          .filter((x: string) => x.length > 0);
+      }
+
+      if (moduloIdsAAsignar.length > 0) {
+        const umRows = moduloIdsAAsignar.map((modulo_id) => ({
           usuario_id: targetId,
-          modulo_id: r.modulo_id as string,
+          modulo_id,
         }));
         const { error: errUm } = await supabase.from("usuario_modulos").insert(umRows);
         if (errUm) {
