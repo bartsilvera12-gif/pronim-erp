@@ -120,7 +120,6 @@ export default function TransferenciasStockPage() {
       return [...prev, { producto_id: p.id, producto_nombre: p.nombre, cantidad: "1" }];
     });
     setBusqueda("");
-    setResultados([]);
   }
 
   function actualizarCantidad(id: string, cant: string) {
