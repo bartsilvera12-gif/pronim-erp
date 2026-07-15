@@ -63,7 +63,10 @@ export default function NuevaAtencionPage() {
   const [lleva, setLleva] = useState<Linea[]>([]);
 
   // ── Pago / balance ────────────────────────────────────────────────────
-  const [aplicarCredito, setAplicarCredito] = useState<string>(""); // ingresado por usuario
+  // aplicarCredito = cuánto del crédito TOTAL (previo + nuevo por lo que
+  // trajo) se aplica en esta venta. Empty string = "aplicar el máximo
+  // posible" automáticamente; cualquier número lo overridea.
+  const [aplicarCredito, setAplicarCredito] = useState<string>("");
   const [metodoCobro, setMetodoCobro] = useState<"efectivo" | "tarjeta" | "transferencia">("efectivo");
   const [observaciones, setObservaciones] = useState("");
 
@@ -126,18 +129,27 @@ export default function NuevaAtencionPage() {
   const totalTrae  = useMemo(() => trae.reduce((s, l) => s + l.precio_unitario * l.cantidad, 0), [trae]);
   const totalLleva = useMemo(() => lleva.reduce((s, l) => s + l.precio_unitario * l.cantidad, 0), [lleva]);
 
-  // Neto a favor de la tienda = lleva - trae. Si es positivo, cliente debe cubrirlo
-  // (con crédito o cash). Si es negativo, sobra plata para el cliente (crédito nuevo).
-  const neto = totalLleva - totalTrae;
+  // Modelo explícito:
+  //  1) Todo lo que TRAE hoy genera crédito nuevo por totalTrae.
+  //  2) El crédito TOTAL disponible ahora = previo + nuevo trae.
+  //  3) La cajera decide cuánto de ese total aplicar en LA VENTA (0 …
+  //     min(disponible, lleva)). Por defecto aplica el máximo posible.
+  //  4) La diferencia se cobra en efectivo/tarjeta/transferencia.
+  //  5) Lo que no se aplique queda como crédito remanente para el futuro.
+  const creditoTotalDisponible = creditoDisponible + totalTrae;
+  const creditoMaxAplicable = Math.min(creditoTotalDisponible, totalLleva);
 
-  const creditoAplicadoNum = Math.max(0, Math.min(
-    Number.isFinite(Number(aplicarCredito)) ? Number(aplicarCredito) : 0,
-    creditoDisponible,
-    Math.max(0, neto), // no aplicar más crédito del que se necesita
-  ));
+  // Si el usuario NO tocó el input, se aplica el máximo. Si lo editó, se
+  // respeta el número (clampeado al rango [0, creditoMaxAplicable]).
+  const creditoAplicadoNum = useMemo(() => {
+    if (aplicarCredito.trim() === "") return creditoMaxAplicable;
+    const n = Number(aplicarCredito);
+    if (!Number.isFinite(n)) return 0;
+    return Math.max(0, Math.min(n, creditoMaxAplicable));
+  }, [aplicarCredito, creditoMaxAplicable]);
 
-  const aCobrar = Math.max(0, neto - creditoAplicadoNum);
-  const creditoNuevoGenerado = Math.max(0, -neto); // si trae > lleva, se le suma al saldo
+  const aCobrar = Math.max(0, totalLleva - creditoAplicadoNum);
+  const creditoRestante = Math.max(0, creditoTotalDisponible - creditoAplicadoNum);
 
   // ── Filtrados / helpers UI ────────────────────────────────────────────
   const clientesFiltrados = useMemo(() => {
@@ -242,9 +254,10 @@ export default function NuevaAtencionPage() {
       // ── 2. Venta (si lleva algo) ───────────────────────────────────
       if (lleva.length > 0) {
         const total = totalLleva;
-        // Crédito a aplicar en la venta: lo que el usuario pidió, pero
-        // no más que el total de la venta ni que el crédito disponible
-        // (ya recalculado en `creditoAplicadoNum`).
+        // Crédito a aplicar en la venta: lo que la cajera decidió (o el
+        // máximo si dejó el input vacío). Como la recepción se ejecutó
+        // primero, el saldo del cliente ya incluye el nuevo crédito y
+        // el consumo FIFO server-side toma primero los lotes viejos.
         const creditoUsado = creditoAplicadoNum;
         const efectivoNeeded = Math.max(0, total - creditoUsado);
         const pagoDetalle = efectivoNeeded > 0
@@ -283,7 +296,9 @@ export default function NuevaAtencionPage() {
       const partes: string[] = [];
       if (trae.length > 0) partes.push(`recepción por ${fmtGs(totalTrae)}`);
       if (lleva.length > 0) partes.push(`venta por ${fmtGs(totalLleva)}`);
-      if (creditoNuevoGenerado > 0) partes.push(`crédito nuevo Gs. ${fmtGs(creditoNuevoGenerado).replace("Gs. ","")}`);
+      if (creditoRestante > creditoDisponible) {
+        partes.push(`crédito restante ${fmtGs(creditoRestante)}`);
+      }
       setOkMsg("Atención registrada: " + partes.join(" + ") + ".");
       reset();
       // recargar saldo de crédito
@@ -399,40 +414,81 @@ export default function NuevaAtencionPage() {
       </div>
 
       {/* ─── Balance + confirmar ─── */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 sm:p-5 space-y-3">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 sm:p-5 space-y-4">
         <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider">Balance</h3>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+        {/* Fila 1: totales de la atención */}
+        <div className="grid grid-cols-2 gap-3 text-sm">
           <BalanceItem label="Total trae"  value={fmtGs(totalTrae)}  tone="emerald" />
           <BalanceItem label="Total lleva" value={fmtGs(totalLleva)} tone="sky" />
-          <BalanceItem label={neto >= 0 ? "Diferencia a cobrar" : "Sobra al cliente"} value={fmtGs(Math.abs(neto))} tone={neto > 0 ? "amber" : "emerald"} />
-          <BalanceItem label="Crédito disponible" value={fmtGs(creditoDisponible)} tone="slate" />
         </div>
 
-        {neto > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+        {/* Bloque de crédito: solo si hay algo relevante (trajo, tiene previo, o va a llevar) */}
+        {(totalTrae > 0 || creditoDisponible > 0 || totalLleva > 0) && (
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2">
+            <p className="text-[11px] uppercase font-semibold text-slate-500">Crédito del cliente</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
+              <div className="flex justify-between sm:block">
+                <span className="text-slate-500 text-xs">Previo</span>
+                <span className="font-medium text-slate-700 sm:block">{fmtGs(creditoDisponible)}</span>
+              </div>
+              <div className="flex justify-between sm:block">
+                <span className="text-slate-500 text-xs">Nuevo (por lo que trajo hoy)</span>
+                <span className={`font-medium sm:block ${totalTrae > 0 ? "text-emerald-700" : "text-slate-500"}`}>
+                  {totalTrae > 0 ? "+ " : ""}{fmtGs(totalTrae)}
+                </span>
+              </div>
+              <div className="flex justify-between sm:block border-t sm:border-t-0 sm:border-l border-slate-200 pt-1 sm:pt-0 sm:pl-3">
+                <span className="text-slate-500 text-xs">Total disponible</span>
+                <span className="font-bold text-slate-900 sm:block">{fmtGs(creditoTotalDisponible)}</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Solo se aplica crédito si hay venta */}
+        {totalLleva > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
-                Aplicar del crédito (Gs.)
+                Aplicar del crédito ahora
               </label>
-              <input
-                type="number"
-                min={0}
-                max={Math.min(creditoDisponible, neto)}
-                value={aplicarCredito}
-                onChange={(e) => setAplicarCredito(e.target.value)}
-                placeholder={String(Math.min(creditoDisponible, neto))}
-                disabled={creditoDisponible === 0}
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2] disabled:bg-slate-50 disabled:text-slate-400"
-              />
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  min={0}
+                  max={creditoMaxAplicable}
+                  value={aplicarCredito}
+                  onChange={(e) => setAplicarCredito(e.target.value)}
+                  placeholder={String(creditoMaxAplicable)}
+                  className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
+                />
+                <button
+                  type="button"
+                  onClick={() => setAplicarCredito("")}
+                  className="rounded-lg border border-slate-200 px-3 text-xs text-slate-500 hover:bg-slate-50"
+                  title="Aplicar el máximo posible"
+                >
+                  Máx
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAplicarCredito("0")}
+                  className="rounded-lg border border-slate-200 px-3 text-xs text-slate-500 hover:bg-slate-50"
+                  title="No aplicar crédito (todo lo que trajo queda a favor)"
+                >
+                  0
+                </button>
+              </div>
               <p className="text-[11px] text-slate-400 mt-1">
-                Máximo aplicable: {fmtGs(Math.min(creditoDisponible, neto))}.
+                Aplicando <strong>{fmtGs(creditoAplicadoNum)}</strong> de {fmtGs(creditoTotalDisponible)} disponibles.
+                Máximo útil: {fmtGs(creditoMaxAplicable)}.
               </p>
             </div>
             {aCobrar > 0 && (
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
-                  Método de cobro por la diferencia
+                  Cobrar en efectivo / tarjeta
                 </label>
                 <select
                   value={metodoCobro}
@@ -443,17 +499,25 @@ export default function NuevaAtencionPage() {
                   <option value="tarjeta">Tarjeta</option>
                   <option value="transferencia">Transferencia</option>
                 </select>
-                <p className="text-[11px] text-slate-400 mt-1">A cobrar: <strong>{fmtGs(aCobrar)}</strong>.</p>
+                <p className="text-[11px] text-slate-400 mt-1">Total a cobrar: <strong>{fmtGs(aCobrar)}</strong>.</p>
               </div>
             )}
           </div>
         )}
 
-        {neto < 0 && (
-          <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-            Al cliente le queda un saldo a favor de <strong>{fmtGs(creditoNuevoGenerado)}</strong> que se sumará a su crédito.
-          </div>
-        )}
+        {/* Resumen final: cuánto crédito le queda al cliente después de esta atención */}
+        <div className="grid grid-cols-2 gap-3">
+          <BalanceItem
+            label={aCobrar > 0 ? "A cobrar ahora" : (totalLleva > 0 ? "A cobrar ahora" : "Sin cobro (solo entregó)")}
+            value={fmtGs(aCobrar)}
+            tone={aCobrar > 0 ? "amber" : "slate"}
+          />
+          <BalanceItem
+            label="Crédito que le queda"
+            value={fmtGs(creditoRestante)}
+            tone={creditoRestante > 0 ? "emerald" : "slate"}
+          />
+        </div>
 
         <div>
           <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
