@@ -201,16 +201,24 @@ export default function UsuarioDetalleClient({
   useEffect(() => {
     let cancel = false;
     fetchWithSupabaseSession("/api/sucursales", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((j) => {
+      .then(async (r) => {
+        const j = await r.json().catch(() => ({}));
         if (cancel) return;
+        if (!r.ok || j?.success === false) {
+          console.error("[UsuarioDetalleClient] /api/sucursales fallo", { status: r.status, body: j });
+          setSucursales([]);
+          return;
+        }
         const arr =
           (j?.data?.sucursales as SucursalOpt[] | undefined) ??
           (j?.sucursales as SucursalOpt[] | undefined) ??
           [];
         setSucursales(arr);
       })
-      .catch(() => { /* tolerar */ });
+      .catch((e) => {
+        console.error("[UsuarioDetalleClient] /api/sucursales fetch error", e);
+        setSucursales([]);
+      });
     return () => { cancel = true; };
   }, []);
 

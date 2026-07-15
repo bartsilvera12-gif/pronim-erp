@@ -35,17 +35,25 @@ export default function UsuarioNuevoForm({
   useEffect(() => {
     let cancel = false;
     fetchWithSupabaseSession("/api/sucursales", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((j) => {
+      .then(async (r) => {
+        const j = await r.json().catch(() => ({}));
         if (cancel) return;
-        // successResponse envuelve en data.data.sucursales
+        if (!r.ok || j?.success === false) {
+          // Antes se tragaba silencioso; ahora dejamos rastro para diagnosticar.
+          console.error("[UsuarioNuevoForm] /api/sucursales fallo", { status: r.status, body: j });
+          setSucursales([]);
+          return;
+        }
         const arr =
           (j?.data?.sucursales as SucursalOpt[] | undefined) ??
           (j?.sucursales as SucursalOpt[] | undefined) ??
           [];
         setSucursales(arr);
       })
-      .catch(() => { /* deploys sin sucursales: array vacío, admin puede seguir */ });
+      .catch((e) => {
+        console.error("[UsuarioNuevoForm] /api/sucursales fetch error", e);
+        setSucursales([]);
+      });
     return () => { cancel = true; };
   }, []);
 
