@@ -11,21 +11,54 @@ import type {
 type Ok<T> = { success: true } & T;
 type Err = { success: false; error: string };
 
+/**
+ * Mensaje amigable cuando el backend devuelve HTML (típicamente páginas de
+ * error de Cloudflare 5xx). Sin esto, los <!DOCTYPE ...> del error de
+ * Cloudflare terminaban pegados en el banner de error de la UI.
+ */
+function friendlyServerError(status: number): string {
+  if (status === 502 || status === 503 || status === 504) {
+    return "El servidor tardó en responder o no está disponible. Reintentá en unos segundos.";
+  }
+  if (status === 520 || status === 521 || status === 522 || status === 523 || status === 524) {
+    return "El servidor no respondió a tiempo (Cloudflare " + status + "). Reintentá en unos segundos.";
+  }
+  if (status >= 500) {
+    return `Error del servidor (código ${status}). Reintentá en unos segundos.`;
+  }
+  return `Respuesta inesperada del servidor (código ${status}).`;
+}
+
 async function postJson<T>(url: string, body: unknown): Promise<Ok<T> | Err> {
+  let res: Response;
   try {
-    const res = await fetchWithSupabaseSession(url, {
+    res = await fetchWithSupabaseSession(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    const json = (await res.json()) as { success?: boolean; data?: T; error?: string };
-    if (!res.ok || !json.success || !json.data) {
-      return { success: false, error: json.error ?? `Error (${res.status}).` };
-    }
-    return { success: true, ...(json.data as T) };
   } catch (e) {
     return { success: false, error: e instanceof Error ? e.message : "Error de red." };
   }
+
+  // Si el content-type no es JSON, probablemente sea una página de error
+  // de Cloudflare / proxy. Nunca queremos mostrar HTML crudo en la UI.
+  const contentType = res.headers.get("content-type") ?? "";
+  if (!contentType.toLowerCase().includes("application/json")) {
+    return { success: false, error: friendlyServerError(res.status) };
+  }
+
+  let json: { success?: boolean; data?: T; error?: string };
+  try {
+    json = (await res.json()) as { success?: boolean; data?: T; error?: string };
+  } catch {
+    return { success: false, error: friendlyServerError(res.status) };
+  }
+
+  if (!res.ok || !json.success || !json.data) {
+    return { success: false, error: json.error ?? friendlyServerError(res.status) };
+  }
+  return { success: true, ...(json.data as T) };
 }
 
 /** Caja abierta actual (o null si no hay). */
