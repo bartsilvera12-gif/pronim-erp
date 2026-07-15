@@ -89,7 +89,8 @@ export default function NuevaAtencionPage() {
   const [puntoCajaId, setPuntoCajaId] = useState<string | null>(null);
   const [puntoCajaNombre, setPuntoCajaNombre] = useState<string | null>(null);
 
-  // ── Apertura de caja (gate) ───────────────────────────────────────────
+  // ── Modal de caja (abrir / cerrar / info) ─────────────────────────────
+  const [cajaModalOpen, setCajaModalOpen] = useState(false);
   const [aperturaMonto, setAperturaMonto] = useState<string>("");
   const [aperturaObs, setAperturaObs] = useState<string>("");
   const [abriendo, setAbriendo] = useState(false);
@@ -148,6 +149,7 @@ export default function NuevaAtencionPage() {
       }
       setAperturaMonto("");
       setAperturaObs("");
+      setCajaModalOpen(false);
       await refrescarCajaEstado();
     } catch (e) {
       setAperturaError(e instanceof Error ? e.message : "Error al abrir la caja.");
@@ -431,96 +433,34 @@ export default function NuevaAtencionPage() {
             Cargá lo que el cliente <span className="font-medium text-slate-700">trae</span> y lo que <span className="font-medium text-slate-700">lleva</span>. El sistema calcula el resto.
           </p>
         </div>
-        <Link
-          href="/ventas"
-          className="shrink-0 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
-        >
-          Historial ↗
-        </Link>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => setCajaModalOpen(true)}
+            className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-semibold transition-colors ${
+              cajaAbiertaId
+                ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                : "border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100"
+            }`}
+            title={cajaAbiertaId ? "Ver / cerrar la caja abierta" : "Abrir caja"}
+          >
+            <span className={`h-1.5 w-1.5 rounded-full ${cajaAbiertaId ? "bg-emerald-500" : "bg-amber-500"}`} />
+            {cajaAbiertaId
+              ? `Caja ${cajaNumero ? `N° ${cajaNumero}` : "abierta"}`
+              : "Abrir caja"}
+          </button>
+          <Link
+            href="/ventas"
+            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+          >
+            Historial ↗
+          </Link>
+        </div>
       </div>
 
       {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
       {okMsg && <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{okMsg}</div>}
 
-      {/* Gate: no hay caja abierta → mostrar panel de apertura y bloquear la atención */}
-      {cajaChecked && !cajaAbiertaId ? (
-        <div className="bg-white rounded-xl border border-amber-300 shadow-sm p-6 sm:p-8 max-w-2xl">
-          <div className="flex items-start gap-3 mb-4">
-            <span className="text-2xl">🔒</span>
-            <div>
-              <h2 className="text-lg font-bold text-slate-900">Abrí la caja para empezar el turno</h2>
-              <p className="text-sm text-slate-500 mt-0.5">
-                Ingresá el efectivo con el que arrancás la caja (podés dejar 0). Todas las atenciones del día quedarán registradas en este turno.
-              </p>
-              {puntoCajaNombre && (
-                <p className="text-xs text-slate-400 mt-2">Punto de caja: <strong>{puntoCajaNombre}</strong></p>
-              )}
-            </div>
-          </div>
-
-          {aperturaError && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 mb-3">{aperturaError}</div>
-          )}
-
-          <div className="space-y-3">
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
-                Monto inicial en efectivo (Gs.)
-              </label>
-              <input
-                type="number"
-                inputMode="numeric"
-                min={0}
-                step="1000"
-                value={aperturaMonto}
-                onChange={(e) => setAperturaMonto(e.target.value)}
-                placeholder="Ej: 200000"
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-lg font-semibold focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
-                Observación <span className="font-normal text-slate-400">(opcional)</span>
-              </label>
-              <input
-                type="text"
-                value={aperturaObs}
-                onChange={(e) => setAperturaObs(e.target.value)}
-                placeholder="Ej: turno mañana"
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
-              />
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={abrirCajaAhora}
-            disabled={abriendo || !puntoCajaId}
-            className="mt-5 w-full rounded-lg bg-[#4FAEB2] hover:bg-[#3F8E91] disabled:bg-slate-200 disabled:text-slate-500 disabled:cursor-not-allowed text-white text-sm font-semibold py-3 transition-colors shadow-sm active:scale-95"
-          >
-            {abriendo ? "Abriendo caja…" : "Abrir caja y empezar"}
-          </button>
-        </div>
-      ) : null}
-
-      {/* Chip informativo cuando la caja está abierta */}
-      {cajaChecked && cajaAbiertaId && (
-        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 font-semibold text-emerald-700">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-            Caja abierta{cajaNumero ? ` · N° ${cajaNumero}` : ""}{puntoCajaNombre ? ` · ${puntoCajaNombre}` : ""}
-          </span>
-          {cajaAperturaHora && (
-            <span>desde {new Date(cajaAperturaHora).toLocaleTimeString("es-PY", { hour: "2-digit", minute: "2-digit" })}</span>
-          )}
-          <Link href="/ventas" className="ml-auto text-slate-400 hover:text-slate-700 underline decoration-dotted underline-offset-2">
-            Cerrar turno / arqueo
-          </Link>
-        </div>
-      )}
-
-      {/* Todo el resto de la atención solo cuando la caja está abierta */}
-      {cajaChecked && cajaAbiertaId && (<>
 
       {/* ─── Cliente ─── */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 sm:p-5">
@@ -839,8 +779,6 @@ export default function NuevaAtencionPage() {
         </div>
       </div>
 
-      </>)}
-
       {nuevoClienteOpen && (
         <NuevoClienteRapidoModal
           onClose={() => setNuevoClienteOpen(false)}
@@ -852,6 +790,111 @@ export default function NuevaAtencionPage() {
             setNuevoClienteOpen(false);
           }}
         />
+      )}
+
+      {cajaModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setCajaModalOpen(false)}>
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-3 flex items-start justify-between gap-2">
+              <div>
+                <h3 className="text-base font-semibold text-slate-900">
+                  {cajaAbiertaId ? "Caja abierta" : "Abrir caja"}
+                </h3>
+                {puntoCajaNombre && (
+                  <p className="mt-0.5 text-xs text-slate-500">Punto: <strong>{puntoCajaNombre}</strong></p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setCajaModalOpen(false)}
+                className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                aria-label="Cerrar"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+                  <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+                </svg>
+              </button>
+            </div>
+
+            {cajaAbiertaId ? (
+              // ── Caja abierta: info + acciones ─────────────────────
+              <div className="space-y-3">
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                    <strong>Turno abierto {cajaNumero ? `N° ${cajaNumero}` : ""}</strong>
+                  </span>
+                  {cajaAperturaHora && (
+                    <p className="mt-0.5 text-xs text-emerald-700">
+                      Abierta a las {new Date(cajaAperturaHora).toLocaleTimeString("es-PY", { hour: "2-digit", minute: "2-digit" })}
+                    </p>
+                  )}
+                </div>
+                <Link
+                  href="/ventas"
+                  className="block w-full rounded-lg bg-[#4FAEB2] hover:bg-[#3F8E91] text-white text-sm font-semibold py-2.5 text-center transition-colors"
+                >
+                  Cerrar turno / arqueo ↗
+                </Link>
+                <Link
+                  href="/ventas"
+                  className="block w-full rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-sm font-medium py-2.5 text-center transition-colors"
+                >
+                  Registrar movimiento manual ↗
+                </Link>
+                <p className="text-[11px] text-slate-400 text-center pt-1">
+                  El cierre, arqueo y movimientos se hacen en el panel completo de caja.
+                </p>
+              </div>
+            ) : (
+              // ── No hay caja abierta: form de apertura ─────────────
+              <div className="space-y-3">
+                <p className="text-sm text-slate-500">
+                  Ingresá el efectivo con el que arrancás la caja. Podés dejar 0 si es una caja nueva.
+                </p>
+                {aperturaError && (
+                  <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{aperturaError}</div>
+                )}
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
+                    Monto inicial en efectivo (Gs.)
+                  </label>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    step="1000"
+                    value={aperturaMonto}
+                    onChange={(e) => setAperturaMonto(e.target.value)}
+                    placeholder="Ej: 200000"
+                    autoFocus
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-lg font-semibold focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
+                    Observación <span className="font-normal text-slate-400">(opcional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={aperturaObs}
+                    onChange={(e) => setAperturaObs(e.target.value)}
+                    placeholder="Ej: turno mañana"
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={abrirCajaAhora}
+                  disabled={abriendo || !puntoCajaId}
+                  className="w-full rounded-lg bg-[#4FAEB2] hover:bg-[#3F8E91] disabled:bg-slate-200 disabled:text-slate-500 disabled:cursor-not-allowed text-white text-sm font-semibold py-3 transition-colors shadow-sm active:scale-95"
+                >
+                  {abriendo ? "Abriendo caja…" : "Abrir caja"}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );
