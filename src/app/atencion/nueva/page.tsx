@@ -317,14 +317,19 @@ export default function NuevaAtencionPage() {
   // ── Render ────────────────────────────────────────────────────────────
   return (
     <div className="space-y-4 max-w-7xl">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Nueva atención</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Caja</h1>
           <p className="text-sm text-slate-500 mt-0.5">
             Cargá lo que el cliente <span className="font-medium text-slate-700">trae</span> y lo que <span className="font-medium text-slate-700">lleva</span>. El sistema calcula el resto.
           </p>
         </div>
-        <Link href="/ventas" className="text-sm text-slate-400 hover:text-slate-700">← Ventas</Link>
+        <Link
+          href="/ventas"
+          className="shrink-0 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+        >
+          Historial ↗
+        </Link>
       </div>
 
       {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}

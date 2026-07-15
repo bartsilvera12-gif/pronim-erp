@@ -145,10 +145,7 @@ const MENU_STRUCTURE_FULL: MenuItem[] = [
     href: "/dashboard/monitoreo",
     icon: Activity,
   },
-  { key: "atencion", slug: "atencion", label: "Caja", href: "/atencion/nueva", icon: ShoppingCart, children: [
-    { label: "Nueva atención", href: "/atencion/nueva" },
-    { label: "Historial de ventas", href: "/ventas" },
-  ]},
+  { key: "atencion", slug: "atencion", label: "Caja", href: "/atencion/nueva", icon: ShoppingCart },
   { key: "inventario", slug: "inventario", label: "Inventario", href: "/inventario", icon: Package, children: [
     { label: "Productos", href: "/inventario" },
     { label: "Movimientos", href: "/inventario/movimientos" },
