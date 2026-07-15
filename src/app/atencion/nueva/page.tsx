@@ -89,12 +89,30 @@ export default function NuevaAtencionPage() {
   const [puntoCajaId, setPuntoCajaId] = useState<string | null>(null);
   const [puntoCajaNombre, setPuntoCajaNombre] = useState<string | null>(null);
 
-  // ── Modal de caja (abrir / cerrar / info) ─────────────────────────────
-  const [cajaModalOpen, setCajaModalOpen] = useState(false);
+  // ── Estado del banner de caja + monto inicial visible ─────────────────
+  const [cajaMontoApertura, setCajaMontoApertura] = useState<number>(0);
+
+  // ── Modales: apertura / cierre / movimiento ───────────────────────────
+  const [cajaModalOpen, setCajaModalOpen] = useState<null | "abrir" | "cerrar" | "mov">(null);
   const [aperturaMonto, setAperturaMonto] = useState<string>("");
   const [aperturaObs, setAperturaObs] = useState<string>("");
   const [abriendo, setAbriendo] = useState(false);
   const [aperturaError, setAperturaError] = useState<string | null>(null);
+
+  // Cierre
+  const [cierreContado, setCierreContado] = useState<string>("");
+  const [cierreObs, setCierreObs] = useState<string>("");
+  const [cerrando, setCerrando] = useState(false);
+  const [cierreError, setCierreError] = useState<string | null>(null);
+
+  // Movimiento manual
+  const [movTipo, setMovTipo] = useState<"ingreso" | "egreso" | "retiro" | "ajuste">("ingreso");
+  const [movConcepto, setMovConcepto] = useState<string>("");
+  const [movMonto, setMovMonto] = useState<string>("");
+  const [movMedio, setMovMedio] = useState<"efectivo" | "tarjeta" | "transferencia" | "otro">("efectivo");
+  const [movObs, setMovObs] = useState<string>("");
+  const [movEnviando, setMovEnviando] = useState(false);
+  const [movError, setMovError] = useState<string | null>(null);
 
   // Detecta caja abierta y primer punto disponible en la sucursal actual.
   // Silencioso: solo guarda ids, no bloquea la pantalla si no hay nada.
@@ -106,11 +124,12 @@ export default function NuevaAtencionPage() {
       ]);
       const jc = await rc.json().catch(() => ({}));
       const jp = await rp.json().catch(() => ({}));
-      const cajas = (jc?.data?.cajas as { id: string; numero_caja?: number; fecha_apertura?: string }[] | undefined) ?? [];
-      const c0 = cajas[0] ?? (jc?.data?.caja as { id: string; numero_caja?: number; fecha_apertura?: string } | null | undefined) ?? null;
+      const cajas = (jc?.data?.cajas as { id: string; numero_caja?: number; fecha_apertura?: string; monto_apertura?: number | string }[] | undefined) ?? [];
+      const c0 = cajas[0] ?? (jc?.data?.caja as { id: string; numero_caja?: number; fecha_apertura?: string; monto_apertura?: number | string } | null | undefined) ?? null;
       setCajaAbiertaId(c0?.id ?? null);
       setCajaNumero(c0?.numero_caja ?? null);
       setCajaAperturaHora(c0?.fecha_apertura ?? null);
+      setCajaMontoApertura(Number(c0?.monto_apertura ?? 0) || 0);
       const puntos = (jp?.data?.puntos as { id: string; nombre?: string }[] | undefined) ?? [];
       setPuntoCajaId(puntos[0]?.id ?? null);
       setPuntoCajaNombre(puntos[0]?.nombre ?? null);
@@ -149,12 +168,84 @@ export default function NuevaAtencionPage() {
       }
       setAperturaMonto("");
       setAperturaObs("");
-      setCajaModalOpen(false);
+      setCajaModalOpen(null);
       await refrescarCajaEstado();
     } catch (e) {
       setAperturaError(e instanceof Error ? e.message : "Error al abrir la caja.");
     } finally {
       setAbriendo(false);
+    }
+  }
+
+  async function cerrarCajaAhora() {
+    setCierreError(null);
+    if (!cajaAbiertaId) {
+      setCierreError("No hay caja abierta.");
+      return;
+    }
+    const contado = Number(cierreContado);
+    if (!Number.isFinite(contado) || contado < 0) {
+      setCierreError("Ingresá el efectivo contado (0 o más).");
+      return;
+    }
+    setCerrando(true);
+    try {
+      const r = await fetchWithSupabaseSession("/api/caja/cerrar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          caja_id: cajaAbiertaId,
+          monto_cierre_contado: contado,
+          observacion: cierreObs.trim() || null,
+        }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || j?.success === false) {
+        throw new Error(j?.error ?? `No se pudo cerrar la caja (${r.status}).`);
+      }
+      setCierreContado(""); setCierreObs("");
+      setCajaModalOpen(null);
+      await refrescarCajaEstado();
+    } catch (e) {
+      setCierreError(e instanceof Error ? e.message : "Error al cerrar la caja.");
+    } finally {
+      setCerrando(false);
+    }
+  }
+
+  async function registrarMovimientoAhora() {
+    setMovError(null);
+    if (!cajaAbiertaId) {
+      setMovError("Abrí la caja primero.");
+      return;
+    }
+    const monto = Number(movMonto);
+    if (!movConcepto.trim()) { setMovError("El concepto es obligatorio."); return; }
+    if (!Number.isFinite(monto) || monto === 0) { setMovError("Ingresá un monto distinto de 0."); return; }
+    setMovEnviando(true);
+    try {
+      const r = await fetchWithSupabaseSession("/api/caja/movimiento", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          caja_id: cajaAbiertaId,
+          tipo: movTipo,
+          concepto: movConcepto.trim(),
+          monto: Math.abs(monto),
+          medio_pago: movMedio,
+          observacion: movObs.trim() || null,
+        }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || j?.success === false) {
+        throw new Error(j?.error ?? `No se pudo registrar el movimiento (${r.status}).`);
+      }
+      setMovConcepto(""); setMovMonto(""); setMovObs("");
+      setCajaModalOpen(null);
+    } catch (e) {
+      setMovError(e instanceof Error ? e.message : "Error al registrar movimiento.");
+    } finally {
+      setMovEnviando(false);
     }
   }
 
@@ -433,30 +524,67 @@ export default function NuevaAtencionPage() {
             Cargá lo que el cliente <span className="font-medium text-slate-700">trae</span> y lo que <span className="font-medium text-slate-700">lleva</span>. El sistema calcula el resto.
           </p>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            type="button"
-            onClick={() => setCajaModalOpen(true)}
-            className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-semibold transition-colors ${
-              cajaAbiertaId
-                ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                : "border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100"
-            }`}
-            title={cajaAbiertaId ? "Ver / cerrar la caja abierta" : "Abrir caja"}
-          >
-            <span className={`h-1.5 w-1.5 rounded-full ${cajaAbiertaId ? "bg-emerald-500" : "bg-amber-500"}`} />
-            {cajaAbiertaId
-              ? `Caja ${cajaNumero ? `N° ${cajaNumero}` : "abierta"}`
-              : "Abrir caja"}
-          </button>
-          <Link
-            href="/ventas"
-            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
-          >
-            Historial ↗
-          </Link>
-        </div>
+        <Link
+          href="/ventas"
+          className="shrink-0 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+        >
+          Historial ↗
+        </Link>
       </div>
+
+      {/* ─── Banner de estado de caja con acciones directas ─── */}
+      {cajaChecked && (
+        cajaAbiertaId ? (
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2 text-sm text-emerald-900">
+              <span className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-wide text-xs text-emerald-700">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                Caja abierta
+              </span>
+              {cajaNumero ? <span className="text-emerald-700">· N° {cajaNumero}</span> : null}
+              <span className="text-emerald-700">· Monto inicial <strong>Gs. {Math.round(cajaMontoApertura).toLocaleString("es-PY")}</strong></span>
+              {cajaAperturaHora && (
+                <span className="text-emerald-700/80 text-xs">
+                  · desde {new Date(cajaAperturaHora).toLocaleTimeString("es-PY", { hour: "2-digit", minute: "2-digit" })}
+                </span>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => { setMovError(null); setCajaModalOpen("mov"); }}
+                className="rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-sm font-medium text-emerald-800 hover:bg-emerald-100"
+              >
+                Movimiento
+              </button>
+              <button
+                type="button"
+                onClick={() => { setCierreError(null); setCajaModalOpen("cerrar"); }}
+                className="rounded-lg bg-rose-600 hover:bg-rose-700 text-white px-3 py-1.5 text-sm font-semibold"
+              >
+                Cerrar caja
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+            <div className="text-sm text-amber-900">
+              <span className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-wide text-xs text-amber-700">
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                Caja cerrada
+              </span>
+              <span className="ml-2 text-amber-800">Abrí la caja para poder registrar atenciones.</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => { setAperturaError(null); setCajaModalOpen("abrir"); }}
+              className="rounded-lg bg-[#4FAEB2] hover:bg-[#3F8E91] text-white px-4 py-1.5 text-sm font-semibold shadow-sm"
+            >
+              Abrir caja
+            </button>
+          </div>
+        )
+      )}
 
       {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
       {okMsg && <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{okMsg}</div>}
@@ -793,105 +921,145 @@ export default function NuevaAtencionPage() {
       )}
 
       {cajaModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setCajaModalOpen(false)}>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setCajaModalOpen(null)}
+        >
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <div className="mb-3 flex items-start justify-between gap-2">
-              <div>
-                <h3 className="text-base font-semibold text-slate-900">
-                  {cajaAbiertaId ? "Caja abierta" : "Abrir caja"}
-                </h3>
-                {puntoCajaNombre && (
-                  <p className="mt-0.5 text-xs text-slate-500">Punto: <strong>{puntoCajaNombre}</strong></p>
-                )}
-              </div>
-              <button
-                type="button"
-                onClick={() => setCajaModalOpen(false)}
-                className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-                aria-label="Cerrar"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
-                  <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
-                </svg>
-              </button>
-            </div>
-
-            {cajaAbiertaId ? (
-              // ── Caja abierta: info + acciones ─────────────────────
-              <div className="space-y-3">
-                <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-                  <span className="inline-flex items-center gap-1.5">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                    <strong>Turno abierto {cajaNumero ? `N° ${cajaNumero}` : ""}</strong>
-                  </span>
-                  {cajaAperturaHora && (
-                    <p className="mt-0.5 text-xs text-emerald-700">
-                      Abierta a las {new Date(cajaAperturaHora).toLocaleTimeString("es-PY", { hour: "2-digit", minute: "2-digit" })}
-                    </p>
-                  )}
-                </div>
-                <Link
-                  href="/ventas"
-                  className="block w-full rounded-lg bg-[#4FAEB2] hover:bg-[#3F8E91] text-white text-sm font-semibold py-2.5 text-center transition-colors"
-                >
-                  Cerrar turno / arqueo ↗
-                </Link>
-                <Link
-                  href="/ventas"
-                  className="block w-full rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-sm font-medium py-2.5 text-center transition-colors"
-                >
-                  Registrar movimiento manual ↗
-                </Link>
-                <p className="text-[11px] text-slate-400 text-center pt-1">
-                  El cierre, arqueo y movimientos se hacen en el panel completo de caja.
-                </p>
-              </div>
-            ) : (
-              // ── No hay caja abierta: form de apertura ─────────────
-              <div className="space-y-3">
-                <p className="text-sm text-slate-500">
-                  Ingresá el efectivo con el que arrancás la caja. Podés dejar 0 si es una caja nueva.
-                </p>
+            {cajaModalOpen === "abrir" && (
+              <>
+                <h3 className="text-base font-semibold text-slate-900">Abrir caja</h3>
+                {puntoCajaNombre && <p className="mt-0.5 text-xs text-slate-500">Punto: <strong>{puntoCajaNombre}</strong></p>}
                 {aperturaError && (
-                  <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{aperturaError}</div>
+                  <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{aperturaError}</div>
                 )}
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
-                    Monto inicial en efectivo (Gs.)
-                  </label>
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    min={0}
-                    step="1000"
-                    value={aperturaMonto}
-                    onChange={(e) => setAperturaMonto(e.target.value)}
-                    placeholder="Ej: 200000"
-                    autoFocus
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-lg font-semibold focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
-                  />
+                <div className="mt-4 space-y-3">
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Monto inicial en efectivo (Gs.)</label>
+                    <input
+                      type="number" inputMode="numeric" min={0} step="1000"
+                      value={aperturaMonto} onChange={(e) => setAperturaMonto(e.target.value)}
+                      placeholder="Ej: 200000" autoFocus
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-lg font-semibold focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Observación (opcional)</label>
+                    <input
+                      type="text" value={aperturaObs} onChange={(e) => setAperturaObs(e.target.value)}
+                      placeholder="Ej: turno mañana"
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
-                    Observación <span className="font-normal text-slate-400">(opcional)</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={aperturaObs}
-                    onChange={(e) => setAperturaObs(e.target.value)}
-                    placeholder="Ej: turno mañana"
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
-                  />
+                <div className="mt-5 flex gap-2 justify-end">
+                  <button type="button" onClick={() => setCajaModalOpen(null)} disabled={abriendo} className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50">Cancelar</button>
+                  <button type="button" onClick={abrirCajaAhora} disabled={abriendo || !puntoCajaId} className="rounded-lg bg-[#4FAEB2] hover:bg-[#3F8E91] disabled:bg-slate-200 disabled:text-slate-500 disabled:cursor-not-allowed text-white text-sm font-semibold px-4 py-2 shadow-sm">
+                    {abriendo ? "Abriendo…" : "Abrir caja"}
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={abrirCajaAhora}
-                  disabled={abriendo || !puntoCajaId}
-                  className="w-full rounded-lg bg-[#4FAEB2] hover:bg-[#3F8E91] disabled:bg-slate-200 disabled:text-slate-500 disabled:cursor-not-allowed text-white text-sm font-semibold py-3 transition-colors shadow-sm active:scale-95"
-                >
-                  {abriendo ? "Abriendo caja…" : "Abrir caja"}
-                </button>
-              </div>
+              </>
+            )}
+
+            {cajaModalOpen === "cerrar" && (
+              <>
+                <h3 className="text-base font-semibold text-slate-900">Cerrar caja</h3>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  Contá el efectivo físico que hay en la caja e ingresalo. El sistema calcula el faltante o sobrante contra lo esperado.
+                </p>
+                {cierreError && (
+                  <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{cierreError}</div>
+                )}
+                <div className="mt-4 space-y-3">
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Efectivo contado (Gs.)</label>
+                    <input
+                      type="number" inputMode="numeric" min={0} step="1000"
+                      value={cierreContado} onChange={(e) => setCierreContado(e.target.value)}
+                      placeholder="Ej: 350000" autoFocus
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-lg font-semibold focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Observación (opcional)</label>
+                    <input
+                      type="text" value={cierreObs} onChange={(e) => setCierreObs(e.target.value)}
+                      placeholder="Ej: cierre turno mañana"
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
+                    />
+                  </div>
+                </div>
+                <div className="mt-5 flex gap-2 justify-end">
+                  <button type="button" onClick={() => setCajaModalOpen(null)} disabled={cerrando} className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50">Cancelar</button>
+                  <button type="button" onClick={cerrarCajaAhora} disabled={cerrando} className="rounded-lg bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white text-sm font-semibold px-4 py-2 shadow-sm">
+                    {cerrando ? "Cerrando…" : "Cerrar caja"}
+                  </button>
+                </div>
+              </>
+            )}
+
+            {cajaModalOpen === "mov" && (
+              <>
+                <h3 className="text-base font-semibold text-slate-900">Movimiento manual</h3>
+                <p className="mt-0.5 text-xs text-slate-500">Ingreso/egreso de plata en la caja fuera de una venta (ej. pagar un delivery, retirar cambio).</p>
+                {movError && (
+                  <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{movError}</div>
+                )}
+                <div className="mt-4 space-y-3">
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {(["ingreso", "egreso", "retiro", "ajuste"] as const).map((t) => (
+                      <button key={t} type="button" onClick={() => setMovTipo(t)}
+                        className={`rounded-lg border px-2 py-2 text-xs font-medium capitalize transition-colors ${
+                          movTipo === t
+                            ? "border-[#4FAEB2] bg-[#4FAEB2]/10 text-[#3F8E91] ring-2 ring-[#4FAEB2]/20"
+                            : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
+                        }`}>{t}</button>
+                    ))}
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Concepto *</label>
+                    <input
+                      type="text" value={movConcepto} onChange={(e) => setMovConcepto(e.target.value)}
+                      placeholder="Ej: pago delivery"
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Monto (Gs.) *</label>
+                      <input
+                        type="number" inputMode="numeric" min={0} step="1000"
+                        value={movMonto} onChange={(e) => setMovMonto(e.target.value)}
+                        placeholder="Ej: 20000"
+                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Método</label>
+                      <select value={movMedio} onChange={(e) => setMovMedio(e.target.value as "efectivo"|"tarjeta"|"transferencia"|"otro")}
+                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]">
+                        <option value="efectivo">Efectivo</option>
+                        <option value="tarjeta">Tarjeta</option>
+                        <option value="transferencia">Transferencia</option>
+                        <option value="otro">Otro</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Observación (opcional)</label>
+                    <input
+                      type="text" value={movObs} onChange={(e) => setMovObs(e.target.value)}
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
+                    />
+                  </div>
+                </div>
+                <div className="mt-5 flex gap-2 justify-end">
+                  <button type="button" onClick={() => setCajaModalOpen(null)} disabled={movEnviando} className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50">Cancelar</button>
+                  <button type="button" onClick={registrarMovimientoAhora} disabled={movEnviando} className="rounded-lg bg-[#4FAEB2] hover:bg-[#3F8E91] disabled:opacity-50 text-white text-sm font-semibold px-4 py-2 shadow-sm">
+                    {movEnviando ? "Registrando…" : "Registrar"}
+                  </button>
+                </div>
+              </>
             )}
           </div>
         </div>
