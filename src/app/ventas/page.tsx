@@ -264,7 +264,7 @@ export default function VentasPage() {
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-xl font-semibold">Órdenes de venta</h2>
           <Link
-            href="/ventas/nueva"
+            href="/atencion/nueva"
             className="bg-[#4FAEB2] hover:bg-[#3F8E91] text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm"
           >
             + Nueva venta
@@ -439,7 +439,7 @@ export default function VentasPage() {
       </div>
 
       {/* FAB mobile: acceso 1-tap a "+ Nueva venta" desde cualquier scroll position */}
-      <MobileFab href="/ventas/nueva" label="Nueva venta" />
+      <MobileFab href="/atencion/nueva" label="Nueva venta" />
     </div>
   );
 }

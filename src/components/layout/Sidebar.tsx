@@ -145,8 +145,10 @@ const MENU_STRUCTURE_FULL: MenuItem[] = [
     href: "/dashboard/monitoreo",
     icon: Activity,
   },
-  { key: "atencion", slug: "atencion", label: "Nueva atención", href: "/atencion/nueva", icon: ShoppingCart },
-  { key: "ventas", slug: "ventas", label: "Caja (histórico)", href: "/ventas", icon: ShoppingCart },
+  { key: "atencion", slug: "atencion", label: "Caja", href: "/atencion/nueva", icon: ShoppingCart, children: [
+    { label: "Nueva atención", href: "/atencion/nueva" },
+    { label: "Historial de ventas", href: "/ventas" },
+  ]},
   { key: "inventario", slug: "inventario", label: "Inventario", href: "/inventario", icon: Package, children: [
     { label: "Productos", href: "/inventario" },
     { label: "Movimientos", href: "/inventario/movimientos" },
@@ -246,7 +248,7 @@ const MENU_FAMILIES: { id: string; title: string; itemKeys: string[] }[] = [
   {
     id: "comercial",
     title: "Comercial",
-    itemKeys: ["atencion", "ventas", "clientes"],
+    itemKeys: ["atencion", "clientes"],
   },
   { id: "finanzas", title: "Finanzas", itemKeys: ["gastos", "reportes"] },
   { id: "operaciones", title: "Operaciones", itemKeys: ["inventario", "compras"] },

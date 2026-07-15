@@ -439,7 +439,7 @@ export default function MobileDashboard({
           Acciones rápidas
         </p>
         <div className="grid grid-cols-2 gap-3">
-          <QuickAction href="/ventas/nueva" icon={ShoppingCart} label="Nueva venta" color="emerald" />
+          <QuickAction href="/atencion/nueva" icon={ShoppingCart} label="Nueva venta" color="emerald" />
           <QuickAction href="/dashboard/proyectos/nuevo" icon={Receipt} label="Nuevo pedido" color="sky" />
           <QuickAction href="/compras/nueva" icon={Package} label="Nueva compra" color="violet" />
           <QuickAction href="/clientes/nuevo" icon={Users} label="Nuevo cliente" color="amber" />
@@ -564,7 +564,7 @@ export default function MobileDashboard({
             No hay ventas en {PERIODO_LABELS[periodo].toLowerCase()}
           </p>
           <Link
-            href="/ventas/nueva"
+            href="/atencion/nueva"
             className="inline-flex items-center gap-1 mt-2 text-sm font-medium text-[#4FAEB2] active:underline"
           >
             <Plus className="h-4 w-4" aria-hidden />
