@@ -779,7 +779,7 @@ export default function InventarioPage() {
                     <td className="py-4 pl-4 text-center">
                       <div className="inline-flex items-center justify-center gap-2">
                         <Link
-                          href={`/inventario/${p.id}/editar`}
+                          href={p.es_franja_precio ? "/admin/franjas" : `/inventario/${p.id}/editar`}
                           className="inline-flex items-center justify-center h-9 rounded-md border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 hover:border-slate-300 hover:bg-slate-50 transition-colors"
                         >
                           Editar

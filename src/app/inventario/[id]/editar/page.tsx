@@ -204,6 +204,15 @@ export default function EditarProductoPage() {
     let cancelled = false;
     getProducto(id).then((p) => {
       if (cancelled || !p) return;
+      // Las franjas de precio son productos virtuales del modelo Pronim:
+      // se administran (crear / editar precio / activar / borrar) desde
+      // /admin/franjas. Editar acá manda al PATCH regular de productos
+      // que rompe reglas del modelo (nombre/SKU se regeneran a partir
+      // del precio y hay unique constraint por precio activo).
+      if (p.es_franja_precio === true) {
+        router.replace("/admin/franjas");
+        return;
+      }
       const costo = p.costo_promedio;
       const precio = p.precio_venta;
       const markup = costo > 0 ? ((precio - costo) / costo) * 100 : 0;
