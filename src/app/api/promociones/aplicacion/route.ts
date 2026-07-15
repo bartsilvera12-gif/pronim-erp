@@ -25,6 +25,12 @@ export async function POST(request: NextRequest) {
     descuento?: number;
     cashback?: number;
     cupon_codigo?: string | null;
+    /**
+     * Origen del crédito a acreditar cuando cashback > 0. Default 'cashback';
+     * también se usa 'descuento_promo' cuando el frontend materializa el
+     * descuento como crédito para pasarlo por la venta.
+     */
+    origen?: "cashback" | "descuento_promo";
   };
   try { body = await request.json(); } catch {
     return NextResponse.json(errorResponse("JSON inválido."), { status: 400 });
@@ -38,6 +44,10 @@ export async function POST(request: NextRequest) {
   const ventaId = typeof body.venta_id === "string" ? body.venta_id : null;
   const clienteId = typeof body.cliente_id === "string" ? body.cliente_id : null;
   const cuponUsado = body.cupon_codigo ? String(body.cupon_codigo).toUpperCase() : null;
+  const origen = body.origen === "descuento_promo" ? "descuento_promo" : "cashback";
+  const observacion = origen === "descuento_promo"
+    ? "Descuento por promoción (aplicado en la venta)"
+    : "Cashback aplicado por promoción";
 
   try {
     // 1) Audit row
@@ -68,11 +78,11 @@ export async function POST(request: NextRequest) {
           cliente_id: clienteId,
           tipo: "ENTRADA",
           monto: cashback,
-          origen: "cashback",
+          origen,
           referencia_id: ventaId,
           referencia_tipo: "venta",
           referencia_numero: null,
-          observaciones: "Cashback aplicado por promoción",
+          observaciones: observacion,
           created_by: ctx.auth.usuarioCatalogId ?? null,
           usuario_nombre: ctx.auth.nombre ?? null,
         });

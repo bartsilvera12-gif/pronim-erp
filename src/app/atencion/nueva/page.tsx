@@ -358,7 +358,7 @@ export default function NuevaAtencionPage() {
     return Math.max(0, Math.min(n, creditoMaxAplicable));
   }, [aplicarCredito, creditoMaxAplicable]);
 
-  const aCobrar = Math.max(0, totalLleva - creditoAplicadoNum);
+  const aCobrar = Math.max(0, totalLlevaConDescuento - creditoAplicadoNum);
   const creditoRestante = Math.max(0, creditoTotalDisponible - creditoAplicadoNum);
 
   // Monto recibido / vuelto — solo relevante cuando hay que cobrar en efectivo.
@@ -424,7 +424,64 @@ export default function NuevaAtencionPage() {
     setTrae([]); setLleva([]);
     setAplicarCredito(""); setObservaciones("");
     setMontoRecibido(""); setReferenciaCobro("");
+    setPromoAplicada(null); setCuponInput(""); setPromoError(null);
     setError(null);
+  }
+
+  async function aplicarPromocion(cuponManual: string | null) {
+    setPromoError(null);
+    if (lleva.length === 0) {
+      setPromoError("Cargá primero lo que el cliente lleva.");
+      return;
+    }
+    setPromoBuscando(true);
+    try {
+      const payload = {
+        cliente_id: cliente?.id ?? null,
+        cupon: cuponManual,
+        items: lleva.map((l) => ({
+          franja_id: l.franja_id,
+          cantidad: l.cantidad,
+          precio_unitario: l.precio_unitario,
+        })),
+      };
+      const r = await fetchWithSupabaseSession("/api/promociones/aplicar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || j?.success === false) {
+        throw new Error(j?.error ?? "No se pudo aplicar la promoción.");
+      }
+      const desc = Number(j?.data?.descuento ?? 0);
+      const cash = Number(j?.data?.cashback ?? 0);
+      const promo = j?.data?.promocion;
+      if (!promo || (desc === 0 && cash === 0)) {
+        setPromoAplicada(null);
+        setPromoError(cuponManual ? `El cupón "${cuponManual}" no aplica.` : "No hay promociones automáticas aplicables.");
+        return;
+      }
+      setPromoAplicada({
+        id: promo.id,
+        nombre: promo.nombre,
+        tipo: promo.tipo,
+        cupon_codigo: promo.cupon_codigo ?? null,
+        descuento: desc,
+        cashback: cash,
+      });
+    } catch (e) {
+      setPromoError(e instanceof Error ? e.message : "Error al aplicar promoción.");
+      setPromoAplicada(null);
+    } finally {
+      setPromoBuscando(false);
+    }
+  }
+
+  function quitarPromocion() {
+    setPromoAplicada(null);
+    setCuponInput("");
+    setPromoError(null);
   }
 
   // ── Confirmar ─────────────────────────────────────────────────────────
@@ -486,11 +543,31 @@ export default function NuevaAtencionPage() {
       // ── 2. Venta (si lleva algo) ───────────────────────────────────
       if (lleva.length > 0) {
         const total = totalLleva;
-        // Crédito a aplicar en la venta: lo que la cajera decidió (o el
-        // máximo si dejó el input vacío). Como la recepción se ejecutó
-        // primero, el saldo del cliente ya incluye el nuevo crédito y
-        // el consumo FIFO server-side toma primero los lotes viejos.
-        const creditoUsado = creditoAplicadoNum;
+        // Si hay descuento por promoción, lo instrumentamos como un crédito
+        // adicional del cliente que se aplica en la venta. Así no rompemos
+        // el backend transaccional de ventas (que valida totales contra
+        // items) y queda trazable en el historial de crédito del cliente.
+        if (promoAplicada && promoAplicada.descuento > 0) {
+          try {
+            await fetchWithSupabaseSession("/api/promociones/aplicacion", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                promocion_id: promoAplicada.id,
+                cliente_id: cliente.id,
+                descuento: 0,           // la aplicación real se persiste luego con venta_id
+                cashback: promoAplicada.descuento,   // reutilizamos el mecanismo de crédito
+                origen: "descuento_promo",           // origen distinto para el ledger del cliente
+                cupon_codigo: promoAplicada.cupon_codigo,
+              }),
+            });
+          } catch (e) {
+            console.error("[atencion] crear crédito por descuento", e);
+          }
+        }
+        // Crédito a aplicar en la venta: lo que la cajera decidió + el
+        // descuento de promoción convertido a crédito recién creado.
+        const creditoUsado = creditoAplicadoNum + (promoAplicada?.descuento ?? 0);
         const efectivoNeeded = Math.max(0, total - creditoUsado);
         const pagoDetalle = efectivoNeeded > 0
           ? [{
@@ -525,6 +602,31 @@ export default function NuevaAtencionPage() {
         const jv = await rv.json().catch(() => ({}));
         if (!rv.ok || jv?.success === false) {
           throw new Error(jv?.error ?? `No se pudo registrar la venta (${rv.status}).`);
+        }
+
+        // Si aplicaba una promoción, registramos la aplicación (audit) y —
+        // si corresponde — acreditamos el cashback al cliente. Best-effort:
+        // fallar acá no revierte la venta, solo avisa al usuario.
+        if (promoAplicada && (promoAplicada.descuento > 0 || promoAplicada.cashback > 0)) {
+          try {
+            const ventaId = (jv?.data?.venta?.id as string | undefined)
+              ?? (jv?.data?.ventaId as string | undefined)
+              ?? null;
+            await fetchWithSupabaseSession("/api/promociones/aplicacion", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                promocion_id: promoAplicada.id,
+                venta_id: ventaId,
+                cliente_id: cliente.id,
+                descuento: promoAplicada.descuento,
+                cashback: promoAplicada.cashback,
+                cupon_codigo: promoAplicada.cupon_codigo,
+              }),
+            });
+          } catch (e) {
+            console.error("[atencion] promocion aplicacion", e);
+          }
         }
       }
 
@@ -770,6 +872,47 @@ export default function NuevaAtencionPage() {
                 <span className="font-bold text-slate-900 sm:block">{fmtGs(creditoTotalDisponible)}</span>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Promoción / cupón — solo cuando el cliente lleva algo */}
+        {totalLleva > 0 && (
+          <div className="rounded-lg border border-fuchsia-200 bg-fuchsia-50/40 p-3 space-y-2">
+            <p className="text-[11px] uppercase font-semibold text-fuchsia-700">Promoción / cupón</p>
+            {promoAplicada ? (
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="text-sm text-fuchsia-900">
+                  <strong>{promoAplicada.nombre}</strong>
+                  {promoAplicada.cupon_codigo && <span className="ml-2 font-mono text-xs text-fuchsia-700">({promoAplicada.cupon_codigo})</span>}
+                  <div className="text-xs text-fuchsia-800 mt-0.5">
+                    {promoAplicada.descuento > 0 && <>Descuento aplicado: <strong>{fmtGs(promoAplicada.descuento)}</strong>. </>}
+                    {promoAplicada.cashback > 0 && <>Cashback al confirmar: <strong>{fmtGs(promoAplicada.cashback)}</strong> a favor.</>}
+                  </div>
+                </div>
+                <button type="button" onClick={quitarPromocion} className="rounded-lg border border-fuchsia-300 bg-white px-2 py-1 text-xs text-fuchsia-700 hover:bg-fuchsia-50">
+                  Quitar
+                </button>
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  type="text"
+                  value={cuponInput}
+                  onChange={(e) => setCuponInput(e.target.value.toUpperCase())}
+                  placeholder="Código de cupón (opcional)"
+                  className="flex-1 min-w-[140px] rounded-lg border border-fuchsia-200 px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-fuchsia-400"
+                />
+                <button
+                  type="button"
+                  onClick={() => aplicarPromocion(cuponInput.trim() || null)}
+                  disabled={promoBuscando}
+                  className="rounded-lg bg-fuchsia-600 hover:bg-fuchsia-700 disabled:opacity-50 text-white text-xs font-semibold px-3 py-1.5"
+                >
+                  {promoBuscando ? "Buscando…" : cuponInput.trim() ? "Aplicar cupón" : "Buscar automática"}
+                </button>
+              </div>
+            )}
+            {promoError && <p className="text-xs text-red-700">{promoError}</p>}
           </div>
         )}
 
