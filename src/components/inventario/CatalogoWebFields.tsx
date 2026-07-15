@@ -155,26 +155,9 @@ export function CatalogoWebFields({ value, onChange, nombre, precioVenta, marcas
         </p>
       </div>
 
-      {/* Toggles */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={value.visible_web}
-            onChange={(e) => set("visible_web", e.target.checked)}
-            className="h-4 w-4"
-          />
-          <span>Visible en la web</span>
-        </label>
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={value.destacado_web}
-            onChange={(e) => set("destacado_web", e.target.checked)}
-            className="h-4 w-4"
-          />
-          <span>Destacado (bestseller)</span>
-        </label>
+      {/* Toggles — "Visible en la web" y "Destacado" quedan ocultos en Pronim
+          (el flag sigue persistiendo con su default). */}
+      <div className="grid grid-cols-1 gap-4 mb-6">
         <label className="flex items-center gap-2 text-sm">
           <input
             type="checkbox"
