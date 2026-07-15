@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
+import MetasWidget from "@/components/metas/MetasWidget";
 import { getConfig } from "@/lib/config/storage";
 import { getUsuarios } from "@/lib/usuarios/storage";
 import { getUsuariosActivosEmpresa } from "@/lib/usuarios/empresa";
@@ -938,6 +939,10 @@ function DashComercial({
 
   return (
     <div className="space-y-8">
+      {/* Widget de Metas de venta por sucursal — se auto-oculta si no
+          hay metas configuradas o si la migración no está aplicada. */}
+      <MetasWidget />
+
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <KpiCard
           icon={<Icon.Target className="h-4 w-4" />}

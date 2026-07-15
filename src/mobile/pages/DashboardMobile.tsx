@@ -17,6 +17,7 @@ import {
   type DashboardMobileSummary,
 } from "@/shared/hooks/useDashboardMobileSummary";
 import { useUsuarioActual } from "@/shared/hooks/useUsuarioActual";
+import MetasWidget from "@/components/metas/MetasWidget";
 
 /**
  * Dashboard mobile — versión LIVIANA.
@@ -51,6 +52,9 @@ export default function DashboardMobile({
         <p className="text-xs uppercase tracking-wider text-slate-400">{fechaHoy}</p>
         <h1 className="mt-0.5 text-2xl font-bold tracking-tight text-slate-900">{greeting}</h1>
       </header>
+
+      {/* Metas por sucursal — se auto-oculta si no hay meta configurada */}
+      <MetasWidget />
 
       {/* KPIs en grid 2x2 */}
       <section aria-label="Resumen del mes">
