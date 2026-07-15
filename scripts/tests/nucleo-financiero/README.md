@@ -37,10 +37,14 @@ En la raíz del proyecto, `.env.local`:
 
 ```env
 TEST_DB_URL=postgresql://postgres:test@localhost:5433/pronim_test
+ALLOW_DESTRUCTIVE_TEST_DB=true
+TEST_DB_CONFIRM=DROP_PRONIMERP
 ```
 
 **NO usar `SUPABASE_DB_URL` de producción.** El runner rechaza correr si
-`TEST_DB_URL` no está definida.
+`TEST_DB_URL` no está definida o si faltan las dos confirmaciones explícitas:
+`ALLOW_DESTRUCTIVE_TEST_DB=true` y `TEST_DB_CONFIRM=DROP_PRONIMERP`. Al
+iniciar, el runner elimina y reconstruye el schema `pronimerp`.
 
 ### 3. Correr
 

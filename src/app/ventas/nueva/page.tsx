@@ -1177,9 +1177,12 @@ export default function NuevaVentaPage() {
                     </div>
                   </div>
 
-                  {tipoVenta === "CONTADO" && (
+                  {(tipoVenta === "CONTADO" ||
+                    (tipoVenta === "CREDITO" && (parseFloat(entregaInicial) || 0) > 0)) && (
                     <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-2.5">
-                      <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Cobro</p>
+                      <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
+                        {tipoVenta === "CREDITO" ? "Medio de entrega inicial" : "Cobro"}
+                      </p>
                       <div className="grid grid-cols-3 gap-1.5">
                         {([
                           { v: "efectivo", label: "Efectivo" },

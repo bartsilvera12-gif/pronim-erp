@@ -205,7 +205,6 @@ export async function getCajaDetallePg(
     .select("id, numero_control, fecha, metodo_pago, total")
     .eq("empresa_id", empresaId)
     .eq("caja_id", cajaId)
-    .neq("estado", "anulada")
     .order("fecha", { ascending: true });
   if (vQ.error) throw new Error(vQ.error.message);
   const rows = (vQ.data ?? []) as unknown as Array<{
@@ -359,15 +358,14 @@ async function attachUsuarioNombres(sb: Sb, resumenes: CajaResumen[]): Promise<v
  *   + ajustes manuales efectivo (signados).
  */
 async function computeResumen(sb: Sb, empresaId: string, caja: Caja): Promise<CajaResumen> {
-  // ── total_vendido: SUMA de ventas.total cuya caja_id = esta caja ──
-  // Incluye ventas a crédito sin pago inmediato (sin filas en pagos_detalle),
-  // pero excluye anuladas. La atribución al turno se hace vía ventas.caja_id.
+  // ── total_vendido histórico: ventas originadas en esta caja ─────────
+  // Una anulación posterior no reescribe el cierre original: la reversión
+  // queda registrada en la caja donde se ejecutó.
   const vTotQ = await sb
     .from("ventas")
     .select("total")
     .eq("empresa_id", empresaId)
-    .eq("caja_id", caja.id)
-    .neq("estado", "anulada");
+    .eq("caja_id", caja.id);
   if (vTotQ.error) throw new Error(vTotQ.error.message);
   let totalVendido = 0;
   const cantidadVentas = (vTotQ.data ?? []).length;
@@ -376,12 +374,12 @@ async function computeResumen(sb: Sb, empresaId: string, caja: Caja): Promise<Ca
   }
   const ventas = { length: cantidadVentas };
 
-  // ── Totales por método desde ventas_pagos_detalle ─────────────────
-  // Aplicamos signo por `direccion`: 'ingreso' suma, 'egreso' (reversas)
-  // resta. Solo se cuentan pagos de ventas NO anuladas.
+  // ── Totales por método desde el libro append-only de pagos ─────────
+  // Cada fila impacta exclusivamente en su caja. Nunca se elimina el efecto
+  // histórico del pago original por consultar el estado actual de la venta.
   const vPagQ = await sb
     .from("ventas_pagos_detalle")
-    .select("metodo_pago, monto, direccion, venta:venta_id(estado)")
+    .select("metodo_pago, monto, direccion")
     .eq("empresa_id", empresaId)
     .eq("caja_id", caja.id);
   if (vPagQ.error) throw new Error(vPagQ.error.message);
@@ -389,21 +387,12 @@ async function computeResumen(sb: Sb, empresaId: string, caja: Caja): Promise<Ca
     metodo_pago: string;
     monto: number | string;
     direccion: "ingreso" | "egreso" | null;
-    venta: { estado: string } | null;
   }>;
 
   let totalEfectivo = 0;
   let totalTarjeta = 0;
   let totalTransferencia = 0;
   for (const pg of vPagos) {
-    // Nota: las reversiones (direccion='egreso' con reversa_de_id) se aplican
-    // a la caja actual donde se anula. Se cuentan igual acá (afectan al
-    // resumen del turno actual, no del histórico).
-    if (pg.venta?.estado === "anulada" && (pg.direccion ?? "ingreso") === "ingreso") {
-      // Pago ORIGINAL de venta anulada: NO se descuenta de esta caja
-      // (la reversión se registró en otra fila, en la caja donde se anuló).
-      continue;
-    }
     const signo = (pg.direccion ?? "ingreso") === "ingreso" ? 1 : -1;
     const m = Number(pg.monto) * signo;
     switch (pg.metodo_pago) {
@@ -422,7 +411,7 @@ async function computeResumen(sb: Sb, empresaId: string, caja: Caja): Promise<Ca
   try {
     const rPagQ = await sb
       .from("cliente_recepciones_pagos")
-      .select("monto, direccion, recepcion:recepcion_id(estado)")
+      .select("monto, direccion")
       .eq("empresa_id", empresaId)
       .eq("caja_id", caja.id)
       .eq("metodo", "efectivo");
@@ -430,14 +419,8 @@ async function computeResumen(sb: Sb, empresaId: string, caja: Caja): Promise<Ca
       const rPagos = (rPagQ.data ?? []) as unknown as Array<{
         monto: number | string;
         direccion: "ingreso" | "egreso" | null;
-        recepcion: { estado: string } | null;
       }>;
       for (const pg of rPagos) {
-        // Pago original de recepción anulada: NO se descuenta acá
-        // (la reversión ya está en otra fila con direccion opuesta).
-        if (pg.recepcion?.estado === "anulada" && (pg.direccion ?? "egreso") === "egreso") {
-          continue;
-        }
         // egreso = sale de caja → resta al efectivo (positivo en la métrica)
         // ingreso = reversión → resta al egreso acumulado
         const dir = pg.direccion ?? "egreso";

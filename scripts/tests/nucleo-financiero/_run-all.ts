@@ -70,6 +70,19 @@ async function loadServerFns() {
 // Pool para queries directas (setup/cleanup)
 const localPool = new Pool({ connectionString: TEST_DB_URL });
 
+async function assertDisposableTestDatabase(): Promise<void> {
+  if (process.env.ALLOW_DESTRUCTIVE_TEST_DB !== "true") {
+    throw new Error(
+      "Falta ALLOW_DESTRUCTIVE_TEST_DB=true. El runner elimina y reconstruye el schema pronimerp.",
+    );
+  }
+  if (process.env.TEST_DB_CONFIRM !== "DROP_PRONIMERP") {
+    throw new Error(
+      "Falta TEST_DB_CONFIRM=DROP_PRONIMERP. Confirmá que TEST_DB_URL apunta a una base descartable.",
+    );
+  }
+}
+
 // ═════════════════════════════════════════════════════════════════════
 // Bootstrap: dropea schema + aplica todas las migraciones desde cero
 // ═════════════════════════════════════════════════════════════════════
@@ -599,10 +612,11 @@ async function run(name: string, fn: (ctx: TestCtx) => Promise<void>) {
 }
 
 async function main() {
-  console.log(`[bootstrap] TEST_DB_URL=${TEST_DB_URL?.slice(0, 40)}...`);
+  console.log("[bootstrap] validando base descartable y reconstruyendo pronimerp...");
+  await assertDisposableTestDatabase();
+  await dropSchemaAndReapply();
 
-  // Test K primero: verifica que migraciones aplican desde cero.
-  // NOTA: no dropea el schema (destructivo). Solo verifica estructura actual.
+  // Test K primero: verifica la estructura obtenida de migraciones reales.
   await loadServerFns();
   try {
     await testK_reconstruccionSchema();
