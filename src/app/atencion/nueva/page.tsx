@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
+import MontoInput from "@/components/ui/MontoInput";
 
 // ═══════════════════════════════════════════════════════════════════════
 // POS UNIFICADO — "Nueva atención"
@@ -984,13 +985,11 @@ export default function NuevaAtencionPage() {
                 </button>
               </div>
               <label className="block text-[11px] text-slate-400 mb-1">O ingresá un monto exacto:</label>
-              <input
-                type="number"
-                min={0}
-                max={creditoMaxAplicable}
-                value={aplicarCredito === "" ? "" : aplicarCredito}
-                onChange={(e) => setAplicarCredito(e.target.value)}
-                placeholder={`Ej: ${Math.min(creditoMaxAplicable, 50000)}`}
+              <MontoInput
+                value={aplicarCredito}
+                onChange={(n) => setAplicarCredito(n === 0 ? "0" : String(n))}
+                placeholder={`Ej: ${Math.min(creditoMaxAplicable, 50000).toLocaleString("es-PY")}`}
+                decimals={false}
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
               />
               <p className="text-[11px] text-slate-500 mt-1">
@@ -1025,14 +1024,11 @@ export default function NuevaAtencionPage() {
                     <label className="block text-[11px] uppercase font-semibold text-slate-500 mt-1 mb-1">
                       Recibido del cliente
                     </label>
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      min={0}
-                      step="1000"
+                    <MontoInput
                       value={montoRecibido}
-                      onChange={(e) => setMontoRecibido(e.target.value)}
-                      placeholder={`Ej: ${Math.ceil(aCobrar / 10000) * 10000}`}
+                      onChange={(n) => setMontoRecibido(n === 0 ? "0" : String(n))}
+                      placeholder={`Ej: ${(Math.ceil(aCobrar / 10000) * 10000).toLocaleString("es-PY")}`}
+                      decimals={false}
                       className="w-full rounded-lg border border-slate-200 px-3 py-2 text-lg font-semibold focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
                     />
                     <div className="mt-1 flex gap-1">
@@ -1186,10 +1182,9 @@ export default function NuevaAtencionPage() {
                 <div className="mt-4 space-y-3">
                   <div>
                     <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Monto inicial en efectivo (Gs.)</label>
-                    <input
-                      type="number" inputMode="numeric" min={0} step="1000"
-                      value={aperturaMonto} onChange={(e) => setAperturaMonto(e.target.value)}
-                      placeholder="Ej: 200000" autoFocus
+                    <MontoInput
+                      value={aperturaMonto} onChange={(n) => setAperturaMonto(String(n))}
+                      placeholder="Ej: 200.000" autoFocus decimals={false}
                       className="w-full rounded-lg border border-slate-200 px-3 py-2 text-lg font-semibold focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
                     />
                   </div>
@@ -1223,10 +1218,9 @@ export default function NuevaAtencionPage() {
                 <div className="mt-4 space-y-3">
                   <div>
                     <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Efectivo contado (Gs.)</label>
-                    <input
-                      type="number" inputMode="numeric" min={0} step="1000"
-                      value={cierreContado} onChange={(e) => setCierreContado(e.target.value)}
-                      placeholder="Ej: 350000" autoFocus
+                    <MontoInput
+                      value={cierreContado} onChange={(n) => setCierreContado(String(n))}
+                      placeholder="Ej: 350.000" autoFocus decimals={false}
                       className="w-full rounded-lg border border-slate-200 px-3 py-2 text-lg font-semibold focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
                     />
                   </div>
@@ -1277,10 +1271,9 @@ export default function NuevaAtencionPage() {
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Monto (Gs.) *</label>
-                      <input
-                        type="number" inputMode="numeric" min={0} step="1000"
-                        value={movMonto} onChange={(e) => setMovMonto(e.target.value)}
-                        placeholder="Ej: 20000"
+                      <MontoInput
+                        value={movMonto} onChange={(n) => setMovMonto(String(n))}
+                        placeholder="Ej: 20.000" decimals={false}
                         className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
                       />
                     </div>
@@ -1614,11 +1607,10 @@ function ColumnaAtencion(props: {
                   </td>
                   <td className="px-3 py-2 text-right">
                     {permitirEditarPrecio ? (
-                      <input
-                        type="number"
-                        min={0}
+                      <MontoInput
                         value={l.precio_unitario}
-                        onChange={(e) => onActualizar(l.franja_id, { precio_unitario: Math.max(0, Number(e.target.value) || 0) })}
+                        onChange={(n) => onActualizar(l.franja_id, { precio_unitario: Math.max(0, n) })}
+                        decimals={false}
                         className="w-28 rounded-md border border-slate-200 px-2 py-1 text-right text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
                       />
                     ) : (
