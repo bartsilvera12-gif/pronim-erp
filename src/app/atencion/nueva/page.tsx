@@ -75,7 +75,33 @@ export default function NuevaAtencionPage() {
   const [enviando, setEnviando] = useState(false);
   const [okMsg, setOkMsg] = useState<string | null>(null);
 
-  // Cargar franjas + clientes iniciales
+  // ── Caja / punto de caja: se detectan y se manejan solos ─────────────
+  // La cajera no debería tener que pensar en abrir/cerrar turno para
+  // hacer una atención. Si no hay caja abierta al confirmar, la abrimos
+  // en el primer punto disponible con monto 0.
+  const [cajaAbiertaId, setCajaAbiertaId] = useState<string | null>(null);
+  const [puntoCajaId, setPuntoCajaId] = useState<string | null>(null);
+
+  // Detecta caja abierta y primer punto disponible en la sucursal actual.
+  // Silencioso: solo guarda ids, no bloquea la pantalla si no hay nada.
+  async function refrescarCajaEstado() {
+    try {
+      const [rc, rp] = await Promise.all([
+        fetchWithSupabaseSession("/api/caja/abierta", { cache: "no-store" }),
+        fetchWithSupabaseSession("/api/puntos-caja", { cache: "no-store" }),
+      ]);
+      const jc = await rc.json().catch(() => ({}));
+      const jp = await rp.json().catch(() => ({}));
+      const cajas = (jc?.data?.cajas as { id: string }[] | undefined) ?? [];
+      setCajaAbiertaId(cajas[0]?.id ?? (jc?.data?.caja?.id ?? null));
+      const puntos = (jp?.data?.puntos as { id: string }[] | undefined) ?? [];
+      setPuntoCajaId(puntos[0]?.id ?? null);
+    } catch {
+      /* tolerar */
+    }
+  }
+
+  // Cargar franjas + clientes iniciales + estado de caja
   useEffect(() => {
     let cancel = false;
     (async () => {
@@ -84,6 +110,7 @@ export default function NuevaAtencionPage() {
           fetchWithSupabaseSession("/api/franjas/publicas", { cache: "no-store" }),
           fetchWithSupabaseSession("/api/clientes", { cache: "no-store" }),
         ]);
+        refrescarCajaEstado();
         const jf = await rf.json().catch(() => ({}));
         const jc = await rc.json().catch(() => ({}));
         if (cancel) return;
@@ -225,6 +252,32 @@ export default function NuevaAtencionPage() {
 
     setEnviando(true);
     try {
+      // ── 0. Caja: si no hay una abierta, abrirla en silencio con
+      //    monto 0 en el primer punto disponible. La cajera no debería
+      //    tener que gestionar turnos para hacer una atención.
+      if (!cajaAbiertaId) {
+        if (!puntoCajaId) {
+          throw new Error(
+            "No hay puntos de caja configurados en esta sucursal. Pedile al admin que cree uno en Configuración → Sucursales.",
+          );
+        }
+        const ra = await fetchWithSupabaseSession("/api/caja/abrir", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            monto_apertura: 0,
+            observacion: "Apertura automática (Nueva atención)",
+            punto_caja_id: puntoCajaId,
+          }),
+        });
+        const ja = await ra.json().catch(() => ({}));
+        if (!ra.ok || ja?.success === false) {
+          throw new Error(ja?.error ?? "No se pudo abrir la caja automáticamente. Revisá permisos o abrila desde Configuración.");
+        }
+        const nuevaId = (ja?.data?.caja as { id: string } | undefined)?.id;
+        if (nuevaId) setCajaAbiertaId(nuevaId);
+      }
+
       // ── 1. Recepción (si trae algo) ────────────────────────────────
       if (trae.length > 0) {
         // Método de pago = crédito completo. El excedente se convierte
@@ -458,36 +511,45 @@ export default function NuevaAtencionPage() {
               <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
                 Aplicar del crédito ahora
               </label>
-              <div className="flex gap-2">
-                <input
-                  type="number"
-                  min={0}
-                  max={creditoMaxAplicable}
-                  value={aplicarCredito}
-                  onChange={(e) => setAplicarCredito(e.target.value)}
-                  placeholder={String(creditoMaxAplicable)}
-                  className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
-                />
+              <div className="flex gap-2 mb-1.5">
                 <button
                   type="button"
                   onClick={() => setAplicarCredito("")}
-                  className="rounded-lg border border-slate-200 px-3 text-xs text-slate-500 hover:bg-slate-50"
-                  title="Aplicar el máximo posible"
+                  className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                    aplicarCredito.trim() === ""
+                      ? "border-[#4FAEB2] bg-[#4FAEB2]/10 text-[#3F8E91] ring-2 ring-[#4FAEB2]/20"
+                      : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
+                  }`}
+                  title="Usar todo el crédito que pueda"
                 >
-                  Máx
+                  💰 Usar el máximo ({fmtGs(creditoMaxAplicable)})
                 </button>
                 <button
                   type="button"
                   onClick={() => setAplicarCredito("0")}
-                  className="rounded-lg border border-slate-200 px-3 text-xs text-slate-500 hover:bg-slate-50"
-                  title="No aplicar crédito (todo lo que trajo queda a favor)"
+                  className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                    aplicarCredito === "0"
+                      ? "border-slate-400 bg-slate-100 text-slate-800 ring-2 ring-slate-300"
+                      : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
+                  }`}
+                  title="No usar crédito ahora — guardarlo para otra venta"
                 >
-                  0
+                  🔒 No usar (guardar para otra venta)
                 </button>
               </div>
-              <p className="text-[11px] text-slate-400 mt-1">
-                Aplicando <strong>{fmtGs(creditoAplicadoNum)}</strong> de {fmtGs(creditoTotalDisponible)} disponibles.
-                Máximo útil: {fmtGs(creditoMaxAplicable)}.
+              <label className="block text-[11px] text-slate-400 mb-1">O ingresá un monto exacto:</label>
+              <input
+                type="number"
+                min={0}
+                max={creditoMaxAplicable}
+                value={aplicarCredito === "" ? "" : aplicarCredito}
+                onChange={(e) => setAplicarCredito(e.target.value)}
+                placeholder={`Ej: ${Math.min(creditoMaxAplicable, 50000)}`}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
+              />
+              <p className="text-[11px] text-slate-500 mt-1">
+                Aplicando ahora: <strong className="text-slate-800">{fmtGs(creditoAplicadoNum)}</strong>.
+                {" "}Queda a favor: <strong className="text-emerald-700">{fmtGs(creditoRestante)}</strong>.
               </p>
             </div>
             {aCobrar > 0 && (
