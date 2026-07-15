@@ -12,7 +12,23 @@ type UsuarioRow = {
   rol: string | null;
   estado: string | null;
   created_at: string;
+  sucursal_id: string | null;
+  sucursal_nombre: string | null;
 };
+
+const ROLES_ADMIN = new Set(["administrador", "admin", "super_admin", "super admin", "superadmin"]);
+function sucursalLabel(row: UsuarioRow): string {
+  const rol = (row.rol ?? "").trim().toLowerCase();
+  if (row.sucursal_nombre) return row.sucursal_nombre;
+  if (ROLES_ADMIN.has(rol)) return "Todas";
+  return "— sin asignar —";
+}
+function sucursalTone(row: UsuarioRow): string {
+  const rol = (row.rol ?? "").trim().toLowerCase();
+  if (row.sucursal_nombre) return "border-slate-200 bg-slate-50 text-slate-700";
+  if (ROLES_ADMIN.has(rol)) return "border-[#4FAEB2]/30 bg-[#4FAEB2]/10 text-[#3F8E91]";
+  return "border-amber-200 bg-amber-50 text-amber-800";
+}
 
 const AVATAR_COLORS = ["bg-violet-500", "bg-blue-500", "bg-emerald-500", "bg-amber-500", "bg-rose-500", "bg-sky-500"];
 function avatarColor(id: string) {
@@ -118,6 +134,7 @@ export default function UsuariosPage() {
                 <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3 uppercase tracking-wide">Email</th>
                 <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3 uppercase tracking-wide hidden md:table-cell">Teléfono</th>
                 <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3 uppercase tracking-wide">Rol</th>
+                <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3 uppercase tracking-wide">Sucursal</th>
                 <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3 uppercase tracking-wide hidden md:table-cell">Estado</th>
                 <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3 uppercase tracking-wide">Acciones</th>
               </tr>
@@ -142,6 +159,13 @@ export default function UsuariosPage() {
                   <td className="px-4 py-3 text-gray-600 hidden md:table-cell">{usr.telefono ?? "—"}</td>
                   <td className="px-4 py-3">
                     <span className="text-xs font-medium text-gray-600 capitalize">{usr.rol ?? "—"}</span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold border ${sucursalTone(usr)}`}
+                    >
+                      {sucursalLabel(usr)}
+                    </span>
                   </td>
                   <td className="px-4 py-3 hidden md:table-cell">
                     <span

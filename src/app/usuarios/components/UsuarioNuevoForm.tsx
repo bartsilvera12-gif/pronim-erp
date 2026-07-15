@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import {
   emptyUsuarioForm,
   rolFromNivelForm,
   UsuarioFormFields,
+  type SucursalOpt,
   type UsuarioFormValues,
 } from "@/components/usuarios/UsuarioForm";
 
@@ -29,6 +30,24 @@ export default function UsuarioNuevoForm({
   const [showPwd2, setShowPwd2] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
+  const [sucursales, setSucursales] = useState<SucursalOpt[]>([]);
+
+  useEffect(() => {
+    let cancel = false;
+    fetchWithSupabaseSession("/api/sucursales", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        if (cancel) return;
+        // successResponse envuelve en data.data.sucursales
+        const arr =
+          (j?.data?.sucursales as SucursalOpt[] | undefined) ??
+          (j?.sucursales as SucursalOpt[] | undefined) ??
+          [];
+        setSucursales(arr);
+      })
+      .catch(() => { /* deploys sin sucursales: array vacío, admin puede seguir */ });
+    return () => { cancel = true; };
+  }, []);
 
   const closeOrBack = () => {
     if (onClose) onClose();
@@ -46,10 +65,6 @@ export default function UsuarioNuevoForm({
       else if (upper.includes(name)) normalized = value.toUpperCase();
       setForm((prev) => ({ ...prev, [name]: normalized } as UsuarioFormValues));
     }
-  }
-
-  function handleSelectChange(name: string, value: string) {
-    setForm((prev) => ({ ...prev, [name]: value } as UsuarioFormValues));
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -84,6 +99,11 @@ export default function UsuarioNuevoForm({
       return;
     }
 
+    if (form.nivel !== "administrador" && !form.sucursal_id) {
+      setError("La sucursal es obligatoria para usuarios y supervisores.");
+      return;
+    }
+
     setGuardando(true);
 
     try {
@@ -103,6 +123,7 @@ export default function UsuarioNuevoForm({
           ips: form.ips,
           area: form.area,
           rol: rolFromNivelForm(form.nivel),
+          sucursal_id: form.sucursal_id || null,
         }),
       });
       const json = await res.json();
@@ -156,12 +177,12 @@ export default function UsuarioNuevoForm({
           variant="create"
           form={form}
           onChange={handleChange}
-          onSelectChange={handleSelectChange}
           onSalarioBaseChange={(n) => setForm((prev) => ({ ...prev, salario_base: String(n) }))}
           showPwd={showPwd}
           setShowPwd={setShowPwd}
           showPwd2={showPwd2}
           setShowPwd2={setShowPwd2}
+          sucursales={sucursales}
         />
 
         <div className="flex items-center justify-end gap-3">

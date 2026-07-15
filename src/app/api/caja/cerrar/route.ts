@@ -1,15 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUserAndEmpresa } from "@/lib/middleware/auth";
-import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema";
+import { getAuthWithRol } from "@/lib/middleware/auth";
+import { esRolAdminEmpresaOGlobal } from "@/lib/auth/rol-empresa";
+import { fetchDataSchemaForEmpresaId, createServiceRoleClientWithDbSchema } from "@/lib/supabase/empresa-data-schema";
 import { cerrarCajaPg, getCajaAbiertaPg } from "@/lib/caja/server/caja-pg";
+import { SIN_SUCURSAL_MENSAJE } from "@/lib/sucursales/enforce";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
 
 /** POST /api/caja/cerrar — cierra la caja con efectivo contado y calcula diferencia. */
 export async function POST(request: NextRequest) {
   try {
-    const auth = await getUserAndEmpresa(request);
+    const auth = await getAuthWithRol(request);
     if (!auth) return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
+    if (!auth.sucursal_id && !esRolAdminEmpresaOGlobal(auth.rol ?? undefined)) {
+      return NextResponse.json(errorResponse(SIN_SUCURSAL_MENSAJE), { status: 403 });
+    }
 
     let body: unknown;
     try {
@@ -29,11 +34,29 @@ export async function POST(request: NextRequest) {
 
     let cajaId = o.caja_id == null || o.caja_id === "" ? null : String(o.caja_id);
     if (!cajaId) {
-      const abierta = await getCajaAbiertaPg(schema, auth.empresa_id);
+      const abierta = await getCajaAbiertaPg(schema, auth.empresa_id, auth.sucursal_id ?? null);
       if (!abierta) {
         return NextResponse.json(errorResponse("No hay ninguna caja abierta para cerrar."), { status: 409 });
       }
       cajaId = abierta.id;
+    } else if (auth.sucursal_id) {
+      // Vendedor con sucursal fija: la caja indicada debe pertenecer a su sucursal.
+      const sb0 = createServiceRoleClientWithDbSchema(schema);
+      const { data: cajaRow } = await sb0
+        .from("cajas")
+        .select("id, sucursal_id, empresa_id")
+        .eq("id", cajaId)
+        .maybeSingle();
+      if (
+        !cajaRow ||
+        cajaRow.empresa_id !== auth.empresa_id ||
+        cajaRow.sucursal_id !== auth.sucursal_id
+      ) {
+        return NextResponse.json(
+          errorResponse("La caja indicada no pertenece a tu sucursal."),
+          { status: 403 },
+        );
+      }
     }
 
     const resumen = await cerrarCajaPg({

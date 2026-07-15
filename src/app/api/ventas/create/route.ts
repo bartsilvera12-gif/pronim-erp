@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUserAndEmpresa } from "@/lib/middleware/auth";
+import { getAuthWithRol } from "@/lib/middleware/auth";
+import { esRolAdminEmpresaOGlobal } from "@/lib/auth/rol-empresa";
+import { SIN_SUCURSAL_MENSAJE } from "@/lib/sucursales/enforce";
 import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema";
 import { createVentaTransaccionalPg } from "@/lib/ventas/server/create-venta-pg";
 import type { CreateVentaItemInput } from "@/lib/ventas/server/create-venta-pg";
@@ -113,7 +115,7 @@ export async function POST(request: NextRequest) {
   const bearerPresent = !!request.headers.get("authorization");
   try {
     console.log(`[diag-venta] POST start bearer=${bearerPresent}`);
-    const auth = await getUserAndEmpresa(request);
+    const auth = await getAuthWithRol(request);
     if (!auth) {
       console.log(`[diag-venta] auth=null bearer=${bearerPresent} ms=${Date.now() - t0}`);
       return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
@@ -197,6 +199,10 @@ export async function POST(request: NextRequest) {
         );
       }
       sucursalId = auth.sucursal_id;
+    } else if (!esRolAdminEmpresaOGlobal(auth.rol ?? undefined)) {
+      // Non-admin sin sucursal fija: no debería llegar acá. Bloqueamos con
+      // mensaje claro para que el admin configure la sucursal del usuario.
+      return NextResponse.json(errorResponse(SIN_SUCURSAL_MENSAJE), { status: 403 });
     } else if (sucursalBody) {
       sucursalId = sucursalBody;
     } else {

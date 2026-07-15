@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getTenantSupabaseFromAuth } from "@/lib/supabase/tenant-api";
+import { getTenantSupabaseFromAuth, getTenantSupabaseFromAuthWithRol } from "@/lib/supabase/tenant-api";
 import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
 import { insertCompraConImpacto } from "@/lib/compras/server/compras-pg";
 import { resolveSucursalIdForUserPg } from "@/lib/sucursales/server";
+import { enforceSucursalForOperation } from "@/lib/sucursales/enforce";
+import { createServiceRoleClientWithDbSchema } from "@/lib/supabase/empresa-data-schema";
 import { postgrestGet, getAccessTokenForRequest } from "@/lib/supabase/postgrest-runtime";
 
 const COMPRAS_COLS =
@@ -49,7 +51,7 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const ctx = await getTenantSupabaseFromAuth(request);
+    const ctx = await getTenantSupabaseFromAuthWithRol(request);
     if (!ctx) return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
     const empresaId = ctx.auth.empresa_id;
     const schema = await fetchDataSchemaForEmpresaId(empresaId);
@@ -67,11 +69,39 @@ export async function POST(request: NextRequest) {
     // producto).
     const itemsRaw = Array.isArray(body.items) ? (body.items as Record<string, unknown>[]) : null;
 
-    const sucursalId = await resolveSucursalIdForUserPg(
-      schema,
-      empresaId,
-      ctx.auth.sucursal_id ?? null,
-    );
+    // Sucursal estricta: si el usuario tiene sucursal fija, manda esa; body no
+    // puede pedir otra. Si es admin sin sucursal, puede indicar `sucursal_id`
+    // en el body o cae a la Principal (para compras "consolidadas" del admin
+    // ya no se acepta null: siempre queda vinculada a una sucursal concreta).
+    const enforce = enforceSucursalForOperation({
+      authSucursalId: ctx.auth.sucursal_id ?? null,
+      rol: ctx.auth.rol ?? null,
+      bodySucursalId: typeof body.sucursal_id === "string" ? (body.sucursal_id as string) : null,
+      allowNullForAdmin: true,
+    });
+    if (!enforce.ok) {
+      return NextResponse.json(errorResponse(enforce.error), { status: enforce.status });
+    }
+    let sucursalId: string | null = enforce.sucursal_id;
+    if (!sucursalId) {
+      // Admin global sin body: caemos a la sucursal Principal por compatibilidad.
+      sucursalId = await resolveSucursalIdForUserPg(schema, empresaId, null);
+    }
+    // Defensa en profundidad: si sucursalId no pertenece a esta empresa → 400.
+    if (sucursalId) {
+      const sb0 = createServiceRoleClientWithDbSchema(schema);
+      const { data: sucRow } = await sb0
+        .from("sucursales")
+        .select("empresa_id, activo")
+        .eq("id", sucursalId)
+        .maybeSingle();
+      if (!sucRow || sucRow.empresa_id !== empresaId || sucRow.activo !== true) {
+        return NextResponse.json(
+          errorResponse("La sucursal indicada no pertenece a tu empresa o está inactiva."),
+          { status: 400 },
+        );
+      }
+    }
 
     const moneda = body.moneda === "USD" ? "USD" : "PYG";
     const tipoCambio = Number(body.tipo_cambio) || 1;

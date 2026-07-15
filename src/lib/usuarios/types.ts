@@ -24,6 +24,13 @@ export interface Usuario {
   nivel: NivelUsuario;
   area:  AreaUsuario;
 
+  /**
+   * Sucursal asignada al usuario (multi-sucursal por empresa).
+   *   - `null` → sólo válido para administradores (opera sobre todas las sucursales).
+   *   - `<uuid>` → usuario operativo restringido a esa sucursal.
+   */
+  sucursal_id?: string | null;
+
   // ── Seguridad ────────────────────────────────────────────────────
   password_hash?: string;
 

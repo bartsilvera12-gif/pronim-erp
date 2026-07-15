@@ -166,7 +166,7 @@ export async function GET(
     const { data: usuario, error } = await supabase
       .from("usuarios")
       .select(
-        "id, nombre, email, telefono, fecha_nacimiento, fecha_ingreso, tipo_contrato, salario_base, porcentaje_comision, ips, area, rol, estado, created_at, empresa_id"
+        "id, nombre, email, telefono, fecha_nacimiento, fecha_ingreso, tipo_contrato, salario_base, porcentaje_comision, ips, area, rol, estado, created_at, empresa_id, sucursal_id"
       )
       .eq("id", id)
       .single();
@@ -337,7 +337,7 @@ export async function PATCH(
 
     const { data: usuario, error: errGet } = await supabase
       .from("usuarios")
-      .select("id, email, estado, auth_user_id, empresa_id, rol")
+      .select("id, email, estado, auth_user_id, empresa_id, rol, sucursal_id")
       .eq("id", id)
       .single();
 
@@ -407,6 +407,64 @@ export async function PATCH(
     if (ips !== undefined) updates.ips = Boolean(ips);
 
     if (rolNormalizado !== undefined) updates.rol = rolNormalizado;
+
+    // ── Sucursal asignada ──────────────────────────────────────────────
+    // - Los administradores pueden dejarla en NULL (todas las sucursales).
+    // - Usuarios/supervisores DEBEN tener sucursal.
+    // - Si viene sucursal_id, debe pertenecer a la empresa del usuario y estar activa.
+    // - Nunca aceptar sucursales de otra empresa (defensa en profundidad).
+    const sucursalIdProvided = Object.prototype.hasOwnProperty.call(body, "sucursal_id");
+    if (sucursalIdProvided) {
+      const raw = body.sucursal_id;
+      const nuevaSucursalId: string | null =
+        raw === null || raw === undefined || (typeof raw === "string" && raw.trim() === "")
+          ? null
+          : String(raw).trim();
+
+      const rolEfectivo = finalRol;
+      const esAdminFinal = esRolAdminEmpresa(rolEfectivo);
+
+      if (!esAdminFinal && !nuevaSucursalId) {
+        return NextResponse.json(
+          { error: "La sucursal es obligatoria para usuarios y supervisores." },
+          { status: 400 }
+        );
+      }
+      if (nuevaSucursalId) {
+        const empresaObjetivo = usuario.empresa_id as string | null;
+        if (!empresaObjetivo) {
+          return NextResponse.json(
+            { error: "El usuario objetivo no tiene empresa; no se puede asignar sucursal." },
+            { status: 400 }
+          );
+        }
+        const { data: sucRow, error: sucErr } = await supabase
+          .from("sucursales")
+          .select("id, empresa_id, activo")
+          .eq("id", nuevaSucursalId)
+          .maybeSingle();
+        if (sucErr || !sucRow || sucRow.empresa_id !== empresaObjetivo || sucRow.activo !== true) {
+          return NextResponse.json(
+            { error: "La sucursal seleccionada no pertenece a la empresa del usuario o está inactiva." },
+            { status: 400 }
+          );
+        }
+      }
+      updates.sucursal_id = nuevaSucursalId;
+    } else if (rolNormalizado !== undefined) {
+      // Si NO vino sucursal_id explícito pero cambiaron el rol de admin a
+      // no-admin y el usuario no tenía sucursal → rechazar por consistencia.
+      const esAdminFinal = esRolAdminEmpresa(finalRol);
+      if (!esAdminFinal && !usuario.sucursal_id) {
+        return NextResponse.json(
+          {
+            error:
+              "Este usuario deja de ser administrador y no tiene una sucursal asignada. Elegí una sucursal antes de cambiar el nivel.",
+          },
+          { status: 400 }
+        );
+      }
+    }
 
     if (estado !== undefined && authUserId) {
       const banDuration = estado === "inactivo" ? "876000h" : "none";

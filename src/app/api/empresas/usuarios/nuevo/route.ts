@@ -88,6 +88,15 @@ export async function POST(req: Request) {
     const area = areaRaw && areasOk.includes(areaRaw) ? areaRaw : null;
     const rol = String(body.rol ?? "usuario");
 
+    // Sucursal asignada: normalizamos "" | undefined | null → null.
+    const sucursalIdRaw = body.sucursal_id;
+    const sucursalId: string | null =
+      typeof sucursalIdRaw === "string" && sucursalIdRaw.trim() !== ""
+        ? sucursalIdRaw.trim()
+        : null;
+    const rolNorm = rol.trim().toLowerCase();
+    const esAdminRol = esRolAdminEmpresa(rolNorm);
+
     if (!email || !password || password.length < 6) {
       return NextResponse.json({ error: "Email y contraseña (mín. 6 caracteres) son obligatorios." }, { status: 400 });
     }
@@ -102,6 +111,28 @@ export async function POST(req: Request) {
     const empresaId = admin.empresa_id;
     if (!empresaId) {
       return NextResponse.json({ error: "Solo un administrador de empresa puede crear usuarios." }, { status: 403 });
+    }
+
+    // Sucursal: obligatoria para no-administradores. Si vino, debe pertenecer
+    // a la empresa del admin y estar activa. Nunca aceptar sucursales de otra empresa.
+    if (!esAdminRol && !sucursalId) {
+      return NextResponse.json(
+        { error: "La sucursal es obligatoria para usuarios y supervisores." },
+        { status: 400 }
+      );
+    }
+    if (sucursalId) {
+      const { data: sucRow, error: sucErr } = await supabase
+        .from("sucursales")
+        .select("id, empresa_id, activo")
+        .eq("id", sucursalId)
+        .maybeSingle();
+      if (sucErr || !sucRow || sucRow.empresa_id !== empresaId || sucRow.activo !== true) {
+        return NextResponse.json(
+          { error: "La sucursal seleccionada no pertenece a tu empresa o está inactiva." },
+          { status: 400 }
+        );
+      }
     }
 
     let authUserId: string | null = null;
@@ -155,6 +186,7 @@ export async function POST(req: Request) {
       rol,
       auth_user_id: authUserId,
       estado: "activo" as const,
+      sucursal_id: sucursalId,
     };
 
     let targetId: string;

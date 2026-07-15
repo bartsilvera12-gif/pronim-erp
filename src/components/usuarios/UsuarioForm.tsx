@@ -53,6 +53,11 @@ export type UsuarioFormValues = {
   dashboard_view_ids: string[];
   /** Vista por defecto al abrir el tablero (id de catálogo). */
   default_dashboard_view_id: string;
+  /**
+   * Sucursal asignada. String vacío = sin asignar (solo válido para
+   * administradores, que operan sobre todas las sucursales).
+   */
+  sucursal_id: string;
 };
 
 export function emptyUsuarioForm(): UsuarioFormValues {
@@ -74,8 +79,11 @@ export function emptyUsuarioForm(): UsuarioFormValues {
     modulo_ids: [],
     dashboard_view_ids: [],
     default_dashboard_view_id: "",
+    sucursal_id: "",
   };
 }
+
+export type SucursalOpt = { id: string; nombre: string; es_principal?: boolean; activo?: boolean };
 
 export function nivelFromRolDb(rol: string | null | undefined): NivelUsuario {
   const r = (rol ?? "").trim().toLowerCase();
@@ -103,6 +111,8 @@ export type UsuarioFormProps = {
   extraSections?: React.ReactNode;
   /** Solo administradores pueden cambiar nivel (rol ERP). */
   nivelAccesoDisabled?: boolean;
+  /** Catálogo de sucursales activas de la empresa. */
+  sucursales?: SucursalOpt[];
 };
 
 export function UsuarioFormFields({
@@ -117,6 +127,7 @@ export function UsuarioFormFields({
   setShowPwd2 = () => {},
   extraSections,
   nivelAccesoDisabled,
+  sucursales,
 }: UsuarioFormProps) {
   const fLabel = usuarioFormLabel;
   const fInput = fieldClassName ?? usuarioFormInput;
@@ -282,6 +293,35 @@ export function UsuarioFormFields({
               <option value="activo">Activo</option>
               <option value="inactivo">Inactivo</option>
             </select>
+          </div>
+          <div className="col-span-2">
+            <label className={fLabel}>
+              Sucursal asignada
+              {form.nivel !== "administrador" ? " *" : ""}
+            </label>
+            <select
+              name="sucursal_id"
+              value={form.sucursal_id}
+              onChange={onChange}
+              className={fSelect}
+              required={form.nivel !== "administrador"}
+            >
+              {form.nivel === "administrador" ? (
+                <option value="">Todas las sucursales</option>
+              ) : (
+                <option value="">Seleccioná una sucursal…</option>
+              )}
+              {(sucursales ?? []).map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.nombre}{s.es_principal ? " (Principal)" : ""}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-400 mt-1">
+              {form.nivel === "administrador"
+                ? "Los administradores pueden operar en todas las sucursales; dejalo vacío para acceso global."
+                : "Usuarios y supervisores operan exclusivamente en la sucursal asignada (ventas, recepciones, caja, stock)."}
+            </p>
           </div>
         </div>
       </SectionCard>

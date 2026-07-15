@@ -106,6 +106,19 @@ export async function POST(request: NextRequest) {
   if (!productoId || !sucursalId) {
     return NextResponse.json(errorResponse("Faltan producto_id o sucursal_id."), { status: 400 });
   }
+
+  // Aislamiento de sucursal: incluso un administrador con sucursal fija sólo
+  // puede modificar el stock de SU sucursal (mismo criterio que ventas y
+  // recepciones). Sólo admins globales (sin sucursal asignada) pueden repartir
+  // stock entre sucursales de la empresa.
+  if (auth.sucursal_id && auth.sucursal_id !== sucursalId) {
+    return NextResponse.json(
+      errorResponse(
+        "Tu usuario está asignado a una sucursal específica; no podés modificar stock de otra sucursal.",
+      ),
+      { status: 400 },
+    );
+  }
   const stockNum = body.stock_actual == null ? 0 : Number(body.stock_actual);
   if (!Number.isFinite(stockNum) || stockNum < 0) {
     return NextResponse.json(errorResponse("Stock inválido."), { status: 400 });

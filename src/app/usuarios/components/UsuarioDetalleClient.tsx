@@ -12,6 +12,7 @@ import {
   usuarioFormInputGray,
   usuarioFormLabel,
   UsuarioFormFields,
+  type SucursalOpt,
   type UsuarioFormValues,
 } from "@/components/usuarios/UsuarioForm";
 import { FancySelect, type FancySelectOption } from "@/app/dashboard/proyectos/components/FancySelect";
@@ -34,6 +35,7 @@ type Usuario = {
   rol: string | null;
   estado: string | null;
   created_at: string;
+  sucursal_id?: string | null;
   modulo_ids?: string[];
   modulos_empresa?: ModuloOpt[];
   dashboard_views_empresa?: { id: string; nombre: string; slug: string; orden: number }[];
@@ -148,6 +150,7 @@ function usuarioToForm(u: Usuario): UsuarioFormValues {
     modulo_ids: u.modulo_ids ?? [],
     dashboard_view_ids: u.dashboard_view_ids ?? [],
     default_dashboard_view_id: u.default_dashboard_view_id ?? "",
+    sucursal_id: u.sucursal_id ?? "",
   };
 }
 
@@ -193,6 +196,23 @@ export default function UsuarioDetalleClient({
 
   const [modulosCollapsed, setModulosCollapsed] = useState(false);
   const [modulosSearch, setModulosSearch] = useState("");
+
+  const [sucursales, setSucursales] = useState<SucursalOpt[]>([]);
+  useEffect(() => {
+    let cancel = false;
+    fetchWithSupabaseSession("/api/sucursales", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        if (cancel) return;
+        const arr =
+          (j?.data?.sucursales as SucursalOpt[] | undefined) ??
+          (j?.sucursales as SucursalOpt[] | undefined) ??
+          [];
+        setSucursales(arr);
+      })
+      .catch(() => { /* tolerar */ });
+    return () => { cancel = true; };
+  }, []);
 
   useEffect(() => {
     if (!id) return;
@@ -267,6 +287,13 @@ export default function UsuarioDetalleClient({
       return;
     }
 
+    // Sucursal obligatoria para no-admin (validación cliente; el servidor la re-valida).
+    const nivelEfectivo = usuario.puede_editar_rol ? form.nivel : nivelFromRolDb(usuario.rol);
+    if (nivelEfectivo !== "administrador" && !form.sucursal_id) {
+      setFormError("La sucursal es obligatoria para usuarios y supervisores.");
+      return;
+    }
+
     setGuardando(true);
     setOmnicanalWarning(null);
     try {
@@ -286,6 +313,9 @@ export default function UsuarioDetalleClient({
       if (usuario.puede_editar_rol) {
         body.rol = rolFromNivelForm(form.nivel);
       }
+
+      // sucursal_id siempre se envía: string vacío se normaliza a null en server.
+      body.sucursal_id = form.sucursal_id || null;
       if (usuario.puede_editar_modulos && !usuario.es_admin_empresa) {
         body.modulo_ids = form.modulo_ids;
       }
@@ -363,6 +393,7 @@ export default function UsuarioDetalleClient({
 
       setUsuario({
         ...usuario,
+        sucursal_id: form.sucursal_id || null,
         nombre: form.nombre.trim(),
         email: form.email.trim().toLowerCase(),
         telefono: form.telefono.trim() || null,
@@ -597,6 +628,14 @@ export default function UsuarioDetalleClient({
               {[
                 { label: "Nivel", value: labelNivelDisplay(usuario.rol) },
                 { label: "Área", value: labelArea(usuario.area) },
+                {
+                  label: "Sucursal",
+                  value: usuario.sucursal_id
+                    ? (sucursales.find((s) => s.id === usuario.sucursal_id)?.nombre ?? "—")
+                    : (usuario.es_admin_empresa
+                        ? "Todas las sucursales"
+                        : "Sin asignar (requiere configuración)"),
+                },
               ].map((i) => (
                 <div key={i.label}>
                   <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">{i.label}</p>
@@ -737,10 +776,10 @@ export default function UsuarioDetalleClient({
             variant="edit"
             form={form}
             onChange={handleChange}
-            onSelectChange={handleSelectChange}
             onSalarioBaseChange={(n) => setForm((prev) => ({ ...prev, salario_base: String(n) }))}
             fieldClassName={usuarioFormInputGray}
             nivelAccesoDisabled={!usuario.puede_editar_rol}
+            sucursales={sucursales}
             extraSections={
               <>
                 {showResetPwd ? (

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUserAndEmpresa } from "@/lib/middleware/auth";
+import { getAuthWithRol } from "@/lib/middleware/auth";
+import { esRolAdminEmpresaOGlobal } from "@/lib/auth/rol-empresa";
+import { SIN_SUCURSAL_MENSAJE } from "@/lib/sucursales/enforce";
 import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
@@ -176,8 +178,12 @@ export async function POST(
 ) {
   try {
     const { id: clienteId } = await ctxParams.params;
-    const auth = await getUserAndEmpresa(request);
+    const auth = await getAuthWithRol(request);
     if (!auth) return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
+    // Bloqueo temprano: operativos sin sucursal no pueden registrar recepciones.
+    if (!auth.sucursal_id && !esRolAdminEmpresaOGlobal(auth.rol ?? undefined)) {
+      return NextResponse.json(errorResponse(SIN_SUCURSAL_MENSAJE), { status: 403 });
+    }
 
     let body: unknown;
     try {
