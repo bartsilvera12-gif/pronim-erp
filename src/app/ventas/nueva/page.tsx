@@ -158,6 +158,8 @@ export default function NuevaVentaPage() {
   const clienteContainerRef = useRef<HTMLDivElement>(null);
   // Nota de remisión: activada si el cliente la usa; toggle manual solo con cliente.
   const [generaNotaRemision, setGeneraNotaRemision] = useState(false);
+  // Modal "Nuevo cliente" — alta rápida sin salir de la venta.
+  const [nuevoClienteOpen, setNuevoClienteOpen] = useState(false);
 
   // ── Cobro (solo CONTADO, no se persiste — solo ayuda al cajero) ───────────
   const [montoRecibido, setMontoRecibido] = useState("");
@@ -871,6 +873,17 @@ export default function NuevaVentaPage() {
               </div>
               {clienteOpen && !clienteSel && (
                 <div className="absolute z-20 mt-1 w-full max-h-64 overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg">
+                  <button
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => { setNuevoClienteOpen(true); setClienteOpen(false); }}
+                    className="sticky top-0 z-10 flex w-full items-center gap-2 border-b border-slate-100 bg-white px-3 py-2 text-sm font-medium text-[#4FAEB2] hover:bg-[#4FAEB2]/5"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+                      <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
+                    </svg>
+                    Cargar nuevo cliente
+                  </button>
                   {clientesFiltrados.length === 0 ? (
                     <p className="px-3 py-2 text-xs text-gray-400">Sin clientes que coincidan.</p>
                   ) : (
@@ -896,14 +909,13 @@ export default function NuevaVentaPage() {
                     : "Debés seleccionar un cliente para poder registrar la venta."}
                 </span>
                 {!clienteSel && (
-                  <a
-                    href="/gestion-clientes"
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <button
+                    type="button"
+                    onClick={() => setNuevoClienteOpen(true)}
                     className="font-medium text-[#4FAEB2] underline decoration-dotted underline-offset-2 hover:text-[#37888c]"
                   >
                     Crear cliente nuevo
-                  </a>
+                  </button>
                 )}
               </div>
 
@@ -1294,6 +1306,20 @@ export default function NuevaVentaPage() {
         ivaDefault={lineaIva}
       />
 
+      {nuevoClienteOpen && (
+        <NuevoClienteRapidoModal
+          onClose={() => setNuevoClienteOpen(false)}
+          onCreated={(nuevo) => {
+            setClientes((prev) => [nuevo, ...prev.filter((c) => c.id !== nuevo.id)]);
+            setClienteId(nuevo.id);
+            setClienteQuery("");
+            setClienteOpen(false);
+            setGeneraNotaRemision(nuevo.usa_nota_remision);
+            setNuevoClienteOpen(false);
+          }}
+        />
+      )}
+
       {/* Modal de cobro (transferencia / tarjeta-débito) */}
       {cobroModalOpen && (metodoPago === "transferencia" || metodoPago === "tarjeta") && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setCobroModalOpen(false)}>
@@ -1474,6 +1500,195 @@ export default function NuevaVentaPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Modal de alta rápida de cliente (embebido en la venta)
+// ═══════════════════════════════════════════════════════════════════════
+
+type NuevoClienteResult = { id: string; label: string; ruc: string | null; usa_nota_remision: boolean };
+
+function NuevoClienteRapidoModal({
+  onClose,
+  onCreated,
+}: {
+  onClose: () => void;
+  onCreated: (c: NuevoClienteResult) => void;
+}) {
+  const [tipo, setTipo] = useState<"empresa" | "persona">("empresa");
+  const [razonSocial, setRazonSocial] = useState("");
+  const [ruc, setRuc] = useState("");
+  const [telefono, setTelefono] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const puedeGuardar = razonSocial.trim().length > 0 && !saving;
+
+  async function submit() {
+    setError(null);
+    if (!razonSocial.trim()) {
+      setError(tipo === "empresa" ? "La razón social es obligatoria." : "El nombre es obligatorio.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const payload: Record<string, unknown> = {
+        tipo_cliente: tipo,
+        nombre_contacto: razonSocial.trim().toUpperCase(),
+        empresa: tipo === "empresa" ? razonSocial.trim().toUpperCase() : null,
+        ruc: ruc.trim() || null,
+        telefono: telefono.trim() || null,
+        estado: "activo",
+      };
+      const res = await fetch("/api/clientes", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok || !j?.success) {
+        throw new Error(j?.error ?? `No se pudo crear el cliente (${res.status}).`);
+      }
+      const data = (j.data ?? {}) as {
+        id?: string;
+        empresa?: string | null;
+        nombre?: string | null;
+        nombre_contacto?: string | null;
+        ruc?: string | null;
+        usa_nota_remision?: boolean;
+      };
+      if (!data.id) throw new Error("El servidor no devolvió el id del cliente.");
+      const label =
+        (data.empresa ?? "").trim() ||
+        (data.nombre_contacto ?? "").trim() ||
+        (data.nombre ?? "").trim() ||
+        razonSocial.trim().toUpperCase();
+      onCreated({
+        id: data.id,
+        label,
+        ruc: (data.ruc ?? "").trim() || null,
+        usa_nota_remision: data.usa_nota_remision === true,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al crear el cliente.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const nombreLabel = tipo === "empresa" ? "Razón social" : "Nombre completo";
+  const nombrePlaceholder = tipo === "empresa" ? "Ej: TALLER VIDAL S.A." : "Ej: MARÍA PÉREZ";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div
+        className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-1 flex items-start justify-between gap-2">
+          <div>
+            <h3 className="text-base font-semibold text-slate-900">Nuevo cliente</h3>
+            <p className="mt-1 text-xs text-slate-500">
+              Solo los datos mínimos. Podés completar dirección, SIFEN y condiciones más tarde desde la ficha del cliente.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            aria-label="Cerrar"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+              <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="mt-4 grid grid-cols-2 gap-2 rounded-lg bg-slate-50 p-1">
+          {(["empresa", "persona"] as const).map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setTipo(t)}
+              className={`rounded-md py-1.5 text-sm font-medium transition-colors ${
+                tipo === t
+                  ? "bg-white text-slate-900 shadow-sm ring-1 ring-[#4FAEB2]/40"
+                  : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              {t === "empresa" ? "Empresa" : "Persona"}
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-4 space-y-3">
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+              {nombreLabel} <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={razonSocial}
+              onChange={(e) => setRazonSocial(e.target.value)}
+              placeholder={nombrePlaceholder}
+              autoFocus
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm uppercase focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+              {tipo === "empresa" ? "RUC" : "RUC / CI (opcional)"}
+            </label>
+            <input
+              type="text"
+              value={ruc}
+              onChange={(e) => setRuc(e.target.value)}
+              placeholder="Ej: 80011405-1"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Teléfono <span className="font-normal text-slate-400">(opcional)</span>
+            </label>
+            <input
+              type="text"
+              value={telefono}
+              onChange={(e) => setTelefono(e.target.value)}
+              placeholder="Ej: 0991 234 567"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
+            />
+          </div>
+        </div>
+
+        {error && (
+          <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+            {error}
+          </div>
+        )}
+
+        <div className="mt-5 flex items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={saving}
+            className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={submit}
+            disabled={!puedeGuardar}
+            className="rounded-lg bg-[#4FAEB2] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#3F8E91] disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500"
+          >
+            {saving ? "Creando…" : "Crear cliente"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
