@@ -1595,9 +1595,20 @@ function ColumnaAtencion(props: {
                   <td className="px-3 py-2 text-right">
                     <input
                       type="number"
-                      min={1}
-                      value={l.cantidad}
-                      onChange={(e) => onActualizar(l.franja_id, { cantidad: Math.max(1, Number(e.target.value) || 1) })}
+                      min={0}
+                      value={l.cantidad === 0 ? "" : l.cantidad}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        // Permitir borrar el campo — se guarda 0 y al salir
+                        // del input (o al confirmar) se limpia esa línea.
+                        const n = v === "" ? 0 : Number(v);
+                        onActualizar(l.franja_id, { cantidad: Number.isFinite(n) && n >= 0 ? n : 0 });
+                      }}
+                      onBlur={() => {
+                        // Al perder el foco: si quedó en 0, quitar la línea.
+                        if (l.cantidad <= 0) onQuitar(l.franja_id);
+                      }}
+                      placeholder="0"
                       className="w-16 rounded-md border border-slate-200 px-2 py-1 text-right text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
                     />
                   </td>
