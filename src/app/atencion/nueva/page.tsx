@@ -123,6 +123,15 @@ export default function NuevaAtencionPage() {
   const [cierreObs, setCierreObs] = useState<string>("");
   const [cerrando, setCerrando] = useState(false);
   const [cierreError, setCierreError] = useState<string | null>(null);
+  const [cierreResumen, setCierreResumen] = useState<{
+    cantidad_ventas: number;
+    total_vendido: number;
+    total_efectivo: number;
+    total_transferencia: number;
+    total_tarjeta: number;
+    monto_apertura: number;
+    efectivo_esperado: number;
+  } | null>(null);
 
   // Movimiento manual
   const [movTipo, setMovTipo] = useState<"ingreso" | "egreso" | "retiro" | "ajuste">("ingreso");
@@ -194,6 +203,25 @@ export default function NuevaAtencionPage() {
     } finally {
       setAbriendo(false);
     }
+  }
+
+  async function cargarResumenCierre() {
+    if (!cajaAbiertaId) { setCierreResumen(null); return; }
+    try {
+      const r = await fetchWithSupabaseSession(`/api/caja/resumen?caja_id=${encodeURIComponent(cajaAbiertaId)}`, { cache: "no-store" });
+      const j = await r.json().catch(() => ({}));
+      const res = j?.data?.resumen;
+      if (!res) { setCierreResumen(null); return; }
+      setCierreResumen({
+        cantidad_ventas: Number(res.cantidad_ventas ?? 0),
+        total_vendido: Number(res.total_vendido ?? 0),
+        total_efectivo: Number(res.total_efectivo ?? 0),
+        total_transferencia: Number(res.total_transferencia ?? 0),
+        total_tarjeta: Number(res.total_tarjeta ?? 0),
+        monto_apertura: Number(res.caja?.monto_apertura ?? 0),
+        efectivo_esperado: Number(res.efectivo_esperado ?? 0),
+      });
+    } catch { setCierreResumen(null); }
   }
 
   async function cerrarCajaAhora() {
@@ -752,7 +780,7 @@ export default function NuevaAtencionPage() {
               </button>
               <button
                 type="button"
-                onClick={() => { setCierreError(null); setCajaModalOpen("cerrar"); }}
+                onClick={() => { setCierreError(null); setCierreResumen(null); setCajaModalOpen("cerrar"); cargarResumenCierre(); }}
                 className="rounded-lg bg-rose-600 hover:bg-rose-700 text-white px-3 py-1.5 text-sm font-semibold"
               >
                 Cerrar caja
@@ -1207,23 +1235,80 @@ export default function NuevaAtencionPage() {
             )}
 
             {cajaModalOpen === "cerrar" && (
-              <>
+              <div className="max-h-[85vh] overflow-y-auto pr-1">
                 <h3 className="text-base font-semibold text-slate-900">Cerrar caja</h3>
-                <p className="mt-0.5 text-xs text-slate-500">
-                  Contá el efectivo físico que hay en la caja e ingresalo. El sistema calcula el faltante o sobrante contra lo esperado.
-                </p>
+
                 {cierreError && (
                   <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{cierreError}</div>
                 )}
+
+                {/* Resumen de ventas del turno */}
+                {cierreResumen ? (
+                  <>
+                    <div className="mt-4">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Resumen de ventas del turno</p>
+                      <div className="rounded-lg border border-slate-200 divide-y divide-slate-100 text-sm">
+                        <ResumenRow label="Cantidad de ventas" value={String(cierreResumen.cantidad_ventas)} />
+                        <ResumenRow label="Ventas en efectivo" value={fmtGs(cierreResumen.total_efectivo)} />
+                        <ResumenRow label="Ventas por transferencia" value={fmtGs(cierreResumen.total_transferencia)} />
+                        <ResumenRow label="Ventas con tarjeta" value={fmtGs(cierreResumen.total_tarjeta)} />
+                        <ResumenRow label="Total vendido" value={fmtGs(cierreResumen.total_vendido)} bold />
+                      </div>
+                    </div>
+
+                    <div className="mt-4">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Cierre total del turno</p>
+                      <div className="rounded-lg border border-sky-200 bg-sky-50/60 p-3 text-sm">
+                        <div className="flex justify-between text-slate-700"><span>Monto de apertura</span><span>{fmtGs(cierreResumen.monto_apertura)}</span></div>
+                        <div className="flex justify-between text-slate-700 border-b border-sky-200 pb-2"><span>Total vendido</span><span>+ {fmtGs(cierreResumen.total_vendido)}</span></div>
+                        <div className="flex justify-between items-baseline pt-2">
+                          <span className="font-semibold text-sky-800">Cierre total esperado</span>
+                          <span className="text-xl font-bold text-sky-900">{fmtGs(cierreResumen.monto_apertura + cierreResumen.total_vendido)}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-4">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Desglose del cierre</p>
+                      <div className="rounded-lg border border-slate-200 divide-y divide-slate-100 text-sm">
+                        <ResumenRow label="Efectivo físico esperado" value={fmtGs(cierreResumen.efectivo_esperado)} />
+                        <ResumenRow label="Transferencias registradas" value={"+ " + fmtGs(cierreResumen.total_transferencia)} />
+                        <ResumenRow label="Tarjetas registradas" value={"+ " + fmtGs(cierreResumen.total_tarjeta)} />
+                        <ResumenRow label="Total cierre esperado" value={fmtGs(cierreResumen.efectivo_esperado + cierreResumen.total_transferencia + cierreResumen.total_tarjeta)} bold />
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-1.5">
+                        El <strong>efectivo físico esperado</strong> es apertura + ventas en efectivo + ingresos − egresos − retiros. Transferencias y tarjetas suman al cierre total, pero <strong>no</strong> al efectivo físico.
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <p className="mt-3 text-xs text-slate-400 animate-pulse">Cargando resumen del turno…</p>
+                )}
+
                 <div className="mt-4 space-y-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Cierre</p>
                   <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Efectivo contado (Gs.)</label>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1">Efectivo físico contado en caja (Gs.)</label>
                     <MontoInput
                       value={cierreContado} onChange={(n) => setCierreContado(String(n))}
-                      placeholder="Ej: 350.000" autoFocus decimals={false}
+                      placeholder="Ej: 160.000" autoFocus decimals={false}
                       className="w-full rounded-lg border border-slate-200 px-3 py-2 text-lg font-semibold focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
                     />
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      Ingresá solo el dinero físico disponible en caja. Transferencias y tarjetas ya se toman desde las ventas registradas.
+                    </p>
                   </div>
+                  {cierreResumen && cierreContado !== "" && (() => {
+                    const contado = Number(cierreContado) || 0;
+                    const dif = contado - cierreResumen.efectivo_esperado;
+                    return dif === 0 ? (
+                      <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">✓ Cuadra: sin diferencia.</div>
+                    ) : dif > 0 ? (
+                      <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-800">Sobrante: <strong>{fmtGs(dif)}</strong></div>
+                    ) : (
+                      <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">Faltante: <strong>{fmtGs(Math.abs(dif))}</strong></div>
+                    );
+                  })()}
                   <div>
                     <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Observación (opcional)</label>
                     <input
@@ -1235,11 +1320,11 @@ export default function NuevaAtencionPage() {
                 </div>
                 <div className="mt-5 flex gap-2 justify-end">
                   <button type="button" onClick={() => setCajaModalOpen(null)} disabled={cerrando} className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50">Cancelar</button>
-                  <button type="button" onClick={cerrarCajaAhora} disabled={cerrando} className="rounded-lg bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white text-sm font-semibold px-4 py-2 shadow-sm">
-                    {cerrando ? "Cerrando…" : "Cerrar caja"}
+                  <button type="button" onClick={cerrarCajaAhora} disabled={cerrando || cierreContado === ""} className="rounded-lg bg-rose-600 hover:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold px-4 py-2 shadow-sm">
+                    {cerrando ? "Cerrando…" : "Confirmar cierre"}
                   </button>
                 </div>
-              </>
+              </div>
             )}
 
             {cajaModalOpen === "mov" && (
@@ -1632,6 +1717,15 @@ function ColumnaAtencion(props: {
           </table>
         </div>
       )}
+    </div>
+  );
+}
+
+function ResumenRow({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
+  return (
+    <div className={`flex justify-between px-3 py-2 ${bold ? "font-semibold text-slate-900" : "text-slate-700"}`}>
+      <span>{label}</span>
+      <span>{value}</span>
     </div>
   );
 }
