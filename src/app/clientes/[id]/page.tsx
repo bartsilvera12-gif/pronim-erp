@@ -87,11 +87,14 @@ type TabId = "informacion" | "vehiculos" | "estado_cuenta" | "suscripciones" | "
 
 const TABS: { id: TabId; label: string; showWhen?: (c: Cliente) => boolean }[] = [
   { id: "informacion",   label: "Información"      },
-  { id: "vehiculos",     label: "Vehículos"        },
+  // Vehículos: solo aplica al ERP de autopartes; oculto en simple client.
+  { id: "vehiculos",     label: "Vehículos",        showWhen: () => !SIMPLE_CLIENTE },
   { id: "estado_cuenta", label: "Estado de cuenta" },
-  { id: "suscripciones", label: "Suscripciones"    },
-  { id: "marketing",     label: "Marketing",        showWhen: (c) => c.tipo_servicio_cliente === "marketing" },
-  { id: "proyectos",     label: "Proyectos"         },
+  // Suscripciones / Proyectos / Marketing: SaaS/consultoría, no aplican
+  // al rubro retail (Pronim) ni a hotelería (Reserva).
+  { id: "suscripciones", label: "Suscripciones",    showWhen: () => !SIMPLE_CLIENTE },
+  { id: "marketing",     label: "Marketing",        showWhen: (c) => !SIMPLE_CLIENTE && c.tipo_servicio_cliente === "marketing" },
+  { id: "proyectos",     label: "Proyectos",        showWhen: () => !SIMPLE_CLIENTE },
   { id: "actividad",     label: "Actividad"         },
   { id: "notas",         label: "Notas"             },
 ];
