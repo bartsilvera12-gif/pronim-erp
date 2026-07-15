@@ -317,11 +317,21 @@ export function UsuarioFormFields({
                 </option>
               ))}
             </select>
-            <p className="text-xs text-gray-400 mt-1">
-              {form.nivel === "administrador"
-                ? "Los administradores pueden operar en todas las sucursales; dejalo vacío para acceso global."
-                : "Usuarios y supervisores operan exclusivamente en la sucursal asignada (ventas, recepciones, caja, stock)."}
-            </p>
+            {sucursales !== undefined && sucursales.length === 0 ? (
+              <p className="text-xs text-amber-700 mt-1">
+                Todavía no hay sucursales activas en tu empresa.{" "}
+                <a href="/admin/sucursales" target="_blank" rel="noopener noreferrer" className="underline decoration-dotted underline-offset-2 font-medium">
+                  Crear la primera desde Administración → Sucursales
+                </a>{" "}
+                y volvé a abrir esta pantalla.
+              </p>
+            ) : (
+              <p className="text-xs text-gray-400 mt-1">
+                {form.nivel === "administrador"
+                  ? "Los administradores pueden operar en todas las sucursales; dejalo vacío para acceso global."
+                  : "Usuarios y supervisores operan exclusivamente en la sucursal asignada (ventas, recepciones, caja, stock)."}
+              </p>
+            )}
           </div>
         </div>
       </SectionCard>

@@ -40,10 +40,20 @@ export async function GET(request: NextRequest) {
         .order("es_principal", { ascending: false })
         .order("nombre", { ascending: true });
       if (error) {
-        return NextResponse.json(successResponse({ sucursales: [] }));
+        // Log server-side pero no romper el cliente. Antes se tragaba el
+        // error silencioso y el dropdown quedaba vacío sin explicación.
+        console.error("[/api/sucursales GET] query", {
+          empresaId,
+          message: error.message,
+          code: (error as { code?: string }).code,
+        });
+        return NextResponse.json(
+          successResponse({ sucursales: [], warning: error.message }),
+        );
       }
       return NextResponse.json(successResponse({ sucursales: data ?? [] }));
-    } catch {
+    } catch (e) {
+      console.error("[/api/sucursales GET] catch", e instanceof Error ? e.message : e);
       return NextResponse.json(successResponse({ sucursales: [] }));
     }
   } catch (err) {
