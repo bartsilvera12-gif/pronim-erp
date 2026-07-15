@@ -279,12 +279,6 @@ export default function ConsultasClientePage() {
             + Registrar evento
           </button>
           <Link
-            href={`/clientes/${clienteId}/recibir-prendas`}
-            className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700"
-          >
-            + Recibir prendas
-          </Link>
-          <Link
             href={`/clientes/${clienteId}`}
             className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
           >
