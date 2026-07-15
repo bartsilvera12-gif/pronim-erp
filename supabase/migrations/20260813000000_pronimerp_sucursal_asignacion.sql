@@ -175,7 +175,9 @@ END $$;
 -- ═════════════════════════════════════════════════════════════════════
 
 WITH empresas_una_suc AS (
-  SELECT s.empresa_id, MIN(s.id) AS sucursal_id
+  -- Postgres no tiene MIN(uuid); usamos array_agg y tomamos el único elemento
+  -- (el HAVING COUNT(*) = 1 garantiza cardinalidad 1 por empresa).
+  SELECT s.empresa_id, (array_agg(s.id))[1] AS sucursal_id
   FROM pronimerp.sucursales s
   WHERE s.activo = true
   GROUP BY s.empresa_id
