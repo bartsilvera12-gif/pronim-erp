@@ -95,6 +95,7 @@ const HIDDEN_MENU_KEYS = new Set<string>([
   "gerencia",
   "planes",
   "comisiones",
+  "configuracion",
   "crm",
   "agenda",
   "conversaciones",
