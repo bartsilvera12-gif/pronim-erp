@@ -68,6 +68,8 @@ export default function NuevaAtencionPage() {
   // posible" automáticamente; cualquier número lo overridea.
   const [aplicarCredito, setAplicarCredito] = useState<string>("");
   const [metodoCobro, setMetodoCobro] = useState<"efectivo" | "tarjeta" | "transferencia">("efectivo");
+  const [montoRecibido, setMontoRecibido] = useState<string>("");
+  const [referenciaCobro, setReferenciaCobro] = useState<string>("");
   const [observaciones, setObservaciones] = useState("");
 
   // ── Feedback ──────────────────────────────────────────────────────────
@@ -178,6 +180,16 @@ export default function NuevaAtencionPage() {
   const aCobrar = Math.max(0, totalLleva - creditoAplicadoNum);
   const creditoRestante = Math.max(0, creditoTotalDisponible - creditoAplicadoNum);
 
+  // Monto recibido / vuelto — solo relevante cuando hay que cobrar en efectivo.
+  const recibidoNum = useMemo(() => {
+    const n = Number(montoRecibido);
+    return Number.isFinite(n) ? Math.max(0, n) : 0;
+  }, [montoRecibido]);
+  const vuelto = metodoCobro === "efectivo" ? Math.max(0, recibidoNum - aCobrar) : 0;
+  const faltaCobrar = metodoCobro === "efectivo"
+    ? Math.max(0, aCobrar - recibidoNum)
+    : 0; // en tarjeta/transferencia se asume que se cobró el monto exacto
+
   // ── Filtrados / helpers UI ────────────────────────────────────────────
   const clientesFiltrados = useMemo(() => {
     const q = clienteQuery.trim().toLowerCase();
@@ -230,6 +242,7 @@ export default function NuevaAtencionPage() {
   function reset() {
     setTrae([]); setLleva([]);
     setAplicarCredito(""); setObservaciones("");
+    setMontoRecibido(""); setReferenciaCobro("");
     setError(null);
   }
 
@@ -247,6 +260,10 @@ export default function NuevaAtencionPage() {
     }
     if (lleva.some((l) => l.cantidad <= 0)) {
       setError("Revisá las líneas de 'Lleva': cantidad debe ser > 0.");
+      return;
+    }
+    if (aCobrar > 0 && metodoCobro === "efectivo" && recibidoNum < aCobrar) {
+      setError(`Falta cobrar Gs. ${Math.round(aCobrar - recibidoNum).toLocaleString("es-PY")} en efectivo. Ingresá el monto recibido.`);
       return;
     }
 
@@ -314,7 +331,11 @@ export default function NuevaAtencionPage() {
         const creditoUsado = creditoAplicadoNum;
         const efectivoNeeded = Math.max(0, total - creditoUsado);
         const pagoDetalle = efectivoNeeded > 0
-          ? [{ metodo_pago: metodoCobro, monto: efectivoNeeded }]
+          ? [{
+              metodo_pago: metodoCobro,
+              monto: efectivoNeeded,
+              referencia: referenciaCobro.trim() || null,
+            }]
           : [];
         const bodyVenta = {
           cliente_id: cliente.id,
@@ -553,20 +574,88 @@ export default function NuevaAtencionPage() {
               </p>
             </div>
             {aCobrar > 0 && (
-              <div>
+              <div className="space-y-2">
                 <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
-                  Cobrar en efectivo / tarjeta
+                  Cobrar Gs. {Math.round(aCobrar).toLocaleString("es-PY")} en
                 </label>
-                <select
-                  value={metodoCobro}
-                  onChange={(e) => setMetodoCobro(e.target.value as "efectivo"|"tarjeta"|"transferencia")}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
-                >
-                  <option value="efectivo">Efectivo</option>
-                  <option value="tarjeta">Tarjeta</option>
-                  <option value="transferencia">Transferencia</option>
-                </select>
-                <p className="text-[11px] text-slate-400 mt-1">Total a cobrar: <strong>{fmtGs(aCobrar)}</strong>.</p>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {(["efectivo", "tarjeta", "transferencia"] as const).map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setMetodoCobro(m)}
+                      className={`rounded-lg border px-2 py-2 text-xs font-medium transition-colors ${
+                        metodoCobro === m
+                          ? "border-[#4FAEB2] bg-[#4FAEB2]/10 text-[#3F8E91] ring-2 ring-[#4FAEB2]/20"
+                          : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
+                      }`}
+                    >
+                      {m === "efectivo" ? "💵 Efectivo" : m === "tarjeta" ? "💳 Tarjeta" : "📱 Transferencia"}
+                    </button>
+                  ))}
+                </div>
+
+                {metodoCobro === "efectivo" ? (
+                  <div>
+                    <label className="block text-[11px] uppercase font-semibold text-slate-500 mt-1 mb-1">
+                      Recibido del cliente
+                    </label>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min={0}
+                      step="1000"
+                      value={montoRecibido}
+                      onChange={(e) => setMontoRecibido(e.target.value)}
+                      placeholder={`Ej: ${Math.ceil(aCobrar / 10000) * 10000}`}
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-lg font-semibold focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
+                    />
+                    <div className="mt-1 flex gap-1">
+                      {[aCobrar, Math.ceil(aCobrar / 10000) * 10000, Math.ceil(aCobrar / 50000) * 50000, Math.ceil(aCobrar / 100000) * 100000]
+                        .filter((n, i, arr) => n >= aCobrar && arr.indexOf(n) === i)
+                        .slice(0, 4)
+                        .map((n) => (
+                          <button
+                            key={n}
+                            type="button"
+                            onClick={() => setMontoRecibido(String(n))}
+                            className="flex-1 rounded-md border border-slate-200 bg-white px-1 py-1 text-[11px] text-slate-600 hover:bg-slate-50"
+                          >
+                            {n.toLocaleString("es-PY")}
+                          </button>
+                        ))}
+                    </div>
+                    {faltaCobrar > 0 ? (
+                      <p className="mt-2 rounded-md border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-700">
+                        Falta cobrar <strong>{fmtGs(faltaCobrar)}</strong>.
+                      </p>
+                    ) : vuelto > 0 ? (
+                      <p className="mt-2 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-sm text-emerald-800">
+                        Vuelto: <strong className="text-lg">{fmtGs(vuelto)}</strong>
+                      </p>
+                    ) : recibidoNum > 0 ? (
+                      <p className="mt-2 rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs text-slate-600">
+                        Exacto — sin vuelto.
+                      </p>
+                    ) : null}
+                  </div>
+                ) : (
+                  <div>
+                    <label className="block text-[11px] uppercase font-semibold text-slate-500 mt-1 mb-1">
+                      Referencia / N° operación (opcional)
+                    </label>
+                    <input
+                      type="text"
+                      value={referenciaCobro}
+                      onChange={(e) => setReferenciaCobro(e.target.value)}
+                      placeholder={metodoCobro === "tarjeta" ? "Últimos 4 dígitos, autorización…" : "N° de transferencia"}
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
+                    />
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Se asume el monto exacto ({fmtGs(aCobrar)}). Sin vuelto.
+                    </p>
+                  </div>
+                )}
               </div>
             )}
           </div>
