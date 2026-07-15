@@ -72,6 +72,10 @@ export default function NuevaAtencionPage() {
   const [montoRecibido, setMontoRecibido] = useState<string>("");
   const [referenciaCobro, setReferenciaCobro] = useState<string>("");
   const [observaciones, setObservaciones] = useState("");
+  // Default true: la mercadería que trae el cliente entra al stock ahora
+  // mismo. Si la cajera tiene que catalogar/etiquetar después, puede
+  // destildar y la recepción queda pendiente de ingreso.
+  const [ingresarAlStock, setIngresarAlStock] = useState<boolean>(true);
 
   // ── Feedback ──────────────────────────────────────────────────────────
   const [error, setError] = useState<string | null>(null);
@@ -82,6 +86,8 @@ export default function NuevaAtencionPage() {
   // La cajera no debería tener que pensar en abrir/cerrar turno para
   // hacer una atención. Si no hay caja abierta al confirmar, la abrimos
   // en el primer punto disponible con monto 0.
+  const [pendientesIngresoCount, setPendientesIngresoCount] = useState<number>(0);
+  const [pendientesVencidasCount, setPendientesVencidasCount] = useState<number>(0);
   const [cajaAbiertaId, setCajaAbiertaId] = useState<string | null>(null);
   const [cajaNumero, setCajaNumero] = useState<number | null>(null);
   const [cajaAperturaHora, setCajaAperturaHora] = useState<string | null>(null);
@@ -249,6 +255,22 @@ export default function NuevaAtencionPage() {
     }
   }
 
+  // Contar recepciones pendientes de ingreso (para chip informativo)
+  async function refrescarPendientesIngreso() {
+    try {
+      const r = await fetchWithSupabaseSession("/api/recepciones/pendientes", { cache: "no-store" });
+      const j = await r.json().catch(() => ({}));
+      const arr = (j?.data?.recepciones as { fecha: string }[] | undefined) ?? [];
+      setPendientesIngresoCount(arr.length);
+      const now = Date.now();
+      const venc = arr.filter((x) => {
+        try { return (now - new Date(x.fecha).getTime()) > 72 * 3600 * 1000; }
+        catch { return false; }
+      }).length;
+      setPendientesVencidasCount(venc);
+    } catch { /* tolerar */ }
+  }
+
   // Cargar franjas + clientes iniciales + estado de caja
   useEffect(() => {
     let cancel = false;
@@ -259,6 +281,7 @@ export default function NuevaAtencionPage() {
           fetchWithSupabaseSession("/api/clientes", { cache: "no-store" }),
         ]);
         refrescarCajaEstado();
+        refrescarPendientesIngreso();
         const jf = await rf.json().catch(() => ({}));
         const jc = await rc.json().catch(() => ({}));
         if (cancel) return;
@@ -435,6 +458,7 @@ export default function NuevaAtencionPage() {
           })),
           pagos: [{ metodo: "credito", monto: totalRec }],
           observaciones: observaciones || null,
+          ingresar_ahora: ingresarAlStock,
         };
         const rr = await fetchWithSupabaseSession(`/api/clientes/${cliente.id}/recepciones`, {
           method: "POST",
@@ -501,6 +525,8 @@ export default function NuevaAtencionPage() {
       }
       setOkMsg("Atención registrada: " + partes.join(" + ") + ".");
       reset();
+      // Re-contar pendientes por si la nueva recepción quedó sin ingresar.
+      refrescarPendientesIngreso();
       // recargar saldo de crédito
       const rc = await fetchWithSupabaseSession(`/api/clientes/${cliente.id}/creditos`, { cache: "no-store" });
       const jcr = await rc.json().catch(() => ({}));
@@ -524,12 +550,30 @@ export default function NuevaAtencionPage() {
             Cargá lo que el cliente <span className="font-medium text-slate-700">trae</span> y lo que <span className="font-medium text-slate-700">lleva</span>. El sistema calcula el resto.
           </p>
         </div>
-        <Link
-          href="/ventas"
-          className="shrink-0 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
-        >
-          Historial ↗
-        </Link>
+        <div className="flex items-center gap-2 shrink-0">
+          {pendientesIngresoCount > 0 && (
+            <Link
+              href="/atencion/pendientes-ingreso"
+              className={`rounded-lg border px-3 py-1.5 text-xs font-medium ${
+                pendientesVencidasCount > 0
+                  ? "border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100"
+                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+              }`}
+              title={pendientesVencidasCount > 0
+                ? `${pendientesVencidasCount} recepción(es) con más de 72h sin ingresar al stock`
+                : "Recepciones pendientes de ingreso al stock"}
+            >
+              {pendientesVencidasCount > 0 ? "⚠ " : "📦 "}
+              {pendientesIngresoCount} pendiente{pendientesIngresoCount === 1 ? "" : "s"} ↗
+            </Link>
+          )}
+          <Link
+            href="/ventas"
+            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+          >
+            Historial ↗
+          </Link>
+        </div>
       </div>
 
       {/* ─── Banner de estado de caja con acciones directas ─── */}
@@ -866,6 +910,23 @@ export default function NuevaAtencionPage() {
             tone={creditoRestante > 0 ? "emerald" : "slate"}
           />
         </div>
+
+        {trae.length > 0 && (
+          <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={ingresarAlStock}
+              onChange={(e) => setIngresarAlStock(e.target.checked)}
+              className="h-4 w-4 rounded border-slate-300 text-[#4FAEB2] focus:ring-[#4FAEB2]"
+            />
+            <span>
+              <strong>Ingresar al stock ahora</strong>
+              <span className="ml-1 text-xs text-slate-400">
+                (si lo destildás, la recepción queda "pendiente de ingreso" y podés catalogarla después)
+              </span>
+            </span>
+          </label>
+        )}
 
         <div>
           <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
