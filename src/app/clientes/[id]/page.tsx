@@ -83,12 +83,15 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 
 // ── Tipos de pestaña ──────────────────────────────────────────────────────────
 
-type TabId = "informacion" | "vehiculos" | "estado_cuenta" | "suscripciones" | "marketing" | "proyectos" | "actividad" | "notas";
+type TabId = "informacion" | "vehiculos" | "estado_cuenta" | "consultas" | "suscripciones" | "marketing" | "proyectos" | "actividad" | "notas";
 
-const TABS: { id: TabId; label: string; showWhen?: (c: Cliente) => boolean }[] = [
+const TABS: { id: TabId; label: string; showWhen?: (c: Cliente) => boolean; href?: (id: string) => string }[] = [
   { id: "informacion",   label: "Información"      },
   // Vehículos: solo aplica al ERP de autopartes; oculto en simple client.
   { id: "vehiculos",     label: "Vehículos",        showWhen: () => !SIMPLE_CLIENTE },
+  // Consultas: KPIs + créditos por lote (FIFO) + historial cronológico.
+  //  Solo aplica al rubro retail (Pronim/Akakua'a).
+  { id: "consultas",     label: "Consultas",        showWhen: () => SIMPLE_CLIENTE, href: (id) => `/clientes/${id}/consultas` },
   { id: "estado_cuenta", label: "Estado de cuenta" },
   // Suscripciones / Proyectos / Marketing: SaaS/consultoría, no aplican
   // al rubro retail (Pronim) ni a hotelería (Reserva).
@@ -1410,7 +1413,12 @@ export default function ClienteDetailPage() {
             <button
               key={tab.id}
               type="button"
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => {
+                // Tabs con `href` (ej. Consultas) navegan a una pantalla propia
+                // en vez de renderizar contenido embebido.
+                if (tab.href) { router.push(tab.href(String(id))); return; }
+                setActiveTab(tab.id);
+              }}
               className={`px-5 py-3.5 text-sm font-medium whitespace-nowrap transition-colors border-b-2 ${
                 activeTab === tab.id
                   ? "border-gray-900 text-gray-900"
