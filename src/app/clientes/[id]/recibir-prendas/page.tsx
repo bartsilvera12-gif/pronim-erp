@@ -298,8 +298,8 @@ export default function RecibirPrendasPage() {
         {franjas.length === 0 ? (
           <p className="text-sm text-slate-500">
             No hay categorías cargadas. Andá a{" "}
-            <Link href="/admin/categorias" className="text-[#3F8E91] underline">
-              /admin/categorias
+            <Link href="/admin/franjas" className="text-[#3F8E91] underline">
+              /admin/franjas
             </Link>{" "}
             para crearlas.
           </p>

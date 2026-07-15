@@ -77,6 +77,15 @@ export default function NuevaAtencionPage() {
   // destildar y la recepción queda pendiente de ingreso.
   const [ingresarAlStock, setIngresarAlStock] = useState<boolean>(true);
 
+  // ── Promoción / cupón ────────────────────────────────────────────────
+  const [cuponInput, setCuponInput] = useState<string>("");
+  const [promoAplicada, setPromoAplicada] = useState<{
+    id: string; nombre: string; tipo: string; cupon_codigo: string | null;
+    descuento: number; cashback: number;
+  } | null>(null);
+  const [promoBuscando, setPromoBuscando] = useState(false);
+  const [promoError, setPromoError] = useState<string | null>(null);
+
   // ── Feedback ──────────────────────────────────────────────────────────
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
@@ -334,8 +343,11 @@ export default function NuevaAtencionPage() {
   //     min(disponible, lleva)). Por defecto aplica el máximo posible.
   //  4) La diferencia se cobra en efectivo/tarjeta/transferencia.
   //  5) Lo que no se aplique queda como crédito remanente para el futuro.
+  const descuentoPromo = promoAplicada?.descuento ?? 0;
+  const totalLlevaConDescuento = Math.max(0, totalLleva - descuentoPromo);
+
   const creditoTotalDisponible = creditoDisponible + totalTrae;
-  const creditoMaxAplicable = Math.min(creditoTotalDisponible, totalLleva);
+  const creditoMaxAplicable = Math.min(creditoTotalDisponible, totalLlevaConDescuento);
 
   // Si el usuario NO tocó el input, se aplica el máximo. Si lo editó, se
   // respeta el número (clampeado al rango [0, creditoMaxAplicable]).

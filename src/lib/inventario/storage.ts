@@ -60,6 +60,8 @@ interface ProductoRow {
   familia_olfativa_id?: string | null;
   /** Desglose multi-sucursal: adjuntado por /api/productos GET para admin. */
   sucursales?: Array<{ sucursal_id: string; nombre: string; es_principal: boolean; stock_actual: number }>;
+  /** Flag Pronim: producto virtual que representa una franja de precio. */
+  es_franja_precio?: boolean | null;
 }
 
 interface MovimientoRow {
@@ -143,6 +145,7 @@ function rowToProducto(row: ProductoRow): Producto {
           stock_actual: Number(s.stock_actual ?? 0),
         }))
       : undefined,
+    es_franja_precio: row.es_franja_precio === true,
   };
 }
 
