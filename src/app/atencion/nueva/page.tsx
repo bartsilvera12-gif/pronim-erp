@@ -57,6 +57,7 @@ export default function NuevaAtencionPage() {
   const [cliente, setCliente] = useState<Cliente | null>(null);
   const [clienteOpen, setClienteOpen] = useState(false);
   const [creditoDisponible, setCreditoDisponible] = useState(0);
+  const [nuevoClienteOpen, setNuevoClienteOpen] = useState(false);
 
   // ── Líneas ────────────────────────────────────────────────────────────
   const [trae, setTrae] = useState<Linea[]>([]);
@@ -398,12 +399,21 @@ export default function NuevaAtencionPage() {
             Cargá lo que el cliente <span className="font-medium text-slate-700">trae</span> y lo que <span className="font-medium text-slate-700">lleva</span>. El sistema calcula el resto.
           </p>
         </div>
-        <Link
-          href="/ventas"
-          className="shrink-0 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
-        >
-          Historial ↗
-        </Link>
+        <div className="flex gap-2 shrink-0">
+          <Link
+            href="/ventas"
+            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+            title="Abrir/cerrar caja, arqueo y movimientos manuales"
+          >
+            🧾 Caja / Arqueo ↗
+          </Link>
+          <Link
+            href="/ventas"
+            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+          >
+            Historial ↗
+          </Link>
+        </div>
       </div>
 
       {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
@@ -443,6 +453,17 @@ export default function NuevaAtencionPage() {
             />
             {clienteOpen && (
               <div className="absolute z-20 mt-1 w-full max-h-64 overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg">
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => { setNuevoClienteOpen(true); setClienteOpen(false); }}
+                  className="sticky top-0 z-10 flex w-full items-center gap-2 border-b border-slate-100 bg-white px-3 py-2 text-sm font-medium text-[#4FAEB2] hover:bg-[#4FAEB2]/5"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+                    <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
+                  </svg>
+                  Cargar nuevo cliente
+                </button>
                 {clientesFiltrados.length === 0 ? (
                   <p className="px-3 py-2 text-xs text-gray-400">Sin clientes que coincidan.</p>
                 ) : clientesFiltrados.map((c) => (
@@ -711,6 +732,202 @@ export default function NuevaAtencionPage() {
             className="text-sm text-slate-400 hover:text-slate-700"
           >
             Cancelar
+          </button>
+        </div>
+      </div>
+
+      {nuevoClienteOpen && (
+        <NuevoClienteRapidoModal
+          onClose={() => setNuevoClienteOpen(false)}
+          onCreated={(nuevo) => {
+            setClientes((prev) => [nuevo, ...prev.filter((c) => c.id !== nuevo.id)]);
+            setCliente(nuevo);
+            setClienteQuery("");
+            setClienteOpen(false);
+            setNuevoClienteOpen(false);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Modal de alta rápida de cliente (embebido)
+// ═══════════════════════════════════════════════════════════════════════
+
+function NuevoClienteRapidoModal({
+  onClose,
+  onCreated,
+}: {
+  onClose: () => void;
+  onCreated: (c: Cliente) => void;
+}) {
+  const [tipo, setTipo] = useState<"empresa" | "persona">("empresa");
+  const [razonSocial, setRazonSocial] = useState("");
+  const [ruc, setRuc] = useState("");
+  const [telefono, setTelefono] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const puedeGuardar = razonSocial.trim().length > 0 && !saving;
+
+  async function submit() {
+    setErr(null);
+    if (!razonSocial.trim()) {
+      setErr(tipo === "empresa" ? "La razón social es obligatoria." : "El nombre es obligatorio.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const payload: Record<string, unknown> = {
+        tipo_cliente: tipo,
+        nombre_contacto: razonSocial.trim().toUpperCase(),
+        empresa: tipo === "empresa" ? razonSocial.trim().toUpperCase() : null,
+        ruc: ruc.trim() || null,
+        telefono: telefono.trim() || null,
+        estado: "activo",
+      };
+      const res = await fetch("/api/clientes", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok || !j?.success) {
+        throw new Error(j?.error ?? `No se pudo crear el cliente (${res.status}).`);
+      }
+      const data = (j.data ?? {}) as {
+        id?: string;
+        empresa?: string | null;
+        nombre?: string | null;
+        nombre_contacto?: string | null;
+        ruc?: string | null;
+      };
+      if (!data.id) throw new Error("El servidor no devolvió el id del cliente.");
+      const nombre =
+        (data.empresa ?? "").trim() ||
+        (data.nombre_contacto ?? "").trim() ||
+        (data.nombre ?? "").trim() ||
+        razonSocial.trim().toUpperCase();
+      onCreated({
+        id: data.id,
+        nombre,
+        empresa: data.empresa ?? null,
+        ruc: (data.ruc ?? "").trim() || null,
+      });
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Error al crear el cliente.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const nombreLabel = tipo === "empresa" ? "Razón social" : "Nombre completo";
+  const nombrePlaceholder = tipo === "empresa" ? "Ej: TALLER VIDAL S.A." : "Ej: MARÍA PÉREZ";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-1 flex items-start justify-between gap-2">
+          <div>
+            <h3 className="text-base font-semibold text-slate-900">Nuevo cliente</h3>
+            <p className="mt-1 text-xs text-slate-500">
+              Solo los datos mínimos. Podés completar dirección, SIFEN y condiciones más tarde desde la ficha del cliente.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            aria-label="Cerrar"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+              <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="mt-4 grid grid-cols-2 gap-2 rounded-lg bg-slate-50 p-1">
+          {(["empresa", "persona"] as const).map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setTipo(t)}
+              className={`rounded-md py-1.5 text-sm font-medium transition-colors ${
+                tipo === t
+                  ? "bg-white text-slate-900 shadow-sm ring-1 ring-[#4FAEB2]/40"
+                  : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              {t === "empresa" ? "Empresa" : "Persona"}
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-4 space-y-3">
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+              {nombreLabel} <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={razonSocial}
+              onChange={(e) => setRazonSocial(e.target.value)}
+              placeholder={nombrePlaceholder}
+              autoFocus
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm uppercase focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+              {tipo === "empresa" ? "RUC" : "RUC / CI (opcional)"}
+            </label>
+            <input
+              type="text"
+              value={ruc}
+              onChange={(e) => setRuc(e.target.value)}
+              placeholder="Ej: 80011405-1"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Teléfono <span className="font-normal text-slate-400">(opcional)</span>
+            </label>
+            <input
+              type="text"
+              value={telefono}
+              onChange={(e) => setTelefono(e.target.value)}
+              placeholder="Ej: 0991 234 567"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
+            />
+          </div>
+        </div>
+
+        {err && (
+          <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+            {err}
+          </div>
+        )}
+
+        <div className="mt-5 flex items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={saving}
+            className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={submit}
+            disabled={!puedeGuardar}
+            className="rounded-lg bg-[#4FAEB2] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#3F8E91] disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500"
+          >
+            {saving ? "Creando…" : "Crear cliente"}
           </button>
         </div>
       </div>
