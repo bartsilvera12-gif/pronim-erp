@@ -175,6 +175,7 @@ const MENU_STRUCTURE_FULL: MenuItem[] = [
     icon: Search,
   },
   { key: "usuarios", slug: "usuarios", label: "Usuarios", href: "/usuarios", icon: UserCog },
+  { key: "sucursales", slug: "sucursales", label: "Sucursales", href: "/admin/sucursales", icon: Building2 },
   {
     key: "configuracion",
     slug: "configuracion",
@@ -264,7 +265,7 @@ const MENU_FAMILIES: { id: string; title: string; itemKeys: string[] }[] = [
     title: "Marketing y Automatización",
     itemKeys: ["marketing", "marketing_ops", "sorteos"],
   },
-  { id: "administracion", title: "Administración", itemKeys: ["usuarios", "configuracion"] },
+  { id: "administracion", title: "Administración", itemKeys: ["usuarios", "sucursales", "configuracion"] },
 ];
 
 function modulosSyntheticFromMenu(): ModuloEmpresa[] {
