@@ -1106,6 +1106,10 @@ export default function ClienteDetailPage() {
             </div>
           </div>
           <div className="mt-4 pt-4 border-t border-slate-200 flex flex-wrap gap-2">
+            {/* Nueva suscripción: solo aplica al modelo SaaS/consultoría. En
+                Pronim/Akakua'a (SIMPLE_CLIENTE=true) no tiene sentido — el
+                cliente no paga cuotas mensuales, hace compras/cambios. */}
+            {!SIMPLE_CLIENTE && (
             <button
               type="button"
               onClick={() => {
@@ -1124,6 +1128,7 @@ export default function ClienteDetailPage() {
             >
               <span className="text-base leading-none">+</span> Nueva suscripción
             </button>
+            )}
             <button
               type="button"
               onClick={() => {
