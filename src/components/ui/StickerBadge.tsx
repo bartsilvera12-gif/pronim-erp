@@ -1,16 +1,17 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 
 /**
- * StickerBadge — etiqueta estilo "sticker recortado" para señalizar segmentos
- * de cliente y estados relacionados. Diseño plano (sin sombras, sin 3D, sin
- * animaciones, sin íconos). Sólo Tailwind + SVG inline para el borde
- * discontinuo que sigue la forma recortada.
+ * StickerBadge — sticker rectangular de papel con extremo derecho recortado
+ * en forma de etiqueta. Fondo sólido, borde discontinuo 2 px, texto oscuro
+ * en negrita. Sin sombras, sin gradientes, sin animaciones, sin íconos.
+ *
+ * Se dibuja con un SVG inline que define la forma exacta (rectángulo con
+ * flag derecha) y su borde discontinuo — el borde CSS no puede seguir un
+ * clip-path, así que la única forma limpia de tener el mismo borde en los
+ * 4 lados (incluido el corte diagonal) es via <polygon stroke="…"/>.
  *
  * Uso:
  *   <StickerBadge type="vip">Cliente VIP</StickerBadge>
- *   <StickerBadge type="deuda" title="3 reclamos previos">Con reclamos previos</StickerBadge>
- *
- * NO es interactivo: pointer-events-none + no role button + sin cursor pointer.
  */
 
 export type StickerBadgeType =
@@ -26,32 +27,29 @@ type Props = {
   type: StickerBadgeType;
   children: ReactNode;
   title?: string;
-  /** Rotación fija leve. Alterná entre 'left' y 'right' cuando haya varios juntos. */
+  /** Rotación fija leve (~1.5°). Alterná entre 'left' y 'right' cuando haya varios juntos. */
   tilt?: "left" | "right" | "none";
   className?: string;
 };
 
-type Palette = {
-  text: string;
-  fill: string;
-  stroke: string;
-};
+type Palette = { bg: string; fg: string };
 
-// Clases completas en el fuente (JIT las detecta). Sombras / gradientes / anim: prohibido.
+// Hex values fijos, no dependen de Tailwind, así el color coincide 1:1 con
+// lo especificado. bg → fondo del sticker, fg → borde + texto.
 const PALETTE: Record<StickerBadgeType, Palette> = {
-  nuevo:     { text: "text-amber-900",   fill: "fill-amber-100",   stroke: "stroke-amber-600" },
-  frecuente: { text: "text-sky-900",     fill: "fill-sky-100",     stroke: "stroke-sky-600" },
-  vip:       { text: "text-violet-900",  fill: "fill-violet-100",  stroke: "stroke-violet-600" },
-  mayorista: { text: "text-blue-900",    fill: "fill-blue-100",    stroke: "stroke-blue-600" },
-  credito:   { text: "text-emerald-900", fill: "fill-emerald-100", stroke: "stroke-emerald-600" },
-  deuda:     { text: "text-rose-900",    fill: "fill-rose-100",    stroke: "stroke-rose-600" },
-  inactivo:  { text: "text-slate-700",   fill: "fill-slate-100",   stroke: "stroke-slate-400" },
+  nuevo:     { bg: "#FDE68A", fg: "#1E3A5F" },
+  frecuente: { bg: "#BAE6FD", fg: "#075985" },
+  vip:       { bg: "#DDD6FE", fg: "#5B21B6" },
+  mayorista: { bg: "#BFDBFE", fg: "#1E40AF" },
+  credito:   { bg: "#BBF7D0", fg: "#166534" },
+  deuda:     { bg: "#FECACA", fg: "#991B1B" },
+  inactivo:  { bg: "#E5E7EB", fg: "#374151" },
 };
 
-const TILT: Record<NonNullable<Props["tilt"]>, string> = {
-  left:  "-rotate-2",
-  right: "rotate-1",
-  none:  "",
+const TILT_DEG: Record<NonNullable<Props["tilt"]>, string> = {
+  left:  "rotate(-1.5deg)",
+  right: "rotate(1.5deg)",
+  none:  "none",
 };
 
 export function StickerBadge({
@@ -62,20 +60,25 @@ export function StickerBadge({
   className = "",
 }: Props) {
   const p = PALETTE[type];
+  const wrapperStyle: CSSProperties = {
+    color: p.fg,
+    transform: TILT_DEG[tilt],
+    minHeight: "28px",
+    padding: "6px 20px 6px 12px", // 12 izq, 20 der (deja hueco para el pico)
+    lineHeight: 1,
+  };
   return (
     <span
       title={title}
       aria-label={typeof children === "string" ? children : title}
+      style={wrapperStyle}
       className={[
         "relative inline-flex items-center justify-center align-middle",
         "select-none pointer-events-none",
-        "px-3 py-1 text-[11px] font-bold uppercase tracking-[0.06em] leading-none",
-        p.text,
-        TILT[tilt],
+        "text-[11px] font-bold uppercase tracking-[0.06em]",
         className,
       ].join(" ")}
     >
-      {/* Etiqueta recortada: relleno + borde discontinuo fino que sigue la forma. */}
       <svg
         aria-hidden
         className="absolute inset-0 h-full w-full"
@@ -83,10 +86,11 @@ export function StickerBadge({
         viewBox="0 0 100 40"
       >
         <polygon
-          points="3,8 8,0 92,0 97,8 100,20 97,32 92,40 8,40 3,32 0,20"
-          className={`${p.fill} ${p.stroke}`}
-          strokeWidth={1.25}
-          strokeDasharray="3 2"
+          points="2,2 90,2 98,20 90,38 2,38"
+          fill={p.bg}
+          stroke={p.fg}
+          strokeWidth={2}
+          strokeDasharray="4 3"
           strokeLinejoin="round"
           vectorEffect="non-scaling-stroke"
         />
