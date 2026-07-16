@@ -122,6 +122,13 @@ export default function NuevaAtencionPage() {
   const [beneficiosMarcados, setBeneficiosMarcados] = useState<Record<string, { marcado: boolean; monto: string }>>({});
   const [clienteSegmentoLoading, setClienteSegmentoLoading] = useState(false);
 
+  // Config de redondeo hacia arriba del subtotal de recepción ("El cliente trae").
+  // 0 = sin redondeo. Default 5000. Ej: 136.500 → 140.000.
+  const [redondeoMultiplo, setRedondeoMultiplo] = useState<number>(5000);
+
+  // Modal "Cambio directo": prenda por otra del mismo precio, sin dinero de por medio.
+  const [cambioDirectoOpen, setCambioDirectoOpen] = useState(false);
+
   // ── Líneas ────────────────────────────────────────────────────────────
   const [trae, setTrae] = useState<Linea[]>([]);
   const [lleva, setLleva] = useState<Linea[]>([]);
@@ -456,8 +463,27 @@ export default function NuevaAtencionPage() {
     return () => { cancel = true; };
   }, [cliente]);
 
+  // Config de redondeo de recepción — carga única al montar.
+  useEffect(() => {
+    let cancel = false;
+    fetchWithSupabaseSession("/api/empresas/recepcion-redondeo", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        if (cancel || !j?.success) return;
+        const m = Number(j.data?.redondeo_recepcion_multiplo ?? 5000);
+        setRedondeoMultiplo(Number.isFinite(m) && m >= 0 ? m : 5000);
+      })
+      .catch(() => { /* silencioso: si falla queda default 5000 */ });
+    return () => { cancel = true; };
+  }, []);
+
   // ── Cálculos ──────────────────────────────────────────────────────────
-  const totalTrae  = useMemo(() => trae.reduce((s, l) => s + l.precio_unitario * l.cantidad, 0), [trae]);
+  const totalTraeSubtotal = useMemo(() => trae.reduce((s, l) => s + l.precio_unitario * l.cantidad, 0), [trae]);
+  const totalTrae = useMemo(() => {
+    if (redondeoMultiplo <= 0 || totalTraeSubtotal <= 0) return totalTraeSubtotal;
+    return Math.ceil(totalTraeSubtotal / redondeoMultiplo) * redondeoMultiplo;
+  }, [totalTraeSubtotal, redondeoMultiplo]);
+  const redondeoDelta = totalTrae - totalTraeSubtotal;
   const totalLleva = useMemo(() => lleva.reduce((s, l) => s + l.precio_unitario * l.cantidad, 0), [lleva]);
 
   // Modelo explícito:
@@ -533,6 +559,26 @@ export default function NuevaAtencionPage() {
         return [...prev, nueva];
       });
     }
+  }
+
+  // Cambio directo: agrega la MISMA franja a TRAE y LLEVA a la vez.
+  // El sistema calcula naturalmente total_a_cobrar = 0 en el balance.
+  function agregarCambioDirecto(franja: Franja, cantidad: number) {
+    const precio = Number(franja.precio_venta) || 0;
+    const merge = (prev: Linea[]) => {
+      const idx = prev.findIndex((l) => l.franja_id === franja.id);
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = { ...copy[idx], cantidad: copy[idx].cantidad + cantidad };
+        return copy;
+      }
+      return [
+        ...prev,
+        { franja_id: franja.id, precio_referencia: precio, precio_unitario: precio, cantidad },
+      ];
+    };
+    setTrae(merge);
+    setLleva(merge);
   }
 
   function actualizarLinea(bucket: "trae" | "lleva", franjaId: string, patch: Partial<Linea>) {
@@ -1109,10 +1155,21 @@ export default function NuevaAtencionPage() {
           cargando={cargando}
           lineas={trae}
           total={totalTrae}
+          subtotalSinRedondeo={totalTraeSubtotal}
           onAgregar={(f) => agregarLineaEn("trae", f)}
           onActualizar={(id, patch) => actualizarLinea("trae", id, patch)}
           onQuitar={(id) => quitarLinea("trae", id)}
           permitirEditarPrecio
+          accionesHeader={
+            <button
+              type="button"
+              onClick={() => setCambioDirectoOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-md border border-emerald-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-50"
+              title="Cliente cambia una prenda por otra del mismo precio, sin pagar diferencia"
+            >
+              ⇄ Cambio directo
+            </button>
+          }
         />
         <ColumnaAtencion
           titulo="El cliente LLEVA"
@@ -1135,7 +1192,21 @@ export default function NuevaAtencionPage() {
 
         {/* Fila 1: totales de la atención */}
         <div className="grid grid-cols-2 gap-3 text-sm">
-          <BalanceItem label="Total trae"  value={fmtGs(totalTrae)}  tone="emerald" />
+          <div>
+            <BalanceItem
+              label={redondeoDelta > 0 ? "Total trae (redondeado)" : "Total trae"}
+              value={fmtGs(totalTrae)}
+              tone="emerald"
+            />
+            {redondeoDelta > 0 && (
+              <p className="mt-1 text-[11px] text-slate-500">
+                Subtotal <span className="line-through">{fmtGs(totalTraeSubtotal)}</span>
+                <span className="ml-1 text-emerald-700 font-semibold">
+                  +{fmtGs(redondeoDelta)} redondeo
+                </span>
+              </p>
+            )}
+          </div>
           <BalanceItem label="Total lleva" value={fmtGs(totalLleva)} tone="sky" />
         </div>
 
@@ -1414,6 +1485,17 @@ export default function NuevaAtencionPage() {
             setClienteQuery("");
             setClienteOpen(false);
             setNuevoClienteOpen(false);
+          }}
+        />
+      )}
+
+      {cambioDirectoOpen && (
+        <CambioDirectoModal
+          franjas={franjas}
+          onClose={() => setCambioDirectoOpen(false)}
+          onConfirmar={(f, cant) => {
+            agregarCambioDirecto(f, cant);
+            setCambioDirectoOpen(false);
           }}
         />
       )}
@@ -1958,25 +2040,40 @@ function ColumnaAtencion(props: {
   onActualizar: (franjaId: string, patch: Partial<Linea>) => void;
   onQuitar: (franjaId: string) => void;
   permitirEditarPrecio: boolean;
+  /** Subtotal antes del redondeo. Si es igual a `total`, no se muestra nada extra. */
+  subtotalSinRedondeo?: number;
+  /** Acciones extra en el header (ej. botón "Cambio directo"). */
+  accionesHeader?: React.ReactNode;
 }) {
-  const { titulo, descripcion, tono, franjas, cargando, lineas, total, onAgregar, onActualizar, onQuitar, permitirEditarPrecio } = props;
+  const { titulo, descripcion, tono, franjas, cargando, lineas, total, onAgregar, onActualizar, onQuitar, permitirEditarPrecio, subtotalSinRedondeo, accionesHeader } = props;
   const border = tono === "emerald" ? "border-emerald-200" : "border-sky-200";
   const bg = tono === "emerald" ? "bg-emerald-50/40" : "bg-sky-50/40";
   const btn = tono === "emerald"
     ? "border-emerald-200 hover:border-emerald-400 hover:bg-emerald-50"
     : "border-sky-200 hover:border-sky-400 hover:bg-sky-50";
   const title = tono === "emerald" ? "text-emerald-700" : "text-sky-700";
+  const delta = subtotalSinRedondeo != null ? total - subtotalSinRedondeo : 0;
+  const hayRedondeo = delta > 0;
 
   return (
     <div className={`rounded-xl border ${border} ${bg} p-4 sm:p-5`}>
-      <div className="flex items-center justify-between mb-3">
-        <div>
+      <div className="flex items-center justify-between mb-3 gap-3">
+        <div className="min-w-0">
           <h2 className={`text-sm font-bold uppercase tracking-wider ${title}`}>{titulo}</h2>
           <p className="text-xs text-slate-500 mt-0.5">{descripcion}</p>
+          {accionesHeader && <div className="mt-2">{accionesHeader}</div>}
         </div>
-        <div className="text-right">
-          <p className="text-[11px] uppercase text-slate-500">Subtotal</p>
+        <div className="text-right shrink-0">
+          <p className="text-[11px] uppercase text-slate-500">
+            {hayRedondeo ? "A pagar (redondeado)" : "Subtotal"}
+          </p>
           <p className="text-lg font-bold text-slate-800">{fmtGs(total)}</p>
+          {hayRedondeo && subtotalSinRedondeo != null && (
+            <p className="text-[11px] text-slate-500 mt-0.5">
+              Subtotal <span className="line-through">{fmtGs(subtotalSinRedondeo)}</span>
+              <span className="ml-1 text-emerald-700 font-semibold">+{fmtGs(delta)}</span>
+            </p>
+          )}
         </div>
       </div>
 
@@ -2088,6 +2185,121 @@ function BalanceItem({ label, value, tone }: { label: string; value: string; ton
     <div className={`rounded-lg border px-3 py-2 ${bg}`}>
       <p className="text-[10px] uppercase font-semibold">{label}</p>
       <p className="text-base font-bold">{value}</p>
+    </div>
+  );
+}
+
+// ── Cambio directo ─────────────────────────────────────────────────────
+// Cliente entrega una prenda y se lleva otra del MISMO precio (mismo valor
+// de franja). El cambio se materializa agregando la franja a TRAE y LLEVA
+// en igual cantidad; el balance calcula naturalmente "a cobrar = 0".
+function CambioDirectoModal({
+  franjas,
+  onClose,
+  onConfirmar,
+}: {
+  franjas: Franja[];
+  onClose: () => void;
+  onConfirmar: (franja: Franja, cantidad: number) => void;
+}) {
+  const [franjaId, setFranjaId] = useState<string>("");
+  const [cantidad, setCantidad] = useState<number>(1);
+  const franjaSel = franjas.find((f) => f.id === franjaId) ?? null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-3 mb-4">
+          <div>
+            <h3 className="text-lg font-bold text-slate-900">Cambio directo</h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              El cliente entrega una prenda y se lleva otra del <span className="font-semibold text-slate-700">mismo precio</span>. No hay dinero de por medio.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-slate-400 hover:text-slate-600 text-xl leading-none"
+            aria-label="Cerrar"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">
+              Categoría / precio
+            </label>
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+              {franjas.map((f) => {
+                const sel = f.id === franjaId;
+                return (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => setFranjaId(f.id)}
+                    className={`rounded-lg border px-2 py-2 text-center transition-colors ${
+                      sel
+                        ? "border-emerald-500 bg-emerald-50 ring-1 ring-emerald-500"
+                        : "border-slate-200 bg-white hover:border-emerald-300 hover:bg-emerald-50/40"
+                    }`}
+                  >
+                    <p className="text-[10px] text-slate-400 uppercase truncate">{f.nombre}</p>
+                    <p className="text-sm font-bold text-slate-800">{fmtGs(Number(f.precio_venta) || 0)}</p>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">
+              Cantidad
+            </label>
+            <input
+              type="number"
+              min={1}
+              value={cantidad}
+              onChange={(e) => {
+                const n = Number(e.target.value);
+                setCantidad(Number.isFinite(n) && n > 0 ? Math.floor(n) : 1);
+              }}
+              className="w-24 rounded-md border border-slate-200 px-2 py-1 text-right text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
+            />
+          </div>
+
+          {franjaSel && (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 p-3 text-sm text-emerald-900">
+              Se agregará <span className="font-semibold">{cantidad}× {franjaSel.nombre}</span> a <span className="font-semibold">Trae</span> y también a <span className="font-semibold">Lleva</span>, por {fmtGs((Number(franjaSel.precio_venta) || 0) * cantidad)}. El balance queda en cero.
+            </div>
+          )}
+        </div>
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            disabled={!franjaSel || cantidad < 1}
+            onClick={() => franjaSel && onConfirmar(franjaSel, cantidad)}
+            className="rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white px-4 py-1.5 text-sm font-semibold"
+          >
+            Agregar cambio
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
