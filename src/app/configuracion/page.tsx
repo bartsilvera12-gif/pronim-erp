@@ -90,6 +90,16 @@ export default function ConfiguracionPage() {
           </li>
           <li>
             <SettingsModuleCard
+              title="Caja — Alertas y beneficios"
+              subtitle="PRONIM · CAJA"
+              description="Mensajes contextuales (sticky notes) que le aparecen al vendedor y checklist de beneficios entregables al cerrar una atención. Personalizable por tipo de cliente."
+              icon={SlidersHorizontal}
+              badge={editorBadge}
+              href="/configuracion/caja"
+            />
+          </li>
+          <li>
+            <SettingsModuleCard
               title="Entidades bancarias"
               subtitle="GLOBAL · COBROS"
               description="Cajas, bancos, tarjetas/POS y billeteras para el cobro de ventas y la conciliación. Código corto para búsqueda rápida del cajero."

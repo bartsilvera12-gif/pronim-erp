@@ -5,6 +5,14 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import MontoInput from "@/components/ui/MontoInput";
+import {
+  ALERTAS_DEFAULTS,
+  mergeConfig,
+  resolverAlerta,
+  segmentoKeysAplicables,
+  type AlertasConfig,
+  type BeneficioCfg,
+} from "@/lib/atencion/alertas-config";
 import { StickerBadge } from "@/components/ui/StickerBadge";
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -78,43 +86,6 @@ export default function NuevaAtencionPage() {
 
   // ── Config del modal previo al cierre (alertas + beneficios) ──────────
   // Se carga desde /api/configuracion/atencion-alertas. Si falla, usamos DEFAULTS.
-  type AlertaCfg = { activa: boolean; titulo: string; mensaje: string };
-  type BeneficioCfg = {
-    id: string;
-    label: string;
-    tipo_evento: "beneficio" | "descuento" | "cashback" | "otro";
-    pide_monto: boolean;
-    genera_credito?: boolean;
-  };
-  type AlertasConfig = {
-    prendas_caras: AlertaCfg & { precio_min: number };
-    prendas_baratas: AlertaCfg & { precio_max: number };
-    pocas_prendas: AlertaCfg & { cantidad_max: number };
-    beneficios: BeneficioCfg[];
-  };
-  const ALERTAS_DEFAULTS: AlertasConfig = {
-    prendas_caras: {
-      activa: true, precio_min: 39000,
-      titulo: "Invitá al cliente a traer prendas",
-      mensaje: "Recordale que si estas prendas dejan de servirle, puede traerlas para evaluación y obtener crédito.",
-    },
-    prendas_baratas: {
-      activa: true, precio_max: 14000,
-      titulo: "Comentá la reposición de los lunes",
-      mensaje: "Todos los lunes reponemos prendas de promoción — invitá al cliente a pasar.",
-    },
-    pocas_prendas: {
-      activa: true, cantidad_max: 2,
-      titulo: "¿Mostraste todo?",
-      mensaje: "Antes de cerrar, verificá que hayas mostrado todo lo que podría interesarle al cliente.",
-    },
-    beneficios: [
-      { id: "cashback",         label: "Cashback",         tipo_evento: "cashback",  pide_monto: true,  genera_credito: true  },
-      { id: "ecobag",           label: "Ecobag",           tipo_evento: "beneficio", pide_monto: false, genera_credito: false },
-      { id: "regalo_dia",       label: "Regalito del día", tipo_evento: "beneficio", pide_monto: false, genera_credito: false },
-      { id: "descuento_manual", label: "Descuento manual", tipo_evento: "descuento", pide_monto: true,  genera_credito: false },
-    ],
-  };
   const [alertasConfig, setAlertasConfig] = useState<AlertasConfig>(ALERTAS_DEFAULTS);
 
   // Modal pre-cierre.
@@ -648,35 +619,40 @@ export default function NuevaAtencionPage() {
     setPromoError(null);
   }
 
-  // Alertas condicionadas: se calculan desde el carrito "lleva" al momento
-  // de abrir el modal. Van al costado del checklist de beneficios.
+  // Alertas condicionadas: se calculan desde el carrito "lleva" y, si hay
+  // cliente cargado, aplican el override por segmento (VIP, con reclamos, etc).
   const alertasDisparadas = useMemo(() => {
-    if (lleva.length === 0) return [] as AlertaCfg[];
+    if (lleva.length === 0) return [] as { titulo: string; mensaje: string }[];
     const cantidadTotal = lleva.reduce((s, l) => s + l.cantidad, 0);
     const preciosUnitarios = lleva.map((l) => l.precio_unitario);
-    const disparadas: AlertaCfg[] = [];
+    const segKeys = segmentoKeysAplicables({
+      categoria: clienteSegmento?.categoria,
+      tieneReclamos: clienteSegmento?.tieneReclamos,
+      recibioBeneficios: clienteSegmento?.recibioBeneficios,
+    });
+    const out: { titulo: string; mensaje: string }[] = [];
     if (
       alertasConfig.prendas_caras.activa &&
       preciosUnitarios.some((p) => p >= alertasConfig.prendas_caras.precio_min)
     ) {
-      disparadas.push(alertasConfig.prendas_caras);
+      out.push(resolverAlerta(alertasConfig.prendas_caras, segKeys));
     }
     if (
       alertasConfig.prendas_baratas.activa &&
       // "varias prenditas baratas" → al menos 2 líneas con precio <= max
       lleva.filter((l) => l.precio_unitario > 0 && l.precio_unitario <= alertasConfig.prendas_baratas.precio_max).length >= 2
     ) {
-      disparadas.push(alertasConfig.prendas_baratas);
+      out.push(resolverAlerta(alertasConfig.prendas_baratas, segKeys));
     }
     if (
       alertasConfig.pocas_prendas.activa &&
       cantidadTotal > 0 &&
       cantidadTotal <= alertasConfig.pocas_prendas.cantidad_max
     ) {
-      disparadas.push(alertasConfig.pocas_prendas);
+      out.push(resolverAlerta(alertasConfig.pocas_prendas, segKeys));
     }
-    return disparadas;
-  }, [lleva, alertasConfig]);
+    return out;
+  }, [lleva, alertasConfig, clienteSegmento]);
 
   // Cargar config del modal (defaults si falla o si la empresa no tiene fila).
   useEffect(() => {
@@ -685,21 +661,10 @@ export default function NuevaAtencionPage() {
       .then((r) => r.json())
       .then((j) => {
         if (cancel || !j?.success) return;
-        const c = j.data?.config;
-        if (c && typeof c === "object") {
-          setAlertasConfig({
-            prendas_caras:   { ...ALERTAS_DEFAULTS.prendas_caras,   ...(c.prendas_caras   ?? {}) },
-            prendas_baratas: { ...ALERTAS_DEFAULTS.prendas_baratas, ...(c.prendas_baratas ?? {}) },
-            pocas_prendas:   { ...ALERTAS_DEFAULTS.pocas_prendas,   ...(c.pocas_prendas   ?? {}) },
-            beneficios: Array.isArray(c.beneficios) && c.beneficios.length > 0
-              ? c.beneficios
-              : ALERTAS_DEFAULTS.beneficios,
-          });
-        }
+        setAlertasConfig(mergeConfig(j.data?.config));
       })
       .catch(() => { /* defaults ya cargados */ });
     return () => { cancel = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Confirmar ─────────────────────────────────────────────────────────
