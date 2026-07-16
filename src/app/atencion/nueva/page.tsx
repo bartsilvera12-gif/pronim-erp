@@ -926,6 +926,14 @@ export default function NuevaAtencionPage() {
   }
 
   // ── Render ────────────────────────────────────────────────────────────
+  // Paleta y rotación para las "sticky notes" del rail derecho. Estable
+  // por índice para que la misma alerta no cambie de estilo al re-render.
+  const STICKY_STYLES = [
+    { bg: "bg-yellow-100", tape: "bg-yellow-300/70", tilt: "-rotate-2", text: "text-yellow-900" },
+    { bg: "bg-pink-100",   tape: "bg-pink-300/70",   tilt: "rotate-1",  text: "text-pink-900"   },
+    { bg: "bg-sky-100",    tape: "bg-sky-300/70",    tilt: "-rotate-1", text: "text-sky-900"    },
+  ];
+
   return (
     <div className="space-y-4 max-w-7xl">
       <div className="flex items-center justify-between gap-3">
@@ -1500,6 +1508,36 @@ export default function NuevaAtencionPage() {
         />
       )}
 
+      {/* ─── Sticky notes: recordatorios contextuales al armar el ticket ─── */}
+      {cliente && alertasDisparadas.length > 0 && (
+        <aside
+          aria-label="Recordatorios para el vendedor"
+          className="hidden xl:flex fixed top-28 right-6 z-30 flex-col gap-4 w-64 pointer-events-none"
+        >
+          {alertasDisparadas.map((a, i) => {
+            const s = STICKY_STYLES[i % STICKY_STYLES.length];
+            return (
+              <div
+                key={`${a.titulo}-${i}`}
+                className={`relative ${s.bg} ${s.tilt} pointer-events-auto shadow-[0_6px_16px_-4px_rgba(0,0,0,0.25)] px-4 pt-5 pb-4 transition-transform hover:rotate-0 hover:scale-[1.02]`}
+                style={{ borderRadius: "2px 2px 14px 2px" }}
+              >
+                <span
+                  aria-hidden
+                  className={`absolute -top-2 left-1/2 -translate-x-1/2 h-4 w-16 ${s.tape} rotate-[-3deg] shadow-sm`}
+                />
+                <p className={`text-[13px] font-bold leading-snug ${s.text}`}>
+                  {a.titulo}
+                </p>
+                <p className={`text-[12px] mt-1 leading-snug ${s.text} opacity-90`}>
+                  {a.mensaje}
+                </p>
+              </div>
+            );
+          })}
+        </aside>
+      )}
+
       {/* ─── Modal previo al cierre: alertas + beneficios entregados ─── */}
       {preCierreOpen && (
         <div
@@ -1529,22 +1567,6 @@ export default function NuevaAtencionPage() {
                 </svg>
               </button>
             </div>
-
-            {alertasDisparadas.length > 0 && (
-              <div className="space-y-2 mb-5">
-                {alertasDisparadas.map((a, i) => (
-                  <div key={i} className="rounded-xl border border-amber-200 bg-amber-50 p-3 flex gap-3">
-                    <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5 shrink-0 text-amber-500">
-                      <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625l6.28-10.875zM10 6a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 10 6zm0 8a1 1 0 1 0 0-2 1 1 0 0 0 0 2z" clipRule="evenodd" />
-                    </svg>
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-amber-900">{a.titulo}</p>
-                      <p className="text-sm text-amber-800 mt-0.5">{a.mensaje}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
 
             <div className="mb-2">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
