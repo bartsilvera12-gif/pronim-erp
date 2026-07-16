@@ -721,6 +721,8 @@ export default function NuevaAtencionPage() {
   }
 
   async function confirmar() {
+    // Defensivo: preConfirmar ya validó, pero TS no puede seguirlo.
+    if (!cliente) return;
     setEnviando(true);
     try {
       // La caja se abre explícitamente antes de arrancar (gate al entrar
@@ -853,6 +855,10 @@ export default function NuevaAtencionPage() {
       if (creditoRestante > creditoDisponible) {
         partes.push(`crédito restante ${fmtGs(creditoRestante)}`);
       }
+      // Persistir beneficios marcados en el modal previo al cierre.
+      // Es best-effort: si falla, la venta ya cerró y no la revertimos.
+      await persistirBeneficios();
+      setPreCierreOpen(false);
       setOkMsg("Atención registrada: " + partes.join(" + ") + ".");
       reset();
       // Re-contar pendientes por si la nueva recepción quedó sin ingresar.
@@ -1397,7 +1403,7 @@ export default function NuevaAtencionPage() {
         <div className="flex flex-wrap items-center gap-3 pt-1">
           <button
             type="button"
-            onClick={confirmar}
+            onClick={preConfirmar}
             disabled={enviando || !cliente || (trae.length === 0 && lleva.length === 0)}
             className="rounded-lg bg-[#4FAEB2] hover:bg-[#3F8E91] disabled:bg-slate-200 disabled:text-slate-500 disabled:cursor-not-allowed text-white text-sm font-semibold px-6 py-2.5 transition-colors shadow-sm active:scale-95"
           >
@@ -1432,6 +1438,131 @@ export default function NuevaAtencionPage() {
             setNuevoClienteOpen(false);
           }}
         />
+      )}
+
+      {/* ─── Modal previo al cierre: alertas + beneficios entregados ─── */}
+      {preCierreOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => { if (!enviando) setPreCierreOpen(false); }}
+        >
+          <div
+            className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Antes de cerrar la atención</h3>
+                <p className="text-sm text-slate-500 mt-0.5">
+                  Repasá los recordatorios y marcá los beneficios que entregaste.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreCierreOpen(false)}
+                disabled={enviando}
+                className="text-slate-400 hover:text-slate-600 disabled:opacity-40"
+                aria-label="Cerrar"
+              >
+                <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+                  <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22z" />
+                </svg>
+              </button>
+            </div>
+
+            {alertasDisparadas.length > 0 && (
+              <div className="space-y-2 mb-5">
+                {alertasDisparadas.map((a, i) => (
+                  <div key={i} className="rounded-xl border border-amber-200 bg-amber-50 p-3 flex gap-3">
+                    <svg viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5 shrink-0 text-amber-500">
+                      <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625l6.28-10.875zM10 6a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 10 6zm0 8a1 1 0 1 0 0-2 1 1 0 0 0 0 2z" clipRule="evenodd" />
+                    </svg>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-amber-900">{a.titulo}</p>
+                      <p className="text-sm text-amber-800 mt-0.5">{a.mensaje}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="mb-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Beneficios entregados
+              </p>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Marcá lo que le diste al cliente. Se registra en su historial.
+              </p>
+            </div>
+            <div className="space-y-2 mb-5">
+              {alertasConfig.beneficios.map((b) => {
+                const marcado = !!beneficiosMarcados[b.id]?.marcado;
+                const monto = beneficiosMarcados[b.id]?.monto ?? "";
+                return (
+                  <label
+                    key={b.id}
+                    className={`flex items-center gap-3 rounded-xl border p-3 cursor-pointer transition-colors ${
+                      marcado ? "border-emerald-300 bg-emerald-50" : "border-slate-200 hover:bg-slate-50"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={marcado}
+                      onChange={(e) =>
+                        setBeneficiosMarcados((prev) => ({
+                          ...prev,
+                          [b.id]: { marcado: e.target.checked, monto: prev[b.id]?.monto ?? "" },
+                        }))
+                      }
+                      className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-slate-800">{b.label}</p>
+                      {b.tipo_evento === "cashback" && b.genera_credito && (
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          Si marcás con monto, se agrega como crédito a favor del cliente.
+                        </p>
+                      )}
+                    </div>
+                    {b.pide_monto && marcado && (
+                      <MontoInput
+                        value={monto === "" ? 0 : Number(monto) || 0}
+                        onChange={(n) =>
+                          setBeneficiosMarcados((prev) => ({
+                            ...prev,
+                            [b.id]: { marcado: true, monto: String(n) },
+                          }))
+                        }
+                        placeholder="Gs."
+                        decimals={false}
+                        className="w-32 rounded-lg border border-slate-300 px-2 py-1 text-sm text-right"
+                      />
+                    )}
+                  </label>
+                );
+              })}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setPreCierreOpen(false)}
+                disabled={enviando}
+                className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+              >
+                Volver
+              </button>
+              <button
+                type="button"
+                onClick={confirmar}
+                disabled={enviando}
+                className="rounded-lg bg-[#4FAEB2] hover:bg-[#3F8E91] disabled:bg-slate-300 text-white text-sm font-semibold px-5 py-2 shadow-sm"
+              >
+                {enviando ? "Registrando…" : "Cerrar atención"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {cajaModalOpen && (
