@@ -168,13 +168,23 @@ export default function NuevaVentaPage() {
   const [saldoCredito, setSaldoCredito] = useState<number>(0);
   const [creditoUsado, setCreditoUsado] = useState<string>("");
 
-  // Segmento del cliente (nuevo / habitual / vip) derivado de sus KPIs.
-  // Umbrales: VIP ≥ 5.000.000 Gs históricos ó ≥ 6 compras en 90 días.
+  // Segmento del cliente derivado de KPIs + timeline.
+  // Categorías (mutuamente excluyentes): nuevo | habitual | vip | dormido
+  // Flags (pueden coexistir con la categoría): reclamos previos, beneficios recibidos.
+  // Umbrales por defecto:
+  //   VIP     → ≥ 5.000.000 Gs históricos ó ≥ 6 compras en 90 días
+  //   Dormido → ya compró alguna vez pero hace > 120 días que no vuelve
+  //   Nuevo   → sin compras previas
+  //   Habitual→ resto
   type ClienteSegmento = {
-    categoria: "nuevo" | "habitual" | "vip";
+    categoria: "nuevo" | "habitual" | "vip" | "dormido";
     totalHistorico: number;
     comprasUltimos90d: number;
     diasDesdeUltima: number | null;
+    tieneReclamos: boolean;
+    reclamosCount: number;
+    recibioBeneficios: boolean;
+    beneficiosCount: number;
   };
   const [clienteSegmento, setClienteSegmento] = useState<ClienteSegmento | null>(null);
 
@@ -463,6 +473,7 @@ export default function NuevaVentaPage() {
       .then((j) => {
         if (cancelled || !j?.success) return;
         const k = j.data?.kpis ?? {};
+        const timeline: { tipo: string }[] = Array.isArray(j.data?.timeline) ? j.data.timeline : [];
         const total = Number(k.total_comprado_historico ?? 0);
         const compras90 = Number(k.compras_ultimos_90d ?? 0);
         const diasUlt = k.dias_desde_ultima_compra == null ? null : Number(k.dias_desde_ultima_compra);
@@ -471,12 +482,22 @@ export default function NuevaVentaPage() {
             ? "vip"
             : total <= 0
               ? "nuevo"
-              : "habitual";
+              : diasUlt != null && diasUlt > 120
+                ? "dormido"
+                : "habitual";
+        const reclamosCount = timeline.filter((e) => e.tipo === "reclamo").length;
+        const beneficiosCount = timeline.filter(
+          (e) => e.tipo === "beneficio" || e.tipo === "cashback" || e.tipo === "descuento",
+        ).length;
         setClienteSegmento({
           categoria,
           totalHistorico: total,
           comprasUltimos90d: compras90,
           diasDesdeUltima: diasUlt,
+          tieneReclamos: reclamosCount > 0,
+          reclamosCount,
+          recibioBeneficios: beneficiosCount > 0,
+          beneficiosCount,
         });
       })
       .catch(() => { /* silencioso: si falla, no mostramos chip */ });
@@ -944,7 +965,7 @@ export default function NuevaVentaPage() {
                   )}
                 </div>
               )}
-              {/* Chip de segmento (nuevo / habitual / vip) */}
+              {/* Chip de segmento + flags del cliente */}
               {clienteSel && clienteSegmento && (
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
                   {clienteSegmento.categoria === "vip" && (
@@ -954,12 +975,40 @@ export default function NuevaVentaPage() {
                   )}
                   {clienteSegmento.categoria === "habitual" && (
                     <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 text-emerald-800 px-2 py-0.5 font-semibold ring-1 ring-emerald-200">
-                      Cliente habitual
+                      Cliente frecuente
                     </span>
                   )}
                   {clienteSegmento.categoria === "nuevo" && (
                     <span className="inline-flex items-center gap-1 rounded-full bg-sky-100 text-sky-800 px-2 py-0.5 font-semibold ring-1 ring-sky-200">
                       Cliente nuevo
+                    </span>
+                  )}
+                  {clienteSegmento.categoria === "dormido" && (
+                    <span
+                      className="inline-flex items-center gap-1 rounded-full bg-violet-100 text-violet-800 px-2 py-0.5 font-semibold ring-1 ring-violet-200"
+                      title={
+                        clienteSegmento.diasDesdeUltima != null
+                          ? `Última compra hace ${clienteSegmento.diasDesdeUltima} días`
+                          : undefined
+                      }
+                    >
+                      Hace tiempo que no visita
+                    </span>
+                  )}
+                  {clienteSegmento.tieneReclamos && (
+                    <span
+                      className="inline-flex items-center gap-1 rounded-full bg-rose-100 text-rose-800 px-2 py-0.5 font-semibold ring-1 ring-rose-200"
+                      title={`${clienteSegmento.reclamosCount} reclamo${clienteSegmento.reclamosCount === 1 ? "" : "s"} previo${clienteSegmento.reclamosCount === 1 ? "" : "s"}`}
+                    >
+                      <span aria-hidden>⚠</span> Con reclamos previos
+                    </span>
+                  )}
+                  {clienteSegmento.recibioBeneficios && (
+                    <span
+                      className="inline-flex items-center gap-1 rounded-full bg-fuchsia-100 text-fuchsia-800 px-2 py-0.5 font-semibold ring-1 ring-fuchsia-200"
+                      title={`${clienteSegmento.beneficiosCount} beneficio${clienteSegmento.beneficiosCount === 1 ? "" : "s"} entregado${clienteSegmento.beneficiosCount === 1 ? "" : "s"}`}
+                    >
+                      <span aria-hidden>🎁</span> Ya recibió beneficios
                     </span>
                   )}
                   <span className="text-gray-500">
