@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import MontoInput from "@/components/ui/MontoInput";
+import { StickerBadge } from "@/components/ui/StickerBadge";
 import ProductPickerModal, { type ProductoPickerItem, type AgregarVentaPayload } from "@/components/inventario/ProductPickerModal";
 import { saveVenta, type FaltanteStock } from "@/lib/ventas/storage";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
@@ -969,23 +970,17 @@ export default function NuevaVentaPage() {
               {clienteSel && clienteSegmento && (
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
                   {clienteSegmento.categoria === "vip" && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-800 px-2 py-0.5 font-semibold ring-1 ring-amber-200">
-                      <span aria-hidden>★</span> Cliente VIP
-                    </span>
+                    <StickerBadge type="vip">Cliente VIP</StickerBadge>
                   )}
                   {clienteSegmento.categoria === "habitual" && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 text-emerald-800 px-2 py-0.5 font-semibold ring-1 ring-emerald-200">
-                      Cliente frecuente
-                    </span>
+                    <StickerBadge type="frecuente" tilt="right">Cliente frecuente</StickerBadge>
                   )}
                   {clienteSegmento.categoria === "nuevo" && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-sky-100 text-sky-800 px-2 py-0.5 font-semibold ring-1 ring-sky-200">
-                      Cliente nuevo
-                    </span>
+                    <StickerBadge type="nuevo">Cliente nuevo</StickerBadge>
                   )}
                   {clienteSegmento.categoria === "dormido" && (
-                    <span
-                      className="inline-flex items-center gap-1 rounded-full bg-violet-100 text-violet-800 px-2 py-0.5 font-semibold ring-1 ring-violet-200"
+                    <StickerBadge
+                      type="inactivo"
                       title={
                         clienteSegmento.diasDesdeUltima != null
                           ? `Última compra hace ${clienteSegmento.diasDesdeUltima} días`
@@ -993,23 +988,24 @@ export default function NuevaVentaPage() {
                       }
                     >
                       Hace tiempo que no visita
-                    </span>
+                    </StickerBadge>
                   )}
                   {clienteSegmento.tieneReclamos && (
-                    <span
-                      className="inline-flex items-center gap-1 rounded-full bg-rose-100 text-rose-800 px-2 py-0.5 font-semibold ring-1 ring-rose-200"
+                    <StickerBadge
+                      type="deuda"
+                      tilt="right"
                       title={`${clienteSegmento.reclamosCount} reclamo${clienteSegmento.reclamosCount === 1 ? "" : "s"} previo${clienteSegmento.reclamosCount === 1 ? "" : "s"}`}
                     >
-                      <span aria-hidden>⚠</span> Con reclamos previos
-                    </span>
+                      Con reclamos previos
+                    </StickerBadge>
                   )}
                   {clienteSegmento.recibioBeneficios && (
-                    <span
-                      className="inline-flex items-center gap-1 rounded-full bg-fuchsia-100 text-fuchsia-800 px-2 py-0.5 font-semibold ring-1 ring-fuchsia-200"
+                    <StickerBadge
+                      type="credito"
                       title={`${clienteSegmento.beneficiosCount} beneficio${clienteSegmento.beneficiosCount === 1 ? "" : "s"} entregado${clienteSegmento.beneficiosCount === 1 ? "" : "s"}`}
                     >
-                      <span aria-hidden>🎁</span> Ya recibió beneficios
-                    </span>
+                      Ya recibió beneficios
+                    </StickerBadge>
                   )}
                   <span className="text-gray-500">
                     {clienteSegmento.categoria === "nuevo"

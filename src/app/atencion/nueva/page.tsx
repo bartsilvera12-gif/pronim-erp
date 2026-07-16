@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import MontoInput from "@/components/ui/MontoInput";
+import { StickerBadge } from "@/components/ui/StickerBadge";
 
 // ═══════════════════════════════════════════════════════════════════════
 // POS UNIFICADO — "Nueva atención"
@@ -1001,67 +1002,44 @@ export default function NuevaAtencionPage() {
                   <span className="inline-block h-5 w-24 rounded-full bg-slate-100 animate-pulse" aria-hidden />
                 )}
                 {clienteSegmento && (
-                  <div className="flex flex-wrap items-center gap-1.5 animate-seg-chip-in">
+                  <div className="flex flex-wrap items-center gap-2 animate-seg-chip-in">
                     {clienteSegmento.categoria === "vip" && (
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-amber-400 to-amber-500 text-white px-2.5 py-1 text-[11px] font-semibold shadow-sm shadow-amber-500/30">
-                        <svg viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
-                          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.286 3.966a1 1 0 0 0 .95.69h4.17c.969 0 1.371 1.24.588 1.81l-3.374 2.451a1 1 0 0 0-.364 1.118l1.287 3.966c.3.921-.755 1.688-1.539 1.118l-3.374-2.45a1 1 0 0 0-1.176 0l-3.374 2.45c-.783.57-1.838-.197-1.539-1.118l1.287-3.966a1 1 0 0 0-.364-1.118L2.049 9.394c-.783-.57-.38-1.81.588-1.81h4.17a1 1 0 0 0 .951-.69l1.286-3.967z" />
-                        </svg>
-                        Cliente VIP
-                      </span>
+                      <StickerBadge type="vip">Cliente VIP</StickerBadge>
                     )}
                     {clienteSegmento.categoria === "habitual" && (
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 text-emerald-700 px-2.5 py-1 text-[11px] font-semibold ring-1 ring-inset ring-emerald-200">
-                        <svg viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
-                          <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143z" clipRule="evenodd" />
-                        </svg>
-                        Cliente frecuente
-                      </span>
+                      <StickerBadge type="frecuente" tilt="right">Cliente frecuente</StickerBadge>
                     )}
                     {clienteSegmento.categoria === "nuevo" && (
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-sky-400 to-cyan-400 text-white px-2.5 py-1 text-[11px] font-semibold shadow-sm shadow-sky-500/30">
-                        <svg viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
-                          <path d="M10 3.75a.75.75 0 0 1 .75.75v5.25H16a.75.75 0 0 1 0 1.5h-5.25v5.25a.75.75 0 0 1-1.5 0v-5.25H4a.75.75 0 0 1 0-1.5h5.25V4.5a.75.75 0 0 1 .75-.75z" />
-                        </svg>
-                        Cliente nuevo
-                      </span>
+                      <StickerBadge type="nuevo">Cliente nuevo</StickerBadge>
                     )}
                     {clienteSegmento.categoria === "dormido" && (
-                      <span
-                        className="inline-flex items-center gap-1.5 rounded-full bg-violet-50 text-violet-700 px-2.5 py-1 text-[11px] font-semibold ring-1 ring-inset ring-violet-200"
+                      <StickerBadge
+                        type="inactivo"
                         title={
                           clienteSegmento.diasDesdeUltima != null
                             ? `Última compra hace ${clienteSegmento.diasDesdeUltima} días`
                             : undefined
                         }
                       >
-                        <svg viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
-                          <path fillRule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16zm.75-13a.75.75 0 0 0-1.5 0v5c0 .2.08.39.22.53l3 3a.75.75 0 1 0 1.06-1.06l-2.78-2.78V5z" clipRule="evenodd" />
-                        </svg>
                         Hace tiempo que no visita
-                      </span>
+                      </StickerBadge>
                     )}
                     {clienteSegmento.tieneReclamos && (
-                      <span
-                        className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 text-rose-700 px-2.5 py-1 text-[11px] font-semibold ring-1 ring-inset ring-rose-200"
+                      <StickerBadge
+                        type="deuda"
+                        tilt="right"
                         title={`${clienteSegmento.reclamosCount} reclamo${clienteSegmento.reclamosCount === 1 ? "" : "s"} previo${clienteSegmento.reclamosCount === 1 ? "" : "s"}`}
                       >
-                        <svg viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
-                          <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625l6.28-10.875zM10 6a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 10 6zm0 8a1 1 0 1 0 0-2 1 1 0 0 0 0 2z" clipRule="evenodd" />
-                        </svg>
                         Con reclamos previos
-                      </span>
+                      </StickerBadge>
                     )}
                     {clienteSegmento.recibioBeneficios && (
-                      <span
-                        className="inline-flex items-center gap-1.5 rounded-full bg-fuchsia-50 text-fuchsia-700 px-2.5 py-1 text-[11px] font-semibold ring-1 ring-inset ring-fuchsia-200"
+                      <StickerBadge
+                        type="credito"
                         title={`${clienteSegmento.beneficiosCount} beneficio${clienteSegmento.beneficiosCount === 1 ? "" : "s"} entregado${clienteSegmento.beneficiosCount === 1 ? "" : "s"}`}
                       >
-                        <svg viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
-                          <path d="M5 5a3 3 0 0 1 5-2.236A3 3 0 0 1 14.83 6h.17a2 2 0 0 1 2 2v1a2 2 0 0 1-2 2v5a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h.17A3.001 3.001 0 0 1 5 5zm4.25 1.5H6.5a1.5 1.5 0 1 1 2.75-.83v.83zm1.5 0V5.67A1.5 1.5 0 1 1 13.5 6.5h-2.75zm-1.5 8.75H7v-4h2.25v4zm1.5-4H13v4h-2.25v-4z" />
-                        </svg>
                         Ya recibió beneficios
-                      </span>
+                      </StickerBadge>
                     )}
                   </div>
                 )}
