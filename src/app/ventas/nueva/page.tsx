@@ -168,6 +168,16 @@ export default function NuevaVentaPage() {
   const [saldoCredito, setSaldoCredito] = useState<number>(0);
   const [creditoUsado, setCreditoUsado] = useState<string>("");
 
+  // Segmento del cliente (nuevo / habitual / vip) derivado de sus KPIs.
+  // Umbrales: VIP ≥ 5.000.000 Gs históricos ó ≥ 6 compras en 90 días.
+  type ClienteSegmento = {
+    categoria: "nuevo" | "habitual" | "vip";
+    totalHistorico: number;
+    comprasUltimos90d: number;
+    diasDesdeUltima: number | null;
+  };
+  const [clienteSegmento, setClienteSegmento] = useState<ClienteSegmento | null>(null);
+
   // ── Detalle de cobro (conciliación bancaria) ──────────────────────────────
   const [entidades, setEntidades] = useState<{ id: string; codigo: string | null; nombre: string; tipo: string | null }[]>([]);
   const [pagoEntidadId, setPagoEntidadId] = useState("");
@@ -438,6 +448,38 @@ export default function NuevaVentaPage() {
         setSaldoCredito(Math.max(0, Number(j.data?.saldo ?? 0)));
       })
       .catch(() => { /* opcional */ });
+    return () => { cancelled = true; };
+  }, [clienteId]);
+
+  // Segmento del cliente: nuevo / habitual / vip.
+  useEffect(() => {
+    if (!clienteId) {
+      setClienteSegmento(null);
+      return;
+    }
+    let cancelled = false;
+    fetchWithSupabaseSession(`/api/clientes/${clienteId}/consultas`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        if (cancelled || !j?.success) return;
+        const k = j.data?.kpis ?? {};
+        const total = Number(k.total_comprado_historico ?? 0);
+        const compras90 = Number(k.compras_ultimos_90d ?? 0);
+        const diasUlt = k.dias_desde_ultima_compra == null ? null : Number(k.dias_desde_ultima_compra);
+        const categoria: ClienteSegmento["categoria"] =
+          total >= 5_000_000 || compras90 >= 6
+            ? "vip"
+            : total <= 0
+              ? "nuevo"
+              : "habitual";
+        setClienteSegmento({
+          categoria,
+          totalHistorico: total,
+          comprasUltimos90d: compras90,
+          diasDesdeUltima: diasUlt,
+        });
+      })
+      .catch(() => { /* silencioso: si falla, no mostramos chip */ });
     return () => { cancelled = true; };
   }, [clienteId]);
 
@@ -902,6 +944,38 @@ export default function NuevaVentaPage() {
                   )}
                 </div>
               )}
+              {/* Chip de segmento (nuevo / habitual / vip) */}
+              {clienteSel && clienteSegmento && (
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
+                  {clienteSegmento.categoria === "vip" && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-800 px-2 py-0.5 font-semibold ring-1 ring-amber-200">
+                      <span aria-hidden>★</span> Cliente VIP
+                    </span>
+                  )}
+                  {clienteSegmento.categoria === "habitual" && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 text-emerald-800 px-2 py-0.5 font-semibold ring-1 ring-emerald-200">
+                      Cliente habitual
+                    </span>
+                  )}
+                  {clienteSegmento.categoria === "nuevo" && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-sky-100 text-sky-800 px-2 py-0.5 font-semibold ring-1 ring-sky-200">
+                      Cliente nuevo
+                    </span>
+                  )}
+                  <span className="text-gray-500">
+                    {clienteSegmento.categoria === "nuevo"
+                      ? "Sin compras previas — ¡primera venta!"
+                      : `${clienteSegmento.comprasUltimos90d} compra${clienteSegmento.comprasUltimos90d === 1 ? "" : "s"} en 90 días · ${
+                          clienteSegmento.diasDesdeUltima == null
+                            ? ""
+                            : clienteSegmento.diasDesdeUltima === 0
+                              ? "última compra hoy"
+                              : `última hace ${clienteSegmento.diasDesdeUltima} día${clienteSegmento.diasDesdeUltima === 1 ? "" : "s"}`
+                        }`}
+                  </span>
+                </div>
+              )}
+
               <div className={`mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] ${clienteSel ? "text-gray-400" : "text-red-600"}`}>
                 <span>
                   {clienteSel
