@@ -60,6 +60,21 @@ export default function NuevaAtencionPage() {
   const [creditoDisponible, setCreditoDisponible] = useState(0);
   const [nuevoClienteOpen, setNuevoClienteOpen] = useState(false);
 
+  // Segmento del cliente derivado de KPIs + timeline (ver ventas/nueva).
+  // Categorías (mutuamente excluyentes): nuevo | habitual | vip | dormido
+  // Flags (coexisten con la categoría): reclamos previos, beneficios recibidos.
+  type ClienteSegmento = {
+    categoria: "nuevo" | "habitual" | "vip" | "dormido";
+    totalHistorico: number;
+    comprasUltimos90d: number;
+    diasDesdeUltima: number | null;
+    tieneReclamos: boolean;
+    reclamosCount: number;
+    recibioBeneficios: boolean;
+    beneficiosCount: number;
+  };
+  const [clienteSegmento, setClienteSegmento] = useState<ClienteSegmento | null>(null);
+
   // ── Líneas ────────────────────────────────────────────────────────────
   const [trae, setTrae] = useState<Linea[]>([]);
   const [lleva, setLleva] = useState<Linea[]>([]);
@@ -375,6 +390,46 @@ export default function NuevaAtencionPage() {
         setCreditoDisponible(Number.isFinite(s) ? s : 0);
       })
       .catch(() => { if (!cancel) setCreditoDisponible(0); });
+    return () => { cancel = true; };
+  }, [cliente]);
+
+  // Segmento del cliente: nuevo / habitual / vip / dormido + flags.
+  useEffect(() => {
+    if (!cliente) { setClienteSegmento(null); return; }
+    let cancel = false;
+    fetchWithSupabaseSession(`/api/clientes/${cliente.id}/consultas`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        if (cancel || !j?.success) return;
+        const k = j.data?.kpis ?? {};
+        const timeline: { tipo: string }[] = Array.isArray(j.data?.timeline) ? j.data.timeline : [];
+        const total = Number(k.total_comprado_historico ?? 0);
+        const compras90 = Number(k.compras_ultimos_90d ?? 0);
+        const diasUlt = k.dias_desde_ultima_compra == null ? null : Number(k.dias_desde_ultima_compra);
+        const categoria: ClienteSegmento["categoria"] =
+          total >= 5_000_000 || compras90 >= 6
+            ? "vip"
+            : total <= 0
+              ? "nuevo"
+              : diasUlt != null && diasUlt > 120
+                ? "dormido"
+                : "habitual";
+        const reclamosCount = timeline.filter((e) => e.tipo === "reclamo").length;
+        const beneficiosCount = timeline.filter(
+          (e) => e.tipo === "beneficio" || e.tipo === "cashback" || e.tipo === "descuento",
+        ).length;
+        setClienteSegmento({
+          categoria,
+          totalHistorico: total,
+          comprasUltimos90d: compras90,
+          diasDesdeUltima: diasUlt,
+          tieneReclamos: reclamosCount > 0,
+          reclamosCount,
+          recibioBeneficios: beneficiosCount > 0,
+          beneficiosCount,
+        });
+      })
+      .catch(() => { /* silencioso */ });
     return () => { cancel = true; };
   }, [cliente]);
 
@@ -818,8 +873,57 @@ export default function NuevaAtencionPage() {
         </label>
         {cliente ? (
           <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="font-semibold text-slate-800">{cliente.nombre}</p>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="font-semibold text-slate-800">{cliente.nombre}</p>
+                {clienteSegmento && (
+                  <>
+                    {clienteSegmento.categoria === "vip" && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-800 px-2 py-0.5 text-[11px] font-semibold ring-1 ring-amber-200">
+                        <span aria-hidden>★</span> Cliente VIP
+                      </span>
+                    )}
+                    {clienteSegmento.categoria === "habitual" && (
+                      <span className="inline-flex items-center rounded-full bg-emerald-100 text-emerald-800 px-2 py-0.5 text-[11px] font-semibold ring-1 ring-emerald-200">
+                        Cliente frecuente
+                      </span>
+                    )}
+                    {clienteSegmento.categoria === "nuevo" && (
+                      <span className="inline-flex items-center rounded-full bg-sky-100 text-sky-800 px-2 py-0.5 text-[11px] font-semibold ring-1 ring-sky-200">
+                        Cliente nuevo
+                      </span>
+                    )}
+                    {clienteSegmento.categoria === "dormido" && (
+                      <span
+                        className="inline-flex items-center rounded-full bg-violet-100 text-violet-800 px-2 py-0.5 text-[11px] font-semibold ring-1 ring-violet-200"
+                        title={
+                          clienteSegmento.diasDesdeUltima != null
+                            ? `Última compra hace ${clienteSegmento.diasDesdeUltima} días`
+                            : undefined
+                        }
+                      >
+                        Hace tiempo que no visita
+                      </span>
+                    )}
+                    {clienteSegmento.tieneReclamos && (
+                      <span
+                        className="inline-flex items-center gap-1 rounded-full bg-rose-100 text-rose-800 px-2 py-0.5 text-[11px] font-semibold ring-1 ring-rose-200"
+                        title={`${clienteSegmento.reclamosCount} reclamo${clienteSegmento.reclamosCount === 1 ? "" : "s"} previo${clienteSegmento.reclamosCount === 1 ? "" : "s"}`}
+                      >
+                        <span aria-hidden>⚠</span> Con reclamos previos
+                      </span>
+                    )}
+                    {clienteSegmento.recibioBeneficios && (
+                      <span
+                        className="inline-flex items-center gap-1 rounded-full bg-fuchsia-100 text-fuchsia-800 px-2 py-0.5 text-[11px] font-semibold ring-1 ring-fuchsia-200"
+                        title={`${clienteSegmento.beneficiosCount} beneficio${clienteSegmento.beneficiosCount === 1 ? "" : "s"} entregado${clienteSegmento.beneficiosCount === 1 ? "" : "s"}`}
+                      >
+                        <span aria-hidden>🎁</span> Ya recibió beneficios
+                      </span>
+                    )}
+                  </>
+                )}
+              </div>
               <p className="text-xs text-slate-500">
                 {cliente.ruc ? `RUC ${cliente.ruc} · ` : ""}
                 Crédito disponible: <span className="font-semibold text-emerald-700">{fmtGs(creditoDisponible)}</span>
