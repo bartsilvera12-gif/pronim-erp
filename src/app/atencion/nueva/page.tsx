@@ -122,12 +122,14 @@ export default function NuevaAtencionPage() {
   const [beneficiosMarcados, setBeneficiosMarcados] = useState<Record<string, { marcado: boolean; monto: string }>>({});
   const [clienteSegmentoLoading, setClienteSegmentoLoading] = useState(false);
 
-  // Config de redondeo hacia arriba del subtotal de recepción ("El cliente trae").
-  // 0 = sin redondeo. Default 5000. Ej: 136.500 → 140.000.
-  const [redondeoMultiplo, setRedondeoMultiplo] = useState<number>(5000);
-
   // Modal "Cambio directo": prenda por otra del mismo precio, sin dinero de por medio.
   const [cambioDirectoOpen, setCambioDirectoOpen] = useState(false);
+
+  // Override manual del monto a pagar por la recepción — la cajera evalúa las
+  // prendas por franja y a veces redondea a mano (140.000), a veces no
+  // (2.040.555). Si el campo queda vacío, se paga el subtotal exacto de los
+  // items; si se completa, ese valor es el que se acredita al cliente.
+  const [traeMontoFinal, setTraeMontoFinal] = useState<string>("");
 
   // ── Líneas ────────────────────────────────────────────────────────────
   const [trae, setTrae] = useState<Linea[]>([]);
@@ -463,27 +465,18 @@ export default function NuevaAtencionPage() {
     return () => { cancel = true; };
   }, [cliente]);
 
-  // Config de redondeo de recepción — carga única al montar.
-  useEffect(() => {
-    let cancel = false;
-    fetchWithSupabaseSession("/api/empresas/recepcion-redondeo", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((j) => {
-        if (cancel || !j?.success) return;
-        const m = Number(j.data?.redondeo_recepcion_multiplo ?? 5000);
-        setRedondeoMultiplo(Number.isFinite(m) && m >= 0 ? m : 5000);
-      })
-      .catch(() => { /* silencioso: si falla queda default 5000 */ });
-    return () => { cancel = true; };
-  }, []);
-
   // ── Cálculos ──────────────────────────────────────────────────────────
   const totalTraeSubtotal = useMemo(() => trae.reduce((s, l) => s + l.precio_unitario * l.cantidad, 0), [trae]);
-  const totalTrae = useMemo(() => {
-    if (redondeoMultiplo <= 0 || totalTraeSubtotal <= 0) return totalTraeSubtotal;
-    return Math.ceil(totalTraeSubtotal / redondeoMultiplo) * redondeoMultiplo;
-  }, [totalTraeSubtotal, redondeoMultiplo]);
-  const redondeoDelta = totalTrae - totalTraeSubtotal;
+  // Si la cajera escribió un monto final (override), ese es el que se paga.
+  // Si el campo está vacío, se usa el subtotal exacto.
+  const totalTraeManual = useMemo(() => {
+    const raw = traeMontoFinal.trim();
+    if (raw === "") return null;
+    const n = Number(raw.replace(/\./g, "").replace(/,/g, ""));
+    return Number.isFinite(n) && n >= 0 ? Math.round(n) : null;
+  }, [traeMontoFinal]);
+  const totalTrae = totalTraeManual != null ? totalTraeManual : totalTraeSubtotal;
+  const ajusteEvaluacion = totalTrae - totalTraeSubtotal;
   const totalLleva = useMemo(() => lleva.reduce((s, l) => s + l.precio_unitario * l.cantidad, 0), [lleva]);
 
   // Modelo explícito:
@@ -595,6 +588,7 @@ export default function NuevaAtencionPage() {
     setAplicarCredito(""); setObservaciones("");
     setMontoRecibido(""); setReferenciaCobro("");
     setPromoAplicada(null); setCuponInput(""); setPromoError(null);
+    setTraeMontoFinal("");
     setError(null);
   }
 
@@ -1163,7 +1157,7 @@ export default function NuevaAtencionPage() {
           cargando={cargando}
           lineas={trae}
           total={totalTrae}
-          subtotalSinRedondeo={totalTraeSubtotal}
+          subtotalItems={totalTraeSubtotal}
           onAgregar={(f) => agregarLineaEn("trae", f)}
           onActualizar={(id, patch) => actualizarLinea("trae", id, patch)}
           onQuitar={(id) => quitarLinea("trae", id)}
@@ -1177,6 +1171,49 @@ export default function NuevaAtencionPage() {
             >
               ⇄ Cambio directo
             </button>
+          }
+          slotDebajo={
+            trae.length > 0 ? (
+              <div className="rounded-lg border border-emerald-200 bg-white p-3">
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                      Monto final de la evaluación
+                    </p>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Escribí lo que efectivamente le pagás al cliente. Si lo dejás vacío se usa el subtotal de arriba ({fmtGs(totalTraeSubtotal)}).
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <MontoInput
+                      value={totalTraeManual ?? 0}
+                      onChange={(n) => setTraeMontoFinal(String(Math.max(0, Math.round(n))))}
+                      decimals={false}
+                      placeholder={fmtGs(totalTraeSubtotal)}
+                      className="w-36 rounded-md border border-emerald-300 px-2 py-1.5 text-right text-sm font-semibold text-emerald-900 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                    />
+                    {totalTraeManual != null && (
+                      <button
+                        type="button"
+                        onClick={() => setTraeMontoFinal("")}
+                        className="text-xs text-slate-500 hover:text-slate-700 underline decoration-dotted"
+                        title="Volver al subtotal de los items"
+                      >
+                        limpiar
+                      </button>
+                    )}
+                  </div>
+                </div>
+                {ajusteEvaluacion !== 0 && (
+                  <p className="mt-2 text-[11px] text-slate-600">
+                    Ajuste sobre el subtotal:{" "}
+                    <span className={`font-semibold ${ajusteEvaluacion > 0 ? "text-emerald-700" : "text-rose-700"}`}>
+                      {ajusteEvaluacion > 0 ? "+" : ""}{fmtGs(ajusteEvaluacion)}
+                    </span>
+                  </p>
+                )}
+              </div>
+            ) : null
           }
         />
         <ColumnaAtencion
@@ -1202,15 +1239,15 @@ export default function NuevaAtencionPage() {
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div>
             <BalanceItem
-              label={redondeoDelta > 0 ? "Total trae (redondeado)" : "Total trae"}
+              label={ajusteEvaluacion !== 0 ? "Total trae (evaluado)" : "Total trae"}
               value={fmtGs(totalTrae)}
               tone="emerald"
             />
-            {redondeoDelta > 0 && (
+            {ajusteEvaluacion !== 0 && (
               <p className="mt-1 text-[11px] text-slate-500">
-                Subtotal <span className="line-through">{fmtGs(totalTraeSubtotal)}</span>
-                <span className="ml-1 text-emerald-700 font-semibold">
-                  +{fmtGs(redondeoDelta)} redondeo
+                Subtotal items <span className="line-through">{fmtGs(totalTraeSubtotal)}</span>
+                <span className={`ml-1 font-semibold ${ajusteEvaluacion > 0 ? "text-emerald-700" : "text-rose-700"}`}>
+                  {ajusteEvaluacion > 0 ? "+" : ""}{fmtGs(ajusteEvaluacion)} ajuste
                 </span>
               </p>
             )}
@@ -2062,20 +2099,22 @@ function ColumnaAtencion(props: {
   onActualizar: (franjaId: string, patch: Partial<Linea>) => void;
   onQuitar: (franjaId: string) => void;
   permitirEditarPrecio: boolean;
-  /** Subtotal antes del redondeo. Si es igual a `total`, no se muestra nada extra. */
-  subtotalSinRedondeo?: number;
+  /** Subtotal de los items antes de un override manual. Solo se usa para mostrar. */
+  subtotalItems?: number;
   /** Acciones extra en el header (ej. botón "Cambio directo"). */
   accionesHeader?: React.ReactNode;
+  /** Bloque debajo del listado (ej. campo "A pagar final" para la recepción). */
+  slotDebajo?: React.ReactNode;
 }) {
-  const { titulo, descripcion, tono, franjas, cargando, lineas, total, onAgregar, onActualizar, onQuitar, permitirEditarPrecio, subtotalSinRedondeo, accionesHeader } = props;
+  const { titulo, descripcion, tono, franjas, cargando, lineas, total, onAgregar, onActualizar, onQuitar, permitirEditarPrecio, subtotalItems, accionesHeader, slotDebajo } = props;
   const border = tono === "emerald" ? "border-emerald-200" : "border-sky-200";
   const bg = tono === "emerald" ? "bg-emerald-50/40" : "bg-sky-50/40";
   const btn = tono === "emerald"
     ? "border-emerald-200 hover:border-emerald-400 hover:bg-emerald-50"
     : "border-sky-200 hover:border-sky-400 hover:bg-sky-50";
   const title = tono === "emerald" ? "text-emerald-700" : "text-sky-700";
-  const delta = subtotalSinRedondeo != null ? total - subtotalSinRedondeo : 0;
-  const hayRedondeo = delta > 0;
+  const delta = subtotalItems != null ? total - subtotalItems : 0;
+  const hayAjuste = subtotalItems != null && delta !== 0;
 
   return (
     <div className={`rounded-xl border ${border} ${bg} p-4 sm:p-5`}>
@@ -2087,13 +2126,15 @@ function ColumnaAtencion(props: {
         </div>
         <div className="text-right shrink-0">
           <p className="text-[11px] uppercase text-slate-500">
-            {hayRedondeo ? "A pagar (redondeado)" : "Subtotal"}
+            {hayAjuste ? "A pagar (final)" : "Subtotal"}
           </p>
           <p className="text-lg font-bold text-slate-800">{fmtGs(total)}</p>
-          {hayRedondeo && subtotalSinRedondeo != null && (
+          {hayAjuste && subtotalItems != null && (
             <p className="text-[11px] text-slate-500 mt-0.5">
-              Subtotal <span className="line-through">{fmtGs(subtotalSinRedondeo)}</span>
-              <span className="ml-1 text-emerald-700 font-semibold">+{fmtGs(delta)}</span>
+              Subtotal <span className="line-through">{fmtGs(subtotalItems)}</span>
+              <span className={`ml-1 font-semibold ${delta > 0 ? "text-emerald-700" : "text-rose-700"}`}>
+                {delta > 0 ? "+" : ""}{fmtGs(delta)}
+              </span>
             </p>
           )}
         </div>
@@ -2185,6 +2226,8 @@ function ColumnaAtencion(props: {
           </table>
         </div>
       )}
+
+      {slotDebajo && <div className="mt-4">{slotDebajo}</div>}
     </div>
   );
 }
