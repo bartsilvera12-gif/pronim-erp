@@ -63,6 +63,15 @@ body {
   font-family: var(--font-plus-jakarta), system-ui, sans-serif;
 }
 
+/* Fade + rise suave para chips y elementos que aparecen tras un fetch. */
+@keyframes segChipIn {
+  from { opacity: 0; transform: translateY(2px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-seg-chip-in {
+  animation: segChipIn 200ms ease-out both;
+}
+
 /**
  * Impresión cupones físicos (/sorteos/[id]/imprimir-cupones): el AppShell usa h-svh + overflow
  * oculto en ancestros; en @media print eso suele dejar casi en blanco la hoja salvo cabecera/pie del navegador.

@@ -75,6 +75,52 @@ export default function NuevaAtencionPage() {
   };
   const [clienteSegmento, setClienteSegmento] = useState<ClienteSegmento | null>(null);
 
+  // ── Config del modal previo al cierre (alertas + beneficios) ──────────
+  // Se carga desde /api/configuracion/atencion-alertas. Si falla, usamos DEFAULTS.
+  type AlertaCfg = { activa: boolean; titulo: string; mensaje: string };
+  type BeneficioCfg = {
+    id: string;
+    label: string;
+    tipo_evento: "beneficio" | "descuento" | "cashback" | "otro";
+    pide_monto: boolean;
+    genera_credito?: boolean;
+  };
+  type AlertasConfig = {
+    prendas_caras: AlertaCfg & { precio_min: number };
+    prendas_baratas: AlertaCfg & { precio_max: number };
+    pocas_prendas: AlertaCfg & { cantidad_max: number };
+    beneficios: BeneficioCfg[];
+  };
+  const ALERTAS_DEFAULTS: AlertasConfig = {
+    prendas_caras: {
+      activa: true, precio_min: 39000,
+      titulo: "Invitá al cliente a traer prendas",
+      mensaje: "Recordale que si estas prendas dejan de servirle, puede traerlas para evaluación y obtener crédito.",
+    },
+    prendas_baratas: {
+      activa: true, precio_max: 14000,
+      titulo: "Comentá la reposición de los lunes",
+      mensaje: "Todos los lunes reponemos prendas de promoción — invitá al cliente a pasar.",
+    },
+    pocas_prendas: {
+      activa: true, cantidad_max: 2,
+      titulo: "¿Mostraste todo?",
+      mensaje: "Antes de cerrar, verificá que hayas mostrado todo lo que podría interesarle al cliente.",
+    },
+    beneficios: [
+      { id: "cashback",         label: "Cashback",         tipo_evento: "cashback",  pide_monto: true,  genera_credito: true  },
+      { id: "ecobag",           label: "Ecobag",           tipo_evento: "beneficio", pide_monto: false, genera_credito: false },
+      { id: "regalo_dia",       label: "Regalito del día", tipo_evento: "beneficio", pide_monto: false, genera_credito: false },
+      { id: "descuento_manual", label: "Descuento manual", tipo_evento: "descuento", pide_monto: true,  genera_credito: false },
+    ],
+  };
+  const [alertasConfig, setAlertasConfig] = useState<AlertasConfig>(ALERTAS_DEFAULTS);
+
+  // Modal pre-cierre.
+  const [preCierreOpen, setPreCierreOpen] = useState(false);
+  const [beneficiosMarcados, setBeneficiosMarcados] = useState<Record<string, { marcado: boolean; monto: string }>>({});
+  const [clienteSegmentoLoading, setClienteSegmentoLoading] = useState(false);
+
   // ── Líneas ────────────────────────────────────────────────────────────
   const [trae, setTrae] = useState<Linea[]>([]);
   const [lleva, setLleva] = useState<Linea[]>([]);
@@ -393,43 +439,19 @@ export default function NuevaAtencionPage() {
     return () => { cancel = true; };
   }, [cliente]);
 
-  // Segmento del cliente: nuevo / habitual / vip / dormido + flags.
+  // Segmento del cliente: endpoint liviano (1 round-trip, sin timeline).
   useEffect(() => {
-    if (!cliente) { setClienteSegmento(null); return; }
+    if (!cliente) { setClienteSegmento(null); setClienteSegmentoLoading(false); return; }
     let cancel = false;
-    fetchWithSupabaseSession(`/api/clientes/${cliente.id}/consultas`, { cache: "no-store" })
+    setClienteSegmentoLoading(true);
+    fetchWithSupabaseSession(`/api/clientes/${cliente.id}/segmento`, { cache: "no-store" })
       .then((r) => r.json())
       .then((j) => {
         if (cancel || !j?.success) return;
-        const k = j.data?.kpis ?? {};
-        const timeline: { tipo: string }[] = Array.isArray(j.data?.timeline) ? j.data.timeline : [];
-        const total = Number(k.total_comprado_historico ?? 0);
-        const compras90 = Number(k.compras_ultimos_90d ?? 0);
-        const diasUlt = k.dias_desde_ultima_compra == null ? null : Number(k.dias_desde_ultima_compra);
-        const categoria: ClienteSegmento["categoria"] =
-          total >= 5_000_000 || compras90 >= 6
-            ? "vip"
-            : total <= 0
-              ? "nuevo"
-              : diasUlt != null && diasUlt > 120
-                ? "dormido"
-                : "habitual";
-        const reclamosCount = timeline.filter((e) => e.tipo === "reclamo").length;
-        const beneficiosCount = timeline.filter(
-          (e) => e.tipo === "beneficio" || e.tipo === "cashback" || e.tipo === "descuento",
-        ).length;
-        setClienteSegmento({
-          categoria,
-          totalHistorico: total,
-          comprasUltimos90d: compras90,
-          diasDesdeUltima: diasUlt,
-          tieneReclamos: reclamosCount > 0,
-          reclamosCount,
-          recibioBeneficios: beneficiosCount > 0,
-          beneficiosCount,
-        });
+        setClienteSegmento(j.data as ClienteSegmento);
       })
-      .catch(() => { /* silencioso */ });
+      .catch(() => { /* silencioso */ })
+      .finally(() => { if (!cancel) setClienteSegmentoLoading(false); });
     return () => { cancel = true; };
   }, [cliente]);
 
@@ -585,8 +607,64 @@ export default function NuevaAtencionPage() {
     setPromoError(null);
   }
 
+  // Alertas condicionadas: se calculan desde el carrito "lleva" al momento
+  // de abrir el modal. Van al costado del checklist de beneficios.
+  const alertasDisparadas = useMemo(() => {
+    if (lleva.length === 0) return [] as AlertaCfg[];
+    const cantidadTotal = lleva.reduce((s, l) => s + l.cantidad, 0);
+    const preciosUnitarios = lleva.map((l) => l.precio_unitario);
+    const disparadas: AlertaCfg[] = [];
+    if (
+      alertasConfig.prendas_caras.activa &&
+      preciosUnitarios.some((p) => p >= alertasConfig.prendas_caras.precio_min)
+    ) {
+      disparadas.push(alertasConfig.prendas_caras);
+    }
+    if (
+      alertasConfig.prendas_baratas.activa &&
+      // "varias prenditas baratas" → al menos 2 líneas con precio <= max
+      lleva.filter((l) => l.precio_unitario > 0 && l.precio_unitario <= alertasConfig.prendas_baratas.precio_max).length >= 2
+    ) {
+      disparadas.push(alertasConfig.prendas_baratas);
+    }
+    if (
+      alertasConfig.pocas_prendas.activa &&
+      cantidadTotal > 0 &&
+      cantidadTotal <= alertasConfig.pocas_prendas.cantidad_max
+    ) {
+      disparadas.push(alertasConfig.pocas_prendas);
+    }
+    return disparadas;
+  }, [lleva, alertasConfig]);
+
+  // Cargar config del modal (defaults si falla o si la empresa no tiene fila).
+  useEffect(() => {
+    let cancel = false;
+    fetchWithSupabaseSession("/api/configuracion/atencion-alertas", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        if (cancel || !j?.success) return;
+        const c = j.data?.config;
+        if (c && typeof c === "object") {
+          setAlertasConfig({
+            prendas_caras:   { ...ALERTAS_DEFAULTS.prendas_caras,   ...(c.prendas_caras   ?? {}) },
+            prendas_baratas: { ...ALERTAS_DEFAULTS.prendas_baratas, ...(c.prendas_baratas ?? {}) },
+            pocas_prendas:   { ...ALERTAS_DEFAULTS.pocas_prendas,   ...(c.pocas_prendas   ?? {}) },
+            beneficios: Array.isArray(c.beneficios) && c.beneficios.length > 0
+              ? c.beneficios
+              : ALERTAS_DEFAULTS.beneficios,
+          });
+        }
+      })
+      .catch(() => { /* defaults ya cargados */ });
+    return () => { cancel = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ── Confirmar ─────────────────────────────────────────────────────────
-  async function confirmar() {
+  // Wrapper: valida el ticket, y si pasa abre el modal previo al cierre.
+  // El cierre real corre desde `confirmarDesdeModal`.
+  function preConfirmar() {
     setError(null); setOkMsg(null);
     if (!cliente) { setError("Elegí un cliente antes de confirmar."); return; }
     if (trae.length === 0 && lleva.length === 0) {
@@ -605,7 +683,44 @@ export default function NuevaAtencionPage() {
       setError(`Falta cobrar Gs. ${Math.round(aCobrar - recibidoNum).toLocaleString("es-PY")} en efectivo. Ingresá el monto recibido.`);
       return;
     }
+    // Reset checklist en cada apertura.
+    setBeneficiosMarcados({});
+    setPreCierreOpen(true);
+  }
 
+  // Persistir beneficios marcados como cliente_eventos. Corre después del
+  // cierre exitoso — así el evento queda ligado al cliente aunque la venta
+  // haya generado (o no) crédito por cashback.
+  async function persistirBeneficios() {
+    if (!cliente) return;
+    const marcados = Object.entries(beneficiosMarcados)
+      .filter(([, v]) => v.marcado)
+      .map(([id, v]) => {
+        const cfg = alertasConfig.beneficios.find((b) => b.id === id);
+        return cfg ? { cfg, monto: v.monto } : null;
+      })
+      .filter((x): x is { cfg: BeneficioCfg; monto: string } => x !== null);
+    for (const { cfg, monto } of marcados) {
+      const montoNum = cfg.pide_monto ? Number(monto.replace(/[^\d]/g, "")) || 0 : 0;
+      try {
+        await fetchWithSupabaseSession(`/api/clientes/${cliente.id}/eventos`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            tipo: cfg.tipo_evento,
+            titulo: cfg.label,
+            descripcion: `Entregado en atención · ${cfg.label}${montoNum > 0 ? ` — Gs. ${montoNum.toLocaleString("es-PY")}` : ""}`,
+            monto: cfg.pide_monto ? montoNum : null,
+            generar_credito: cfg.tipo_evento === "cashback" && cfg.genera_credito === true && montoNum > 0,
+          }),
+        });
+      } catch (e) {
+        console.error("[atencion] persistir beneficio", cfg.id, e);
+      }
+    }
+  }
+
+  async function confirmar() {
     setEnviando(true);
     try {
       // La caja se abre explícitamente antes de arrancar (gate al entrar
@@ -876,8 +991,11 @@ export default function NuevaAtencionPage() {
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <p className="font-semibold text-slate-800">{cliente.nombre}</p>
+                {clienteSegmentoLoading && !clienteSegmento && (
+                  <span className="inline-block h-5 w-24 rounded-full bg-slate-100 animate-pulse" aria-hidden />
+                )}
                 {clienteSegmento && (
-                  <>
+                  <div className="flex flex-wrap items-center gap-1.5 animate-seg-chip-in">
                     {clienteSegmento.categoria === "vip" && (
                       <span className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-amber-400 to-amber-500 text-white px-2.5 py-1 text-[11px] font-semibold shadow-sm shadow-amber-500/30">
                         <svg viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
@@ -939,7 +1057,7 @@ export default function NuevaAtencionPage() {
                         Ya recibió beneficios
                       </span>
                     )}
-                  </>
+                  </div>
                 )}
               </div>
               <p className="text-xs text-slate-500">
