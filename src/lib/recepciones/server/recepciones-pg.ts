@@ -504,6 +504,67 @@ export async function crearRecepcionEnClientePg(
       );
     }
 
+    // ── Registrar la recepción como compras en el ERP ────────────────
+    // Cada item se refleja como una fila en pronimerp.compras usando un
+    // proveedor "shadow" idempotente por cliente. Esto permite que el
+    // reporte/dashboard de compras muestre las prendas traídas junto
+    // con las compras a proveedores externos.
+    //
+    // Se hace DENTRO de la tx: si algo falla después, no queda compra
+    // huérfana. Si Postgres no tiene la función (instancia sin migración
+    // aplicada), no reventamos la operación — solo logueamos.
+    try {
+      const provQ = await client.query<{ p: string }>(
+        `SELECT pronimerp.ensure_proveedor_from_cliente($1::uuid, $2::uuid) AS p`,
+        [p.empresaId, p.clienteId],
+      );
+      const provId = provQ.rows[0].p;
+      // Insert 1 fila de compra por cada item ya insertado, con RETURNING
+      // link explícito por item_recepcion_id. Uso un solo INSERT ... SELECT.
+      await client.query(
+        `INSERT INTO ${quoteSchemaTable(schema, "compras")} (
+           empresa_id, proveedor_id, proveedor_nombre,
+           producto_id, producto_nombre, cantidad,
+           moneda, tipo_cambio,
+           costo_unitario_original, costo_unitario,
+           iva_tipo, subtotal, monto_iva, total, precio_venta,
+           tipo_pago, nro_timbrado, numero_control, estado, fecha,
+           sucursal_id, recepcion_id, item_recepcion_id,
+           created_by, usuario_nombre
+         )
+         SELECT
+           $1, $2,
+           (SELECT nombre FROM ${quoteSchemaTable(schema, "proveedores")} WHERE id = $2),
+           i.producto_id, COALESCE(i.producto_nombre, 'Prenda'), i.cantidad,
+           'PYG', 1,
+           COALESCE(i.precio_compra_unitario, 0), COALESCE(i.precio_compra_unitario, 0),
+           'exenta',
+           i.cantidad * COALESCE(i.precio_compra_unitario, 0), 0,
+           i.cantidad * COALESCE(i.precio_compra_unitario, 0),
+           COALESCE(i.precio_venta_snapshot, 0),
+           'contado', 'S/T', $3, 'registrada', $4::timestamptz,
+           $5, $6, i.id, $7, $8
+         FROM ${recepItemsT} i
+         WHERE i.recepcion_id = $6
+         ON CONFLICT (item_recepcion_id) WHERE item_recepcion_id IS NOT NULL DO NOTHING`,
+        [
+          p.empresaId, provId, numero, fecha, p.sucursalId, recepcionId,
+          p.createdBy, p.usuarioNombre,
+        ],
+      );
+    } catch (e) {
+      // Instancia sin la función/migración aplicada — no bloqueamos la
+      // recepción por eso. Se loguea; el backfill posterior arregla.
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.includes("ensure_proveedor_from_cliente")
+          || msg.includes("column \"cliente_id\"")
+          || msg.includes("column \"recepcion_id\"")) {
+        console.warn("[recepciones] compras skip: migracion 20260824 no aplicada aun");
+      } else {
+        throw e; // otro error real ⇒ rollback tx
+      }
+    }
+
     // Solo el crédito genera ENTRADA en el ledger del cliente
     if (creditoInput) {
       await client.query(
@@ -1031,6 +1092,25 @@ export async function anularRecepcionPg(p: RecepcionAnularInput): Promise<Recepc
         RETURNING anulada_at`,
       [p.actorId, p.actorNombre, p.motivo, p.recepcionId, p.empresaId],
     );
+
+    // Anular en cascada las compras espejo generadas por esta recepción.
+    // Tolerante: si la columna recepcion_id no existe (instancia sin
+    // migración 20260824), se saltea sin romper la anulación.
+    try {
+      await client.query(
+        `UPDATE ${quoteSchemaTable(schema, "compras")}
+            SET estado = 'anulada', updated_at = now()
+          WHERE recepcion_id = $1 AND empresa_id = $2 AND estado <> 'anulada'`,
+        [p.recepcionId, p.empresaId],
+      );
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.includes("column \"recepcion_id\"")) {
+        console.warn("[recepciones anular] compras cascade skip: migracion 20260824 no aplicada");
+      } else {
+        throw e;
+      }
+    }
 
     // Evento
     try {
