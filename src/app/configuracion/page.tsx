@@ -100,6 +100,16 @@ export default function ConfiguracionPage() {
           </li>
           <li>
             <SettingsModuleCard
+              title="Tipos de prenda"
+              subtitle="PRONIM · CATÁLOGOS"
+              description="Catálogo (remera, pantalón, calzado, …) que aparece como selector en 'Cliente trae' y alimenta las estadísticas del dashboard de Sucursales."
+              icon={LayoutGrid}
+              badge={editorBadge}
+              href="/configuracion/tipos-prenda"
+            />
+          </li>
+          <li>
+            <SettingsModuleCard
               title="Entidades bancarias"
               subtitle="GLOBAL · COBROS"
               description="Cajas, bancos, tarjetas/POS y billeteras para el cobro de ventas y la conciliación. Código corto para búsqueda rápida del cajero."

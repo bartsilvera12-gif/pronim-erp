@@ -43,6 +43,8 @@ export interface RecepcionItemInput {
   cantidad: number;
   /** Lo que la tienda paga al cliente por cada unidad. Autoritativo. */
   precio_compra_unitario: number;
+  /** Tipo de prenda (catálogo pronimerp.tipos_prenda). Opcional. */
+  tipo_prenda_id?: string | null;
 }
 
 export type MetodoPagoRecepcion = "credito" | "efectivo" | "transferencia";
@@ -359,6 +361,7 @@ export async function crearRecepcionEnClientePg(
       precio_venta_snapshot: number;
       subtotal: number;
       margen_bruto_pct: number | null;
+      tipo_prenda_id: string | null;
     }
     const itemsResueltos: ItemFila[] = [];
     let acumCosto = 0;
@@ -371,6 +374,7 @@ export async function crearRecepcionEnClientePg(
       const residuo = target - base * x.cantidad; // 0 ≤ residuo < cantidad
       const info = x.info;
       const precioVenta = info.precio_venta;
+      const tipoPrendaId = typeof x.it.tipo_prenda_id === "string" && x.it.tipo_prenda_id ? x.it.tipo_prenda_id : null;
       const emitir = (q: number, precio: number) => {
         if (q <= 0) return;
         const st = q * precio;
@@ -384,6 +388,7 @@ export async function crearRecepcionEnClientePg(
           precio_venta_snapshot: precioVenta,
           subtotal: st,
           margen_bruto_pct: margen,
+          tipo_prenda_id: tipoPrendaId,
         });
         acumCosto += st;
       };
@@ -465,12 +470,14 @@ export async function crearRecepcionEnClientePg(
         `INSERT INTO ${recepItemsT} (
            empresa_id, recepcion_id, producto_id, producto_nombre, sku,
            cantidad, precio_compra_unitario, precio_venta_snapshot,
-           subtotal, margen_bruto_pct, costo_historico_incompleto
-         ) VALUES ($1,$2,$3,$4,$5, $6,$7,$8, $9,$10,false)`,
+           subtotal, margen_bruto_pct, costo_historico_incompleto,
+           tipo_prenda_id
+         ) VALUES ($1,$2,$3,$4,$5, $6,$7,$8, $9,$10,false, $11)`,
         [
           p.empresaId, recepcionId, it.producto_id, it.producto_nombre, it.sku,
           it.cantidad, it.precio_compra_unitario, it.precio_venta_snapshot,
           it.subtotal, it.margen_bruto_pct,
+          it.tipo_prenda_id,
         ],
       );
     }

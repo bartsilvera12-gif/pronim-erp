@@ -44,7 +44,13 @@ type Linea = {
   precio_referencia: number;   // precio de venta de la franja (fijo)
   precio_unitario: number;     // en Trae: lo que la tienda paga; en Lleva: normalmente = precio_referencia
   cantidad: number;
+  /** Tipo de prenda (catálogo). Solo aplica al carrito TRAE. La identidad
+   *  de la línea pasa a ser (franja + tipo_prenda_id): la misma franja
+   *  puede repetirse con distintos tipos. */
+  tipo_prenda_id?: string | null;
 };
+
+type TipoPrenda = { id: string; nombre: string; orden: number; activo: boolean };
 
 function fmtGs(n: number): string {
   return "Gs. " + Math.round(n || 0).toLocaleString("es-PY");
@@ -105,6 +111,7 @@ export default function NuevaAtencionPage() {
   // ── Líneas ────────────────────────────────────────────────────────────
   const [trae, setTrae] = useState<Linea[]>([]);
   const [lleva, setLleva] = useState<Linea[]>([]);
+  const [tiposPrenda, setTiposPrenda] = useState<TipoPrenda[]>([]);
 
   // ── Pago / balance ────────────────────────────────────────────────────
   // aplicarCredito = cuánto del crédito TOTAL (previo + nuevo por lo que
@@ -402,15 +409,20 @@ export default function NuevaAtencionPage() {
     let cancel = false;
     (async () => {
       try {
-        const [rf, rc] = await Promise.all([
+        const [rf, rc, rt] = await Promise.all([
           fetchWithSupabaseSession("/api/franjas/publicas", { cache: "no-store" }),
           fetchWithSupabaseSession("/api/clientes", { cache: "no-store" }),
+          fetchWithSupabaseSession("/api/tipos-prenda?solo_activos=true", { cache: "no-store" }),
         ]);
         refrescarCajaEstado();
         refrescarPendientesIngreso();
         refrescarMetaDia();
         const jf = await rf.json().catch(() => ({}));
         const jc = await rc.json().catch(() => ({}));
+        const jt = await rt.json().catch(() => ({}));
+        if (!cancel && jt?.success) {
+          setTiposPrenda((jt.data?.tipos as TipoPrenda[]) ?? []);
+        }
         if (cancel) return;
         const fr = (jf?.data?.franjas as Franja[] | undefined) ?? [];
         setFranjas(fr);
@@ -531,10 +543,16 @@ export default function NuevaAtencionPage() {
       precio_referencia: precio,
       precio_unitario: precio, // por defecto igual al de la franja
       cantidad: 1,
+      tipo_prenda_id: null,
     };
     if (bucket === "trae") {
+      // Identidad = (franja + tipo). Al agregar, la nueva línea nace SIN
+      // tipo asignado — hacemos merge SOLO con otras del mismo franja que
+      // aún no tengan tipo (para no pisar categorizaciones ya hechas).
       setTrae((prev) => {
-        const idx = prev.findIndex((l) => l.franja_id === franja.id);
+        const idx = prev.findIndex(
+          (l) => l.franja_id === franja.id && (l.tipo_prenda_id == null),
+        );
         if (idx >= 0) {
           const copy = [...prev];
           copy[idx] = { ...copy[idx], cantidad: copy[idx].cantidad + 1 };
@@ -575,13 +593,13 @@ export default function NuevaAtencionPage() {
     setLleva(merge);
   }
 
-  function actualizarLinea(bucket: "trae" | "lleva", franjaId: string, patch: Partial<Linea>) {
+  function actualizarLinea(bucket: "trae" | "lleva", idx: number, patch: Partial<Linea>) {
     const setter = bucket === "trae" ? setTrae : setLleva;
-    setter((prev) => prev.map((l) => l.franja_id === franjaId ? { ...l, ...patch } : l));
+    setter((prev) => prev.map((l, i) => i === idx ? { ...l, ...patch } : l));
   }
-  function quitarLinea(bucket: "trae" | "lleva", franjaId: string) {
+  function quitarLinea(bucket: "trae" | "lleva", idx: number) {
     const setter = bucket === "trae" ? setTrae : setLleva;
-    setter((prev) => prev.filter((l) => l.franja_id !== franjaId));
+    setter((prev) => prev.filter((_, i) => i !== idx));
   }
 
   function reset() {
@@ -797,6 +815,7 @@ export default function NuevaAtencionPage() {
               producto_id: l.franja_id,
               cantidad: l.cantidad,
               precio_compra_unitario: l.precio_unitario,
+              tipo_prenda_id: l.tipo_prenda_id ?? null,
             })),
             total_final_evaluado: totalTrae, // ya incluye el ajuste manual (traeMontoFinal)
             ingresar_al_stock: ingresarAlStock,
@@ -1170,9 +1189,10 @@ export default function NuevaAtencionPage() {
           total={totalTrae}
           subtotalItems={totalTraeSubtotal}
           onAgregar={(f) => agregarLineaEn("trae", f)}
-          onActualizar={(id, patch) => actualizarLinea("trae", id, patch)}
-          onQuitar={(id) => quitarLinea("trae", id)}
+          onActualizar={(i, patch) => actualizarLinea("trae", i, patch)}
+          onQuitar={(i) => quitarLinea("trae", i)}
           permitirEditarPrecio
+          tiposPrenda={tiposPrenda}
           accionesHeader={
             <button
               type="button"
@@ -1236,8 +1256,8 @@ export default function NuevaAtencionPage() {
           lineas={lleva}
           total={totalLleva}
           onAgregar={(f) => agregarLineaEn("lleva", f)}
-          onActualizar={(id, patch) => actualizarLinea("lleva", id, patch)}
-          onQuitar={(id) => quitarLinea("lleva", id)}
+          onActualizar={(i, patch) => actualizarLinea("lleva", i, patch)}
+          onQuitar={(i) => quitarLinea("lleva", i)}
           permitirEditarPrecio={false}
         />
       </div>
@@ -2107,8 +2127,8 @@ function ColumnaAtencion(props: {
   lineas: Linea[];
   total: number;
   onAgregar: (f: Franja) => void;
-  onActualizar: (franjaId: string, patch: Partial<Linea>) => void;
-  onQuitar: (franjaId: string) => void;
+  onActualizar: (idx: number, patch: Partial<Linea>) => void;
+  onQuitar: (idx: number) => void;
   permitirEditarPrecio: boolean;
   /** Subtotal de los items antes de un override manual. Solo se usa para mostrar. */
   subtotalItems?: number;
@@ -2116,8 +2136,11 @@ function ColumnaAtencion(props: {
   accionesHeader?: React.ReactNode;
   /** Bloque debajo del listado (ej. campo "A pagar final" para la recepción). */
   slotDebajo?: React.ReactNode;
+  /** Solo TRAE: catálogo de tipos de prenda. Si viene, se muestra selector
+   *  discreto por línea. La identidad de la línea es (franja + tipo). */
+  tiposPrenda?: TipoPrenda[];
 }) {
-  const { titulo, descripcion, tono, franjas, cargando, lineas, total, onAgregar, onActualizar, onQuitar, permitirEditarPrecio, subtotalItems, accionesHeader, slotDebajo } = props;
+  const { titulo, descripcion, tono, franjas, cargando, lineas, total, onAgregar, onActualizar, onQuitar, permitirEditarPrecio, subtotalItems, accionesHeader, slotDebajo, tiposPrenda } = props;
   const border = tono === "emerald" ? "border-emerald-200" : "border-sky-200";
   const bg = tono === "emerald" ? "bg-emerald-50/40" : "bg-sky-50/40";
   const btn = tono === "emerald"
@@ -2187,9 +2210,29 @@ function ColumnaAtencion(props: {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {lineas.map((l) => (
-                <tr key={l.franja_id}>
-                  <td className="px-3 py-2 text-slate-700">{fmtGs(l.precio_referencia)}</td>
+              {lineas.map((l, idx) => (
+                <tr key={`${l.franja_id}::${l.tipo_prenda_id ?? ""}::${idx}`}>
+                  <td className="px-3 py-2 text-slate-700">
+                    {fmtGs(l.precio_referencia)}
+                    {/* Selector discreto de tipo de prenda — solo TRAE (cuando
+                        se pasó `tiposPrenda`). No cambia estructura ni botones. */}
+                    {tiposPrenda && tiposPrenda.length > 0 && (
+                      <select
+                        value={l.tipo_prenda_id ?? ""}
+                        onChange={(e) =>
+                          onActualizar(idx, { tipo_prenda_id: e.target.value || null })
+                        }
+                        className="ml-2 rounded border border-slate-200 bg-white px-1 py-0.5 text-[11px] text-slate-600 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                        aria-label="Tipo de prenda"
+                        title="Tipo de prenda (opcional)"
+                      >
+                        <option value="">— tipo —</option>
+                        {tiposPrenda.map((t) => (
+                          <option key={t.id} value={t.id}>{t.nombre}</option>
+                        ))}
+                      </select>
+                    )}
+                  </td>
                   <td className="px-3 py-2 text-right">
                     <input
                       type="number"
@@ -2197,14 +2240,11 @@ function ColumnaAtencion(props: {
                       value={l.cantidad === 0 ? "" : l.cantidad}
                       onChange={(e) => {
                         const v = e.target.value;
-                        // Permitir borrar el campo — se guarda 0 y al salir
-                        // del input (o al confirmar) se limpia esa línea.
                         const n = v === "" ? 0 : Number(v);
-                        onActualizar(l.franja_id, { cantidad: Number.isFinite(n) && n >= 0 ? n : 0 });
+                        onActualizar(idx, { cantidad: Number.isFinite(n) && n >= 0 ? n : 0 });
                       }}
                       onBlur={() => {
-                        // Al perder el foco: si quedó en 0, quitar la línea.
-                        if (l.cantidad <= 0) onQuitar(l.franja_id);
+                        if (l.cantidad <= 0) onQuitar(idx);
                       }}
                       placeholder="0"
                       className="w-16 rounded-md border border-slate-200 px-2 py-1 text-right text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
@@ -2214,7 +2254,7 @@ function ColumnaAtencion(props: {
                     {permitirEditarPrecio ? (
                       <MontoInput
                         value={l.precio_unitario}
-                        onChange={(n) => onActualizar(l.franja_id, { precio_unitario: Math.max(0, n) })}
+                        onChange={(n) => onActualizar(idx, { precio_unitario: Math.max(0, n) })}
                         decimals={false}
                         className="w-28 rounded-md border border-slate-200 px-2 py-1 text-right text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
                       />
@@ -2226,7 +2266,7 @@ function ColumnaAtencion(props: {
                   <td className="px-2 py-2 text-right">
                     <button
                       type="button"
-                      onClick={() => onQuitar(l.franja_id)}
+                      onClick={() => onQuitar(idx)}
                       title="Quitar"
                       className="text-slate-400 hover:text-red-600 text-lg leading-none"
                     >×</button>

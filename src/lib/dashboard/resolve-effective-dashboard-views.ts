@@ -10,8 +10,12 @@ export type DashboardViewRow = {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnySb = any;
 
-const DASH_SLUGS = new Set(["comercial", "financiero", "inventario", "ventas"]);
-export type DashboardTabSlug = "comercial" | "financiero" | "inventario" | "ventas";
+// El slug `financiero` se mantiene para no romper permisos existentes;
+// el label visible se cambia a "Sucursales" en el frontend (TAB_META).
+// `clientes` es la vista nueva (habilitada solo para tenants Pronim vía
+// migration 20260823000001).
+const DASH_SLUGS = new Set(["comercial", "financiero", "inventario", "ventas", "clientes"]);
+export type DashboardTabSlug = "comercial" | "financiero" | "inventario" | "ventas" | "clientes";
 
 export function isDashboardTabSlug(s: string): s is DashboardTabSlug {
   return DASH_SLUGS.has(s);

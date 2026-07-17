@@ -112,9 +112,12 @@ async function runProcesar(
           const cantidad = Number(r.cantidad);
           const precio = Number(r.precio_compra_unitario);
           if (!producto_id || !(cantidad > 0) || !(precio >= 0)) return null;
-          return { producto_id, cantidad, precio_compra_unitario: precio };
+          const tipo_prenda_id =
+            typeof r.tipo_prenda_id === "string" && r.tipo_prenda_id
+              ? r.tipo_prenda_id : null;
+          return { producto_id, cantidad, precio_compra_unitario: precio, tipo_prenda_id };
         })
-        .filter((x): x is { producto_id: string; cantidad: number; precio_compra_unitario: number } => !!x);
+        .filter((x): x is { producto_id: string; cantidad: number; precio_compra_unitario: number; tipo_prenda_id: string | null } => !!x);
       if (out.length === 0) return null;
       const totalFinal = Number(raw.total_final_evaluado);
       if (!(totalFinal > 0)) {
@@ -283,7 +286,10 @@ async function runProcesar(
         caja_id: cajaId, cliente_id: clienteId, sucursal_id: sucursalId,
         observaciones,
         trae: trae ? {
-          items: trae.items.map(i => ({ p: i.producto_id, c: i.cantidad, u: i.precio_compra_unitario })),
+          items: trae.items.map(i => ({
+            p: i.producto_id, c: i.cantidad, u: i.precio_compra_unitario,
+            t: i.tipo_prenda_id ?? "",
+          })),
           total: trae.totalFinalEvaluado,
           ingresar: trae.ingresarAlStock !== false,
         } : null,

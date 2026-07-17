@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import MetasWidget from "@/components/metas/MetasWidget";
+import DashSucursales from "./DashSucursales";
+import DashClientes from "./DashClientes";
 import { getConfig } from "@/lib/config/storage";
 import { getUsuarios } from "@/lib/usuarios/storage";
 import { getUsuariosActivosEmpresa } from "@/lib/usuarios/empresa";
@@ -2525,7 +2527,7 @@ const PERIODO_OPTS: { id: Periodo; label: string }[] = [
   { id: "anio", label: "Año"       },
 ];
 
-const TAB_VALID: TabDash[] = ["financiero", "inventario", "ventas"];
+const TAB_VALID: TabDash[] = ["financiero", "inventario", "ventas", "clientes"];
 
 type DashScope =
   | { kind: "pending" }
@@ -2670,9 +2672,13 @@ export default function DashboardPage() {
 
   const TAB_META: Record<TabDash, { label: string; Icon: (props: IconProps) => React.ReactElement }> = {
     comercial: { label: "Comercial", Icon: Icon.Comercial },
-    financiero: { label: "Financiero", Icon: Icon.Financiero },
+    // El slug `financiero` se preserva para no romper permisos; el label
+    // visible ahora es "Sucursales" y el componente asociado consume el
+    // endpoint agregado /api/dashboard/sucursales.
+    financiero: { label: "Sucursales", Icon: Icon.Financiero },
     inventario: { label: "Inventario", Icon: Icon.Inventario },
     ventas: { label: "Ventas", Icon: Icon.Ventas },
+    clientes: { label: "Clientes", Icon: Icon.Comercial },
   };
 
   if (!config) {
@@ -2764,7 +2770,7 @@ export default function DashboardPage() {
               Dashboard
             </h1>
             <p className="mt-1.5 max-w-md text-sm leading-relaxed text-slate-500">
-              Joyería Artesanos · Vista {nivel === "supervisor" ? "de tu área" : "global"} · período alineado al filtro
+              Akakua&apos;a · Vista {nivel === "supervisor" ? "de tu área" : "global"} · período alineado al filtro
             </p>
           </div>
         </div>
@@ -2842,14 +2848,18 @@ export default function DashboardPage() {
 
       {/* Contenido */}
       {tab === "financiero" && (
-        <DashFinanciero
-          facturas={facturas}
-          pagos={pagos}
-          clientes={clientes}
-          ventas={ventas}
-          periodo={periodo}
-          config={config}
-          mapNombreTipoServicio={mapNombreTipoServicio}
+        // El slug se mantiene por compat de permisos; el label es "Sucursales".
+        // El componente consume /api/dashboard/sucursales (server-side agg).
+        <DashSucursales
+          desde={getRango(periodo).desde.toISOString().slice(0, 10)}
+          hasta={getRango(periodo).hasta.toISOString().slice(0, 10)}
+        />
+      )}
+
+      {tab === "clientes" && (
+        <DashClientes
+          desde={getRango(periodo).desde.toISOString().slice(0, 10)}
+          hasta={getRango(periodo).hasta.toISOString().slice(0, 10)}
         />
       )}
 

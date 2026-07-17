@@ -4,13 +4,13 @@
  * (evita duplicar el markup del encabezado en cada documento).
  *
  * SOLO presentación: no toca datos de negocio. Los datos comerciales son fijos
- * de la empresa (Joyería Artesanos).
+ * de la empresa (Akakua'a — Pronim).
  */
 
 export const EMPRESA_DOC = {
-  nombre: "Joyería Artesanos",
+  nombre: "Akakua'a",
   actividad: [
-    "Venta de joyería y bisutería",
+    "Compra y venta de prendas usadas",
   ],
   telefono: "",
   /** Dirección oculta a pedido del cliente (lista vacía → no se renderiza). */
