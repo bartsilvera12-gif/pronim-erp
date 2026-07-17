@@ -41,17 +41,35 @@ CREATE INDEX IF NOT EXISTS idx_recep_items_tipo_prenda
   ON pronimerp.cliente_recepciones_items (tipo_prenda_id)
   WHERE tipo_prenda_id IS NOT NULL;
 
--- Seed inicial idempotente por empresa: se corre para toda empresa cuyo
--- data_schema sea pronimerp. Los admins pueden desactivar/renombrar
--- después desde /configuracion/tipos-prenda.
+-- Seed inicial idempotente por empresa. Buscamos primero en el catálogo
+-- que exista (pronimerp.empresas o zentra_erp.empresas). Los admins
+-- pueden desactivar/renombrar después desde /configuracion/tipos-prenda.
 DO $seed$
 DECLARE
   emp RECORD;
   tipo TEXT;
   ord INT;
+  cat_schema TEXT;
 BEGIN
-  FOR emp IN
-    SELECT id FROM zentra_erp.empresas WHERE data_schema = 'pronimerp'
+  -- Detecta dónde está el catálogo de empresas en esta instancia.
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'pronimerp' AND table_name = 'empresas'
+  ) THEN
+    cat_schema := 'pronimerp';
+  ELSIF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'zentra_erp' AND table_name = 'empresas'
+  ) THEN
+    cat_schema := 'zentra_erp';
+  ELSE
+    RAISE NOTICE 'tipos_prenda seed skipped: catalogo de empresas no encontrado';
+    RETURN;
+  END IF;
+
+  FOR emp IN EXECUTE format(
+    'SELECT id FROM %I.empresas WHERE data_schema = %L', cat_schema, 'pronimerp'
+  )
   LOOP
     ord := 10;
     FOREACH tipo IN ARRAY ARRAY[
