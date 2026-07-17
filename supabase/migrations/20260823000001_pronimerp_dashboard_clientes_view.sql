@@ -33,8 +33,14 @@ BEGIN
     orden = EXCLUDED.orden,
     activo = EXCLUDED.activo;
 
-  -- 2) Habilitar la vista para todas las empresas pronimerp — solo si
-  --    existen pronimerp.empresas y pronimerp.empresa_dashboard_views.
+  -- 2) Habilitar TODAS las vistas activas del catálogo para todas las
+  --    empresas pronimerp — no solo 'clientes'.
+  --    Motivo: la app usa la regla "si empresa_dashboard_views está
+  --    vacía => mostrar TODAS las del catálogo; si tiene filas =>
+  --    mostrar SOLO las que están ahí". Si insertáramos únicamente
+  --    'clientes', las demás pestañas (financiero, inventario, ventas)
+  --    dejarían de aparecer para esa empresa. Insertamos todas para
+  --    preservar el comportamiento previo.
   IF EXISTS (
     SELECT 1 FROM information_schema.tables
     WHERE table_schema = 'pronimerp' AND table_name = 'empresa_dashboard_views'
@@ -46,7 +52,7 @@ BEGIN
     SELECT e.id, dv.id, true
     FROM pronimerp.empresas e
     CROSS JOIN pronimerp.dashboard_views dv
-    WHERE dv.slug = 'clientes'
+    WHERE dv.activo = true
     ON CONFLICT (empresa_id, dashboard_view_id) DO UPDATE SET activo = true;
   ELSE
     RAISE NOTICE 'pronimerp.empresa_dashboard_views o pronimerp.empresas ausentes; catalogo actualizado pero no se habilita por-empresa.';
