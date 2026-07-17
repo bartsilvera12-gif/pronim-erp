@@ -151,10 +151,14 @@ export async function GET(request: NextRequest) {
                AND fecha_cierre::date BETWEEN (SELECT desde FROM periodo) AND (SELECT hasta FROM periodo)
            ), 0)::text AS cajas_cerradas,
            NULLIF((
-             SELECT MAX(meta_diaria)::text FROM ${metasT}
-             WHERE empresa_id = $1 AND sucursal_id = s.id
+             -- La meta se llama monto_meta_diaria; no hay vigente_hasta.
+             -- Tomamos la mas reciente activa cuya vigencia empezó antes
+             -- (o durante) del fin del período.
+             SELECT monto_meta_diaria::text FROM ${metasT}
+             WHERE empresa_id = $1 AND sucursal_id = s.id AND activo = true
                AND vigente_desde <= (SELECT hasta FROM periodo)
-               AND (vigente_hasta IS NULL OR vigente_hasta >= (SELECT desde FROM periodo))
+             ORDER BY vigente_desde DESC
+             LIMIT 1
            ), '')::text AS meta_diaria,
            COALESCE((
              SELECT SUM(total) FROM ventas_periodo WHERE sucursal_id = s.id
