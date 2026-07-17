@@ -88,8 +88,28 @@ export default function ConfiguracionCajaPage() {
 
   useEffect(() => { void cargar(); }, [cargar]);
 
+  // Validación pre-guardado: los beneficios con genera_credito=true DEBEN
+  // tener monto_max > 0. Devolvemos el label del primero inválido para el
+  // mensaje, o null si todo OK. El server además revalida y rechaza igual.
+  function primerBeneficioInvalido(): string | null {
+    for (const b of config.beneficios) {
+      if (b.genera_credito === true) {
+        const mm = Number(b.monto_max);
+        if (!Number.isFinite(mm) || mm <= 0) return b.label || b.id;
+      }
+    }
+    return null;
+  }
+  const beneficioSinMax = primerBeneficioInvalido();
+
   async function guardar() {
     if (!esAdmin) { setError("Solo un administrador puede guardar."); return; }
+    if (beneficioSinMax) {
+      setError(
+        `El beneficio "${beneficioSinMax}" genera crédito pero no tiene monto máximo configurado. Ingresá un tope > 0 antes de guardar.`,
+      );
+      return;
+    }
     setError(null); setOkMsg(null); setGuardando(true);
     try {
       const r = await fetchWithSupabaseSession("/api/configuracion/atencion-alertas", {
@@ -374,6 +394,34 @@ export default function ConfiguracionCajaPage() {
                     />
                     Genera crédito
                   </label>
+                  {/* Monto máximo por operación — solo visible cuando genera
+                      crédito. Obligatorio: el server rechaza guardar/usar el
+                      beneficio si falta o es <= 0. Sin límite predeterminado. */}
+                  {b.genera_credito === true && (
+                    <div className="sm:col-span-3">
+                      <label className={F_LABEL}>
+                        Monto máximo por operación (Gs.)
+                        <span className="text-rose-600"> *</span>
+                      </label>
+                      <MontoInput
+                        value={Number(b.monto_max ?? 0) || 0}
+                        onChange={(n) => updateBeneficio(i, { monto_max: n })}
+                        decimals={false}
+                        disabled={!esAdmin}
+                        className={
+                          F_INPUT + " text-sm text-right" +
+                          (!(Number(b.monto_max) > 0)
+                            ? " border-rose-300 focus:ring-rose-500"
+                            : "")
+                        }
+                      />
+                      {!(Number(b.monto_max) > 0) && (
+                        <p className="mt-1 text-[11px] text-rose-600">
+                          Obligatorio: el admin debe fijar un tope mayor a 0.
+                        </p>
+                      )}
+                    </div>
+                  )}
                   {esAdmin && (
                     <div className="sm:col-span-6 flex justify-end">
                       <button
@@ -402,7 +450,10 @@ export default function ConfiguracionCajaPage() {
             <button
               type="button"
               onClick={guardar}
-              disabled={!esAdmin || guardando}
+              disabled={!esAdmin || guardando || Boolean(beneficioSinMax)}
+              title={beneficioSinMax
+                ? `El beneficio "${beneficioSinMax}" necesita monto máximo > 0`
+                : undefined}
               className="rounded-lg bg-[#4FAEB2] hover:bg-[#3F8E91] disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-sm font-semibold px-5 py-2 shadow-sm"
             >
               {guardando ? "Guardando…" : "Guardar cambios"}

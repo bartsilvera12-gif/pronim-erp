@@ -756,17 +756,37 @@ async function runAll(): Promise<void> {
       assert(data.venta.id, "venta creada");
     });
 
-    // ─── E2: monto SUPERIOR al máximo → 400 + rollback ────────────────
+    // ─── E2: monto SUPERIOR al máximo → 400 + rollback total ──────────
+    // Verificamos NO cambian: ventas, stock del producto, pagos, créditos.
     await withSavepoint(client, "E2_endpoint_monto_sobre_max", async () => {
-      // Contamos ventas y créditos antes.
-      const cntVentasAntes = await client.query<{ c: string }>(
-        `SELECT COUNT(*)::text AS c FROM ${quoteSchemaTable(SCHEMA, "ventas")} WHERE cliente_id=$1`,
-        [fx.clienteId],
-      );
-      const cntCreditoAntes = await client.query<{ c: string }>(
-        `SELECT COUNT(*)::text AS c FROM ${quoteSchemaTable(SCHEMA, "cliente_creditos_movimientos")} WHERE cliente_id=$1`,
-        [fx.clienteId],
-      );
+      const snapshot = async () => {
+        const v = await client.query<{ c: string }>(
+          `SELECT COUNT(*)::text AS c FROM ${quoteSchemaTable(SCHEMA, "ventas")} WHERE cliente_id=$1`,
+          [fx.clienteId],
+        );
+        const cred = await client.query<{ c: string }>(
+          `SELECT COUNT(*)::text AS c FROM ${quoteSchemaTable(SCHEMA, "cliente_creditos_movimientos")} WHERE cliente_id=$1`,
+          [fx.clienteId],
+        );
+        const stk = await client.query<{ s: string }>(
+          `SELECT stock_actual::text AS s FROM ${quoteSchemaTable(SCHEMA, "producto_stock_sucursal")}
+            WHERE producto_id=$1 AND sucursal_id=$2`,
+          [fx.franjaA_6000, fx.sucursalId],
+        );
+        const pagos = await client.query<{ c: string }>(
+          `SELECT COUNT(*)::text AS c FROM ${quoteSchemaTable(SCHEMA, "ventas_pagos_detalle")}
+            WHERE sucursal_id=$1`,
+          [fx.sucursalId],
+        );
+        return {
+          ventas: v.rows[0].c,
+          creditos: cred.rows[0].c,
+          stock: stk.rows[0]?.s ?? "0",
+          pagos: pagos.rows[0].c,
+        };
+      };
+      const antes = await snapshot();
+
       const resp = await procesarConfirmarAtencion(
         endpointBody({
           lleva: {
@@ -782,17 +802,85 @@ async function runAll(): Promise<void> {
       eq(resp.status, 400, "monto sobre max debe ser 400");
       const bodyResp = resp.body as { code?: string };
       eq(bodyResp.code, "BENEFICIO_MONTO_SOBRE_MAX", "código tipado");
-      // Rollback total: ni venta ni crédito nuevos.
-      const cntVentasDesp = await client.query<{ c: string }>(
-        `SELECT COUNT(*)::text AS c FROM ${quoteSchemaTable(SCHEMA, "ventas")} WHERE cliente_id=$1`,
-        [fx.clienteId],
+
+      // Rollback total: ninguno de estos contadores cambia.
+      const despues = await snapshot();
+      eq(despues.ventas, antes.ventas, "ventas no cambia");
+      eq(despues.creditos, antes.creditos, "creditos no cambia");
+      eq(despues.stock, antes.stock, "stock no cambia");
+      eq(despues.pagos, antes.pagos, "pagos no cambia");
+    });
+
+    // ─── E7: parseo estricto — id vacío ───────────────────────────────
+    await withSavepoint(client, "E7_endpoint_id_vacio", async () => {
+      const resp = await procesarConfirmarAtencion(
+        endpointBody({
+          lleva: {
+            items: [{ producto_id: fx.franjaA_6000, cantidad: 1, tipo_iva: "EXENTA" }],
+            credito_usado: 0,
+            pago_detalle: [{ metodo_pago: "efectivo", monto: 6000 }],
+          },
+          beneficios_credito: [{ id: "", monto: 1000 }],
+        }),
+        mockAuth,
+        client,
       );
-      const cntCreditoDesp = await client.query<{ c: string }>(
-        `SELECT COUNT(*)::text AS c FROM ${quoteSchemaTable(SCHEMA, "cliente_creditos_movimientos")} WHERE cliente_id=$1`,
-        [fx.clienteId],
+      eq(resp.status, 400, "id vacío debe ser 400");
+      eq((resp.body as { code?: string }).code, "BENEFICIO_MONTO_INVALIDO", "código tipado");
+    });
+
+    // ─── E8: parseo estricto — monto no numérico ──────────────────────
+    await withSavepoint(client, "E8_endpoint_monto_no_numerico", async () => {
+      const resp = await procesarConfirmarAtencion(
+        endpointBody({
+          lleva: {
+            items: [{ producto_id: fx.franjaA_6000, cantidad: 1, tipo_iva: "EXENTA" }],
+            credito_usado: 0,
+            pago_detalle: [{ metodo_pago: "efectivo", monto: 6000 }],
+          },
+          beneficios_credito: [{ id: fx.beneficioCashbackConCredId, monto: "abc" }],
+        }),
+        mockAuth,
+        client,
       );
-      eq(cntVentasDesp.rows[0].c, cntVentasAntes.rows[0].c, "ventas no cambia");
-      eq(cntCreditoDesp.rows[0].c, cntCreditoAntes.rows[0].c, "créditos no cambia");
+      eq(resp.status, 400, "monto no numérico debe ser 400");
+      eq((resp.body as { code?: string }).code, "BENEFICIO_MONTO_INVALIDO", "código tipado");
+    });
+
+    // ─── E9: parseo estricto — monto <= 0 ─────────────────────────────
+    await withSavepoint(client, "E9_endpoint_monto_cero", async () => {
+      const resp = await procesarConfirmarAtencion(
+        endpointBody({
+          lleva: {
+            items: [{ producto_id: fx.franjaA_6000, cantidad: 1, tipo_iva: "EXENTA" }],
+            credito_usado: 0,
+            pago_detalle: [{ metodo_pago: "efectivo", monto: 6000 }],
+          },
+          beneficios_credito: [{ id: fx.beneficioCashbackConCredId, monto: 0 }],
+        }),
+        mockAuth,
+        client,
+      );
+      eq(resp.status, 400, "monto <= 0 debe ser 400");
+      eq((resp.body as { code?: string }).code, "BENEFICIO_MONTO_INVALIDO", "código tipado");
+    });
+
+    // ─── E10: parseo estricto — estructura inválida (no lista) ────────
+    await withSavepoint(client, "E10_endpoint_estructura_invalida", async () => {
+      const resp = await procesarConfirmarAtencion(
+        endpointBody({
+          lleva: {
+            items: [{ producto_id: fx.franjaA_6000, cantidad: 1, tipo_iva: "EXENTA" }],
+            credito_usado: 0,
+            pago_detalle: [{ metodo_pago: "efectivo", monto: 6000 }],
+          },
+          beneficios_credito: "no-es-una-lista",
+        }),
+        mockAuth,
+        client,
+      );
+      eq(resp.status, 400, "beneficios_credito no-lista debe ser 400");
+      eq((resp.body as { code?: string }).code, "BENEFICIO_MONTO_INVALIDO", "código tipado");
     });
 
     // ─── E3: beneficio sin monto_max en config → rechazado ────────────

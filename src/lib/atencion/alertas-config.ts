@@ -54,6 +54,14 @@ export type BeneficioCfg = {
   tipo_evento: "beneficio" | "descuento" | "cashback" | "otro";
   pide_monto: boolean;
   genera_credito?: boolean;
+  /**
+   * Tope máximo por operación cuando genera_credito=true. Es OBLIGATORIO
+   * en ese caso; el admin lo fija desde /configuracion/caja. Sin default
+   * silencioso: si no está o es <= 0, el server rechaza el uso del
+   * beneficio (evita que se manipule el request para emitir crédito
+   * arbitrario).
+   */
+  monto_max?: number;
 };
 
 export type AlertasConfig = {
@@ -88,6 +96,9 @@ export const ALERTAS_DEFAULTS: AlertasConfig = {
     overrides: {},
   },
   beneficios: [
+    // El cashback default nace SIN monto_max: obligamos al admin a fijar
+    // el tope desde /configuracion/caja antes de usarlo. La UI marca ese
+    // input como obligatorio y bloquea guardado si falta.
     { id: "cashback",         label: "Cashback",         tipo_evento: "cashback",  pide_monto: true,  genera_credito: true  },
     { id: "ecobag",           label: "Ecobag",           tipo_evento: "beneficio", pide_monto: false, genera_credito: false },
     { id: "regalo_dia",       label: "Regalito del día", tipo_evento: "beneficio", pide_monto: false, genera_credito: false },

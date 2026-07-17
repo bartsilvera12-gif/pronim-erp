@@ -48,10 +48,36 @@ function err(status: number, message: string, code?: string): HandlerResponse {
 
 /**
  * Overload testeable: si viene `externalClient`, se usa ese pg.Client para
- * TODAS las queries (lookup de caja + orquestador). El caller es responsable
- * del BEGIN/COMMIT/ROLLBACK — permitiendo envolver ejecuciones en SAVEPOINT.
+ * TODAS las queries y se envuelve la ejecución en un SAVEPOINT propio.
+ * En éxito ⇒ RELEASE SAVEPOINT. En error/validación ⇒ ROLLBACK TO SAVEPOINT
+ * + RELEASE, y se devuelve la HandlerResponse igual que en producción.
+ * Así los tests pueden ejecutar múltiples llamadas concatenadas sin dejar
+ * la tx en estado "abortada" tras un 400/409.
  */
 export async function procesarConfirmarAtencion(
+  body: Record<string, unknown>,
+  auth: HandlerAuth,
+  externalClient?: import("pg").PoolClient,
+): Promise<HandlerResponse> {
+  // Modo tests: con client externo, envolvemos la ejecución en un
+  // SAVEPOINT propio. Tras éxito ⇒ RELEASE. Tras 4xx/5xx ⇒ ROLLBACK TO
+  // + RELEASE. Así los tests pueden concatenar llamadas sin dejar la tx
+  // externa en estado aborted (y sin persistir writes de las que fallaron).
+  const spName = externalClient ? `sp_ep_${Math.floor(Math.random() * 1e9)}` : null;
+  if (externalClient && spName) {
+    await externalClient.query(`SAVEPOINT ${spName}`);
+  }
+  const resp = await runProcesar(body, auth, externalClient);
+  if (externalClient && spName) {
+    if (resp.status >= 400) {
+      await externalClient.query(`ROLLBACK TO SAVEPOINT ${spName}`).catch(() => null);
+    }
+    await externalClient.query(`RELEASE SAVEPOINT ${spName}`).catch(() => null);
+  }
+  return resp;
+}
+
+async function runProcesar(
   body: Record<string, unknown>,
   auth: HandlerAuth,
   externalClient?: import("pg").PoolClient,
@@ -173,15 +199,31 @@ export async function procesarConfirmarAtencion(
       return err(400, "promocion requiere promocion_id o cupon_codigo.", "PROMO_REF_REQUERIDA");
     }
 
-    const beneficiosRaw = Array.isArray(body.beneficios_credito) ? body.beneficios_credito : [];
+    // Parseo ESTRICTO: si el body trae basura, rechazamos con 400 tipado.
+    // No ignoramos silenciosamente elementos inválidos — el frontend nunca
+    // debería enviarlos, y ocultarlos enmascara bugs y facilita manipulación.
+    const beneficiosRaw = body.beneficios_credito;
+    if (beneficiosRaw !== undefined && !Array.isArray(beneficiosRaw)) {
+      return err(400, "beneficios_credito debe ser una lista.", "BENEFICIO_MONTO_INVALIDO");
+    }
     const beneficiosCredito: NonNullable<ConfirmarAtencionInput["beneficiosCredito"]> = [];
-    for (const raw of beneficiosRaw) {
-      if (!raw || typeof raw !== "object") continue;
+    for (const raw of (beneficiosRaw as unknown[] | undefined) ?? []) {
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+        return err(400, "Beneficio inválido en beneficios_credito.", "BENEFICIO_MONTO_INVALIDO");
+      }
       const r = raw as Record<string, unknown>;
-      const id = typeof r.id === "string" ? r.id : null;
+      const id = typeof r.id === "string" ? r.id.trim() : "";
+      if (!id) {
+        return err(400, "Beneficio con id vacío en beneficios_credito.", "BENEFICIO_MONTO_INVALIDO");
+      }
       const monto = Number(r.monto);
-      if (!id) continue;
-      if (!(monto > 0)) continue;
+      if (!Number.isFinite(monto) || monto <= 0) {
+        return err(
+          400,
+          `Beneficio "${id}": monto inválido (debe ser numérico > 0).`,
+          "BENEFICIO_MONTO_INVALIDO",
+        );
+      }
       beneficiosCredito.push({ id, monto: Math.round(monto) });
     }
 
