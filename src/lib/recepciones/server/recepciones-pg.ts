@@ -68,6 +68,13 @@ export interface RecepcionCreateInput {
   usuarioNombre: string | null;
   ingresarAhora?: boolean;
   cambioId?: string | null;
+  /**
+   * Monto FINAL evaluado por la cajera. Si viene, es la fuente de verdad
+   * para el crédito generado y para prorratear el costo por línea.
+   * Debe ser > 0. Puede diferir del subtotal crudo (ajuste manual).
+   * Si no viene, el server usa el subtotal crudo (comportamiento legacy).
+   */
+  totalFinalEvaluado?: number | null;
 }
 
 export interface RecepcionCreated {
@@ -179,9 +186,32 @@ async function cajaAbiertaSucursal(
 export async function crearRecepcionPg(
   p: RecepcionCreateInput,
 ): Promise<RecepcionCreated> {
-  const schema = assertAllowedChatDataSchema(p.schema);
   const pool = getChatPostgresPool();
   if (!pool) throw new Error("Sin conexión Postgres.");
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const r = await crearRecepcionEnClientePg(client, p);
+    await client.query("COMMIT");
+    return r;
+  } catch (e) {
+    await client.query("ROLLBACK").catch(() => null);
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Variante interna: recibe el `PoolClient` de una transacción externa y
+ * NO abre/comitea su propio BEGIN. Diseñado para orquestadores que
+ * agrupan varias operaciones en una sola tx (ej. /api/atencion/confirmar).
+ */
+export async function crearRecepcionEnClientePg(
+  client: import("pg").PoolClient,
+  p: RecepcionCreateInput,
+): Promise<RecepcionCreated> {
+  const schema = assertAllowedChatDataSchema(p.schema);
 
   if (!p.items.length) throw new Error("La recepción debe tener al menos una prenda.");
   if (!p.pagos.length) throw new Error("La recepción debe tener al menos una forma de pago.");
@@ -219,9 +249,7 @@ export async function crearRecepcionPg(
   const eventosT = quoteSchemaTable(schema, "cliente_eventos");
   const entidadesT = quoteSchemaTable(schema, "entidades_bancarias");
 
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
+  {
 
     // Cliente + sucursal
     const cl = await client.query(
@@ -254,33 +282,88 @@ export async function crearRecepcionPg(
     const uniqueIds = [...new Set(p.items.map((i) => i.producto_id))];
     const productosInfo = await lockProductosRecep(client, schema, p.empresaId, uniqueIds);
 
-    // Recalcular total_compra server-side
-    let totalCompra = 0;
-    const itemsResueltos = p.items.map((it) => {
+    // ── Subtotal crudo (antes de ajuste) ─────────────────────────────
+    // Lo guardamos como subtotal_evaluado para auditoría. Si la cajera
+    // ingresó un totalFinalEvaluado distinto, prorrateamos el ajuste
+    // proporcionalmente entre las líneas para que el WACP se calcule con
+    // el costo real pagado y `SUM(cantidad × precio_ajustado) = total_final`.
+    let subtotalEvaluado = 0;
+    const itemsCrudo = p.items.map((it) => {
       const info = productosInfo.get(it.producto_id)!;
       const cantidad = Number(it.cantidad);
       const precioCompra = Number(it.precio_compra_unitario);
-      const subtotal = cantidad * precioCompra;
-      totalCompra += subtotal;
+      const subtotalLinea = cantidad * precioCompra;
+      subtotalEvaluado += subtotalLinea;
+      return { it, info, cantidad, precioCompra, subtotalLinea };
+    });
+
+    const totalFinalRaw = p.totalFinalEvaluado != null ? Number(p.totalFinalEvaluado) : null;
+    const totalFinal = totalFinalRaw != null && Number.isFinite(totalFinalRaw)
+      ? Math.round(totalFinalRaw)
+      : subtotalEvaluado;
+    if (!(totalFinal > 0)) {
+      throw new Error("El monto final de la evaluación debe ser mayor a 0.");
+    }
+    if (subtotalEvaluado <= 0 && totalFinal > 0) {
+      throw new Error(
+        "No se puede prorratear el monto final: el subtotal de líneas es 0 (todas las prendas tienen precio 0).",
+      );
+    }
+    const ajusteEvaluacion = totalFinal - subtotalEvaluado;
+
+    // Prorrateo: precio_ajustado_linea_i = round(subtotal_linea_i × total_final / subtotal_evaluado / cantidad_i).
+    // El residuo por redondeo se corrige en la última línea para garantizar
+    // SUM(cantidad_i × precio_ajustado_i) = total_final exactamente.
+    // Si no hay ajuste, precio_ajustado_i = precio_compra_unitario_i.
+    let acumCosto = 0;
+    const itemsResueltos = itemsCrudo.map((x, idx) => {
+      const info = x.info;
+      let precioAjustado = x.precioCompra;
+      if (ajusteEvaluacion !== 0) {
+        const factor = totalFinal / subtotalEvaluado;
+        precioAjustado = x.cantidad > 0
+          ? Math.round((x.subtotalLinea * factor) / x.cantidad)
+          : 0;
+      }
+      let subtotalAjustadoLinea = x.cantidad * precioAjustado;
+      if (idx === itemsCrudo.length - 1) {
+        // corregir residuo en la última línea
+        const dif = totalFinal - (acumCosto + subtotalAjustadoLinea);
+        if (dif !== 0 && x.cantidad > 0) {
+          precioAjustado = Math.round((subtotalAjustadoLinea + dif) / x.cantidad);
+          subtotalAjustadoLinea = x.cantidad * precioAjustado;
+        }
+      }
+      acumCosto += subtotalAjustadoLinea;
       const precioVenta = info.precio_venta;
-      const margen = precioVenta > 0 ? ((precioVenta - precioCompra) / precioVenta) * 100 : null;
+      const margen = precioVenta > 0
+        ? ((precioVenta - precioAjustado) / precioVenta) * 100
+        : null;
       return {
-        producto_id: it.producto_id,
+        producto_id: x.it.producto_id,
         producto_nombre: info.nombre,
         sku: info.sku,
-        cantidad,
-        precio_compra_unitario: precioCompra,
+        cantidad: x.cantidad,
+        precio_compra_unitario: precioAjustado,
         precio_venta_snapshot: precioVenta,
-        subtotal,
+        subtotal: subtotalAjustadoLinea,
         margen_bruto_pct: margen,
       };
     });
+    // Consolidamos: el total_compra que se persiste es igual al total_final
+    // para no romper la ecuación pagos = total_compra en el bloque siguiente.
+    const totalCompra = acumCosto;
+    if (Math.abs(totalCompra - totalFinal) > TOL) {
+      throw new Error(
+        `Prorrateo interno inconsistente (${totalCompra} vs total_final ${totalFinal}). Reportá este bug.`,
+      );
+    }
 
-    // Ecuación: suma pagos = total_compra
+    // Ecuación: suma pagos = total_compra (= total_final)
     const totalPagos = p.pagos.reduce((s, pg) => s + Number(pg.monto), 0);
     if (Math.abs(totalPagos - totalCompra) > TOL) {
       throw new Error(
-        `La suma de las formas de pago (${totalPagos}) no coincide con el total de compra (${totalCompra}).`,
+        `La suma de las formas de pago (${totalPagos}) no coincide con el total final de la evaluación (${totalCompra}).`,
       );
     }
 
@@ -312,18 +395,23 @@ export async function crearRecepcionPg(
     );
     const numero = nc.rows[0].n;
 
-    // Cabecera
+    // Cabecera — guarda subtotal_evaluado, ajuste_evaluacion y total_final
+    // para auditoría. `total_compra` queda igual al total_final para
+    // preservar la semántica del resto de reportes.
     const ins = await client.query<{ id: string; fecha: string }>(
       `INSERT INTO ${recepT} (
          empresa_id, cliente_id, sucursal_id, numero_control,
          total_compra, total_credito, observaciones, estado, cambio_id,
-         origen_datos, created_by, usuario_nombre
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,'pendiente_ingreso',$8,'nuevo_modelo',$9,$10)
+         origen_datos, created_by, usuario_nombre,
+         subtotal_evaluado, ajuste_evaluacion, total_final
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,'pendiente_ingreso',$8,'nuevo_modelo',$9,$10,
+                 $11,$12,$13)
        RETURNING id, fecha`,
       [
         p.empresaId, p.clienteId, p.sucursalId, numero,
         totalCompra, creditoInput ? Number(creditoInput.monto) : 0,
         p.observaciones, p.cambioId ?? null, p.createdBy, p.usuarioNombre,
+        subtotalEvaluado, ajusteEvaluacion, totalFinal,
       ],
     );
     const recepcionId = ins.rows[0].id;
@@ -416,7 +504,6 @@ export async function crearRecepcionPg(
       ingresadaAt = r.ingresada_at;
     }
 
-    await client.query("COMMIT");
     return {
       id: recepcionId,
       numero_control: numero,
@@ -428,11 +515,6 @@ export async function crearRecepcionPg(
       estado: estadoFinal,
       ingresada_at: ingresadaAt,
     };
-  } catch (e) {
-    await client.query("ROLLBACK").catch(() => null);
-    throw e;
-  } finally {
-    client.release();
   }
 }
 

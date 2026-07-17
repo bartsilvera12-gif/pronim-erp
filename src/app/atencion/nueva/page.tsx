@@ -144,6 +144,16 @@ export default function NuevaAtencionPage() {
   const [pendientesIngresoCount, setPendientesIngresoCount] = useState<number>(0);
   const [pendientesVencidasCount, setPendientesVencidasCount] = useState<number>(0);
   const [cajaAbiertaId, setCajaAbiertaId] = useState<string | null>(null);
+  // Multi-caja: si hay más de una abierta en la sucursal, la cajera elige.
+  // Si hay una sola, se autoresuelve (spec: “Si existe una sola caja abierta, usarla”).
+  // Si hay >1 y no eligió, se bloquea la confirmación en preConfirmar.
+  const [cajasAbiertas, setCajasAbiertas] = useState<
+    { id: string; numero_caja?: number; punto_caja_nombre?: string | null }[]
+  >([]);
+  const [cajaSeleccionadaId, setCajaSeleccionadaId] = useState<string | null>(null);
+  // Idempotency key del submit actual. Se genera al abrir el modal pre-cierre
+  // y se invalida al cerrar o al cambiar cualquier dato relevante.
+  const [idempotencyKey, setIdempotencyKey] = useState<string | null>(null);
   const [cajaNumero, setCajaNumero] = useState<number | null>(null);
   const [cajaAperturaHora, setCajaAperturaHora] = useState<string | null>(null);
   const [cajaChecked, setCajaChecked] = useState(false);
@@ -194,12 +204,20 @@ export default function NuevaAtencionPage() {
       ]);
       const jc = await rc.json().catch(() => ({}));
       const jp = await rp.json().catch(() => ({}));
-      const cajas = (jc?.data?.cajas as { id: string; numero_caja?: number; fecha_apertura?: string; monto_apertura?: number | string }[] | undefined) ?? [];
+      const cajas = (jc?.data?.cajas as { id: string; numero_caja?: number; fecha_apertura?: string; monto_apertura?: number | string; punto_caja_nombre?: string | null }[] | undefined) ?? [];
       const c0 = cajas[0] ?? (jc?.data?.caja as { id: string; numero_caja?: number; fecha_apertura?: string; monto_apertura?: number | string } | null | undefined) ?? null;
       setCajaAbiertaId(c0?.id ?? null);
       setCajaNumero(c0?.numero_caja ?? null);
       setCajaAperturaHora(c0?.fecha_apertura ?? null);
       setCajaMontoApertura(Number(c0?.monto_apertura ?? 0) || 0);
+      setCajasAbiertas(cajas);
+      // Auto-selección solo si hay exactamente una caja abierta.
+      setCajaSeleccionadaId((prev) => {
+        if (cajas.length === 1) return cajas[0].id;
+        // Si ya había una seleccionada y sigue estando abierta, la respetamos.
+        if (prev && cajas.some((c) => c.id === prev)) return prev;
+        return null;
+      });
       const puntos = (jp?.data?.puntos as { id: string; nombre?: string }[] | undefined) ?? [];
       setPuntoCajaId(puntos[0]?.id ?? null);
       setPuntoCajaNombre(puntos[0]?.nombre ?? null);
@@ -689,8 +707,18 @@ export default function NuevaAtencionPage() {
       setError(`Falta cobrar Gs. ${Math.round(aCobrar - recibidoNum).toLocaleString("es-PY")} en efectivo. Ingresá el monto recibido.`);
       return;
     }
+    // Caja: exigimos selección explícita cuando hay >1 abierta.
+    if (!cajaSeleccionadaId && cajasAbiertas.length !== 1) {
+      setError(cajasAbiertas.length > 1
+        ? "Elegí la caja en la que se registra esta atención (hay más de una abierta)."
+        : "Abrí una caja antes de confirmar.");
+      return;
+    }
     // Reset checklist en cada apertura.
     setBeneficiosMarcados({});
+    // Nueva idempotency_key por submit lógico. Si el usuario cierra y vuelve
+    // a abrir el modal (o cambia datos), la key se regenera.
+    setIdempotencyKey(crypto.randomUUID());
     setPreCierreOpen(true);
   }
 
@@ -729,132 +757,93 @@ export default function NuevaAtencionPage() {
   async function confirmar() {
     // Defensivo: preConfirmar ya validó, pero TS no puede seguirlo.
     if (!cliente) return;
+    // Caja explícita — nunca autoseleccionamos la primera cuando hay varias.
+    const cajaIdFinal = cajaSeleccionadaId
+      ?? (cajasAbiertas.length === 1 ? cajasAbiertas[0].id : null);
+    if (!cajaIdFinal) {
+      setError(cajasAbiertas.length > 1
+        ? "Hay más de una caja abierta. Elegí la caja antes de confirmar."
+        : "Abrí la caja antes de confirmar la atención.");
+      return;
+    }
+    // Idempotency key: la fija preConfirmar al abrir el modal. Si por alguna
+    // razón no está (llamada directa), la generamos acá — reintento de la
+    // misma llamada reusa la misma key gracias a este cierre léxico.
+    const key = idempotencyKey ?? crypto.randomUUID();
+    if (!idempotencyKey) setIdempotencyKey(key);
+
     setEnviando(true);
     try {
-      // La caja se abre explícitamente antes de arrancar (gate al entrar
-      // a la pantalla). Acá asumimos que ya hay una abierta.
-      if (!cajaAbiertaId) {
-        throw new Error("Abrí la caja antes de confirmar la atención.");
-      }
-
-      // ── 1. Recepción (si trae algo) ────────────────────────────────
-      if (trae.length > 0) {
-        // Método de pago = crédito completo. El excedente se convierte
-        // en saldo a favor. Si el cliente lleva algo también, ese
-        // crédito se aplica automáticamente en la venta a continuación.
-        const totalRec = totalTrae;
-        const bodyRec = {
-          items: trae.map((l) => ({
-            producto_id: l.franja_id,
-            cantidad: l.cantidad,
-            precio_compra_unitario: l.precio_unitario,
-          })),
-          pagos: [{ metodo: "credito", monto: totalRec }],
-          observaciones: observaciones || null,
-          ingresar_ahora: ingresarAlStock,
-        };
-        const rr = await fetchWithSupabaseSession(`/api/clientes/${cliente.id}/recepciones`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(bodyRec),
-        });
-        const jr = await rr.json().catch(() => ({}));
-        if (!rr.ok || jr?.success === false) {
-          throw new Error(jr?.error ?? `No se pudo registrar la recepción (${rr.status}).`);
-        }
-      }
-
-      // ── 2. Venta (si lleva algo) ───────────────────────────────────
-      if (lleva.length > 0) {
-        const total = totalLleva;
-        // Si hay descuento por promoción, lo instrumentamos como un crédito
-        // adicional del cliente que se aplica en la venta. Así no rompemos
-        // el backend transaccional de ventas (que valida totales contra
-        // items) y queda trazable en el historial de crédito del cliente.
-        if (promoAplicada && promoAplicada.descuento > 0) {
-          try {
-            await fetchWithSupabaseSession("/api/promociones/aplicacion", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                promocion_id: promoAplicada.id,
-                cliente_id: cliente.id,
-                descuento: 0,           // la aplicación real se persiste luego con venta_id
-                cashback: promoAplicada.descuento,   // reutilizamos el mecanismo de crédito
-                origen: "descuento_promo",           // origen distinto para el ledger del cliente
-                cupon_codigo: promoAplicada.cupon_codigo,
-              }),
-            });
-          } catch (e) {
-            console.error("[atencion] crear crédito por descuento", e);
+      const traePayload = trae.length > 0
+        ? {
+            items: trae.map((l) => ({
+              producto_id: l.franja_id,
+              cantidad: l.cantidad,
+              precio_compra_unitario: l.precio_unitario,
+            })),
+            total_final_evaluado: totalTrae, // ya incluye el ajuste manual (traeMontoFinal)
+            ingresar_al_stock: ingresarAlStock,
           }
-        }
-        // Crédito a aplicar en la venta: lo que la cajera decidió + el
-        // descuento de promoción convertido a crédito recién creado.
-        const creditoUsado = creditoAplicadoNum + (promoAplicada?.descuento ?? 0);
-        const efectivoNeeded = Math.max(0, total - creditoUsado);
-        const pagoDetalle = efectivoNeeded > 0
-          ? [{
-              metodo_pago: metodoCobro,
-              monto: efectivoNeeded,
-              referencia: referenciaCobro.trim() || null,
-            }]
-          : [];
-        const bodyVenta = {
+        : null;
+
+      const llevaPayload = lleva.length > 0
+        ? (() => {
+            const total = totalLleva;
+            // Crédito a aplicar: lo que la cajera decidió + descuento
+            // promocional que el orquestador materializa como crédito
+            // dentro de la misma tx (descuento_ya_aplicado_como_credito=false).
+            const creditoUsado = creditoAplicadoNum + (promoAplicada?.descuento ?? 0);
+            const efectivoNeeded = Math.max(0, total - creditoUsado);
+            const pago_detalle = efectivoNeeded > 0
+              ? [{
+                  metodo_pago: metodoCobro,
+                  monto: efectivoNeeded,
+                  referencia: referenciaCobro.trim() || null,
+                }]
+              : [];
+            return {
+              items: lleva.map((l) => ({
+                producto_id: l.franja_id,
+                cantidad: l.cantidad,
+                tipo_iva: "EXENTA" as const,
+              })),
+              credito_usado: creditoUsado,
+              pago_detalle,
+              moneda: "GS" as const,
+              tipo_cambio: 1,
+            };
+          })()
+        : null;
+
+      const promoPayload = promoAplicada
+        ? {
+            promocion_id: promoAplicada.id,
+            descuento: promoAplicada.descuento,
+            cashback: promoAplicada.cashback,
+            cupon_codigo: promoAplicada.cupon_codigo,
+            descuento_ya_aplicado_como_credito: false,
+          }
+        : null;
+
+      const r = await fetchWithSupabaseSession("/api/atencion/confirmar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          idempotency_key: key,
+          caja_id: cajaIdFinal,
           cliente_id: cliente.id,
-          items: lleva.map((l) => ({
-            producto_id: l.franja_id,
-            cantidad: l.cantidad,
-            tipo_iva: "EXENTA" as const,
-          })),
-          moneda: "GS",
-          tipo_cambio: 1,
-          tipo_venta: "CONTADO",
-          subtotal: total,
-          monto_iva: 0,
-          total,
-          metodo_pago: pagoDetalle.length > 0 ? metodoCobro : "efectivo",
-          credito_cliente_usado: creditoUsado,
-          pago_detalle: pagoDetalle,
           observaciones: observaciones || null,
-        };
-        const rv = await fetchWithSupabaseSession("/api/ventas/create", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(bodyVenta),
-        });
-        const jv = await rv.json().catch(() => ({}));
-        if (!rv.ok || jv?.success === false) {
-          throw new Error(jv?.error ?? `No se pudo registrar la venta (${rv.status}).`);
-        }
-
-        // Si aplicaba una promoción, registramos la aplicación (audit) y —
-        // si corresponde — acreditamos el cashback al cliente. Best-effort:
-        // fallar acá no revierte la venta, solo avisa al usuario.
-        if (promoAplicada && (promoAplicada.descuento > 0 || promoAplicada.cashback > 0)) {
-          try {
-            const ventaId = (jv?.data?.venta?.id as string | undefined)
-              ?? (jv?.data?.ventaId as string | undefined)
-              ?? null;
-            await fetchWithSupabaseSession("/api/promociones/aplicacion", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                promocion_id: promoAplicada.id,
-                venta_id: ventaId,
-                cliente_id: cliente.id,
-                descuento: promoAplicada.descuento,
-                cashback: promoAplicada.cashback,
-                cupon_codigo: promoAplicada.cupon_codigo,
-              }),
-            });
-          } catch (e) {
-            console.error("[atencion] promocion aplicacion", e);
-          }
-        }
+          trae: traePayload,
+          lleva: llevaPayload,
+          promocion: promoPayload,
+        }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || j?.success === false) {
+        throw new Error(j?.error ?? `No se pudo confirmar la atención (${r.status}).`);
       }
 
-      // ── 3. Feedback + reset ────────────────────────────────────────
+      // ── Feedback + reset ────────────────────────────────────────
       const partes: string[] = [];
       if (trae.length > 0) partes.push(`recepción por ${fmtGs(totalTrae)}`);
       if (lleva.length > 0) partes.push(`venta por ${fmtGs(totalLleva)}`);
@@ -865,6 +854,9 @@ export default function NuevaAtencionPage() {
       // Es best-effort: si falla, la venta ya cerró y no la revertimos.
       await persistirBeneficios();
       setPreCierreOpen(false);
+      // Invalidamos la key: cualquier confirmación posterior es un submit
+      // nuevo (una key = una operación exitosa).
+      setIdempotencyKey(null);
       setOkMsg("Atención registrada: " + partes.join(" + ") + ".");
       reset();
       // Re-contar pendientes por si la nueva recepción quedó sin ingresar.
@@ -952,7 +944,26 @@ export default function NuevaAtencionPage() {
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                 Caja abierta
               </span>
-              {cajaNumero ? <span className="text-emerald-700">· N° {cajaNumero}</span> : null}
+              {cajasAbiertas.length > 1 ? (
+                <span className="inline-flex items-center gap-1 text-emerald-700">
+                  · Caja
+                  <select
+                    value={cajaSeleccionadaId ?? ""}
+                    onChange={(e) => setCajaSeleccionadaId(e.target.value || null)}
+                    className="rounded border border-emerald-300 bg-white px-1 py-0.5 text-xs text-emerald-900 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    aria-label="Seleccionar caja abierta"
+                  >
+                    <option value="">— Elegir —</option>
+                    {cajasAbiertas.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        N° {c.numero_caja ?? "?"}{c.punto_caja_nombre ? ` (${c.punto_caja_nombre})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </span>
+              ) : cajaNumero ? (
+                <span className="text-emerald-700">· N° {cajaNumero}</span>
+              ) : null}
               <span className="text-emerald-700">· Monto inicial <strong>Gs. {Math.round(cajaMontoApertura).toLocaleString("es-PY")}</strong></span>
               {cajaAperturaHora && (
                 <span className="text-emerald-700/80 text-xs">

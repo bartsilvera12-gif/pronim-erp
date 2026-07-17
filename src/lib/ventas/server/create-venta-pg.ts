@@ -206,7 +206,29 @@ export async function createVentaTransaccionalPg(
 ): Promise<CreateVentaResult> {
   const pool = getChatPostgresPool();
   if (!pool) throw new Error("Sin conexión directa a Postgres (SUPABASE_DB_URL).");
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const r = await createVentaEnClientePg(client, params);
+    await client.query("COMMIT");
+    return r;
+  } catch (e) {
+    await client.query("ROLLBACK").catch(() => null);
+    throw e;
+  } finally {
+    client.release();
+  }
+}
 
+/**
+ * Variante interna: recibe el `PoolClient` de una transacción externa y
+ * NO abre/comitea su propio BEGIN. Diseñado para orquestadores que
+ * agrupan varias operaciones en una sola tx (ej. /api/atencion/confirmar).
+ */
+export async function createVentaEnClientePg(
+  client: import("pg").PoolClient,
+  params: CreateVentaPgParams,
+): Promise<CreateVentaResult> {
   // ── Validaciones sintácticas ────────────────────────────────────────
   if (!params.clienteId) {
     throw new Error("Cliente requerido: no se pueden registrar ventas sin cliente.");
@@ -236,9 +258,7 @@ export async function createVentaTransaccionalPg(
   const eventosT = qTable(params.schema, "cliente_eventos");
   const entidadesT = qTable(params.schema, "entidades_bancarias");
 
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
+  {
 
     // ── Cliente + sucursal pertenecen a la empresa ────────────────────
     const ck = await client.query(
@@ -695,7 +715,6 @@ export async function createVentaTransaccionalPg(
       });
     }
 
-    await client.query("COMMIT");
     return {
       ventaId,
       numeroControl,
@@ -706,10 +725,5 @@ export async function createVentaTransaccionalPg(
       montoFinanciado,
       cxcId,
     };
-  } catch (e) {
-    await client.query("ROLLBACK").catch(() => null);
-    throw e;
-  } finally {
-    client.release();
   }
 }
