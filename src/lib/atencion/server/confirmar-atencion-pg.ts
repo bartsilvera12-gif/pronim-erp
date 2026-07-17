@@ -72,19 +72,32 @@ export interface ConfirmarAtencionInput {
     cuponCodigo?: string | null;
   } | null;
 
-  // Beneficios que GENERAN crédito (típicamente cashback manual entregado
-  // por el vendedor). Se procesan dentro de la tx del orquestador:
-  //   - se inserta ENTRADA en cliente_creditos_movimientos
-  //   - se registra el evento en cliente_eventos
-  // Si la venta o cualquier paso falla ⇒ ROLLBACK ⇒ nada se persiste.
-  // Los beneficios NO monetarios (ecobag, regalitos) van por otro camino
-  // best-effort en el frontend (post-commit).
+  // Beneficios que se marcaron como entregados. El server los resuelve
+  // contra la config de la empresa (`pronimerp.empresas.alertas_atencion_config
+  // .beneficios[]`) — label, tipo_evento y genera_credito se leen de ahí,
+  // NO de lo que envía el frontend. Solo los que tengan `genera_credito=true`
+  // producen ENTRADA en cliente_creditos_movimientos DENTRO de la tx; el
+  // resto no debería llegar acá (el frontend los persiste post-commit).
+  // Si la venta falla ⇒ ROLLBACK ⇒ nada se persiste.
   beneficiosCredito?: Array<{
-    id: string;             // slug del beneficio (p.ej. 'cashback')
-    tipoEvento: "cashback" | "descuento" | "beneficio" | "otro";
-    label: string;          // etiqueta legible
+    id: string;             // slug del beneficio (fuente única = config server-side)
     monto: number;          // > 0
   }>;
+}
+
+/**
+ * Shape de un beneficio en pronimerp.empresas.alertas_atencion_config.
+ * Definido en src/lib/atencion/alertas-config.ts (frontend) — replicado
+ * acá para no importar código cliente desde código server.
+ */
+interface BeneficioConfigServer {
+  id: string;
+  label: string;
+  tipo_evento: "cashback" | "descuento" | "beneficio" | "otro";
+  pide_monto: boolean;
+  genera_credito?: boolean;
+  /** Monto máximo permitido por operación (opcional, default sin límite). */
+  monto_max?: number;
 }
 
 export interface ConfirmarAtencionResult {
@@ -330,15 +343,19 @@ export async function confirmarAtencionEnClientePg(
     // Si hay descuento server-side, lo materializamos como ENTRADA de crédito
     // ANTES de la venta y lo sumamos a `creditoUsado`. La ENTRADA usa
     // origen='descuento_promo' (no confundir con crédito "real" del cliente).
+    // Capturamos su id para poder excluirla luego del cálculo de
+    // `credito_previo_usado` (la promo no debe contarse como saldo previo).
     let creditoUsadoVenta = hayLleva ? p.lleva!.creditoUsado : 0;
+    let entradaDescuentoPromoId: string | null = null;
     if (promoEvaluada && promoEvaluada.descuento > 0) {
-      await client.query(
+      const dpIns = await client.query<{ id: string }>(
         `INSERT INTO ${creditosT} (
            empresa_id, cliente_id, tipo, monto, origen,
            referencia_tipo, referencia_numero, observaciones,
            created_by, usuario_nombre
          ) VALUES ($1,$2,'ENTRADA',$3,'descuento_promo',
-                   'promocion',$4,$5,$6,$7)`,
+                   'promocion',$4,$5,$6,$7)
+         RETURNING id`,
         [
           p.empresaId, p.clienteId, promoEvaluada.descuento,
           promoEvaluada.cuponCodigo ?? promoEvaluada.promocionId,
@@ -346,6 +363,7 @@ export async function confirmarAtencionEnClientePg(
           p.createdBy, p.usuarioNombre,
         ],
       );
+      entradaDescuentoPromoId = dpIns.rows[0].id;
       creditoUsadoVenta += promoEvaluada.descuento;
     }
 
@@ -413,13 +431,48 @@ export async function confirmarAtencionEnClientePg(
     }
 
     // ── 6.5) Beneficios que GENERAN crédito, dentro de la tx ─────────
-    // Solo cashback/descuento manual con monto > 0. Los no monetarios
-    // (ecobag, regalitos) el frontend los persiste best-effort post-commit.
+    // El server NO confía en label/tipo_evento/monto máximo del frontend.
+    // Carga la lista canónica de `pronimerp.empresas.alertas_atencion_config
+    // .beneficios[]`, resuelve cada beneficio por ID, y solo procesa los
+    // que tengan `genera_credito === true`. Cualquier ID inexistente o
+    // con genera_credito != true ⇒ throw (400) — rollback total.
     if (p.beneficiosCredito && p.beneficiosCredito.length > 0) {
+      const empresasT = quoteSchemaTable(schema, "empresas");
+      const cfgQ = await client.query<{ alertas_atencion_config: unknown }>(
+        `SELECT alertas_atencion_config FROM ${empresasT}
+          WHERE id = $1 LIMIT 1`,
+        [p.empresaId],
+      );
+      const cfg = cfgQ.rows[0]?.alertas_atencion_config as
+        | { beneficios?: BeneficioConfigServer[] } | null;
+      const beneficiosCfg = Array.isArray(cfg?.beneficios) ? cfg!.beneficios! : [];
+      const byId = new Map(beneficiosCfg.map((b) => [String(b.id), b]));
+
       const eventosT = quoteSchemaTable(schema, "cliente_eventos");
       for (const b of p.beneficiosCredito) {
         const monto = Math.round(Number(b.monto) || 0);
-        if (!(monto > 0)) continue;
+        if (!(monto > 0)) {
+          throw new Error(`Beneficio "${b.id}": monto inválido (${b.monto}).`);
+        }
+        const cfgB = byId.get(String(b.id));
+        if (!cfgB) {
+          throw new Error(
+            `Beneficio "${b.id}" no está configurado para la empresa. Revisá /configuracion/caja.`,
+          );
+        }
+        if (cfgB.genera_credito !== true) {
+          throw new Error(
+            `Beneficio "${cfgB.label}" no está autorizado para generar crédito (genera_credito=false).`,
+          );
+        }
+        if (typeof cfgB.monto_max === "number" && cfgB.monto_max > 0 && monto > cfgB.monto_max) {
+          throw new Error(
+            `Beneficio "${cfgB.label}": monto (${monto}) supera el máximo permitido (${cfgB.monto_max}).`,
+          );
+        }
+        // label + tipo_evento vienen de la config server, NO del frontend.
+        const label = cfgB.label;
+        const tipoEvento = cfgB.tipo_evento;
         await client.query(
           `INSERT INTO ${creditosT} (
              empresa_id, cliente_id, tipo, monto, origen,
@@ -428,8 +481,8 @@ export async function confirmarAtencionEnClientePg(
            ) VALUES ($1,$2,'ENTRADA',$3,'ajuste_manual',$4,$5,$6,$7,$8)`,
           [
             p.empresaId, p.clienteId, monto,
-            b.tipoEvento, b.id,
-            `${b.label} (beneficio entregado en atención)`,
+            tipoEvento, cfgB.id,
+            `${label} (beneficio entregado en atención)`,
             p.createdBy, p.usuarioNombre,
           ],
         );
@@ -440,8 +493,8 @@ export async function confirmarAtencionEnClientePg(
              autor_id, autor_nombre
            ) VALUES ($1,$2,$3,$4,$5,$6,'venta',$7,$8,$9,$10)`,
           [
-            p.empresaId, p.clienteId, b.tipoEvento, b.label,
-            `Entregado en atención · ${b.label} — Gs. ${monto.toLocaleString("es-PY")}`,
+            p.empresaId, p.clienteId, tipoEvento, label,
+            `Entregado en atención · ${label} — Gs. ${monto.toLocaleString("es-PY")}`,
             monto, ventaOut?.id ?? null, ventaOut?.numero_control ?? null,
             p.createdBy, p.usuarioNombre,
           ],
@@ -454,10 +507,16 @@ export async function confirmarAtencionEnClientePg(
     if (cambioId && recepcionOut && ventaOut) {
       // credito_generado = total_final de la recepción.
       // credito_previo_usado = SALIDAs de crédito de la venta sobre ENTRADAs
-      //   distintas a la de esta recepción.
-      // diferencia_pagada = pagos inmediatos en la venta (efectivo/tarjeta/etc).
+      //   distintas a la de esta recepción Y distintas a la entrada
+      //   descuento_promo materializada al inicio (el descuento no es
+      //   saldo previo del cliente; es materializado por la promo).
+      // diferencia_pagada = pagos inmediatos en la venta.
       // credito_restante = saldo actual del cliente.
       const creditoGenerado = recepcionOut.total_final;
+      // IDs a excluir del cálculo de "previo": la ENTRADA de esta recepción
+      // + la ENTRADA de descuento_promo (si hubo).
+      const excluirEntradaIds: string[] = [];
+      if (entradaDescuentoPromoId) excluirEntradaIds.push(entradaDescuentoPromoId);
       const consumosVentaQ = await client.query<{ ajena_total: string }>(
         `WITH salida_venta AS (
            SELECT id FROM ${creditosT}
@@ -473,8 +532,9 @@ export async function confirmarAtencionEnClientePg(
          FROM ${quoteSchemaTable(schema, "cliente_creditos_consumos")} c
          WHERE c.empresa_id = $1
            AND c.salida_id IN (SELECT id FROM salida_venta)
-           AND c.entrada_id NOT IN (SELECT id FROM entrada_recep)`,
-        [p.empresaId, p.clienteId, ventaOut.id, recepcionOut.id],
+           AND c.entrada_id NOT IN (SELECT id FROM entrada_recep)
+           AND c.entrada_id <> ALL($5::uuid[])`,
+        [p.empresaId, p.clienteId, ventaOut.id, recepcionOut.id, excluirEntradaIds],
       );
       const creditoPrevioUsado = Number(consumosVentaQ.rows[0]?.ajena_total ?? 0);
       const diferenciaPagada = (p.lleva?.pagosInmediatos ?? [])

@@ -100,6 +100,28 @@ export async function evaluarPromocionEnClientePg(
     throw new Error("La promoción indicada no existe o está inactiva.");
   }
 
+  // Cupón obligatorio cuando la promo lo tiene configurado.
+  // Al buscar por promocion_id, si la promo requiere cupón, exigimos que
+  // el request lo incluya y que coincida exactamente (normalizado a upper).
+  // Esto impide "saltear" el cupón mandando solo el UUID de la promo.
+  if (p.promocionId) {
+    for (const row of rows) {
+      if (row.cupon_codigo) {
+        const requerido = row.cupon_codigo.trim().toUpperCase();
+        if (!cupon) {
+          throw new Error(
+            `La promoción "${row.nombre}" requiere ingresar el cupón "${row.cupon_codigo}".`,
+          );
+        }
+        if (cupon !== requerido) {
+          throw new Error(
+            `El cupón enviado no coincide con el configurado para "${row.nombre}".`,
+          );
+        }
+      }
+    }
+  }
+
   // Filtrado por vigencia / ámbito / mínimo.
   const aplicables = rows.filter((row) => {
     const minComp = Number(row.minimo_compra);

@@ -52,6 +52,12 @@ interface Fixtures {
   franjaA_6000: string;
   franjaB_9000: string;
   franjaC_14000: string;
+  promoDescuentoFijoId: string;    // descuento_fijo 10.000, sin cupón
+  promoCashbackId: string;         // cashback 10%, sin cupón
+  promoConCuponId: string;         // descuento_fijo 5.000, con cupón "TESTCUP"
+  promoConCuponCodigo: string;
+  beneficioCashbackConCredId: string;   // genera_credito=true
+  beneficioDescManualId: string;        // genera_credito=false, pide_monto=true
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -172,8 +178,49 @@ async function seedFixtures(client: import("pg").PoolClient): Promise<Fixtures> 
     console.warn("⚠ Skipping caja fixtures — no hay puntos_caja para la sucursal");
   }
 
+  // ── Promociones temporales para T2/T3/promos con cupón ─────────────
+  const promosT = quoteSchemaTable(SCHEMA, "promociones");
+  const mkPromo = async (nombre: string, tipo: string, valor: number, cupon: string | null): Promise<string> => {
+    const r = await client.query<{ id: string }>(
+      `INSERT INTO ${promosT} (
+         empresa_id, nombre, tipo, valor, ambito, cupon_codigo, activo, minimo_compra
+       ) VALUES ($1,$2,$3,$4,'general',$5,true,0)
+       RETURNING id`,
+      [EMPRESA_ID, nombre, tipo, valor, cupon],
+    );
+    return r.rows[0].id;
+  };
+  const promoDescuentoFijoId = await mkPromo("TEST descuento fijo 10k", "descuento_fijo", 10000, null);
+  const promoCashbackId = await mkPromo("TEST cashback 10%", "cashback", 10, null);
+  const promoConCuponCodigo = `TESTCUP${randomUUID().slice(0, 6).toUpperCase()}`;
+  const promoConCuponId = await mkPromo("TEST descuento fijo con cupón", "descuento_fijo", 5000, promoConCuponCodigo);
+
+  // ── Config de beneficios en pronimerp.empresas.alertas_atencion_config ─
+  const beneficioCashbackConCredId = `test_cashback_${randomUUID().slice(0, 6)}`;
+  const beneficioDescManualId = `test_descmanual_${randomUUID().slice(0, 6)}`;
+  const empresasT = quoteSchemaTable(SCHEMA, "empresas");
+  const beneficiosConfig = [
+    { id: beneficioCashbackConCredId, label: "TEST Cashback (crédito)",
+      tipo_evento: "cashback",  pide_monto: true, genera_credito: true, monto_max: 100000 },
+    { id: beneficioDescManualId,      label: "TEST Descuento manual",
+      tipo_evento: "descuento", pide_monto: true, genera_credito: false },
+  ];
+  await client.query(
+    `UPDATE ${empresasT}
+        SET alertas_atencion_config = jsonb_set(
+          COALESCE(alertas_atencion_config, '{}'::jsonb),
+          '{beneficios}',
+          $1::jsonb, true
+        )
+      WHERE id = $2`,
+    [JSON.stringify(beneficiosConfig), EMPRESA_ID],
+  );
+
   return { clienteId, sucursalId, cajaId, cajaAltId,
-           franjaA_6000, franjaB_9000, franjaC_14000 };
+           franjaA_6000, franjaB_9000, franjaC_14000,
+           promoDescuentoFijoId, promoCashbackId,
+           promoConCuponId, promoConCuponCodigo,
+           beneficioCashbackConCredId, beneficioDescManualId };
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -254,10 +301,8 @@ async function runAll(): Promise<void> {
       eq(Number(recepQPost.rows[0].c), prev, "cliente_recepciones no debe cambiar");
     });
 
-    // ─── T2: descuento server-side (ignora monto del frontend) ─────────
-    await withSavepoint(client, "T2_descuento_server_side", async () => {
-      // Sin promo activa que aplique al carrito: el orquestador debe ignorar
-      // cualquier cupón inventado y arrojar 'no aplica'.
+    // ─── T2: cupón inexistente rechazado ───────────────────────────────
+    await withSavepoint(client, "T2_cupon_inexistente", async () => {
       let threw = false;
       try {
         await confirmarAtencionEnClientePg(client, payload(fx, {
@@ -275,31 +320,10 @@ async function runAll(): Promise<void> {
         assert(/cup[oó]n/i.test(msg), `esperado error de cupón, fue: ${msg}`);
       }
       assert(threw, "el server debió rechazar el cupón inexistente");
-      await client.query("ROLLBACK TO SAVEPOINT sp_T2_descuento_server_side");
-      await client.query("SAVEPOINT sp_T2_descuento_server_side");
-      // Sin promo: la venta pasa y NO hay ENTRADA descuento_promo.
-      const r = await confirmarAtencionEnClientePg(client, payload(fx, {
-        requestPayloadForHash: { t: "T2-ok" },
-        lleva: {
-          items: [{ producto_id: fx.franjaA_6000, cantidad: 1, tipo_iva: "EXENTA" }],
-          creditoUsado: 0,
-          pagosInmediatos: [{ metodo_pago: "efectivo", monto: 6000 }],
-        },
-      }));
-      assert(r.venta, "venta esperada");
-      const promoRow = await client.query<{ c: string }>(
-        `SELECT COUNT(*)::text AS c FROM ${quoteSchemaTable(SCHEMA, "cliente_creditos_movimientos")}
-         WHERE cliente_id = $1 AND origen = 'descuento_promo'`,
-        [fx.clienteId],
-      );
-      eq(Number(promoRow.rows[0].c), 0, "no debe haber ENTRADA descuento_promo sin promo válida");
     });
 
-    // ─── T3: cashback server-side ─────────────────────────────────────
-    await withSavepoint(client, "T3_cashback_manipulado", async () => {
-      // Sin promo real: aunque el frontend "envíe" un valor de cashback, el
-      // shape del orquestador ya no acepta descuento/cashback del cliente,
-      // así que basta con verificar que no aparece ENTRADA de origen='cashback'.
+    // ─── T3: cashback SOLO se genera si viene una promo real ─────────
+    await withSavepoint(client, "T3_cashback_solo_si_promo", async () => {
       const r = await confirmarAtencionEnClientePg(client, payload(fx, {
         requestPayloadForHash: { t: "T3" },
         lleva: {
@@ -314,7 +338,7 @@ async function runAll(): Promise<void> {
          WHERE cliente_id = $1 AND origen = 'cashback' AND referencia_id = $2`,
         [fx.clienteId, r.venta!.id],
       );
-      eq(Number(cashRow.rows[0].c), 0, "no debe generarse cashback si no lo determina el server");
+      eq(Number(cashRow.rows[0].c), 0, "sin promo ⇒ 0 ENTRADAs de cashback");
     });
 
     // ─── T4: prorrateo con cantidades 3, 7 y 10 ────────────────────────
@@ -479,6 +503,208 @@ async function runAll(): Promise<void> {
       eq(h1, h2, "hash idéntico");
       const c = canonicalStringify({ nested: { x: 2, y: 2 }, a: 2, b: 1 });
       assert(canonicalStringify(c) !== a, "cambiar un valor profundo debe cambiar el string");
+    });
+
+    // ─── T10: descuento_promo NO se suma dos veces ────────────────────
+    // Venta 100.000; descuento 10.000; crédito previo 20.000; efectivo 70.000.
+    // Verificamos:
+    //   - Se consume 20.000 del crédito PREVIO del cliente + 10.000 del
+    //     descuento_promo materializado + 70.000 en efectivo.
+    //   - En NINGÚN caso se consume el crédito 2 veces (110.000).
+    await withSavepoint(client, "T10_descuento_no_duplica", async () => {
+      // Sembramos crédito previo de 20.000 al cliente.
+      await client.query(
+        `INSERT INTO ${quoteSchemaTable(SCHEMA, "cliente_creditos_movimientos")}
+           (empresa_id, cliente_id, tipo, monto, origen, referencia_numero)
+         VALUES ($1,$2,'ENTRADA',20000,'ajuste_manual','TEST-SETUP-T10')`,
+        [EMPRESA_ID, fx.clienteId],
+      );
+      // Promo descuento_fijo 10.000. Con 1 unidad de franja C_14000 el
+      // subtotal es 14.000 — no llegamos a 100.000. Usamos 8 unidades de
+      // franja C_14000 (subtotal 112.000) para tener margen.
+      // Elegimos 100.000 exactos: no fácil con franjas fijas. Usamos:
+      //   franjaB_9000 × 10 = 90.000 + franjaA_6000 × 2 = 12.000  → 102.000
+      // Y la promo aplica un descuento_fijo de 10.000.
+      // Total = 102.000; descuento = 10.000; neto = 92.000. Crédito previo 20.000,
+      // efectivo 72.000. Verificamos no-duplicación observando saldo consumido.
+      const r = await confirmarAtencionEnClientePg(client, payload(fx, {
+        requestPayloadForHash: { t: "T10" },
+        lleva: {
+          items: [
+            { producto_id: fx.franjaB_9000, cantidad: 10, tipo_iva: "EXENTA" },
+            { producto_id: fx.franjaA_6000, cantidad: 2,  tipo_iva: "EXENTA" },
+          ],
+          creditoUsado: 20000, // <-- solo el crédito previo, NO sumar el descuento
+          pagosInmediatos: [{ metodo_pago: "efectivo", monto: 72000 }],
+        },
+        promocion: { promocionId: fx.promoDescuentoFijoId },
+      }));
+      assert(r.venta, "venta esperada");
+
+      // El total de SALIDA de crédito por esta venta debe ser 30.000
+      // (20k previo + 10k del descuento_promo materializado), NO 40.000.
+      const salidaQ = await client.query<{ suma: string }>(
+        `SELECT COALESCE(SUM(monto),0)::text AS suma
+         FROM ${quoteSchemaTable(SCHEMA, "cliente_creditos_movimientos")}
+         WHERE cliente_id=$1 AND tipo='SALIDA' AND origen='venta' AND referencia_id=$2`,
+        [fx.clienteId, r.venta!.id],
+      );
+      eq(Number(salidaQ.rows[0].suma), 30000, "SALIDA de crédito por la venta = 30k (no 40k)");
+
+      // Efectivo cobrado en la caja debe ser 72.000.
+      const pagosQ = await client.query<{ suma: string }>(
+        `SELECT COALESCE(SUM(monto),0)::text AS suma
+         FROM ${quoteSchemaTable(SCHEMA, "ventas_pagos_detalle")}
+         WHERE venta_id=$1 AND metodo_pago='efectivo'`,
+        [r.venta!.id],
+      );
+      eq(Number(pagosQ.rows[0].suma), 72000, "efectivo cobrado = 72k");
+    });
+
+    // ─── T11: cupón obligatorio si promo lo tiene configurado ─────────
+    await withSavepoint(client, "T11a_id_sin_cupon_rechazado", async () => {
+      let threw = false;
+      try {
+        await confirmarAtencionEnClientePg(client, payload(fx, {
+          requestPayloadForHash: { t: "T11a" },
+          lleva: {
+            items: [{ producto_id: fx.franjaB_9000, cantidad: 2, tipo_iva: "EXENTA" }],
+            creditoUsado: 0,
+            pagosInmediatos: [{ metodo_pago: "efectivo", monto: 18000 }],
+          },
+          promocion: { promocionId: fx.promoConCuponId }, // sin cupón
+        }));
+      } catch (e) {
+        threw = true;
+        const msg = e instanceof Error ? e.message : "";
+        assert(/requiere.+cup/i.test(msg), `esperado error 'requiere cupón', fue: ${msg}`);
+      }
+      assert(threw, "id + sin cupón cuando la promo lo requiere ⇒ rechazado");
+    });
+
+    await withSavepoint(client, "T11b_id_cupon_incorrecto", async () => {
+      let threw = false;
+      try {
+        await confirmarAtencionEnClientePg(client, payload(fx, {
+          requestPayloadForHash: { t: "T11b" },
+          lleva: {
+            items: [{ producto_id: fx.franjaB_9000, cantidad: 2, tipo_iva: "EXENTA" }],
+            creditoUsado: 0,
+            pagosInmediatos: [{ metodo_pago: "efectivo", monto: 13000 }],
+          },
+          promocion: { promocionId: fx.promoConCuponId, cuponCodigo: "OTROCUPON" },
+        }));
+      } catch (e) {
+        threw = true;
+        const msg = e instanceof Error ? e.message : "";
+        assert(/no coincide/i.test(msg), `esperado error 'no coincide', fue: ${msg}`);
+      }
+      assert(threw, "id + cupón incorrecto ⇒ rechazado");
+    });
+
+    await withSavepoint(client, "T11c_id_cupon_correcto_ok", async () => {
+      const r = await confirmarAtencionEnClientePg(client, payload(fx, {
+        requestPayloadForHash: { t: "T11c" },
+        lleva: {
+          items: [{ producto_id: fx.franjaB_9000, cantidad: 2, tipo_iva: "EXENTA" }],
+          creditoUsado: 0,
+          pagosInmediatos: [{ metodo_pago: "efectivo", monto: 13000 }],
+        },
+        promocion: { promocionId: fx.promoConCuponId, cuponCodigo: fx.promoConCuponCodigo },
+      }));
+      assert(r.venta, "venta esperada con id+cupón correctos");
+      // Aplicación registrada con el cupón normalizado (upper).
+      const aplQ = await client.query<{ cupon: string | null }>(
+        `SELECT cupon_codigo_usado AS cupon FROM ${quoteSchemaTable(SCHEMA, "promocion_aplicaciones")}
+          WHERE venta_id = $1`,
+        [r.venta!.id],
+      );
+      eq(aplQ.rows[0]?.cupon, fx.promoConCuponCodigo.toUpperCase(), "cupón normalizado a upper");
+    });
+
+    // ─── T12: promo cashback real acredita ENTRADA origen='cashback' ──
+    await withSavepoint(client, "T12_promo_cashback_real", async () => {
+      const r = await confirmarAtencionEnClientePg(client, payload(fx, {
+        requestPayloadForHash: { t: "T12" },
+        lleva: {
+          items: [{ producto_id: fx.franjaB_9000, cantidad: 10, tipo_iva: "EXENTA" }], // 90k
+          creditoUsado: 0,
+          pagosInmediatos: [{ metodo_pago: "efectivo", monto: 90000 }],
+        },
+        promocion: { promocionId: fx.promoCashbackId }, // 10% ⇒ 9.000
+      }));
+      const cashQ = await client.query<{ suma: string }>(
+        `SELECT COALESCE(SUM(monto),0)::text AS suma
+         FROM ${quoteSchemaTable(SCHEMA, "cliente_creditos_movimientos")}
+         WHERE cliente_id=$1 AND origen='cashback' AND referencia_id=$2`,
+        [fx.clienteId, r.venta!.id],
+      );
+      eq(Number(cashQ.rows[0].suma), 9000, "cashback = 9.000 (10% de 90.000)");
+    });
+
+    // ─── T13: beneficio configurado como cashback crea el crédito ─────
+    await withSavepoint(client, "T13_beneficio_cashback_ok", async () => {
+      const r = await confirmarAtencionEnClientePg(client, payload(fx, {
+        requestPayloadForHash: { t: "T13" },
+        lleva: {
+          items: [{ producto_id: fx.franjaA_6000, cantidad: 1, tipo_iva: "EXENTA" }],
+          creditoUsado: 0,
+          pagosInmediatos: [{ metodo_pago: "efectivo", monto: 6000 }],
+        },
+        beneficiosCredito: [{ id: fx.beneficioCashbackConCredId, monto: 5000 }],
+      }));
+      const credQ = await client.query<{ suma: string }>(
+        `SELECT COALESCE(SUM(monto),0)::text AS suma
+         FROM ${quoteSchemaTable(SCHEMA, "cliente_creditos_movimientos")}
+         WHERE cliente_id=$1 AND origen='ajuste_manual' AND referencia_numero=$2`,
+        [fx.clienteId, fx.beneficioCashbackConCredId],
+      );
+      eq(Number(credQ.rows[0].suma), 5000, "beneficio cashback creó crédito de 5.000");
+      assert(r.venta, "venta esperada");
+    });
+
+    // ─── T14: beneficio con genera_credito=false NO crea crédito ──────
+    await withSavepoint(client, "T14_beneficio_no_credito_rechazado", async () => {
+      // El frontend nunca debería mandarlo, pero si viene manipulado,
+      // el server lo rechaza — rollback total, no queda venta ni crédito.
+      let threw = false;
+      try {
+        await confirmarAtencionEnClientePg(client, payload(fx, {
+          requestPayloadForHash: { t: "T14" },
+          lleva: {
+            items: [{ producto_id: fx.franjaA_6000, cantidad: 1, tipo_iva: "EXENTA" }],
+            creditoUsado: 0,
+            pagosInmediatos: [{ metodo_pago: "efectivo", monto: 6000 }],
+          },
+          beneficiosCredito: [{ id: fx.beneficioDescManualId, monto: 3000 }],
+        }));
+      } catch (e) {
+        threw = true;
+        const msg = e instanceof Error ? e.message : "";
+        assert(/no est[aá] autorizado/i.test(msg), `esperado error no autorizado, fue: ${msg}`);
+      }
+      assert(threw, "beneficio con genera_credito=false ⇒ rechazado");
+    });
+
+    // ─── T15: beneficio inventado o monto <= 0 rechazado ─────────────
+    await withSavepoint(client, "T15_beneficio_inventado", async () => {
+      let threw = false;
+      try {
+        await confirmarAtencionEnClientePg(client, payload(fx, {
+          requestPayloadForHash: { t: "T15" },
+          lleva: {
+            items: [{ producto_id: fx.franjaA_6000, cantidad: 1, tipo_iva: "EXENTA" }],
+            creditoUsado: 0,
+            pagosInmediatos: [{ metodo_pago: "efectivo", monto: 6000 }],
+          },
+          beneficiosCredito: [{ id: "id-fantasma", monto: 999999 }],
+        }));
+      } catch (e) {
+        threw = true;
+        const msg = e instanceof Error ? e.message : "";
+        assert(/no est[aá] configurado/i.test(msg), `esperado 'no está configurado', fue: ${msg}`);
+      }
+      assert(threw, "id inventado ⇒ rechazado");
     });
 
   } finally {

@@ -171,24 +171,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Beneficios que GENERAN crédito (procesados dentro de la tx).
+    // Beneficios que GENERAN crédito: el server los re-valida contra la
+    // config de la empresa (label/tipo_evento/genera_credito se toman de
+    // ahí). El frontend solo puede enviar id + monto.
     const beneficiosRaw = Array.isArray(body.beneficios_credito) ? body.beneficios_credito : [];
     const beneficiosCredito: NonNullable<ConfirmarAtencionInput["beneficiosCredito"]> = [];
     for (const raw of beneficiosRaw) {
       if (!raw || typeof raw !== "object") continue;
       const r = raw as Record<string, unknown>;
       const id = typeof r.id === "string" ? r.id : null;
-      const label = typeof r.label === "string" ? r.label : null;
-      const tipo = typeof r.tipo_evento === "string" ? r.tipo_evento : null;
       const monto = Number(r.monto);
-      if (!id || !label || !tipo) continue;
-      if (!["cashback","descuento","beneficio","otro"].includes(tipo)) continue;
+      if (!id) continue;
       if (!(monto > 0)) continue;
-      beneficiosCredito.push({
-        id, label,
-        tipoEvento: tipo as "cashback" | "descuento" | "beneficio" | "otro",
-        monto: Math.round(monto),
-      });
+      beneficiosCredito.push({ id, monto: Math.round(monto) });
     }
 
     const schema = await fetchDataSchemaForEmpresaId(auth.empresa_id);
@@ -280,7 +275,7 @@ export async function POST(request: NextRequest) {
           moneda: lleva.moneda ?? "GS", tc: lleva.tipoCambio ?? 1,
         } : null,
         promo: promocion ? { id: promocion.promocionId ?? "", cupon: promocion.cuponCodigo ?? "" } : null,
-        beneficios: beneficiosCredito.map(b => ({ id: b.id, t: b.tipoEvento, m: b.monto })),
+        beneficios: beneficiosCredito.map(b => ({ id: b.id, m: b.monto })),
       },
     });
 

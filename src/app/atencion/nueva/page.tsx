@@ -739,14 +739,21 @@ export default function NuevaAtencionPage() {
   // haya generado (o no) crédito por cashback.
   async function persistirBeneficios() {
     if (!cliente) return;
-    // Solo persistimos post-commit los beneficios NO monetarios
-    // (ecobag, regalitos). Los que piden monto ya se persistieron
-    // dentro de la transacción del orquestador (beneficios_credito).
-    const informativos = Object.entries(beneficiosMarcados)
+    // Persistimos post-commit los beneficios que NO generan crédito
+    // (los que sí generan crédito ya se procesaron dentro de la tx del
+    // orquestador). Distinguimos si piden monto: descuento_manual con
+    // genera_credito=false SÍ pide monto pero solo queda como evento.
+    const posCommit = Object.entries(beneficiosMarcados)
       .filter(([, v]) => v.marcado)
-      .map(([id]) => alertasConfig.beneficios.find((b) => b.id === id))
-      .filter((cfg): cfg is BeneficioCfg => Boolean(cfg && !cfg.pide_monto));
-    for (const cfg of informativos) {
+      .map(([id, v]) => {
+        const cfg = alertasConfig.beneficios.find((b) => b.id === id);
+        if (!cfg) return null;
+        if (cfg.genera_credito === true) return null;
+        const monto = cfg.pide_monto ? Number(v.monto.replace(/[^\d]/g, "")) || 0 : 0;
+        return { cfg, monto };
+      })
+      .filter((x): x is { cfg: BeneficioCfg; monto: number } => x !== null);
+    for (const { cfg, monto } of posCommit) {
       try {
         await fetchWithSupabaseSession(`/api/clientes/${cliente.id}/eventos`, {
           method: "POST",
@@ -754,13 +761,13 @@ export default function NuevaAtencionPage() {
           body: JSON.stringify({
             tipo: cfg.tipo_evento,
             titulo: cfg.label,
-            descripcion: `Entregado en atención · ${cfg.label}`,
-            monto: null,
+            descripcion: `Entregado en atención · ${cfg.label}${monto > 0 ? ` — Gs. ${monto.toLocaleString("es-PY")}` : ""}`,
+            monto: cfg.pide_monto ? monto : null,
             generar_credito: false,
           }),
         });
       } catch (e) {
-        console.error("[atencion] persistir beneficio informativo", cfg.id, e);
+        console.error("[atencion] persistir beneficio post-commit", cfg.id, e);
       }
     }
   }
@@ -799,11 +806,15 @@ export default function NuevaAtencionPage() {
       const llevaPayload = lleva.length > 0
         ? (() => {
             const total = totalLleva;
-            // Crédito a aplicar: lo que la cajera decidió + descuento
-            // promocional que el orquestador materializa como crédito
-            // dentro de la misma tx (descuento_ya_aplicado_como_credito=false).
-            const creditoUsado = creditoAplicadoNum + (promoAplicada?.descuento ?? 0);
-            const efectivoNeeded = Math.max(0, total - creditoUsado);
+            // Crédito a aplicar EN EL PAYLOAD: solo el que la cajera eligió.
+            // El descuento promocional lo materializa el orquestador como
+            // crédito adicional server-side y lo suma UNA SOLA VEZ ahí; si
+            // lo sumáramos también acá, la venta consumiría el doble.
+            const creditoUsadoEnPayload = creditoAplicadoNum;
+            // Para calcular el efectivo que falta cobrar, sí consideramos
+            // el descuento (visual): total − credito_previo − descuento_promo.
+            const descuentoPromoVisual = promoAplicada?.descuento ?? 0;
+            const efectivoNeeded = Math.max(0, total - creditoAplicadoNum - descuentoPromoVisual);
             const pago_detalle = efectivoNeeded > 0
               ? [{
                   metodo_pago: metodoCobro,
@@ -817,7 +828,7 @@ export default function NuevaAtencionPage() {
                 cantidad: l.cantidad,
                 tipo_iva: "EXENTA" as const,
               })),
-              credito_usado: creditoUsado,
+              credito_usado: creditoUsadoEnPayload,
               pago_detalle,
               moneda: "GS" as const,
               tipo_cambio: 1,
@@ -833,24 +844,20 @@ export default function NuevaAtencionPage() {
           }
         : null;
 
-      // Beneficios entregados: separamos los que generan crédito (van a la tx
-      // del orquestador) de los meramente informativos (persistBeneficios
-      // sigue haciéndolos best-effort post-commit).
+      // Beneficios entregados: solo enviamos al orquestador los que están
+      // marcados con `genera_credito=true` en la config (el server los
+      // re-valida por ID). Los que no generan crédito — aunque pidan monto
+      // (ej. descuento_manual) — se persisten como eventos post-commit.
       const beneficiosCredito = Object.entries(beneficiosMarcados)
         .filter(([, v]) => v.marcado)
         .map(([id, v]) => {
           const cfg = alertasConfig.beneficios.find((b) => b.id === id);
-          if (!cfg || !cfg.pide_monto) return null;
+          if (!cfg || cfg.genera_credito !== true) return null;
           const monto = Number(v.monto.replace(/[^\d]/g, "")) || 0;
           if (!(monto > 0)) return null;
-          return {
-            id: cfg.id,
-            label: cfg.label,
-            tipo_evento: cfg.tipo_evento,
-            monto,
-          };
+          return { id: cfg.id, monto };
         })
-        .filter((x): x is { id: string; label: string; tipo_evento: BeneficioCfg["tipo_evento"]; monto: number } => x !== null);
+        .filter((x): x is { id: string; monto: number } => x !== null);
 
       const r = await fetchWithSupabaseSession("/api/atencion/confirmar", {
         method: "POST",
