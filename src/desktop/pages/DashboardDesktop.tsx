@@ -2593,8 +2593,13 @@ export default function DashboardPage() {
           return;
         }
         const defRaw = j.defaultSlug ?? null;
+        // Preferencia dura: si "financiero" (etiquetada "Sucursales") está
+        // disponible, esa es la tab por default — evita aterrizar en
+        // "clientes" solo porque su `orden` en el catálogo sea mayor.
+        const preferido: TabDash | null = slugs.includes("financiero") ? "financiero" : null;
         const defaultTab =
-          defRaw && isDashboardTabSlug(defRaw) && slugs.includes(defRaw) ? defRaw : slugs[0];
+          defRaw && isDashboardTabSlug(defRaw) && slugs.includes(defRaw) ? defRaw
+          : preferido ?? slugs[0];
         if (!cancelled) setDashScope({ kind: "scoped", tabs: slugs, defaultTab });
       })
       .catch(() => {

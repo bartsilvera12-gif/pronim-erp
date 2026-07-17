@@ -60,7 +60,14 @@ export default function DashSucursales({
       const params = new URLSearchParams({ desde, hasta });
       if (sucursalFiltro) params.set("sucursal_id", sucursalFiltro);
       const url = `/api/dashboard/sucursales?${params.toString()}`;
-      const r = await fetchWithSupabaseSession(url, { cache: "no-store" });
+      const ctrl = new AbortController();
+      const to = setTimeout(() => ctrl.abort(), 20_000);
+      let r: Response;
+      try {
+        r = await fetchWithSupabaseSession(url, { cache: "no-store", signal: ctrl.signal });
+      } finally {
+        clearTimeout(to);
+      }
       const j = await r.json().catch(() => null);
       if (!r.ok || !j?.success) {
         console.error("[DashSucursales] fetch failed", { status: r.status, body: j, url });

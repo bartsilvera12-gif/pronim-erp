@@ -59,7 +59,16 @@ export default function DashClientes({ desde, hasta }: { desde: string; hasta: s
       if (q.trim()) params.set("q", q.trim());
       if (segmento) params.set("segmento", segmento);
       const url = `/api/dashboard/clientes?${params.toString()}`;
-      const r = await fetchWithSupabaseSession(url, { cache: "no-store" });
+      // Timeout duro para no dejar la vista en "Cargando…" eterno si el
+      // endpoint no responde. Muestra error accionable en su lugar.
+      const ctrl = new AbortController();
+      const to = setTimeout(() => ctrl.abort(), 20_000);
+      let r: Response;
+      try {
+        r = await fetchWithSupabaseSession(url, { cache: "no-store", signal: ctrl.signal });
+      } finally {
+        clearTimeout(to);
+      }
       const j = await r.json().catch(() => null);
       if (!r.ok || !j?.success) {
         // Logueamos para poder diagnosticar desde consola sin adivinar.
