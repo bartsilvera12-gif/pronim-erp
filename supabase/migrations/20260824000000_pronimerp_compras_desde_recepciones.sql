@@ -106,7 +106,9 @@ BEGIN
   ) VALUES (
     p_empresa, v_nombre, v_ruc, 'activo', p_cliente, true
   )
-  ON CONFLICT (empresa_id, cliente_id) WHERE es_cliente_shadow = true
+  -- El predicado del ON CONFLICT debe matchear EXACTAMENTE al WHERE
+  -- del indice parcial ux_proveedores_cliente_shadow (Postgres lo exige).
+  ON CONFLICT (empresa_id, cliente_id) WHERE es_cliente_shadow = true AND cliente_id IS NOT NULL
   DO UPDATE SET nombre = EXCLUDED.nombre, ruc = EXCLUDED.ruc
   RETURNING id INTO v_id;
 
