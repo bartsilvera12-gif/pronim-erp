@@ -290,8 +290,8 @@ export async function crearRecepcionEnClientePg(
     let subtotalEvaluado = 0;
     const itemsCrudo = p.items.map((it) => {
       const info = productosInfo.get(it.producto_id)!;
-      const cantidad = Number(it.cantidad);
-      const precioCompra = Number(it.precio_compra_unitario);
+      const cantidad = Math.round(Number(it.cantidad));
+      const precioCompra = Math.round(Number(it.precio_compra_unitario));
       const subtotalLinea = cantidad * precioCompra;
       subtotalEvaluado += subtotalLinea;
       return { it, info, cantidad, precioCompra, subtotalLinea };
@@ -311,61 +311,103 @@ export async function crearRecepcionEnClientePg(
     }
     const ajusteEvaluacion = totalFinal - subtotalEvaluado;
 
-    // Prorrateo: precio_ajustado_linea_i = round(subtotal_linea_i × total_final / subtotal_evaluado / cantidad_i).
-    // El residuo por redondeo se corrige en la última línea para garantizar
-    // SUM(cantidad_i × precio_ajustado_i) = total_final exactamente.
-    // Si no hay ajuste, precio_ajustado_i = precio_compra_unitario_i.
-    let acumCosto = 0;
-    const itemsResueltos = itemsCrudo.map((x, idx) => {
-      const info = x.info;
-      let precioAjustado = x.precioCompra;
-      if (ajusteEvaluacion !== 0) {
-        const factor = totalFinal / subtotalEvaluado;
-        precioAjustado = x.cantidad > 0
-          ? Math.round((x.subtotalLinea * factor) / x.cantidad)
-          : 0;
-      }
-      let subtotalAjustadoLinea = x.cantidad * precioAjustado;
-      if (idx === itemsCrudo.length - 1) {
-        // corregir residuo en la última línea
-        const dif = totalFinal - (acumCosto + subtotalAjustadoLinea);
-        if (dif !== 0 && x.cantidad > 0) {
-          precioAjustado = Math.round((subtotalAjustadoLinea + dif) / x.cantidad);
-          subtotalAjustadoLinea = x.cantidad * precioAjustado;
-        }
-      }
-      acumCosto += subtotalAjustadoLinea;
-      const precioVenta = info.precio_venta;
-      const margen = precioVenta > 0
-        ? ((precioVenta - precioAjustado) / precioVenta) * 100
-        : null;
-      return {
-        producto_id: x.it.producto_id,
-        producto_nombre: info.nombre,
-        sku: info.sku,
-        cantidad: x.cantidad,
-        precio_compra_unitario: precioAjustado,
-        precio_venta_snapshot: precioVenta,
-        subtotal: subtotalAjustadoLinea,
-        margen_bruto_pct: margen,
-      };
+    // ── Prorrateo EXACTO con posible división de líneas ───────────────
+    // Para cada línea, calculamos su target = round(subtotal_linea × T/S).
+    // Corregimos residuo global (T - sum(targets)) empujando el diff a la
+    // última línea (que absorbe hasta ±N Gs, siendo N el número de líneas).
+    // Después, DENTRO de cada línea, distribuimos el target entre las N_i
+    // unidades emitiendo hasta 2 filas de recepcion_items:
+    //   - (q_i - r_i) unidades a precio floor(t_i / q_i)
+    //   - r_i        unidades a precio floor(t_i / q_i) + 1
+    // donde r_i = t_i - floor(t_i/q_i) * q_i (0 ≤ r_i < q_i).
+    // Esto garantiza SUM(cantidad × precio_unitario) == total_final para
+    // TODA combinación de cantidades enteras (3, 7, 10, …), sin tolerancia.
+    const targetsPreliminar = itemsCrudo.map((x) => {
+      if (ajusteEvaluacion === 0) return x.subtotalLinea;
+      // proporcion en punto flotante, luego redondeo
+      return Math.round((x.subtotalLinea * totalFinal) / subtotalEvaluado);
     });
-    // Consolidamos: el total_compra que se persiste es igual al total_final
-    // para no romper la ecuación pagos = total_compra en el bloque siguiente.
+    // Ajuste global: forzamos sum(targets) == totalFinal.
+    let sumT = targetsPreliminar.reduce((s, n) => s + n, 0);
+    let diff = totalFinal - sumT;
+    if (diff !== 0) {
+      // Empujamos ±1 Gs a los índices con mayor cantidad primero (más "capacidad").
+      const order = itemsCrudo
+        .map((x, i) => ({ i, cant: x.cantidad }))
+        .sort((a, b) => b.cant - a.cant)
+        .map((x) => x.i);
+      let idx = 0;
+      while (diff !== 0) {
+        const i = order[idx % order.length];
+        if (diff > 0) { targetsPreliminar[i] += 1; diff -= 1; }
+        else          { targetsPreliminar[i] -= 1; diff += 1; }
+        idx += 1;
+      }
+    }
+    sumT = targetsPreliminar.reduce((s, n) => s + n, 0);
+    if (sumT !== totalFinal) {
+      throw new Error(`Prorrateo global inconsistente (${sumT} vs ${totalFinal}). Reportá este bug.`);
+    }
+
+    // Emitir filas (posiblemente 2 por línea) con precios enteros.
+    interface ItemFila {
+      producto_id: string;
+      producto_nombre: string;
+      sku: string;
+      cantidad: number;
+      precio_compra_unitario: number;
+      precio_venta_snapshot: number;
+      subtotal: number;
+      margen_bruto_pct: number | null;
+    }
+    const itemsResueltos: ItemFila[] = [];
+    let acumCosto = 0;
+    itemsCrudo.forEach((x, i) => {
+      const target = targetsPreliminar[i];
+      if (!(x.cantidad > 0)) {
+        throw new Error(`Cantidad de línea inválida (${x.cantidad}).`);
+      }
+      const base = Math.floor(target / x.cantidad);
+      const residuo = target - base * x.cantidad; // 0 ≤ residuo < cantidad
+      const info = x.info;
+      const precioVenta = info.precio_venta;
+      const emitir = (q: number, precio: number) => {
+        if (q <= 0) return;
+        const st = q * precio;
+        const margen = precioVenta > 0 ? ((precioVenta - precio) / precioVenta) * 100 : null;
+        itemsResueltos.push({
+          producto_id: x.it.producto_id,
+          producto_nombre: info.nombre,
+          sku: info.sku,
+          cantidad: q,
+          precio_compra_unitario: precio,
+          precio_venta_snapshot: precioVenta,
+          subtotal: st,
+          margen_bruto_pct: margen,
+        });
+        acumCosto += st;
+      };
+      // Cuando residuo == 0: 1 sola fila con `cantidad` a precio `base`.
+      // Cuando residuo > 0: (cantidad-residuo) a precio base, y residuo a precio base+1.
+      emitir(x.cantidad - residuo, base);
+      if (residuo > 0) emitir(residuo, base + 1);
+    });
     const totalCompra = acumCosto;
-    if (Math.abs(totalCompra - totalFinal) > TOL) {
+    if (totalCompra !== totalFinal) {
       throw new Error(
         `Prorrateo interno inconsistente (${totalCompra} vs total_final ${totalFinal}). Reportá este bug.`,
       );
     }
 
-    // Ecuación: suma pagos = total_compra (= total_final)
-    const totalPagos = p.pagos.reduce((s, pg) => s + Number(pg.monto), 0);
-    if (Math.abs(totalPagos - totalCompra) > TOL) {
+    // Ecuación estricta (sin tolerancia): suma pagos = total_final.
+    const totalPagos = p.pagos.reduce((s, pg) => Math.round(s + Number(pg.monto)), 0);
+    if (totalPagos !== totalCompra) {
       throw new Error(
         `La suma de las formas de pago (${totalPagos}) no coincide con el total final de la evaluación (${totalCompra}).`,
       );
     }
+    // La constante TOL se preserva para el resto del módulo; el prorrateo no la usa.
+    void TOL;
 
     // Advisory lock crédito si hay porción crédito
     if (creditoInput) {

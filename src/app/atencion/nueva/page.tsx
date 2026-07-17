@@ -154,6 +154,14 @@ export default function NuevaAtencionPage() {
   // Idempotency key del submit actual. Se genera al abrir el modal pre-cierre
   // y se invalida al cerrar o al cambiar cualquier dato relevante.
   const [idempotencyKey, setIdempotencyKey] = useState<string | null>(null);
+
+  // Caja "en uso" — la que efectivamente se opera. Reglas:
+  //   - 1 sola caja abierta ⇒ esa.
+  //   - >1 ⇒ la que la cajera eligió en el selector; null si aún no eligió.
+  // TODAS las acciones (Movimiento, Cerrar caja, resumen, confirmar atención)
+  // usan ESTE id; nunca `cajas[0]` silenciosamente.
+  const cajaEnUsoId = cajaSeleccionadaId
+    ?? (cajasAbiertas.length === 1 ? cajasAbiertas[0].id : null);
   const [cajaNumero, setCajaNumero] = useState<number | null>(null);
   const [cajaAperturaHora, setCajaAperturaHora] = useState<string | null>(null);
   const [cajaChecked, setCajaChecked] = useState(false);
@@ -266,9 +274,9 @@ export default function NuevaAtencionPage() {
   }
 
   async function cargarResumenCierre() {
-    if (!cajaAbiertaId) { setCierreResumen(null); return; }
+    if (!cajaEnUsoId) { setCierreResumen(null); return; }
     try {
-      const r = await fetchWithSupabaseSession(`/api/caja/resumen?caja_id=${encodeURIComponent(cajaAbiertaId)}`, { cache: "no-store" });
+      const r = await fetchWithSupabaseSession(`/api/caja/resumen?caja_id=${encodeURIComponent(cajaEnUsoId)}`, { cache: "no-store" });
       const j = await r.json().catch(() => ({}));
       const res = j?.data?.resumen;
       if (!res) { setCierreResumen(null); return; }
@@ -286,8 +294,10 @@ export default function NuevaAtencionPage() {
 
   async function cerrarCajaAhora() {
     setCierreError(null);
-    if (!cajaAbiertaId) {
-      setCierreError("No hay caja abierta.");
+    if (!cajaEnUsoId) {
+      setCierreError(cajasAbiertas.length > 1
+        ? "Elegí la caja a cerrar en el selector antes de continuar."
+        : "No hay caja abierta.");
       return;
     }
     const contado = Number(cierreContado);
@@ -301,7 +311,7 @@ export default function NuevaAtencionPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          caja_id: cajaAbiertaId,
+          caja_id: cajaEnUsoId,
           monto_cierre_contado: contado,
           observacion: cierreObs.trim() || null,
         }),
@@ -322,8 +332,10 @@ export default function NuevaAtencionPage() {
 
   async function registrarMovimientoAhora() {
     setMovError(null);
-    if (!cajaAbiertaId) {
-      setMovError("Abrí la caja primero.");
+    if (!cajaEnUsoId) {
+      setMovError(cajasAbiertas.length > 1
+        ? "Elegí la caja para registrar el movimiento."
+        : "Abrí la caja primero.");
       return;
     }
     const monto = Number(movMonto);
@@ -335,7 +347,7 @@ export default function NuevaAtencionPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          caja_id: cajaAbiertaId,
+          caja_id: cajaEnUsoId,
           tipo: movTipo,
           concepto: movConcepto.trim(),
           monto: Math.abs(monto),
@@ -727,15 +739,14 @@ export default function NuevaAtencionPage() {
   // haya generado (o no) crédito por cashback.
   async function persistirBeneficios() {
     if (!cliente) return;
-    const marcados = Object.entries(beneficiosMarcados)
+    // Solo persistimos post-commit los beneficios NO monetarios
+    // (ecobag, regalitos). Los que piden monto ya se persistieron
+    // dentro de la transacción del orquestador (beneficios_credito).
+    const informativos = Object.entries(beneficiosMarcados)
       .filter(([, v]) => v.marcado)
-      .map(([id, v]) => {
-        const cfg = alertasConfig.beneficios.find((b) => b.id === id);
-        return cfg ? { cfg, monto: v.monto } : null;
-      })
-      .filter((x): x is { cfg: BeneficioCfg; monto: string } => x !== null);
-    for (const { cfg, monto } of marcados) {
-      const montoNum = cfg.pide_monto ? Number(monto.replace(/[^\d]/g, "")) || 0 : 0;
+      .map(([id]) => alertasConfig.beneficios.find((b) => b.id === id))
+      .filter((cfg): cfg is BeneficioCfg => Boolean(cfg && !cfg.pide_monto));
+    for (const cfg of informativos) {
       try {
         await fetchWithSupabaseSession(`/api/clientes/${cliente.id}/eventos`, {
           method: "POST",
@@ -743,13 +754,13 @@ export default function NuevaAtencionPage() {
           body: JSON.stringify({
             tipo: cfg.tipo_evento,
             titulo: cfg.label,
-            descripcion: `Entregado en atención · ${cfg.label}${montoNum > 0 ? ` — Gs. ${montoNum.toLocaleString("es-PY")}` : ""}`,
-            monto: cfg.pide_monto ? montoNum : null,
-            generar_credito: cfg.tipo_evento === "cashback" && cfg.genera_credito === true && montoNum > 0,
+            descripcion: `Entregado en atención · ${cfg.label}`,
+            monto: null,
+            generar_credito: false,
           }),
         });
       } catch (e) {
-        console.error("[atencion] persistir beneficio", cfg.id, e);
+        console.error("[atencion] persistir beneficio informativo", cfg.id, e);
       }
     }
   }
@@ -757,9 +768,8 @@ export default function NuevaAtencionPage() {
   async function confirmar() {
     // Defensivo: preConfirmar ya validó, pero TS no puede seguirlo.
     if (!cliente) return;
-    // Caja explícita — nunca autoseleccionamos la primera cuando hay varias.
-    const cajaIdFinal = cajaSeleccionadaId
-      ?? (cajasAbiertas.length === 1 ? cajasAbiertas[0].id : null);
+    // Caja "en uso" — nunca autoseleccionamos la primera cuando hay varias.
+    const cajaIdFinal = cajaEnUsoId;
     if (!cajaIdFinal) {
       setError(cajasAbiertas.length > 1
         ? "Hay más de una caja abierta. Elegí la caja antes de confirmar."
@@ -815,15 +825,32 @@ export default function NuevaAtencionPage() {
           })()
         : null;
 
+      // Promo: solo mandamos la referencia; el server re-evalúa monto y cashback.
       const promoPayload = promoAplicada
         ? {
             promocion_id: promoAplicada.id,
-            descuento: promoAplicada.descuento,
-            cashback: promoAplicada.cashback,
             cupon_codigo: promoAplicada.cupon_codigo,
-            descuento_ya_aplicado_como_credito: false,
           }
         : null;
+
+      // Beneficios entregados: separamos los que generan crédito (van a la tx
+      // del orquestador) de los meramente informativos (persistBeneficios
+      // sigue haciéndolos best-effort post-commit).
+      const beneficiosCredito = Object.entries(beneficiosMarcados)
+        .filter(([, v]) => v.marcado)
+        .map(([id, v]) => {
+          const cfg = alertasConfig.beneficios.find((b) => b.id === id);
+          if (!cfg || !cfg.pide_monto) return null;
+          const monto = Number(v.monto.replace(/[^\d]/g, "")) || 0;
+          if (!(monto > 0)) return null;
+          return {
+            id: cfg.id,
+            label: cfg.label,
+            tipo_evento: cfg.tipo_evento,
+            monto,
+          };
+        })
+        .filter((x): x is { id: string; label: string; tipo_evento: BeneficioCfg["tipo_evento"]; monto: number } => x !== null);
 
       const r = await fetchWithSupabaseSession("/api/atencion/confirmar", {
         method: "POST",
@@ -836,6 +863,7 @@ export default function NuevaAtencionPage() {
           trae: traePayload,
           lleva: llevaPayload,
           promocion: promoPayload,
+          beneficios_credito: beneficiosCredito,
         }),
       });
       const j = await r.json().catch(() => ({}));

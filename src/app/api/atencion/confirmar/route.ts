@@ -7,6 +7,7 @@ import { confirmarAtencionPg } from "@/lib/atencion/server/confirmar-atencion-pg
 import type {
   ConfirmarAtencionInput,
 } from "@/lib/atencion/server/confirmar-atencion-pg";
+import { getChatPostgresPool, quoteSchemaTable } from "@/lib/supabase/chat-pg-pool";
 
 /**
  * POST /api/atencion/confirmar
@@ -61,12 +62,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(errorResponse("cliente_id es obligatorio."), { status: 400 });
     }
 
-    // Sucursal: preferimos la del usuario si tiene fija; si no, la del body.
+    // sucursal_id: se deriva SIEMPRE de la caja server-side (más abajo).
+    // Solo aceptamos body.sucursal_id como pista adicional; si no coincide
+    // con la sucursal de la caja, se rechaza.
     const sucursalBody = typeof body.sucursal_id === "string" ? body.sucursal_id : null;
-    const sucursalId = auth.sucursal_id ?? sucursalBody;
-    if (!sucursalId) {
-      return NextResponse.json(errorResponse("sucursal_id no pudo determinarse."), { status: 400 });
-    }
 
     // Parseo defensivo del bloque trae/lleva
     const parseTrae = (): ConfirmarAtencionInput["trae"] | null => {
@@ -150,21 +149,100 @@ export async function POST(request: NextRequest) {
     const trae = parseTrae();
     const lleva = parseLleva();
 
+    // Promo: aceptamos promocion_id o cupon_codigo (uno de los dos). El
+    // server RE-EVALÚA descuento/cashback — cualquier monto enviado por
+    // el frontend se descarta explícitamente.
     const promoRaw = body.promocion as Record<string, unknown> | undefined;
-    const promocion: ConfirmarAtencionInput["promocion"] = promoRaw && typeof promoRaw === "object"
-      ? {
-          promocionId: String(promoRaw.promocion_id ?? ""),
-          descuento: Math.max(0, Number(promoRaw.descuento) || 0),
-          cashback: Math.max(0, Number(promoRaw.cashback) || 0),
-          cuponCodigo: typeof promoRaw.cupon_codigo === "string" ? promoRaw.cupon_codigo : null,
-          descuentoYaAplicadoComoCredito: promoRaw.descuento_ya_aplicado_como_credito === true,
-        }
-      : null;
-    if (promocion && !promocion.promocionId) {
-      return NextResponse.json(errorResponse("promocion.promocion_id inválido."), { status: 400 });
+    const promocion: ConfirmarAtencionInput["promocion"] =
+      promoRaw && typeof promoRaw === "object"
+        ? {
+            promocionId:
+              typeof promoRaw.promocion_id === "string" && promoRaw.promocion_id
+                ? promoRaw.promocion_id : null,
+            cuponCodigo:
+              typeof promoRaw.cupon_codigo === "string" && promoRaw.cupon_codigo
+                ? promoRaw.cupon_codigo : null,
+          }
+        : null;
+    if (promocion && !promocion.promocionId && !promocion.cuponCodigo) {
+      return NextResponse.json(
+        errorResponse("promocion requiere promocion_id o cupon_codigo."),
+        { status: 400 },
+      );
+    }
+
+    // Beneficios que GENERAN crédito (procesados dentro de la tx).
+    const beneficiosRaw = Array.isArray(body.beneficios_credito) ? body.beneficios_credito : [];
+    const beneficiosCredito: NonNullable<ConfirmarAtencionInput["beneficiosCredito"]> = [];
+    for (const raw of beneficiosRaw) {
+      if (!raw || typeof raw !== "object") continue;
+      const r = raw as Record<string, unknown>;
+      const id = typeof r.id === "string" ? r.id : null;
+      const label = typeof r.label === "string" ? r.label : null;
+      const tipo = typeof r.tipo_evento === "string" ? r.tipo_evento : null;
+      const monto = Number(r.monto);
+      if (!id || !label || !tipo) continue;
+      if (!["cashback","descuento","beneficio","otro"].includes(tipo)) continue;
+      if (!(monto > 0)) continue;
+      beneficiosCredito.push({
+        id, label,
+        tipoEvento: tipo as "cashback" | "descuento" | "beneficio" | "otro",
+        monto: Math.round(monto),
+      });
     }
 
     const schema = await fetchDataSchemaForEmpresaId(auth.empresa_id);
+    const observaciones = typeof body.observaciones === "string"
+      ? body.observaciones.slice(0, 4000)
+      : null;
+
+    // ── Derivación server-side de sucursal ─────────────────────────────
+    // Regla:
+    //   - Si el usuario tiene sucursal_id fija: es la única válida. Si el
+    //     body pidió otra o si la caja está en otra ⇒ 400.
+    //   - Si no tiene sucursal fija (admin sin scope): derivamos SIEMPRE
+    //     desde la caja (caja_id es obligatoria). El body.sucursal_id se
+    //     ignora si no coincide con la de la caja.
+    const cajasT = quoteSchemaTable(schema, "cajas");
+    // Necesitamos pool solo para pre-derivar la sucursal fuera de la tx
+    // del orquestador — es una lectura simple, no muta nada.
+    const pool = getChatPostgresPool();
+    if (!pool) return NextResponse.json(errorResponse("Sin conexión Postgres."), { status: 500 });
+    const cajaLookupClient = await pool.connect();
+    let sucursalId: string;
+    try {
+      const cq = await cajaLookupClient.query<{ sucursal_id: string | null; estado: string }>(
+        `SELECT sucursal_id, estado FROM ${cajasT}
+         WHERE empresa_id = $1 AND id = $2 LIMIT 1`,
+        [auth.empresa_id, cajaId],
+      );
+      const cajaRow = cq.rows[0];
+      if (!cajaRow) {
+        return NextResponse.json(errorResponse("La caja indicada no existe."), { status: 400 });
+      }
+      if (!cajaRow.sucursal_id) {
+        return NextResponse.json(errorResponse("La caja no tiene sucursal asignada."), { status: 400 });
+      }
+      if (auth.sucursal_id) {
+        if (cajaRow.sucursal_id !== auth.sucursal_id) {
+          return NextResponse.json(
+            errorResponse("Tu usuario está asignado a una sucursal distinta a la de la caja."),
+            { status: 400 },
+          );
+        }
+        sucursalId = auth.sucursal_id;
+      } else {
+        if (sucursalBody && sucursalBody !== cajaRow.sucursal_id) {
+          return NextResponse.json(
+            errorResponse("sucursal_id del body no coincide con la sucursal de la caja."),
+            { status: 400 },
+          );
+        }
+        sucursalId = cajaRow.sucursal_id;
+      }
+    } finally {
+      cajaLookupClient.release();
+    }
 
     const result = await confirmarAtencionPg({
       schema,
@@ -175,26 +253,34 @@ export async function POST(request: NextRequest) {
       createdBy: auth.user.id ?? null,
       usuarioNombre: auth.nombre ?? null,
       idempotencyKey,
-      observaciones: typeof body.observaciones === "string" ? body.observaciones.slice(0, 4000) : null,
+      observaciones,
       trae,
       lleva,
       promocion,
-      // Hash: incluimos todos los campos que definen la operación.
+      beneficiosCredito,
+      // Hash del request — canonicalStringify normaliza el orden de claves
+      // a cualquier profundidad. Incluye todos los datos que definen la
+      // operación (cambiar cualquiera dispara 409 en el reintento).
       requestPayloadForHash: {
         caja_id: cajaId, cliente_id: clienteId, sucursal_id: sucursalId,
+        observaciones,
         trae: trae ? {
           items: trae.items.map(i => ({ p: i.producto_id, c: i.cantidad, u: i.precio_compra_unitario })),
-          total: trae.totalFinalEvaluado, ingresar: trae.ingresarAlStock !== false,
+          total: trae.totalFinalEvaluado,
+          ingresar: trae.ingresarAlStock !== false,
         } : null,
         lleva: lleva ? {
           items: lleva.items.map(i => ({ p: i.producto_id, c: i.cantidad, iva: i.tipo_iva })),
           credito: lleva.creditoUsado,
-          pagos: lleva.pagosInmediatos.map(pg => ({ m: pg.metodo_pago, v: pg.monto, e: pg.entidad_bancaria_id ?? "" })),
+          pagos: lleva.pagosInmediatos.map(pg => ({
+            m: pg.metodo_pago, v: pg.monto,
+            e: pg.entidad_bancaria_id ?? "", r: pg.referencia ?? "",
+            t: pg.titular ?? "", o: pg.observacion ?? "",
+          })),
+          moneda: lleva.moneda ?? "GS", tc: lleva.tipoCambio ?? 1,
         } : null,
-        promo: promocion ? {
-          id: promocion.promocionId, d: promocion.descuento, c: promocion.cashback,
-          ya: promocion.descuentoYaAplicadoComoCredito ?? false,
-        } : null,
+        promo: promocion ? { id: promocion.promocionId ?? "", cupon: promocion.cuponCodigo ?? "" } : null,
+        beneficios: beneficiosCredito.map(b => ({ id: b.id, t: b.tipoEvento, m: b.monto })),
       },
     });
 

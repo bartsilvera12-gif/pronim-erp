@@ -30,6 +30,10 @@ import {
   type CreateVentaItemInput,
   type PagoDetalleVentaInput,
 } from "@/lib/ventas/server/create-venta-pg";
+import {
+  evaluarPromocionEnClientePg,
+  type PromoEvaluada,
+} from "@/lib/promociones/server/evaluar-promocion-pg";
 
 export interface ConfirmarAtencionInput {
   schema: string;
@@ -60,17 +64,27 @@ export interface ConfirmarAtencionInput {
     tipoCambio?: number;
   } | null;
 
-  // Promoción (opcional). Se aplica DENTRO de la misma transacción.
+  // Promoción (opcional). El server RE-CALCULA descuento/cashback contra
+  // pronimerp.promociones — los valores enviados por el frontend se ignoran.
+  // Se pasa solo la referencia (id y/o cupón) más las líneas del carrito.
   promocion?: {
-    promocionId: string;
-    descuento: number;
-    cashback: number;
+    promocionId?: string | null;
     cuponCodigo?: string | null;
-    /** Si el frontend ya "convirtió" el descuento a crédito y lo pasó
-     *  como creditoUsado en lleva, marcá `descuentoYaAplicado=true` para
-     *  no duplicar la ENTRADA de crédito. */
-    descuentoYaAplicadoComoCredito?: boolean;
   } | null;
+
+  // Beneficios que GENERAN crédito (típicamente cashback manual entregado
+  // por el vendedor). Se procesan dentro de la tx del orquestador:
+  //   - se inserta ENTRADA en cliente_creditos_movimientos
+  //   - se registra el evento en cliente_eventos
+  // Si la venta o cualquier paso falla ⇒ ROLLBACK ⇒ nada se persiste.
+  // Los beneficios NO monetarios (ecobag, regalitos) van por otro camino
+  // best-effort en el frontend (post-commit).
+  beneficiosCredito?: Array<{
+    id: string;             // slug del beneficio (p.ej. 'cashback')
+    tipoEvento: "cashback" | "descuento" | "beneficio" | "otro";
+    label: string;          // etiqueta legible
+    monto: number;          // > 0
+  }>;
 }
 
 export interface ConfirmarAtencionResult {
@@ -82,21 +96,62 @@ export interface ConfirmarAtencionResult {
 }
 
 /**
- * Canonicaliza el payload (orden estable de claves) y devuelve SHA-256 hex.
- * Cambiar cualquier campo (ítem, monto, ajuste, promoción, caja) produce
- * un hash distinto — así el frontend detecta "esto ya no es el mismo submit".
+ * Canonicaliza el payload de forma RECURSIVA (orden estable de claves en
+ * todo nivel; arrays preservan orden porque son semánticamente ordenados)
+ * y devuelve SHA-256 hex.
+ *
+ * Cambiar cualquier campo — cantidad, precio, pago, referencia, observación,
+ * promoción, caja o sucursal — a cualquier profundidad, produce un hash
+ * distinto. Así el orquestador puede rechazar con 409 los reintentos con
+ * mismo key pero payload diferente.
  */
+export function canonicalStringify(v: unknown): string {
+  if (v === null || v === undefined) return "null";
+  const t = typeof v;
+  if (t === "string" || t === "number" || t === "boolean") return JSON.stringify(v);
+  if (Array.isArray(v)) return "[" + v.map(canonicalStringify).join(",") + "]";
+  if (t === "object") {
+    const obj = v as Record<string, unknown>;
+    const keys = Object.keys(obj).sort();
+    const parts = keys.map((k) => JSON.stringify(k) + ":" + canonicalStringify(obj[k]));
+    return "{" + parts.join(",") + "}";
+  }
+  return JSON.stringify(String(v));
+}
+
 function computeRequestHash(payload: unknown): string {
-  const stable = JSON.stringify(payload, Object.keys(payload as object).sort());
-  return createHash("sha256").update(stable).digest("hex");
+  return createHash("sha256").update(canonicalStringify(payload)).digest("hex");
 }
 
 export async function confirmarAtencionPg(
   p: ConfirmarAtencionInput,
 ): Promise<ConfirmarAtencionResult> {
-  const schema = assertAllowedChatDataSchema(p.schema);
   const pool = getChatPostgresPool();
   if (!pool) throw new Error("Sin conexión Postgres.");
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const r = await confirmarAtencionEnClientePg(client, p);
+    await client.query("COMMIT");
+    return r;
+  } catch (e) {
+    await client.query("ROLLBACK").catch(() => null);
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Variante interna: usa el `client` recibido y NO abre/comitea. Se expone
+ * para poder ejercitar el orquestador desde tests con SAVEPOINT/ROLLBACK
+ * sin persistir datos en la base.
+ */
+export async function confirmarAtencionEnClientePg(
+  client: import("pg").PoolClient,
+  p: ConfirmarAtencionInput,
+): Promise<ConfirmarAtencionResult> {
+  const schema = assertAllowedChatDataSchema(p.schema);
 
   // Validaciones sintácticas duras (fuera de la tx, para fallar rápido).
   if (!p.cajaId) throw new Error("caja_id es obligatorio (nunca autoseleccionamos caja).");
@@ -124,9 +179,7 @@ export async function confirmarAtencionPg(
   const promoAplT = quoteSchemaTable(schema, "promocion_aplicaciones");
   const creditosT = quoteSchemaTable(schema, "cliente_creditos_movimientos");
 
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
+  {
 
     // ── 1) Idempotencia ────────────────────────────────────────────────
     // Intento insertar la key; si ya existe, leo la fila (con lock para
@@ -160,7 +213,7 @@ export async function confirmarAtencionPg(
         );
       }
       if (row.estado === "ok" && row.resultado) {
-        await client.query("COMMIT");
+        // Sin COMMIT propio: el wrapper (o la tx externa) commitea.
         return { ...(row.resultado as Omit<ConfirmarAtencionResult, "reutilizado">), reutilizado: true };
       }
       // estado='error' o resultado null: dejamos que reintente creando un
@@ -242,6 +295,60 @@ export async function confirmarAtencionPg(
       recepcionOut = { id: r.id, numero_control: r.numero_control, total_final: totalFinal };
     }
 
+    // ── 4.5) Promoción: evaluación server-side ANTES de la venta ──────
+    // Los descuento/cashback del frontend se ignoran. Si viene id o cupón,
+    // reevaluamos server-side contra pronimerp.promociones sobre el mismo
+    // carrito. Si aplica, materializamos el descuento como una ENTRADA de
+    // crédito con origen='descuento_promo' que se suma a creditoUsado de la
+    // venta. El cashback se acredita DESPUÉS de crear la venta.
+    let promoEvaluada: PromoEvaluada | null = null;
+    if (p.promocion && (p.promocion.promocionId || p.promocion.cuponCodigo) && hayLleva) {
+      promoEvaluada = await evaluarPromocionEnClientePg(client, {
+        schema, empresaId: p.empresaId,
+        clienteId: p.clienteId, sucursalId: p.sucursalId,
+        promocionId: p.promocion.promocionId ?? null,
+        cuponCodigo: p.promocion.cuponCodigo ?? null,
+        // Convertimos los items de venta a la forma que espera el evaluador,
+        // resolviendo precio server-side desde `productos` (lock rápido).
+        items: await (async () => {
+          const ids = p.lleva!.items.map(i => i.producto_id);
+          const q = await client.query<{ id: string; precio_venta: string }>(
+            `SELECT id, precio_venta::text FROM ${quoteSchemaTable(schema, "productos")}
+             WHERE empresa_id = $1 AND id = ANY($2::uuid[])`,
+            [p.empresaId, ids],
+          );
+          const priceById = new Map(q.rows.map(r => [r.id, Number(r.precio_venta)]));
+          return p.lleva!.items.map(i => ({
+            franja_id: i.producto_id,
+            cantidad: Number(i.cantidad),
+            precio_unitario: priceById.get(i.producto_id) ?? 0,
+          }));
+        })(),
+      });
+    }
+
+    // Si hay descuento server-side, lo materializamos como ENTRADA de crédito
+    // ANTES de la venta y lo sumamos a `creditoUsado`. La ENTRADA usa
+    // origen='descuento_promo' (no confundir con crédito "real" del cliente).
+    let creditoUsadoVenta = hayLleva ? p.lleva!.creditoUsado : 0;
+    if (promoEvaluada && promoEvaluada.descuento > 0) {
+      await client.query(
+        `INSERT INTO ${creditosT} (
+           empresa_id, cliente_id, tipo, monto, origen,
+           referencia_tipo, referencia_numero, observaciones,
+           created_by, usuario_nombre
+         ) VALUES ($1,$2,'ENTRADA',$3,'descuento_promo',
+                   'promocion',$4,$5,$6,$7)`,
+        [
+          p.empresaId, p.clienteId, promoEvaluada.descuento,
+          promoEvaluada.cuponCodigo ?? promoEvaluada.promocionId,
+          `Descuento por promoción "${promoEvaluada.nombre}" (materializado como crédito)`,
+          p.createdBy, p.usuarioNombre,
+        ],
+      );
+      creditoUsadoVenta += promoEvaluada.descuento;
+    }
+
     // ── 5) VENTA ──────────────────────────────────────────────────────
     let ventaOut: ConfirmarAtencionResult["venta"] = null;
     if (hayLleva) {
@@ -258,7 +365,7 @@ export async function confirmarAtencionPg(
         items: v.items,
         sucursalId: p.sucursalId,
         cajaId: p.cajaId,
-        creditoClienteUsado: v.creditoUsado,
+        creditoClienteUsado: creditoUsadoVenta,
         pagosInmediatos: v.pagosInmediatos,
         createdBy: p.createdBy,
         usuarioNombre: p.usuarioNombre,
@@ -267,19 +374,13 @@ export async function confirmarAtencionPg(
       ventaOut = { id: r.ventaId, numero_control: r.numeroControl, total: r.total };
     }
 
-    // ── 6) Promoción DENTRO de la misma tx ────────────────────────────
-    // Reemplaza el POST /api/promociones/aplicacion best-effort del frontend.
-    // Si la venta o cualquier paso falló, no hay commit ⇒ ni aplicación ni crédito.
-    // Anti-duplicación: constraint unique (promocion_id, venta_id) ideal, o
-    // en su defecto no re-insertar si ya existe.
-    if (p.promocion && ventaOut) {
-      const promo = p.promocion;
-      // Anti-duplicación: si ya hay una aplicación para esta (promocion, venta), no insertamos.
+    // ── 6) Registro de aplicación + cashback (DESPUÉS de la venta) ───
+    if (promoEvaluada && ventaOut) {
       const dupQ = await client.query<{ id: string }>(
         `SELECT id FROM ${promoAplT}
          WHERE empresa_id = $1 AND promocion_id = $2 AND venta_id = $3
          LIMIT 1`,
-        [p.empresaId, promo.promocionId, ventaOut.id],
+        [p.empresaId, promoEvaluada.promocionId, ventaOut.id],
       );
       if (!dupQ.rows.length) {
         await client.query(
@@ -288,17 +389,12 @@ export async function confirmarAtencionPg(
              descuento_aplicado, cashback_generado, cupon_codigo_usado
            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
           [
-            p.empresaId, promo.promocionId, ventaOut.id, p.clienteId,
-            p.sucursalId, Math.max(0, Math.round(promo.descuento || 0)),
-            Math.max(0, Math.round(promo.cashback || 0)),
-            promo.cuponCodigo ? String(promo.cuponCodigo).toUpperCase() : null,
+            p.empresaId, promoEvaluada.promocionId, ventaOut.id, p.clienteId,
+            p.sucursalId, promoEvaluada.descuento, promoEvaluada.cashback,
+            promoEvaluada.cuponCodigo ? promoEvaluada.cuponCodigo.toUpperCase() : null,
           ],
         );
-
-        // Cashback → crédito al cliente (ENTRADA).
-        // Si el frontend materializó el descuento como crédito y ya lo pasó
-        // como `creditoUsado` en la venta, NO lo duplicamos acá.
-        if (promo.cashback > 0) {
+        if (promoEvaluada.cashback > 0) {
           await client.query(
             `INSERT INTO ${creditosT} (
                empresa_id, cliente_id, tipo, monto, origen,
@@ -306,13 +402,50 @@ export async function confirmarAtencionPg(
                observaciones, created_by, usuario_nombre
              ) VALUES ($1,$2,'ENTRADA',$3,'cashback',$4,'venta',$5,$6,$7,$8)`,
             [
-              p.empresaId, p.clienteId, Math.round(promo.cashback),
+              p.empresaId, p.clienteId, promoEvaluada.cashback,
               ventaOut.id, ventaOut.numero_control,
-              "Cashback aplicado por promoción",
+              `Cashback aplicado por promoción "${promoEvaluada.nombre}"`,
               p.createdBy, p.usuarioNombre,
             ],
           );
         }
+      }
+    }
+
+    // ── 6.5) Beneficios que GENERAN crédito, dentro de la tx ─────────
+    // Solo cashback/descuento manual con monto > 0. Los no monetarios
+    // (ecobag, regalitos) el frontend los persiste best-effort post-commit.
+    if (p.beneficiosCredito && p.beneficiosCredito.length > 0) {
+      const eventosT = quoteSchemaTable(schema, "cliente_eventos");
+      for (const b of p.beneficiosCredito) {
+        const monto = Math.round(Number(b.monto) || 0);
+        if (!(monto > 0)) continue;
+        await client.query(
+          `INSERT INTO ${creditosT} (
+             empresa_id, cliente_id, tipo, monto, origen,
+             referencia_tipo, referencia_numero, observaciones,
+             created_by, usuario_nombre
+           ) VALUES ($1,$2,'ENTRADA',$3,'ajuste_manual',$4,$5,$6,$7,$8)`,
+          [
+            p.empresaId, p.clienteId, monto,
+            b.tipoEvento, b.id,
+            `${b.label} (beneficio entregado en atención)`,
+            p.createdBy, p.usuarioNombre,
+          ],
+        );
+        await client.query(
+          `INSERT INTO ${eventosT} (
+             empresa_id, cliente_id, tipo, titulo, descripcion, monto,
+             referencia_tipo, referencia_id, referencia_numero,
+             autor_id, autor_nombre
+           ) VALUES ($1,$2,$3,$4,$5,$6,'venta',$7,$8,$9,$10)`,
+          [
+            p.empresaId, p.clienteId, b.tipoEvento, b.label,
+            `Entregado en atención · ${b.label} — Gs. ${monto.toLocaleString("es-PY")}`,
+            monto, ventaOut?.id ?? null, ventaOut?.numero_control ?? null,
+            p.createdBy, p.usuarioNombre,
+          ],
+        );
       }
     }
 
@@ -399,12 +532,6 @@ export async function confirmarAtencionPg(
       [JSON.stringify(resultado), p.empresaId, p.idempotencyKey],
     );
 
-    await client.query("COMMIT");
     return { ...resultado, reutilizado: false };
-  } catch (e) {
-    await client.query("ROLLBACK").catch(() => null);
-    throw e;
-  } finally {
-    client.release();
   }
 }
