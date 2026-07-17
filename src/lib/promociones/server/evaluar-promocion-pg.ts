@@ -11,6 +11,7 @@
  */
 
 import { quoteSchemaTable } from "@/lib/supabase/chat-pg-pool";
+import { ValidationError } from "@/lib/atencion/server/errors";
 
 export interface EvaluarPromocionInput {
   schema: string;
@@ -94,10 +95,10 @@ export async function evaluarPromocionEnClientePg(
   const r = await client.query<PromoRow>(sql, args);
   const rows = r.rows;
   if (cupon && rows.length === 0) {
-    throw new Error(`El cupón "${cupon}" no existe o está inactivo.`);
+    throw new ValidationError("CUPON_INVALIDO", `El cupón "${cupon}" no existe o está inactivo.`);
   }
   if (p.promocionId && rows.length === 0) {
-    throw new Error("La promoción indicada no existe o está inactiva.");
+    throw new ValidationError("PROMO_INEXISTENTE", "La promoción indicada no existe o está inactiva.");
   }
 
   // Cupón obligatorio cuando la promo lo tiene configurado.
@@ -109,12 +110,14 @@ export async function evaluarPromocionEnClientePg(
       if (row.cupon_codigo) {
         const requerido = row.cupon_codigo.trim().toUpperCase();
         if (!cupon) {
-          throw new Error(
+          throw new ValidationError(
+            "CUPON_REQUERIDO",
             `La promoción "${row.nombre}" requiere ingresar el cupón "${row.cupon_codigo}".`,
           );
         }
         if (cupon !== requerido) {
-          throw new Error(
+          throw new ValidationError(
+            "CUPON_INVALIDO",
             `El cupón enviado no coincide con el configurado para "${row.nombre}".`,
           );
         }
@@ -137,8 +140,8 @@ export async function evaluarPromocionEnClientePg(
   });
 
   if (aplicables.length === 0) {
-    if (cupon) throw new Error(`El cupón "${cupon}" no aplica a este carrito.`);
-    if (p.promocionId) throw new Error("La promoción indicada no aplica a este carrito.");
+    if (cupon) throw new ValidationError("PROMO_NO_APLICA", `El cupón "${cupon}" no aplica a este carrito.`);
+    if (p.promocionId) throw new ValidationError("PROMO_NO_APLICA", "La promoción indicada no aplica a este carrito.");
     return null;
   }
 

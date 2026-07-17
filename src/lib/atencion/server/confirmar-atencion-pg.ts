@@ -34,6 +34,10 @@ import {
   evaluarPromocionEnClientePg,
   type PromoEvaluada,
 } from "@/lib/promociones/server/evaluar-promocion-pg";
+import {
+  ValidationError,
+  IdempotencyConflictError,
+} from "@/lib/atencion/server/errors";
 
 export interface ConfirmarAtencionInput {
   schema: string;
@@ -167,19 +171,19 @@ export async function confirmarAtencionEnClientePg(
   const schema = assertAllowedChatDataSchema(p.schema);
 
   // Validaciones sintácticas duras (fuera de la tx, para fallar rápido).
-  if (!p.cajaId) throw new Error("caja_id es obligatorio (nunca autoseleccionamos caja).");
-  if (!p.clienteId) throw new Error("cliente_id es obligatorio.");
-  if (!p.sucursalId) throw new Error("sucursal_id es obligatorio.");
+  if (!p.cajaId) throw new ValidationError("CAJA_REQUERIDA", "caja_id es obligatorio (nunca autoseleccionamos caja).");
+  if (!p.clienteId) throw new ValidationError("CLIENTE_REQUERIDO", "cliente_id es obligatorio.");
+  if (!p.sucursalId) throw new ValidationError("SUCURSAL_REQUERIDA", "sucursal_id es obligatorio.");
   if (!p.idempotencyKey || p.idempotencyKey.length < 8) {
-    throw new Error("idempotency_key requerido (min 8 chars).");
+    throw new ValidationError("IDEMPOTENCY_KEY_REQUERIDA", "idempotency_key requerido (min 8 chars).");
   }
   const hayTrae = !!(p.trae && p.trae.items.length > 0);
   const hayLleva = !!(p.lleva && p.lleva.items.length > 0);
   if (!hayTrae && !hayLleva) {
-    throw new Error("La atención requiere al menos una prenda que el cliente traiga o lleve.");
+    throw new ValidationError("ATENCION_VACIA", "La atención requiere al menos una prenda que el cliente traiga o lleve.");
   }
   if (hayTrae && !(Number(p.trae!.totalFinalEvaluado) > 0)) {
-    throw new Error("total_final de la evaluación debe ser > 0.");
+    throw new ValidationError("TOTAL_FINAL_INVALIDO", "total_final de la evaluación debe ser > 0.");
   }
 
   const requestHash = computeRequestHash(p.requestPayloadForHash);
@@ -221,9 +225,7 @@ export async function confirmarAtencionEnClientePg(
       );
       const row = existing.rows[0];
       if (row.request_hash !== requestHash) {
-        throw new Error(
-          "IDEMPOTENCY_CONFLICT: la misma idempotency_key llegó con un payload distinto. Generá una key nueva.",
-        );
+        throw new IdempotencyConflictError();
       }
       if (row.estado === "ok" && row.resultado) {
         // Sin COMMIT propio: el wrapper (o la tx externa) commitea.
@@ -248,10 +250,10 @@ export async function confirmarAtencionEnClientePg(
         WHERE empresa_id = $1 AND id = $2 LIMIT 1`,
       [p.empresaId, p.cajaId],
     );
-    if (!cq.rows.length) throw new Error("La caja indicada no existe en esta empresa.");
-    if (cq.rows[0].estado !== "abierta") throw new Error("La caja indicada está cerrada.");
+    if (!cq.rows.length) throw new ValidationError("CAJA_INEXISTENTE", "La caja indicada no existe en esta empresa.");
+    if (cq.rows[0].estado !== "abierta") throw new ValidationError("CAJA_CERRADA", "La caja indicada está cerrada.");
     if (cq.rows[0].sucursal_id !== p.sucursalId) {
-      throw new Error("La caja indicada no pertenece a la sucursal de la atención.");
+      throw new ValidationError("CAJA_SUCURSAL_MISMATCH", "La caja indicada no pertenece a la sucursal de la atención.");
     }
 
     // ── 3) Si hay trae + lleva, creamos primero la fila de `cambios` ──
@@ -452,22 +454,38 @@ export async function confirmarAtencionEnClientePg(
       for (const b of p.beneficiosCredito) {
         const monto = Math.round(Number(b.monto) || 0);
         if (!(monto > 0)) {
-          throw new Error(`Beneficio "${b.id}": monto inválido (${b.monto}).`);
+          throw new ValidationError(
+            "BENEFICIO_MONTO_INVALIDO",
+            `Beneficio "${b.id}": monto inválido (${b.monto}).`,
+          );
         }
         const cfgB = byId.get(String(b.id));
         if (!cfgB) {
-          throw new Error(
+          throw new ValidationError(
+            "BENEFICIO_INEXISTENTE",
             `Beneficio "${b.id}" no está configurado para la empresa. Revisá /configuracion/caja.`,
           );
         }
         if (cfgB.genera_credito !== true) {
-          throw new Error(
+          throw new ValidationError(
+            "BENEFICIO_NO_AUTORIZADO",
             `Beneficio "${cfgB.label}" no está autorizado para generar crédito (genera_credito=false).`,
           );
         }
-        if (typeof cfgB.monto_max === "number" && cfgB.monto_max > 0 && monto > cfgB.monto_max) {
-          throw new Error(
-            `Beneficio "${cfgB.label}": monto (${monto}) supera el máximo permitido (${cfgB.monto_max}).`,
+        // monto_max OBLIGATORIO cuando genera_credito=true. Sin default silencioso:
+        // si el admin no configuró el tope, el server rechaza — así impedimos que
+        // una cajera pueda emitir crédito arbitrario cambiando el body.
+        const montoMax = Number(cfgB.monto_max);
+        if (!Number.isFinite(montoMax) || montoMax <= 0) {
+          throw new ValidationError(
+            "BENEFICIO_MONTO_MAX_FALTANTE",
+            `Beneficio "${cfgB.label}": falta configurar monto_max. Un administrador debe fijarlo en /configuracion/caja antes de poder entregarlo.`,
+          );
+        }
+        if (monto > montoMax) {
+          throw new ValidationError(
+            "BENEFICIO_MONTO_SOBRE_MAX",
+            `Beneficio "${cfgB.label}": monto (${monto}) supera el máximo permitido (${montoMax}).`,
           );
         }
         // label + tipo_evento vienen de la config server, NO del frontend.

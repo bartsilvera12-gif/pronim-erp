@@ -88,6 +88,20 @@ export async function PATCH(request: NextRequest) {
         if (typeof bo.tipo_evento !== "string" || !TIPOS_EVENTO_VALIDOS.has(bo.tipo_evento)) {
           return NextResponse.json(errorResponse("beneficio.tipo_evento inválido."), { status: 400 });
         }
+        // Cuando el beneficio genera crédito, monto_max es OBLIGATORIO.
+        // El administrador debe fijar un tope explícito — no aceptamos
+        // "sin límite" ni defaults comerciales adivinados por el server.
+        if (bo.genera_credito === true) {
+          const mm = Number(bo.monto_max);
+          if (!Number.isFinite(mm) || mm <= 0) {
+            return NextResponse.json(
+              errorResponse(
+                `Beneficio "${bo.label}": monto_max es obligatorio y > 0 cuando genera_credito=true.`,
+              ),
+              { status: 400 },
+            );
+          }
+        }
       }
     }
 

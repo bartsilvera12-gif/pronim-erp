@@ -39,6 +39,7 @@ import {
   canonicalStringify,
   type ConfirmarAtencionInput,
 } from "@/lib/atencion/server/confirmar-atencion-pg";
+import { procesarConfirmarAtencion } from "@/lib/atencion/server/procesar-confirmar-atencion";
 import { randomUUID, createHash } from "node:crypto";
 
 const SCHEMA = "pronimerp";
@@ -705,6 +706,193 @@ async function runAll(): Promise<void> {
         assert(/no est[aá] configurado/i.test(msg), `esperado 'no está configurado', fue: ${msg}`);
       }
       assert(threw, "id inventado ⇒ rechazado");
+    });
+
+    // ═══════════════════════════════════════════════════════════════════
+    // Bloque 2 — Tests del ENDPOINT (procesarConfirmarAtencion) que
+    // verifican mapeo de status codes + validación de monto_max.
+    // Ejecutan con el mismo client (SAVEPOINT-wrapped) via externalClient.
+    // ═══════════════════════════════════════════════════════════════════
+    const mockAuth = {
+      empresa_id: EMPRESA_ID,
+      sucursal_id: null,      // admin sin sucursal fija — deriva de caja
+      user_id: null,
+      nombre: "TEST_RUNNER",
+    };
+
+    // Helper: arma un body válido para el endpoint desde overrides mínimos.
+    function endpointBody(overrides: Record<string, unknown>): Record<string, unknown> {
+      return {
+        idempotency_key: randomUUID(),
+        caja_id: fx.cajaId,
+        cliente_id: fx.clienteId,
+        ...overrides,
+      };
+    }
+
+    // ─── E1: monto exactamente igual al máximo → OK ───────────────────
+    await withSavepoint(client, "E1_endpoint_monto_igual_a_max", async () => {
+      const resp = await procesarConfirmarAtencion(
+        endpointBody({
+          lleva: {
+            items: [{ producto_id: fx.franjaA_6000, cantidad: 1, tipo_iva: "EXENTA" }],
+            credito_usado: 0,
+            pago_detalle: [{ metodo_pago: "efectivo", monto: 6000 }],
+          },
+          beneficios_credito: [{ id: fx.beneficioCashbackConCredId, monto: 100000 }], // = monto_max
+        }),
+        mockAuth,
+        client,
+      );
+      eq(resp.status, 200, "monto == monto_max debe pasar");
+      const data = (resp.body as { data: { venta: { id: string } } }).data;
+      const credQ = await client.query<{ suma: string }>(
+        `SELECT COALESCE(SUM(monto),0)::text AS suma
+         FROM ${quoteSchemaTable(SCHEMA, "cliente_creditos_movimientos")}
+         WHERE cliente_id=$1 AND origen='ajuste_manual' AND referencia_numero=$2`,
+        [fx.clienteId, fx.beneficioCashbackConCredId],
+      );
+      eq(Number(credQ.rows[0].suma), 100000, "crédito por beneficio = 100.000");
+      assert(data.venta.id, "venta creada");
+    });
+
+    // ─── E2: monto SUPERIOR al máximo → 400 + rollback ────────────────
+    await withSavepoint(client, "E2_endpoint_monto_sobre_max", async () => {
+      // Contamos ventas y créditos antes.
+      const cntVentasAntes = await client.query<{ c: string }>(
+        `SELECT COUNT(*)::text AS c FROM ${quoteSchemaTable(SCHEMA, "ventas")} WHERE cliente_id=$1`,
+        [fx.clienteId],
+      );
+      const cntCreditoAntes = await client.query<{ c: string }>(
+        `SELECT COUNT(*)::text AS c FROM ${quoteSchemaTable(SCHEMA, "cliente_creditos_movimientos")} WHERE cliente_id=$1`,
+        [fx.clienteId],
+      );
+      const resp = await procesarConfirmarAtencion(
+        endpointBody({
+          lleva: {
+            items: [{ producto_id: fx.franjaA_6000, cantidad: 1, tipo_iva: "EXENTA" }],
+            credito_usado: 0,
+            pago_detalle: [{ metodo_pago: "efectivo", monto: 6000 }],
+          },
+          beneficios_credito: [{ id: fx.beneficioCashbackConCredId, monto: 100001 }], // > 100.000
+        }),
+        mockAuth,
+        client,
+      );
+      eq(resp.status, 400, "monto sobre max debe ser 400");
+      const bodyResp = resp.body as { code?: string };
+      eq(bodyResp.code, "BENEFICIO_MONTO_SOBRE_MAX", "código tipado");
+      // Rollback total: ni venta ni crédito nuevos.
+      const cntVentasDesp = await client.query<{ c: string }>(
+        `SELECT COUNT(*)::text AS c FROM ${quoteSchemaTable(SCHEMA, "ventas")} WHERE cliente_id=$1`,
+        [fx.clienteId],
+      );
+      const cntCreditoDesp = await client.query<{ c: string }>(
+        `SELECT COUNT(*)::text AS c FROM ${quoteSchemaTable(SCHEMA, "cliente_creditos_movimientos")} WHERE cliente_id=$1`,
+        [fx.clienteId],
+      );
+      eq(cntVentasDesp.rows[0].c, cntVentasAntes.rows[0].c, "ventas no cambia");
+      eq(cntCreditoDesp.rows[0].c, cntCreditoAntes.rows[0].c, "créditos no cambia");
+    });
+
+    // ─── E3: beneficio sin monto_max en config → rechazado ────────────
+    // Sembramos un beneficio SIN monto_max en la config y verificamos que
+    // el server lo rechaza aunque tenga genera_credito=true.
+    await withSavepoint(client, "E3_endpoint_beneficio_sin_max", async () => {
+      const idSinMax = `test_sinmax_${randomUUID().slice(0, 6)}`;
+      const empresasT = quoteSchemaTable(SCHEMA, "empresas");
+      // Leemos config actual, agregamos el beneficio sin monto_max, guardamos.
+      const cfgQ = await client.query<{ c: unknown }>(
+        `SELECT alertas_atencion_config AS c FROM ${empresasT} WHERE id=$1`,
+        [EMPRESA_ID],
+      );
+      const cfg = cfgQ.rows[0]?.c as { beneficios?: unknown[] } ?? {};
+      const beneficios = Array.isArray(cfg.beneficios) ? [...cfg.beneficios] : [];
+      beneficios.push({
+        id: idSinMax, label: "TEST sin max", tipo_evento: "cashback",
+        pide_monto: true, genera_credito: true,
+        // NO monto_max
+      });
+      await client.query(
+        `UPDATE ${empresasT}
+            SET alertas_atencion_config = jsonb_set(
+              COALESCE(alertas_atencion_config, '{}'::jsonb), '{beneficios}', $1::jsonb, true)
+          WHERE id = $2`,
+        [JSON.stringify(beneficios), EMPRESA_ID],
+      );
+
+      const resp = await procesarConfirmarAtencion(
+        endpointBody({
+          lleva: {
+            items: [{ producto_id: fx.franjaA_6000, cantidad: 1, tipo_iva: "EXENTA" }],
+            credito_usado: 0,
+            pago_detalle: [{ metodo_pago: "efectivo", monto: 6000 }],
+          },
+          beneficios_credito: [{ id: idSinMax, monto: 1000 }],
+        }),
+        mockAuth,
+        client,
+      );
+      eq(resp.status, 400, "sin monto_max debe ser 400");
+      const bodyResp = resp.body as { code?: string; error?: string };
+      eq(bodyResp.code, "BENEFICIO_MONTO_MAX_FALTANTE", "código tipado");
+    });
+
+    // ─── E4: cupón faltante via endpoint → 400 con code ───────────────
+    await withSavepoint(client, "E4_endpoint_cupon_faltante", async () => {
+      const resp = await procesarConfirmarAtencion(
+        endpointBody({
+          lleva: {
+            items: [{ producto_id: fx.franjaB_9000, cantidad: 2, tipo_iva: "EXENTA" }],
+            credito_usado: 0,
+            pago_detalle: [{ metodo_pago: "efectivo", monto: 18000 }],
+          },
+          promocion: { promocion_id: fx.promoConCuponId }, // sin cupon_codigo
+        }),
+        mockAuth,
+        client,
+      );
+      eq(resp.status, 400, "cupón faltante debe ser 400");
+      const bodyResp = resp.body as { code?: string };
+      eq(bodyResp.code, "CUPON_REQUERIDO", "código CUPON_REQUERIDO");
+    });
+
+    // ─── E5: cupón incorrecto via endpoint → 400 con code CUPON_INVALIDO
+    await withSavepoint(client, "E5_endpoint_cupon_incorrecto", async () => {
+      const resp = await procesarConfirmarAtencion(
+        endpointBody({
+          lleva: {
+            items: [{ producto_id: fx.franjaB_9000, cantidad: 2, tipo_iva: "EXENTA" }],
+            credito_usado: 0,
+            pago_detalle: [{ metodo_pago: "efectivo", monto: 13000 }],
+          },
+          promocion: { promocion_id: fx.promoConCuponId, cupon_codigo: "MAL" },
+        }),
+        mockAuth,
+        client,
+      );
+      eq(resp.status, 400, "cupón inválido debe ser 400");
+      const bodyResp = resp.body as { code?: string };
+      eq(bodyResp.code, "CUPON_INVALIDO", "código CUPON_INVALIDO");
+    });
+
+    // ─── E6: beneficio inexistente via endpoint → 400 con code ────────
+    await withSavepoint(client, "E6_endpoint_beneficio_inexistente", async () => {
+      const resp = await procesarConfirmarAtencion(
+        endpointBody({
+          lleva: {
+            items: [{ producto_id: fx.franjaA_6000, cantidad: 1, tipo_iva: "EXENTA" }],
+            credito_usado: 0,
+            pago_detalle: [{ metodo_pago: "efectivo", monto: 6000 }],
+          },
+          beneficios_credito: [{ id: "fantasma-xyz", monto: 100 }],
+        }),
+        mockAuth,
+        client,
+      );
+      eq(resp.status, 400, "beneficio inexistente debe ser 400");
+      const bodyResp = resp.body as { code?: string };
+      eq(bodyResp.code, "BENEFICIO_INEXISTENTE", "código BENEFICIO_INEXISTENTE");
     });
 
   } finally {
