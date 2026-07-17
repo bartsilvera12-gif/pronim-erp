@@ -61,16 +61,22 @@ export async function GET(request: NextRequest) {
       const sucClause = sucursalFiltro ? "AND sucursal_id = $4" : "";
       if (sucursalFiltro) params.push(sucursalFiltro);
 
-      // 1) Lista de clientes (nombres) — con filtro por q si viene.
-      const qParamIdx = params.length + 1;
+      // 1) Lista de clientes (nombres). Pasa SOLO los params que el SQL
+      // realmente referencia (Postgres exige match exacto — bind vs prep).
+      const cliArgs: unknown[] = [auth.empresa_id];
+      let qClause = "";
+      if (q) {
+        cliArgs.push(`%${q.toLowerCase()}%`);
+        qClause = `AND LOWER(COALESCE(nombre_contacto, empresa, nombre, '')) LIKE $${cliArgs.length}`;
+      }
       const clientesQ = await client.query<{ id: string; nombre: string | null }>(
         `SELECT id, COALESCE(nombre_contacto, empresa, nombre) AS nombre
          FROM ${cliT}
          WHERE empresa_id = $1
-           ${q ? `AND LOWER(COALESCE(nombre_contacto, empresa, nombre, '')) LIKE $${qParamIdx}` : ""}
+           ${qClause}
          ORDER BY nombre ASC
          LIMIT 2000`,
-        q ? [...params, `%${q.toLowerCase()}%`] : params,
+        cliArgs,
       );
       const clientes = clientesQ.rows;
       if (clientes.length === 0) {
