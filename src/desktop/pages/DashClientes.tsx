@@ -58,11 +58,22 @@ export default function DashClientes({ desde, hasta }: { desde: string; hasta: s
       const params = new URLSearchParams({ desde, hasta });
       if (q.trim()) params.set("q", q.trim());
       if (segmento) params.set("segmento", segmento);
-      const r = await fetchWithSupabaseSession(`/api/dashboard/clientes?${params.toString()}`, { cache: "no-store" });
-      const j = await r.json();
-      if (!r.ok || !j?.success) throw new Error(j?.error ?? "Error");
-      setData(j.data as Payload);
+      const url = `/api/dashboard/clientes?${params.toString()}`;
+      const r = await fetchWithSupabaseSession(url, { cache: "no-store" });
+      const j = await r.json().catch(() => null);
+      if (!r.ok || !j?.success) {
+        // Logueamos para poder diagnosticar desde consola sin adivinar.
+        console.error("[DashClientes] fetch failed", { status: r.status, body: j, url });
+        throw new Error((j && (j as { error?: string }).error) || `Error HTTP ${r.status}`);
+      }
+      const payload = (j as { data?: Payload }).data;
+      if (!payload) {
+        console.error("[DashClientes] empty payload", j);
+        throw new Error("El endpoint devolvió una respuesta vacía.");
+      }
+      setData(payload);
     } catch (e) {
+      console.error("[DashClientes] cargar()", e);
       setErr(e instanceof Error ? e.message : "Error");
     } finally {
       setLoading(false);
@@ -71,9 +82,27 @@ export default function DashClientes({ desde, hasta }: { desde: string; hasta: s
 
   useEffect(() => { void cargar(); }, [cargar]);
 
-  if (loading && !data) return <div className="py-10 text-center text-sm text-slate-500">Cargando…</div>;
-  if (err) return <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{err}</div>;
-  if (!data) return null;
+  if (loading && !data) {
+    return <div className="py-10 text-center text-sm text-slate-500">Cargando…</div>;
+  }
+  if (err) {
+    return (
+      <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+        <p className="font-semibold mb-1">No se pudo cargar el dashboard de clientes.</p>
+        <p className="text-rose-800">{err}</p>
+        <button
+          type="button"
+          onClick={() => cargar()}
+          className="mt-2 rounded border border-rose-300 bg-white px-3 py-1 text-xs text-rose-700 hover:bg-rose-100"
+        >
+          Reintentar
+        </button>
+      </div>
+    );
+  }
+  if (!data) {
+    return <div className="py-6 text-center text-sm text-slate-400">Sin datos.</div>;
+  }
 
   const k = data.kpis;
 

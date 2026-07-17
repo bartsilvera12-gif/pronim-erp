@@ -59,11 +59,21 @@ export default function DashSucursales({
     try {
       const params = new URLSearchParams({ desde, hasta });
       if (sucursalFiltro) params.set("sucursal_id", sucursalFiltro);
-      const r = await fetchWithSupabaseSession(`/api/dashboard/sucursales?${params.toString()}`, { cache: "no-store" });
-      const j = await r.json();
-      if (!r.ok || !j?.success) throw new Error(j?.error ?? "Error");
-      setData(j.data as Payload);
+      const url = `/api/dashboard/sucursales?${params.toString()}`;
+      const r = await fetchWithSupabaseSession(url, { cache: "no-store" });
+      const j = await r.json().catch(() => null);
+      if (!r.ok || !j?.success) {
+        console.error("[DashSucursales] fetch failed", { status: r.status, body: j, url });
+        throw new Error((j && (j as { error?: string }).error) || `Error HTTP ${r.status}`);
+      }
+      const payload = (j as { data?: Payload }).data;
+      if (!payload) {
+        console.error("[DashSucursales] empty payload", j);
+        throw new Error("El endpoint devolvió una respuesta vacía.");
+      }
+      setData(payload);
     } catch (e) {
+      console.error("[DashSucursales] cargar()", e);
       setErr(e instanceof Error ? e.message : "Error");
     } finally {
       setLoading(false);
@@ -72,9 +82,27 @@ export default function DashSucursales({
 
   useEffect(() => { void cargar(); }, [cargar]);
 
-  if (loading && !data) return <div className="py-10 text-center text-sm text-slate-500">Cargando…</div>;
-  if (err) return <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{err}</div>;
-  if (!data) return null;
+  if (loading && !data) {
+    return <div className="py-10 text-center text-sm text-slate-500">Cargando…</div>;
+  }
+  if (err) {
+    return (
+      <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+        <p className="font-semibold mb-1">No se pudo cargar el dashboard de sucursales.</p>
+        <p className="text-rose-800">{err}</p>
+        <button
+          type="button"
+          onClick={() => cargar()}
+          className="mt-2 rounded border border-rose-300 bg-white px-3 py-1 text-xs text-rose-700 hover:bg-rose-100"
+        >
+          Reintentar
+        </button>
+      </div>
+    );
+  }
+  if (!data) {
+    return <div className="py-6 text-center text-sm text-slate-400">Sin datos.</div>;
+  }
 
   const t = data.totales;
   const varTotal = t.ventas_prev > 0
