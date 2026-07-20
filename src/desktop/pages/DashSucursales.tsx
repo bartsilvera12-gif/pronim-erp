@@ -171,41 +171,29 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
         if (!alive || !j?.success) return;
         const metas = (j.data?.metas as { sucursal_id: string; nombre: string; pct_meta: number }[]) ?? [];
         setMetasHoy(metas);
-        // Sonar el "ding-ding-ding" cuando aparece meta nueva. Usamos
-        // sessionStorage (no localStorage) para que solo controle el
-        // sonido dentro de esta ventana, sin marcar la meta como
-        // "cerrada" — el sticky de la caja usa localStorage con el
-        // click × como acción explícita del usuario. Si escribiéramos
-        // acá, la caja nunca mostraría el sticky.
+        // MODO PRUEBA: cada detección con meta > 0 dispara el sonido.
+        // Sin sound-guard, así Karen puede probar el audio recargando la
+        // página. Volver al guard con sessionStorage cuando esté probado.
         if (metas.length > 0 && typeof window !== "undefined") {
-          const now = new Date();
-          const diaKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-          const sonadoRaw = sessionStorage.getItem("neura:metas-sonadas") ?? "{}";
-          const sonado = JSON.parse(sonadoRaw) as Record<string, string>;
-          const nueva = metas.find(m => sonado[m.sucursal_id] !== diaKey);
-          if (nueva) {
-            try {
-              const AC = (window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext);
-              if (AC) {
-                const ctx = new AC();
-                const t0 = ctx.currentTime;
-                [523.25, 659.25, 783.99].forEach((freq, i) => {
-                  const o = ctx.createOscillator();
-                  const g = ctx.createGain();
-                  o.type = "sine"; o.frequency.value = freq;
-                  const start = t0 + i * 0.12;
-                  g.gain.setValueAtTime(0, start);
-                  g.gain.linearRampToValueAtTime(0.18, start + 0.02);
-                  g.gain.exponentialRampToValueAtTime(0.0001, start + 0.35);
-                  o.connect(g).connect(ctx.destination);
-                  o.start(start); o.stop(start + 0.4);
-                });
-                setTimeout(() => ctx.close().catch(() => { /* ignore */ }), 1500);
-              }
-            } catch { /* audio bloqueado */ }
-            sonado[nueva.sucursal_id] = diaKey;
-            sessionStorage.setItem("neura:metas-sonadas", JSON.stringify(sonado));
-          }
+          try {
+            const AC = (window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext);
+            if (AC) {
+              const ctx = new AC();
+              const t0 = ctx.currentTime;
+              [523.25, 659.25, 783.99].forEach((freq, i) => {
+                const o = ctx.createOscillator();
+                const g = ctx.createGain();
+                o.type = "sine"; o.frequency.value = freq;
+                const start = t0 + i * 0.12;
+                g.gain.setValueAtTime(0, start);
+                g.gain.linearRampToValueAtTime(0.18, start + 0.02);
+                g.gain.exponentialRampToValueAtTime(0.0001, start + 0.35);
+                o.connect(g).connect(ctx.destination);
+                o.start(start); o.stop(start + 0.4);
+              });
+              setTimeout(() => ctx.close().catch(() => { /* ignore */ }), 1500);
+            }
+          } catch { /* audio bloqueado */ }
         }
       } catch { /* silencioso */ }
     }

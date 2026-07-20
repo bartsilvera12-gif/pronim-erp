@@ -134,7 +134,10 @@ export default function Header({ onOpenMobileSidebar }: HeaderProps = {}) {
   useEffect(() => {
     let alive = true;
     let seenIds = new Set<string>();
-    let esPrimerLoad = true;
+    // MODO PRUEBA: se dispara sonido también en el primer load si hay
+    // pendientes, así al refrescar la pestaña Karen puede confirmar que
+    // el audio funciona en su navegador. Cuando esté todo probado se
+    // puede volver a activar el guard de esPrimerLoad.
     async function loadNotif() {
       try {
         const r = await fetchWithSupabaseSession("/api/recepciones/pendientes", { cache: "no-store" });
@@ -143,15 +146,11 @@ export default function Header({ onOpenMobileSidebar }: HeaderProps = {}) {
         const arr = (j.data?.recepciones as NotifRecep[]) ?? [];
         setNotifPend(arr);
         setNotifClientes((j.data?.clientes as Record<string, string>) ?? {});
-        // Detectar nuevas: cualquier id que no estuviera en seenIds.
-        // En el primer load NO suena (evita sonar al abrir la página con
-        // pendientes viejos acumulados).
         const nuevasHay = arr.some(n => !seenIds.has(n.id));
-        if (nuevasHay && !esPrimerLoad) {
+        if (nuevasHay) {
           playNotifSound();
         }
         seenIds = new Set(arr.map(n => n.id));
-        esPrimerLoad = false;
       } catch { /* silencioso */ }
     }
     void loadNotif();

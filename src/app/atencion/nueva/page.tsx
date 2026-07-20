@@ -453,15 +453,12 @@ export default function NuevaAtencionPage() {
       const nueva = metas.find(m => cerradas[m.sucursal_id] !== diaKey);
       if (nueva) {
         setMetaAlcanzada(nueva);
-        // Sound-guard por sesión (ventana de navegador). Recargar la
-        // página reinicia y vuelve a sonar — que es lo que quiere Karen.
-        const sonadoRaw = sessionStorage.getItem("neura:metas-sonadas") ?? "{}";
-        const sonado = JSON.parse(sonadoRaw) as Record<string, string>;
-        if (sonado[nueva.sucursal_id] !== diaKey) {
-          playCelebrationSound();
-          sonado[nueva.sucursal_id] = diaKey;
-          sessionStorage.setItem("neura:metas-sonadas", JSON.stringify(sonado));
-        }
+        // MODO PRUEBA: sonamos en cada detección (incluye refresh) para
+        // que Karen pueda verificar el audio. Con el sound-guard estaba
+        // sonando solo la primera vez por sesión y no se podía re-probar
+        // sin borrar sessionStorage. Volver a poner el guard cuando esté
+        // todo verificado.
+        playCelebrationSound();
       }
     } catch { /* silencioso */ }
   }
