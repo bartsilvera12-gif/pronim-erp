@@ -195,7 +195,9 @@ function buildClienteColumns(mapNombreTipo: Record<string, string>): ClienteColu
     {
       key: "plan_activo",
       label: "Plan activo",
-      visibleDefault: true,
+      // Oculto por default en Pronim — sin suscripciones vigentes. El
+      // usuario puede reactivarlo desde el selector "Columnas".
+      visibleDefault: false,
       headerClassName: th,
       className: td,
       render: (c) => c.plan_activo ? (
@@ -217,7 +219,9 @@ function buildClienteColumns(mapNombreTipo: Record<string, string>): ClienteColu
     {
       key: "tipo_servicio",
       label: "Tipo servicio",
-      visibleDefault: true,
+      // Oculto por default en Pronim — no aplica al modelo compra/venta
+      // de prendas. Reactivable desde "Columnas".
+      visibleDefault: false,
       headerClassName: th,
       className: `${td} text-xs text-gray-600 whitespace-nowrap`,
       render: (c) => etiquetaVisibleTipoServicio(c.tipo_servicio_cliente ?? null, mapNombreTipo),
