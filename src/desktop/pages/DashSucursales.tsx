@@ -182,8 +182,68 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
   const pctRecurrentes = data.flujo.clientes_unicos > 0
     ? Math.round((data.flujo.clientes_recurrentes / data.flujo.clientes_unicos) * 100) : null;
 
+  // Detectar la sucursal con meta ALCANZADA (la que más se pasó del 100%,
+  // si hay varias). El banner celebratorio solo aparece si hay alguna.
+  const metaAlcanzada = data.sucursales
+    .filter(s => s.pct_meta != null && s.pct_meta >= 100)
+    .sort((a, b) => (b.pct_meta ?? 0) - (a.pct_meta ?? 0))[0] ?? null;
+
   return (
     <div className="space-y-6">
+      {/* ═════ Banner: meta alcanzada por alguna sucursal ═════ */}
+      {metaAlcanzada && (
+        <div className="rounded-2xl border-2 border-emerald-300 bg-gradient-to-br from-emerald-50 via-white to-emerald-50/50 p-5 shadow-sm">
+          <div className="flex items-start gap-4">
+            {/* Ícono check en pill verde */}
+            <div className="h-10 w-10 shrink-0 rounded-xl bg-emerald-500 text-white flex items-center justify-center shadow-md shadow-emerald-500/30">
+              <svg viewBox="0 0 24 24" fill="none" strokeWidth={2.5} stroke="currentColor" className="h-6 w-6">
+                <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+              </svg>
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-lg font-bold text-emerald-900">
+                ¡Meta alcanzada en {metaAlcanzada.nombre}!
+              </h3>
+              <p className="text-sm text-emerald-800 mt-0.5">
+                La sucursal llegó al{" "}
+                <strong className="tabular-nums">{metaAlcanzada.pct_meta}%</strong> de su meta del período.
+                Este resultado se construyó con el trabajo de todo el período.
+              </p>
+              {/* Métricas destacadas del logro */}
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 text-sm">
+                <MetaMetric value={metaAlcanzada.visitas} label="visitas" />
+                <span className="text-emerald-300">·</span>
+                <MetaMetric value={metaAlcanzada.prendas_recibidas} label="prendas recibidas" />
+                <span className="text-emerald-300">·</span>
+                <MetaMetric value={metaAlcanzada.prendas_vendidas} label="prendas vendidas" />
+                {metaAlcanzada.clientes_atendidos > 0 && metaAlcanzada.recurrentes > 0 && (
+                  <>
+                    <span className="text-emerald-300">·</span>
+                    <MetaMetric
+                      value={`${Math.round((metaAlcanzada.recurrentes / metaAlcanzada.clientes_atendidos) * 100)}%`}
+                      label="clientes recurrentes"
+                    />
+                  </>
+                )}
+              </div>
+              {/* CTA: filtrar por esta sucursal para ver el detalle */}
+              <div className="flex items-center justify-end mt-3">
+                <button
+                  type="button"
+                  onClick={() => setSucursalFiltro(metaAlcanzada.sucursal_id)}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3 py-1.5 shadow-sm"
+                >
+                  Ver cómo se logró
+                  <svg viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
+                    <path fillRule="evenodd" d="M5 10a.75.75 0 0 1 .75-.75h6.638L10.23 7.29a.75.75 0 1 1 1.04-1.08l3.5 3.25a.75.75 0 0 1 0 1.08l-3.5 3.25a.75.75 0 1 1-1.04-1.08l2.158-1.96H5.75A.75.75 0 0 1 5 10Z" clipRule="evenodd" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ═════ Switcher de vista + filtro sucursal ═════ */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5">
@@ -819,6 +879,17 @@ function DrillModal({
         </div>
       </div>
     </div>
+  );
+}
+
+// Métrica destacada del banner de meta alcanzada.
+function MetaMetric({ value, label }: { value: number | string; label: string }) {
+  const shown = typeof value === "number" ? value.toLocaleString("es-PY") : value;
+  return (
+    <span className="inline-flex items-baseline gap-1">
+      <strong className="text-emerald-900 font-bold tabular-nums">{shown}</strong>
+      <span className="text-emerald-700">{label}</span>
+    </span>
   );
 }
 

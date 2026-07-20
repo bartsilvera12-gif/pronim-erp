@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Bell, ChevronDown, LogOut, Menu } from "lucide-react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
@@ -42,11 +43,23 @@ type HeaderProps = {
   onOpenMobileSidebar?: () => void;
 };
 
+type NotifRecep = {
+  id: string;
+  numero_control: string | null;
+  cliente_id: string | null;
+  fecha: string;
+};
+
 export default function Header({ onOpenMobileSidebar }: HeaderProps = {}) {
   const router = useRouter();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [usuario, setUsuario] = useState<HeaderUsuario | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  // Notificaciones — recepciones pendientes de evaluar/ingresar.
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [notifPend, setNotifPend] = useState<NotifRecep[]>([]);
+  const [notifClientes, setNotifClientes] = useState<Record<string, string>>({});
+  const notifRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -76,6 +89,36 @@ export default function Header({ onOpenMobileSidebar }: HeaderProps = {}) {
     };
   }, []);
 
+  // Cargar notificaciones (recepciones pendientes) al montar + refrescar
+  // cada 60s. El endpoint ya filtra por sucursal del usuario si tiene fija.
+  useEffect(() => {
+    let alive = true;
+    async function loadNotif() {
+      try {
+        const r = await fetchWithSupabaseSession("/api/recepciones/pendientes", { cache: "no-store" });
+        const j = await r.json().catch(() => ({}));
+        if (!alive || !j?.success) return;
+        setNotifPend((j.data?.recepciones as NotifRecep[]) ?? []);
+        setNotifClientes((j.data?.clientes as Record<string, string>) ?? {});
+      } catch { /* silencioso */ }
+    }
+    void loadNotif();
+    const t = setInterval(loadNotif, 60_000);
+    return () => { alive = false; clearInterval(t); };
+  }, []);
+
+  // Cerrar popover de notificaciones al hacer click afuera.
+  useEffect(() => {
+    if (!notifOpen) return;
+    function onDown(e: MouseEvent) {
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
+        setNotifOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [notifOpen]);
+
   const nombreReal = clean(usuario?.nombre);
   const fallbackEmail = clean(usuario?.email);
   const displayName = nombreReal || fallbackEmail || "Usuario";
@@ -103,17 +146,89 @@ export default function Header({ onOpenMobileSidebar }: HeaderProps = {}) {
       <div className="flex items-center gap-2">
         {/* Asistente de ayuda (Neurita) — desactivado temporalmente. */}
 
-        {/* Notificaciones */}
-        <button
-          type="button"
-          className="relative rounded-lg p-2 text-[#475569] transition-colors hover:bg-slate-50 hover:text-[#4FAEB2]"
-          aria-label="Notificaciones"
-        >
-          <Bell className="h-5 w-5" />
-          <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#4FAEB2] text-[10px] font-bold text-white">
-            0
-          </span>
-        </button>
+        {/* Notificaciones — hoy solo muestran recepciones pendientes de
+            evaluar/ingresar al stock. Refresca cada 60s. */}
+        <div className="relative" ref={notifRef}>
+          <button
+            type="button"
+            onClick={() => setNotifOpen(v => !v)}
+            className={`relative rounded-lg p-2 transition-colors hover:bg-slate-50 ${
+              notifPend.length > 0 ? "text-amber-600 hover:text-amber-700" : "text-[#475569] hover:text-[#4FAEB2]"
+            }`}
+            aria-label="Notificaciones"
+          >
+            <Bell className="h-5 w-5" />
+            <span className={`absolute -right-0.5 -top-0.5 flex min-w-4 h-4 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white ${
+              notifPend.length > 0 ? "bg-amber-500" : "bg-[#4FAEB2]"
+            }`}>
+              {notifPend.length > 99 ? "99+" : notifPend.length}
+            </span>
+          </button>
+          {notifOpen && (
+            <div className="absolute right-0 mt-2 w-80 rounded-xl border border-slate-200 bg-white shadow-2xl overflow-hidden z-50">
+              <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+                <h4 className="text-sm font-bold text-slate-800">Notificaciones</h4>
+                {notifPend.length > 0 && (
+                  <span className="text-[11px] text-amber-700 font-semibold">{notifPend.length} pendiente{notifPend.length === 1 ? "" : "s"}</span>
+                )}
+              </div>
+              {notifPend.length === 0 ? (
+                <p className="px-4 py-6 text-center text-xs text-slate-400">Todo al día, sin pendientes.</p>
+              ) : (
+                <>
+                  <div className="px-4 py-3 bg-amber-50/50 border-b border-amber-100">
+                    <div className="flex items-start gap-2">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-5 w-5 shrink-0 text-amber-600">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m0 3.75h.007v.008H12v-.008ZM12 4c-4 5-6 8-6 11a6 6 0 0 0 12 0c0-3-2-6-6-11Z" />
+                      </svg>
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-amber-900">
+                          {notifPend.length === 1
+                            ? "1 recepción pendiente de evaluar"
+                            : `${notifPend.length} recepciones pendientes de evaluar`}
+                        </p>
+                        <p className="text-[11px] text-amber-800 mt-0.5">
+                          Ropas del cliente que aún no fueron ingresadas al stock.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <ul className="max-h-64 overflow-y-auto divide-y divide-slate-100">
+                    {notifPend.slice(0, 8).map(n => {
+                      const cliente = (n.cliente_id && notifClientes[n.cliente_id]) || "(sin cliente)";
+                      const horas = Math.max(0, Math.floor((Date.now() - new Date(n.fecha).getTime()) / (3600 * 1000)));
+                      const dias = Math.floor(horas / 24);
+                      const cuantoHace = dias >= 1 ? `hace ${dias}d` : `hace ${horas}h`;
+                      const vencida = horas > 72;
+                      return (
+                        <li key={n.id} className="px-4 py-2 hover:bg-slate-50">
+                          <div className="flex items-center gap-2 text-xs">
+                            <span className={`inline-block w-2 h-2 rounded-full shrink-0 ${vencida ? "bg-rose-500" : "bg-amber-500"}`} />
+                            <span className="font-mono text-[10px] text-slate-500 shrink-0">{n.numero_control ?? "—"}</span>
+                            <span className="flex-1 truncate text-slate-700">{cliente}</span>
+                            <span className={`text-[10px] font-semibold shrink-0 ${vencida ? "text-rose-700" : "text-slate-500"}`}>{cuantoHace}</span>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  {notifPend.length > 8 && (
+                    <p className="px-4 py-1.5 text-center text-[10px] text-slate-400">
+                      +{notifPend.length - 8} más
+                    </p>
+                  )}
+                  <Link
+                    href="/atencion/pendientes-ingreso"
+                    onClick={() => setNotifOpen(false)}
+                    className="flex items-center justify-center gap-1 px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold border-t border-amber-700"
+                  >
+                    Ir a la bandeja de pendientes →
+                  </Link>
+                </>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Avatar + menú usuario */}
         <div className="relative" ref={menuRef}>

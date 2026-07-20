@@ -108,6 +108,10 @@ export default function NuevaAtencionPage() {
   const [cargaRapidaOpen, setCargaRapidaOpen] = useState(false);
   const [cargaRapidaCantidad, setCargaRapidaCantidad] = useState<string>("");
   const [cargaRapidaMonto, setCargaRapidaMonto] = useState<string>("");
+  // Recepciones pendientes de evaluar — para mostrar sticky note en el
+  // rail derecho (usuarios comunes que no ven el dashboard también se
+  // enteran de que hay bolsas esperando).
+  const [pendientesEvaluar, setPendientesEvaluar] = useState(0);
 
   // Override manual del monto a pagar por la recepción — la cajera evalúa las
   // prendas por franja y a veces redondea a mano (140.000), a veces no
