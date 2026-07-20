@@ -139,19 +139,21 @@ export default function DashClientes({ desde, hasta }: { desde: string; hasta: s
         </select>
       </div>
 
-      {/* KPIs de segmentos */}
+      {/* KPIs de segmentos — cada uno con tooltip que explica la fórmula.
+          Docs completos en docs/dashboards-formulas.md. */}
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 gap-3">
-        <Kpi label="Total clientes" value={fmtN(k.total)} />
-        <Kpi label="VIP" value={fmtN(k.vip)} />
-        <Kpi label="Frecuentes" value={fmtN(k.habitual)} />
-        <Kpi label="Nuevos" value={fmtN(k.nuevo)} />
-        <Kpi label="Dormidos" value={fmtN(k.dormido)} />
-        <Kpi label="Solo traen" value={fmtN(k.solo_trae)} />
-        <Kpi label="Solo compran" value={fmtN(k.solo_lleva)} />
-        <Kpi label="Ambos (trae + lleva)" value={fmtN(k.ambos)} />
-        <Kpi label="Crédito disponible total" value={fmtGs(k.credito_disponible_total)} />
+        <Kpi label="Total clientes" value={fmtN(k.total)} tip="Total de clientes que matchean el filtro actual (segmento, sucursal, búsqueda)." />
+        <Kpi label="VIP" value={fmtN(k.vip)} tip="total_historico ≥ Gs. 5.000.000 o ≥ 6 compras en 90 días." />
+        <Kpi label="Frecuentes" value={fmtN(k.habitual)} tip="Con compras pero no VIP y no Dormido." />
+        <Kpi label="Nuevos" value={fmtN(k.nuevo)} tip="Sin compras históricas registradas." />
+        <Kpi label="Dormidos" value={fmtN(k.dormido)} tip="Con compras pero > 120 días sin visita." />
+        <Kpi label="Solo traen" value={fmtN(k.solo_trae)} tip="Clientes con recepciones pero ninguna venta." />
+        <Kpi label="Solo compran" value={fmtN(k.solo_lleva)} tip="Clientes con ventas pero ninguna recepción." />
+        <Kpi label="Ambos (trae + lleva)" value={fmtN(k.ambos)} tip="Clientes con recepciones y ventas." />
+        <Kpi label="Crédito disponible total" value={fmtGs(k.credito_disponible_total)} tip="SUM de saldos > 0 de todos los clientes en el filtro." />
         <Kpi label="Prom. días desde última visita"
-             value={k.prom_dias_entre_visitas != null ? `${k.prom_dias_entre_visitas} días` : "—"} />
+             value={k.prom_dias_entre_visitas != null ? `${k.prom_dias_entre_visitas} días` : "—"}
+             tip="AVG de días desde la última visita, sobre clientes con al menos 1 visita." />
       </div>
 
       {/* Tabla principal */}
@@ -212,9 +214,9 @@ export default function DashClientes({ desde, hasta }: { desde: string; hasta: s
   );
 }
 
-function Kpi({ label, value }: { label: string; value: string }) {
+function Kpi({ label, value, tip }: { label: string; value: string; tip?: string }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
+    <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5" title={tip}>
       <p className="text-[11px] uppercase tracking-wide text-slate-500">{label}</p>
       <p className="mt-0.5 text-lg font-bold text-slate-800">{value}</p>
     </div>
