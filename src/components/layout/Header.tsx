@@ -50,6 +50,15 @@ type NotifRecep = {
   fecha: string;
 };
 
+type NotifMeta = {
+  sucursal_id: string;
+  nombre: string;
+  pct_meta: number;
+  vendido: number;
+  meta_periodo: number;
+};
+
+
 export default function Header({ onOpenMobileSidebar }: HeaderProps = {}) {
   const router = useRouter();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -60,6 +69,9 @@ export default function Header({ onOpenMobileSidebar }: HeaderProps = {}) {
   const [notifPend, setNotifPend] = useState<NotifRecep[]>([]);
   const [notifClientes, setNotifClientes] = useState<Record<string, string>>({});
   const notifRef = useRef<HTMLDivElement>(null);
+  // Notificaciones — metas alcanzadas. Se muestran en el popover del bell.
+  // El sticky note celebratorio + sonido viven en /atencion/nueva (caja).
+  const [notifMetas, setNotifMetas] = useState<NotifMeta[]>([]);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -107,6 +119,22 @@ export default function Header({ onOpenMobileSidebar }: HeaderProps = {}) {
     return () => { alive = false; clearInterval(t); };
   }, []);
 
+  // Cargar metas alcanzadas al montar + refrescar cada 2 min (solo para el bell).
+  useEffect(() => {
+    let alive = true;
+    async function loadMetas() {
+      try {
+        const r = await fetchWithSupabaseSession("/api/notificaciones/metas", { cache: "no-store" });
+        const j = await r.json().catch(() => ({}));
+        if (!alive || !j?.success) return;
+        setNotifMetas((j.data?.metas as NotifMeta[]) ?? []);
+      } catch { /* silencioso */ }
+    }
+    void loadMetas();
+    const t = setInterval(loadMetas, 120_000);
+    return () => { alive = false; clearInterval(t); };
+  }, []);
+
   // Cerrar popover de notificaciones al hacer click afuera.
   useEffect(() => {
     if (!notifOpen) return;
@@ -125,6 +153,16 @@ export default function Header({ onOpenMobileSidebar }: HeaderProps = {}) {
   const dropdownName = nombreReal || "Usuario";
   const avatarInitial = (nombreReal || fallbackEmail || "Usuario").charAt(0).toUpperCase();
   const displayRole = roleLabel(usuario?.rol);
+
+  // Total combinado (recepciones pendientes + metas alcanzadas) para el
+  // badge del bell. Las metas destacan en verde; los pendientes en ámbar.
+  const totalNotif = notifPend.length + notifMetas.length;
+  const badgeTone = notifMetas.length > 0
+    ? "bg-emerald-500"
+    : notifPend.length > 0 ? "bg-amber-500" : "bg-[#4FAEB2]";
+  const bellTone = notifMetas.length > 0
+    ? "text-emerald-600 hover:text-emerald-700"
+    : notifPend.length > 0 ? "text-amber-600 hover:text-amber-700" : "text-[#475569] hover:text-[#4FAEB2]";
 
   return (
     <header
@@ -152,28 +190,42 @@ export default function Header({ onOpenMobileSidebar }: HeaderProps = {}) {
           <button
             type="button"
             onClick={() => setNotifOpen(v => !v)}
-            className={`relative rounded-lg p-2 transition-colors hover:bg-slate-50 ${
-              notifPend.length > 0 ? "text-amber-600 hover:text-amber-700" : "text-[#475569] hover:text-[#4FAEB2]"
-            }`}
+            className={`relative rounded-lg p-2 transition-colors hover:bg-slate-50 ${bellTone}`}
             aria-label="Notificaciones"
           >
             <Bell className="h-5 w-5" />
-            <span className={`absolute -right-0.5 -top-0.5 flex min-w-4 h-4 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white ${
-              notifPend.length > 0 ? "bg-amber-500" : "bg-[#4FAEB2]"
-            }`}>
-              {notifPend.length > 99 ? "99+" : notifPend.length}
+            <span className={`absolute -right-0.5 -top-0.5 flex min-w-4 h-4 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white ${badgeTone}`}>
+              {totalNotif > 99 ? "99+" : totalNotif}
             </span>
           </button>
           {notifOpen && (
             <div className="absolute right-0 mt-2 w-80 rounded-xl border border-slate-200 bg-white shadow-2xl overflow-hidden z-50">
               <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
                 <h4 className="text-sm font-bold text-slate-800">Notificaciones</h4>
-                {notifPend.length > 0 && (
-                  <span className="text-[11px] text-amber-700 font-semibold">{notifPend.length} pendiente{notifPend.length === 1 ? "" : "s"}</span>
+                {totalNotif > 0 && (
+                  <span className="text-[11px] text-slate-500 font-semibold">{totalNotif} nuevas</span>
                 )}
               </div>
-              {notifPend.length === 0 ? (
+
+              {/* ═════ Metas alcanzadas — sticky note verde adentro del bell ═════ */}
+              {notifMetas.map(m => (
+                <div key={m.sucursal_id} className="mx-3 mt-3 rounded-lg bg-gradient-to-br from-emerald-100 to-emerald-50 border border-emerald-300 shadow-sm p-3 -rotate-1">
+                  <div className="flex items-start gap-2">
+                    <span className="text-2xl leading-none">🎉</span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-bold text-emerald-900">¡Felicidades!</p>
+                      <p className="text-xs text-emerald-800 mt-0.5 leading-tight">
+                        <strong>{m.nombre}</strong> alcanzó el <strong>{m.pct_meta}%</strong> de la meta del mes.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              {notifPend.length === 0 && notifMetas.length === 0 ? (
                 <p className="px-4 py-6 text-center text-xs text-slate-400">Todo al día, sin pendientes.</p>
+              ) : notifPend.length === 0 ? (
+                <div className="px-4 py-4 text-center text-xs text-slate-400">Sin pendientes de evaluar.</div>
               ) : (
                 <>
                   <div className="px-4 py-3 bg-amber-50/50 border-b border-amber-100">

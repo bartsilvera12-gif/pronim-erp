@@ -112,6 +112,11 @@ export default function NuevaAtencionPage() {
   // rail derecho (usuarios comunes que no ven el dashboard también se
   // enteran de que hay bolsas esperando).
   const [pendientesEvaluar, setPendientesEvaluar] = useState(0);
+  // Meta alcanzada — sticky note celebratorio con sonido para que la
+  // cajera se entere del logro sin tener que ir al dashboard.
+  const [metaAlcanzada, setMetaAlcanzada] = useState<{
+    sucursal_id: string; nombre: string; pct_meta: number;
+  } | null>(null);
 
   // Override manual del monto a pagar por la recepción — la cajera evalúa las
   // prendas por franja y a veces redondea a mano (140.000), a veces no
@@ -405,6 +410,54 @@ export default function NuevaAtencionPage() {
     } catch { /* tolerar */ }
   }
 
+  // Toca un "ding ding ding" ascendente vía WebAudio (sin asset externo).
+  function playCelebrationSound() {
+    try {
+      const AC = (window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext);
+      if (!AC) return;
+      const ctx = new AC();
+      const now = ctx.currentTime;
+      const notes = [523.25, 659.25, 783.99];
+      notes.forEach((freq, i) => {
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.type = "sine";
+        o.frequency.value = freq;
+        const start = now + i * 0.12;
+        g.gain.setValueAtTime(0, start);
+        g.gain.linearRampToValueAtTime(0.18, start + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, start + 0.35);
+        o.connect(g).connect(ctx.destination);
+        o.start(start);
+        o.stop(start + 0.4);
+      });
+      setTimeout(() => ctx.close().catch(() => { /* ignore */ }), 1500);
+    } catch { /* audio bloqueado */ }
+  }
+
+  // Detectar sucursales que alcanzaron su meta del mes. Cuando aparece
+  // una NUEVA (no vista antes en este navegador → localStorage por
+  // sucursal+mes), pintamos el sticky celebratorio + suena el ding.
+  async function refrescarMetasAlcanzadas() {
+    try {
+      const r = await fetchWithSupabaseSession("/api/notificaciones/metas", { cache: "no-store" });
+      const j = await r.json().catch(() => ({}));
+      const metas = (j?.data?.metas as { sucursal_id: string; nombre: string; pct_meta: number }[] | undefined) ?? [];
+      if (metas.length === 0) return;
+      const now = new Date();
+      const mesKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+      const seenRaw = localStorage.getItem("neura:metas-celebradas") ?? "{}";
+      const seen = JSON.parse(seenRaw) as Record<string, string>;
+      const nueva = metas.find(m => seen[m.sucursal_id] !== mesKey);
+      if (nueva) {
+        setMetaAlcanzada(nueva);
+        playCelebrationSound();
+        seen[nueva.sucursal_id] = mesKey;
+        localStorage.setItem("neura:metas-celebradas", JSON.stringify(seen));
+      }
+    } catch { /* silencioso */ }
+  }
+
   async function refrescarMetaDia() {
     try {
       const r = await fetchWithSupabaseSession("/api/metas", { cache: "no-store" });
@@ -431,6 +484,7 @@ export default function NuevaAtencionPage() {
         refrescarCajaEstado();
         refrescarPendientesIngreso();
         refrescarMetaDia();
+        refrescarMetasAlcanzadas();
         const jf = await rf.json().catch(() => ({}));
         const jc = await rc.json().catch(() => ({}));
         const jt = await rt.json().catch(() => ({}));
@@ -1684,6 +1738,79 @@ export default function NuevaAtencionPage() {
             setCambioDirectoOpen(false);
           }}
         />
+      )}
+
+      {/* ─── Sticky note de meta alcanzada — celebratorio, solo aparece
+             cuando detectamos por primera vez que la sucursal llegó a
+             la meta del mes. Va arriba de los recordatorios. ─── */}
+      {metaAlcanzada && (
+        <aside
+          aria-label="Meta alcanzada"
+          className="fixed top-24 right-6 z-40 w-72 pointer-events-auto"
+          style={{ animation: "metaDrop .5s ease-out" }}
+        >
+          <style>{`
+            @keyframes metaDrop {
+              0% { transform: translateY(-40px) rotate(-6deg); opacity: 0; }
+              60% { transform: translateY(6px) rotate(-2deg); opacity: 1; }
+              100% { transform: translateY(0) rotate(-3deg); opacity: 1; }
+            }
+            @keyframes metaWiggle {
+              0%,100% { transform: rotate(-3deg); }
+              50% { transform: rotate(-1deg); }
+            }
+            .meta-sticky { animation: metaWiggle 3s ease-in-out infinite; }
+          `}</style>
+          <div
+            className="meta-sticky relative bg-gradient-to-br from-yellow-200 via-yellow-100 to-amber-100 border border-amber-300 p-5 pt-6"
+            style={{
+              borderRadius: "2px 2px 14px 2px",
+              boxShadow: "0 15px 35px -5px rgba(146, 64, 14, 0.35), 0 8px 15px -3px rgba(0,0,0,0.1)",
+            }}
+          >
+            {/* Cinta verde arriba */}
+            <span
+              aria-hidden
+              className="absolute -top-2 left-1/2 -translate-x-1/2 h-4 w-16 bg-emerald-400/70 rotate-[-3deg] shadow-sm"
+            />
+            <button
+              type="button"
+              onClick={() => setMetaAlcanzada(null)}
+              className="absolute top-1 right-1 h-6 w-6 rounded-full text-amber-900/60 hover:bg-amber-900/10 hover:text-amber-900 flex items-center justify-center text-lg leading-none font-bold"
+              aria-label="Cerrar"
+            >
+              ×
+            </button>
+            <div className="text-center">
+              <p className="text-lg font-bold text-emerald-900 font-serif">¡Felicidades!</p>
+              <p className="text-sm text-amber-900 mt-1 leading-snug">
+                <strong>{metaAlcanzada.nombre}</strong> alcanzó el{" "}
+                <strong className="tabular-nums">{metaAlcanzada.pct_meta}%</strong>{" "}
+                de la meta del mes.
+              </p>
+              <div className="text-5xl mt-3 leading-none">🎉</div>
+              {/* Dibujito de confetti abajo del emoji */}
+              <svg viewBox="0 0 200 40" className="mx-auto mt-1 w-40 h-10">
+                <g fill="none" strokeWidth={2} strokeLinecap="round">
+                  <path d="M20 25 L28 10" stroke="#f59e0b" />
+                  <path d="M45 30 L52 15" stroke="#10b981" />
+                  <path d="M70 22 L78 8" stroke="#ef4444" />
+                  <path d="M100 32 L108 18" stroke="#3b82f6" />
+                  <path d="M130 22 L138 8" stroke="#f59e0b" />
+                  <path d="M155 30 L162 15" stroke="#10b981" />
+                  <path d="M180 25 L188 10" stroke="#a855f7" />
+                  <circle cx="35" cy="18" r="2" fill="#f59e0b" />
+                  <circle cx="88" cy="20" r="2" fill="#10b981" />
+                  <circle cx="120" cy="14" r="2" fill="#ef4444" />
+                  <circle cx="170" cy="20" r="2" fill="#3b82f6" />
+                </g>
+              </svg>
+              <p className="text-[11px] text-amber-800/80 mt-2 italic">
+                ¡Gran trabajo del equipo!
+              </p>
+            </div>
+          </div>
+        </aside>
       )}
 
       {/* ─── Sticky notes: recordatorios contextuales al armar el ticket ─── */}
