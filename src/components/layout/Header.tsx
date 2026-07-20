@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Bell, ChevronDown, LogOut, Menu } from "lucide-react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { signOut } from "@/lib/auth";
+import { initNotifSounds, playCelebrationSound, playNotifSound } from "@/lib/audio/notif-sounds";
 
 type HeaderUsuario = {
   nombre: string | null;
@@ -58,31 +59,6 @@ type NotifMeta = {
   meta_periodo: number;
 };
 
-// Sonido corto tipo "bloop" para notificaciones no-celebratorias
-// (recepción pendiente nueva). Dos notas descendentes suaves.
-function playNotifSound() {
-  try {
-    const AC = (window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext);
-    if (!AC) return;
-    const ctx = new AC();
-    const now = ctx.currentTime;
-    const notes = [880, 660];
-    notes.forEach((freq, i) => {
-      const o = ctx.createOscillator();
-      const g = ctx.createGain();
-      o.type = "sine";
-      o.frequency.value = freq;
-      const start = now + i * 0.09;
-      g.gain.setValueAtTime(0, start);
-      g.gain.linearRampToValueAtTime(0.12, start + 0.02);
-      g.gain.exponentialRampToValueAtTime(0.0001, start + 0.22);
-      o.connect(g).connect(ctx.destination);
-      o.start(start);
-      o.stop(start + 0.25);
-    });
-    setTimeout(() => ctx.close().catch(() => { /* ignore */ }), 800);
-  } catch { /* audio bloqueado */ }
-}
 
 
 export default function Header({ onOpenMobileSidebar }: HeaderProps = {}) {
@@ -100,6 +76,8 @@ export default function Header({ onOpenMobileSidebar }: HeaderProps = {}) {
   const [notifMetas, setNotifMetas] = useState<NotifMeta[]>([]);
 
   useEffect(() => {
+    // Inicia el "unlock" de WebAudio (una sola vez global).
+    initNotifSounds();
     function handleClickOutside(e: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setUserMenuOpen(false);
@@ -239,11 +217,35 @@ export default function Header({ onOpenMobileSidebar }: HeaderProps = {}) {
           </button>
           {notifOpen && (
             <div className="absolute right-0 mt-2 w-80 rounded-xl border border-slate-200 bg-white shadow-2xl overflow-hidden z-50">
-              <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+              <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-2">
                 <h4 className="text-sm font-bold text-slate-800">Notificaciones</h4>
-                {totalNotif > 0 && (
-                  <span className="text-[11px] text-slate-500 font-semibold">{totalNotif} nuevas</span>
-                )}
+                <div className="flex items-center gap-2">
+                  {totalNotif > 0 && (
+                    <span className="text-[11px] text-slate-500 font-semibold">{totalNotif} nuevas</span>
+                  )}
+                  {/* Botón de test: dispara el mismo sonido que llegaría con
+                      una notificación nueva. Como el click desbloquea el
+                      AudioContext, el segundo click (si querés celebrar)
+                      ya suena a 🎉. */}
+                  <button
+                    type="button"
+                    onClick={() => playNotifSound()}
+                    title="Probar sonido de notificación"
+                    className="rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 px-1.5 py-0.5 text-xs"
+                    aria-label="Probar sonido"
+                  >
+                    🔊
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => playCelebrationSound()}
+                    title="Probar sonido de meta alcanzada"
+                    className="rounded-md border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 px-1.5 py-0.5 text-xs"
+                    aria-label="Probar sonido celebratorio"
+                  >
+                    🎉
+                  </button>
+                </div>
               </div>
 
               {/* ═════ Metas alcanzadas — sticky note verde adentro del bell ═════ */}

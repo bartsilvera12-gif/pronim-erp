@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
+import { playCelebrationSound } from "@/lib/audio/notif-sounds";
 import MontoInput from "@/components/ui/MontoInput";
 import {
   ALERTAS_DEFAULTS,
@@ -410,30 +411,8 @@ export default function NuevaAtencionPage() {
     } catch { /* tolerar */ }
   }
 
-  // Toca un "ding ding ding" ascendente vía WebAudio (sin asset externo).
-  function playCelebrationSound() {
-    try {
-      const AC = (window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext);
-      if (!AC) return;
-      const ctx = new AC();
-      const now = ctx.currentTime;
-      const notes = [523.25, 659.25, 783.99];
-      notes.forEach((freq, i) => {
-        const o = ctx.createOscillator();
-        const g = ctx.createGain();
-        o.type = "sine";
-        o.frequency.value = freq;
-        const start = now + i * 0.12;
-        g.gain.setValueAtTime(0, start);
-        g.gain.linearRampToValueAtTime(0.18, start + 0.02);
-        g.gain.exponentialRampToValueAtTime(0.0001, start + 0.35);
-        o.connect(g).connect(ctx.destination);
-        o.start(start);
-        o.stop(start + 0.4);
-      });
-      setTimeout(() => ctx.close().catch(() => { /* ignore */ }), 1500);
-    } catch { /* audio bloqueado */ }
-  }
+  // Sonido celebratorio compartido — usa el AudioContext global
+  // desbloqueado en la primera interacción.
 
   // Detectar sucursales que alcanzaron su meta del mes. Cuando aparece
   // una NUEVA (no vista antes en este navegador → localStorage por
