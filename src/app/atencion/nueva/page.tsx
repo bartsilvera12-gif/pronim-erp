@@ -1803,7 +1803,7 @@ export default function NuevaAtencionPage() {
       {(metaAlcanzada || pendientesIngresoCount > 0 || (cliente && alertasDisparadas.length > 0)) && (
         <aside
           aria-label="Recordatorios"
-          className="hidden xl:flex fixed top-24 right-6 z-30 flex-col gap-4 w-72 max-h-[calc(100vh-8rem)] overflow-y-auto pr-1 pointer-events-none"
+          className="hidden xl:flex fixed top-24 right-6 z-30 flex-col gap-4 w-72 max-h-[calc(100vh-8rem)] overflow-y-auto overflow-x-hidden py-2 pr-1 pointer-events-none"
         >
           {/* ── 1) Meta alcanzada ── */}
           {metaAlcanzada && (

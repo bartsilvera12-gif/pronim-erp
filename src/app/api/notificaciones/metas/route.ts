@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
            FROM ${ventasT} v
            WHERE v.empresa_id = $1
              AND v.fecha::date = CURRENT_DATE
-             AND COALESCE(v.estado,'confirmada') = 'confirmada'
+             AND v.estado IN ('pendiente','completada')
            GROUP BY v.sucursal_id
          )
          SELECT s.id::text AS sucursal_id, s.nombre,
