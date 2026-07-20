@@ -40,6 +40,8 @@ export default function PendientesIngresoPage() {
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [ingresandoId, setIngresandoId] = useState<string | null>(null);
+  // Modal de preview antes de ingresar: muestra items + margen estimado.
+  const [previewId, setPreviewId] = useState<string | null>(null);
 
   async function cargar() {
     setError(null); setCargando(true);
@@ -144,11 +146,11 @@ export default function PendientesIngresoPage() {
                     <td className="px-4 py-3 text-right">
                       <button
                         type="button"
-                        onClick={() => ingresar(r)}
+                        onClick={() => setPreviewId(r.id)}
                         disabled={ingresandoId === r.id}
                         className="rounded-lg bg-[#4FAEB2] hover:bg-[#3F8E91] disabled:opacity-50 text-white text-xs font-semibold px-3 py-1.5"
                       >
-                        {ingresandoId === r.id ? "Ingresando…" : "Ingresar al stock"}
+                        {ingresandoId === r.id ? "Ingresando…" : "Revisar e ingresar"}
                       </button>
                     </td>
                   </tr>
@@ -158,6 +160,237 @@ export default function PendientesIngresoPage() {
           </table>
         )}
       </div>
+
+      {/* Modal de preview con margen esperado */}
+      {previewId && (
+        <PreviewIngresoModal
+          recepcionId={previewId}
+          onClose={() => setPreviewId(null)}
+          onConfirmar={async (cliId) => {
+            setIngresandoId(previewId);
+            setPreviewId(null);
+            try {
+              const rr = await fetchWithSupabaseSession(
+                `/api/clientes/${cliId}/recepciones/${previewId}/ingresar`,
+                { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" },
+              );
+              const j = await rr.json().catch(() => ({}));
+              if (!rr.ok || j?.success === false) throw new Error(j?.error ?? `Error ${rr.status}`);
+              cargar();
+            } catch (e) {
+              setError(e instanceof Error ? e.message : "No se pudo ingresar la recepción.");
+            } finally {
+              setIngresandoId(null);
+            }
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Modal: preview del ingreso al stock con cálculo de MARGEN esperado.
+// ─────────────────────────────────────────────────────────────────────
+
+type PreviewItem = {
+  id: string; producto_id: string; producto_nombre: string; sku: string | null;
+  tipo_nombre: string | null; cantidad: number;
+  costo_unit: number; venta_unit: number;
+  margen_unit: number; margen_pct: number | null;
+  costo_total: number; venta_total: number; margen_total: number;
+};
+
+type PreviewPayload = {
+  recepcion: {
+    id: string; numero_control: string; fecha: string; estado: string;
+    cliente_id: string; cliente_nombre: string;
+    sucursal_id: string; sucursal_nombre: string;
+    total_final: number | null; ajuste_evaluacion: number;
+  };
+  items: PreviewItem[];
+  totales: {
+    prendas: number; costo_total: number;
+    venta_total_esperada: number; margen_bruto_esperado: number;
+    margen_pct_esperado: number | null;
+  };
+};
+
+function PreviewIngresoModal({
+  recepcionId,
+  onClose,
+  onConfirmar,
+}: {
+  recepcionId: string;
+  onClose: () => void;
+  onConfirmar: (clienteId: string) => void;
+}) {
+  const [data, setData] = useState<PreviewPayload | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+  const [confirmando, setConfirmando] = useState(false);
+
+  useEffect(() => {
+    let cancel = false;
+    setLoading(true);
+    fetchWithSupabaseSession(`/api/recepciones/${recepcionId}/preview`, { cache: "no-store" })
+      .then(r => r.json())
+      .then(j => {
+        if (cancel) return;
+        if (!j?.success) throw new Error(j?.error ?? "Error");
+        setData(j.data as PreviewPayload);
+      })
+      .catch(e => setErr(e instanceof Error ? e.message : "Error"))
+      .finally(() => { if (!cancel) setLoading(false); });
+    return () => { cancel = true; };
+  }, [recepcionId]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <div className="w-full max-w-4xl max-h-[90vh] overflow-hidden rounded-2xl bg-white shadow-xl flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 shrink-0">
+          <div>
+            <h3 className="text-base font-bold text-slate-800">Revisar antes de ingresar al stock</h3>
+            {data && (
+              <p className="text-xs text-slate-500 mt-0.5">
+                {data.recepcion.numero_control} · {data.recepcion.cliente_nombre} · {data.recepcion.sucursal_nombre}
+              </p>
+            )}
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-700 text-2xl leading-none">×</button>
+        </div>
+
+        <div className="overflow-auto flex-1 p-5">
+          {loading && !data && <p className="py-8 text-center text-sm text-slate-400">Cargando detalle…</p>}
+          {err && <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{err}</div>}
+          {data && (
+            <>
+              {/* Bloque destacado: margen esperado */}
+              <div className="rounded-xl border-2 border-emerald-200 bg-gradient-to-br from-emerald-50 to-slate-50 p-4 mb-4">
+                <h4 className="text-xs uppercase font-bold text-emerald-800 mb-3">
+                  Margen de ganancia estimado si se vende TODO al precio de la franja
+                </h4>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <MarginStat label="Prendas" value={data.totales.prendas.toLocaleString("es-PY")} />
+                  <MarginStat
+                    label="Costo (evaluación)"
+                    value={"Gs. " + data.totales.costo_total.toLocaleString("es-PY")}
+                    valueClass="text-slate-800"
+                  />
+                  <MarginStat
+                    label="Venta esperada"
+                    value={"Gs. " + data.totales.venta_total_esperada.toLocaleString("es-PY")}
+                    valueClass="text-sky-800"
+                  />
+                  <MarginStat
+                    label="Margen bruto"
+                    value={"Gs. " + data.totales.margen_bruto_esperado.toLocaleString("es-PY")}
+                    valueClass={data.totales.margen_bruto_esperado >= 0 ? "text-emerald-800" : "text-rose-800"}
+                    sub={data.totales.margen_pct_esperado != null ? `${data.totales.margen_pct_esperado}% margen` : "—"}
+                  />
+                </div>
+                {data.recepcion.ajuste_evaluacion !== 0 && (
+                  <p className="mt-3 text-[11px] text-slate-500">
+                    Nota: la evaluación tuvo un ajuste manual de{" "}
+                    <strong className={data.recepcion.ajuste_evaluacion > 0 ? "text-emerald-700" : "text-rose-700"}>
+                      {data.recepcion.ajuste_evaluacion > 0 ? "+" : ""}Gs. {data.recepcion.ajuste_evaluacion.toLocaleString("es-PY")}
+                    </strong>.
+                  </p>
+                )}
+              </div>
+
+              {/* Tabla de items */}
+              <table className="w-full text-xs border border-slate-200 rounded-lg overflow-hidden">
+                <thead className="bg-slate-50 text-left text-[10px] uppercase text-slate-500">
+                  <tr>
+                    <th className="px-3 py-2">Franja / prenda</th>
+                    <th className="px-3 py-2">Tipo</th>
+                    <th className="px-3 py-2 text-right">Cant.</th>
+                    <th className="px-3 py-2 text-right">Costo unit.</th>
+                    <th className="px-3 py-2 text-right">Venta unit.</th>
+                    <th className="px-3 py-2 text-right">Margen unit.</th>
+                    <th className="px-3 py-2 text-right">Total costo</th>
+                    <th className="px-3 py-2 text-right">Total venta</th>
+                    <th className="px-3 py-2 text-right">Margen tot.</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {data.items.map(it => (
+                    <tr key={it.id}>
+                      <td className="px-3 py-2">
+                        <div className="font-medium text-slate-800 truncate max-w-[180px]">{it.producto_nombre}</div>
+                        {it.sku && <div className="text-[10px] text-slate-400">{it.sku}</div>}
+                      </td>
+                      <td className="px-3 py-2 text-slate-500">{it.tipo_nombre ?? "—"}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{it.cantidad}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-slate-700">
+                        {"Gs. " + it.costo_unit.toLocaleString("es-PY")}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums text-sky-700">
+                        {"Gs. " + it.venta_unit.toLocaleString("es-PY")}
+                      </td>
+                      <td className={`px-3 py-2 text-right tabular-nums font-semibold ${it.margen_unit >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
+                        {"Gs. " + it.margen_unit.toLocaleString("es-PY")}
+                        {it.margen_pct != null && (
+                          <div className="text-[10px] font-normal opacity-70">{it.margen_pct}%</div>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums">
+                        {"Gs. " + it.costo_total.toLocaleString("es-PY")}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums">
+                        {"Gs. " + it.venta_total.toLocaleString("es-PY")}
+                      </td>
+                      <td className={`px-3 py-2 text-right tabular-nums font-bold ${it.margen_total >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
+                        {"Gs. " + it.margen_total.toLocaleString("es-PY")}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              <p className="mt-3 text-[11px] text-slate-500">
+                El precio de venta es el de la franja de precio al momento de la recepción. El margen
+                real puede variar si vendés con descuento, cashback o alguna forma de pago con costo.
+                Los precios de venta se editan desde el catálogo de franjas, no acá.
+              </p>
+            </>
+          )}
+        </div>
+
+        <div className="border-t border-slate-100 px-5 py-3 flex items-center justify-end gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={confirmando}
+            className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+          >Cancelar</button>
+          <button
+            type="button"
+            onClick={() => {
+              if (!data) return;
+              setConfirmando(true);
+              onConfirmar(data.recepcion.cliente_id);
+            }}
+            disabled={!data || confirmando || loading}
+            className="rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-sm font-semibold px-5 py-2 shadow-sm"
+          >
+            {confirmando ? "Ingresando…" : "Confirmar ingreso al stock"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MarginStat({ label, value, sub, valueClass }: {
+  label: string; value: string; sub?: string; valueClass?: string;
+}) {
+  return (
+    <div>
+      <p className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold">{label}</p>
+      <p className={`mt-0.5 text-lg font-bold tabular-nums ${valueClass ?? "text-slate-800"}`}>{value}</p>
+      {sub && <p className="text-[11px] text-slate-500 mt-0.5">{sub}</p>}
     </div>
   );
 }
