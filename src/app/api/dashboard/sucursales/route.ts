@@ -129,15 +129,18 @@ export async function GET(request: NextRequest) {
         `WITH primera_visita AS (
            SELECT cliente_id, MIN(fecha) AS primera
            FROM (
-             SELECT cliente_id, fecha FROM ${cambiosT} c
-               LEFT JOIN ${recepT} r ON r.id = c.recepcion_id
-               WHERE c.empresa_id = $1 AND c.estado = 'confirmado' AND c.cliente_id IS NOT NULL
+             -- cambios: cliente_id y fecha vienen del cambio + recepción
+             SELECT c.cliente_id AS cliente_id, COALESCE(r.fecha, v.fecha) AS fecha
+             FROM ${cambiosT} c
+             LEFT JOIN ${recepT} r ON r.id = c.recepcion_id
+             LEFT JOIN ${ventasT} v ON v.id = c.venta_id
+             WHERE c.empresa_id = $1 AND c.estado = 'confirmado' AND c.cliente_id IS NOT NULL
              UNION ALL
-             SELECT cliente_id, fecha FROM ${recepT}
-               WHERE empresa_id = $1 AND estado <> 'anulada' AND cambio_id IS NULL AND cliente_id IS NOT NULL
+             SELECT r2.cliente_id, r2.fecha FROM ${recepT} r2
+             WHERE r2.empresa_id = $1 AND r2.estado <> 'anulada' AND r2.cambio_id IS NULL AND r2.cliente_id IS NOT NULL
              UNION ALL
-             SELECT cliente_id, fecha FROM ${ventasT}
-               WHERE empresa_id = $1 AND estado IN ('pendiente','completada') AND cambio_id IS NULL AND cliente_id IS NOT NULL
+             SELECT v2.cliente_id, v2.fecha FROM ${ventasT} v2
+             WHERE v2.empresa_id = $1 AND v2.estado IN ('pendiente','completada') AND v2.cambio_id IS NULL AND v2.cliente_id IS NOT NULL
            ) x
            GROUP BY cliente_id
          ),
