@@ -13,9 +13,10 @@ export const dynamic = "force-dynamic";
 /**
  * GET /api/notificaciones/metas
  *
- * Endpoint liviano usado por el bell del Header. Devuelve las sucursales
- * que ALCANZARON su meta del mes en curso (pct_meta >= 100). Se computa
- * el mes calendario actual (día 1 → hoy) contra `monto_meta_diaria`.
+ * Endpoint liviano para notificaciones (bell del Header + sticky en la
+ * caja). Devuelve las sucursales que ALCANZARON su meta DIARIA de HOY
+ * (vendido_hoy vs monto_meta_diaria, pct >= 100). Ronda por día para
+ * que la celebración se dispare cada vez que se llega a la meta.
  *
  * Respuesta:
  *   { metas: [{ sucursal_id, nombre, pct_meta, vendido, meta_periodo }] }
@@ -44,11 +45,7 @@ export async function GET(request: NextRequest) {
     const client = await pool.connect();
     try {
       const q = await client.query(
-        `WITH periodo AS (
-           SELECT date_trunc('month', CURRENT_DATE)::date AS desde,
-                  CURRENT_DATE AS hasta
-         ),
-         suc AS (
+        `WITH suc AS (
            SELECT s.id, s.nombre
            FROM ${sucT} s
            WHERE s.empresa_id = $1 AND COALESCE(s.activo, true) = true
@@ -58,22 +55,21 @@ export async function GET(request: NextRequest) {
            SELECT s.id AS sucursal_id,
              (SELECT monto_meta_diaria FROM ${metasT} m
                WHERE m.empresa_id = $1 AND m.sucursal_id = s.id AND m.activo = true
-                 AND m.vigente_desde <= (SELECT hasta FROM periodo)
+                 AND m.vigente_desde <= CURRENT_DATE
                ORDER BY m.vigente_desde DESC LIMIT 1) AS meta_diaria
            FROM suc s
          ),
          vend AS (
            SELECT v.sucursal_id, COALESCE(SUM(v.total),0)::numeric AS vendido
-           FROM ${ventasT} v, periodo p
+           FROM ${ventasT} v
            WHERE v.empresa_id = $1
-             AND v.fecha::date BETWEEN p.desde AND p.hasta
+             AND v.fecha::date = CURRENT_DATE
              AND COALESCE(v.estado,'confirmada') = 'confirmada'
            GROUP BY v.sucursal_id
          )
          SELECT s.id::text AS sucursal_id, s.nombre,
                 COALESCE(v.vendido,0)::text AS vendido,
-                m.meta_diaria::text AS meta_diaria,
-                ((SELECT hasta FROM periodo) - (SELECT desde FROM periodo) + 1)::text AS dias
+                m.meta_diaria::text AS meta_diaria
          FROM suc s
          LEFT JOIN meta m ON m.sucursal_id = s.id
          LEFT JOIN vend v ON v.sucursal_id = s.id
@@ -82,16 +78,16 @@ export async function GET(request: NextRequest) {
       );
 
       const metas = q.rows
-        .map((r: { sucursal_id: string; nombre: string; vendido: string; meta_diaria: string; dias: string }) => {
+        .map((r: { sucursal_id: string; nombre: string; vendido: string; meta_diaria: string }) => {
           const vendido = Number(r.vendido);
-          const meta_periodo = Number(r.meta_diaria) * Number(r.dias);
-          const pct_meta = meta_periodo > 0 ? Math.round((vendido / meta_periodo) * 100) : 0;
+          const meta_diaria = Number(r.meta_diaria);
+          const pct_meta = meta_diaria > 0 ? Math.round((vendido / meta_diaria) * 100) : 0;
           return {
             sucursal_id: r.sucursal_id,
             nombre: r.nombre,
             pct_meta,
             vendido,
-            meta_periodo,
+            meta_periodo: meta_diaria,
           };
         })
         .filter(m => m.pct_meta >= 100);

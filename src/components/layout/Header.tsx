@@ -215,7 +215,7 @@ export default function Header({ onOpenMobileSidebar }: HeaderProps = {}) {
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-bold text-emerald-900">¡Felicidades!</p>
                       <p className="text-xs text-emerald-800 mt-0.5 leading-tight">
-                        <strong>{m.nombre}</strong> alcanzó el <strong>{m.pct_meta}%</strong> de la meta del mes.
+                        <strong>{m.nombre}</strong> alcanzó el <strong>{m.pct_meta}%</strong> de la meta del día.
                       </p>
                     </div>
                   </div>

@@ -445,14 +445,14 @@ export default function NuevaAtencionPage() {
       const metas = (j?.data?.metas as { sucursal_id: string; nombre: string; pct_meta: number }[] | undefined) ?? [];
       if (metas.length === 0) return;
       const now = new Date();
-      const mesKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+      const diaKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
       const seenRaw = localStorage.getItem("neura:metas-celebradas") ?? "{}";
       const seen = JSON.parse(seenRaw) as Record<string, string>;
-      const nueva = metas.find(m => seen[m.sucursal_id] !== mesKey);
+      const nueva = metas.find(m => seen[m.sucursal_id] !== diaKey);
       if (nueva) {
         setMetaAlcanzada(nueva);
         playCelebrationSound();
-        seen[nueva.sucursal_id] = mesKey;
+        seen[nueva.sucursal_id] = diaKey;
         localStorage.setItem("neura:metas-celebradas", JSON.stringify(seen));
       }
     } catch { /* silencioso */ }
@@ -513,6 +513,14 @@ export default function NuevaAtencionPage() {
       }
     })();
     return () => { cancel = true; };
+  }, []);
+
+  // Poll periódico de metas alcanzadas — cada 2 min. Permite que la
+  // celebración salte durante el día aunque la caja ya esté abierta.
+  useEffect(() => {
+    const t = setInterval(() => { refrescarMetasAlcanzadas(); }, 120_000);
+    return () => clearInterval(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Cargar saldo de crédito al elegir cliente
@@ -1016,6 +1024,8 @@ export default function NuevaAtencionPage() {
       refrescarPendientesIngreso();
       // Actualizar el chip de meta del día — la venta que acaba de entrar suma.
       refrescarMetaDia();
+      // Chequear si esta venta cruzó la meta diaria → dispara sticky celebratorio.
+      refrescarMetasAlcanzadas();
       // recargar saldo de crédito
       const rc = await fetchWithSupabaseSession(`/api/clientes/${cliente.id}/creditos`, { cache: "no-store" });
       const jcr = await rc.json().catch(() => ({}));
@@ -1869,7 +1879,7 @@ export default function NuevaAtencionPage() {
               <p className="text-sm text-amber-900 mt-1 leading-snug">
                 <strong>{metaAlcanzada.nombre}</strong> alcanzó el{" "}
                 <strong className="tabular-nums">{metaAlcanzada.pct_meta}%</strong>{" "}
-                de la meta del mes.
+                de la meta del día.
               </p>
               <div className="text-5xl mt-3 leading-none">🎉</div>
               {/* Dibujito de confetti abajo del emoji */}

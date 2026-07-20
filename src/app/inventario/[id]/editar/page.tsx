@@ -1015,33 +1015,6 @@ export default function EditarProductoPage() {
                 />
                 Activo <span className="text-xs text-slate-400">(disponible para vender)</span>
               </label>
-              {isAdmin && (
-                <label className="flex items-center gap-2 text-sm text-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={visibleWeb}
-                    onChange={(e) => setVisibleWeb(e.target.checked)}
-                    className="h-4 w-4 rounded border-slate-300 text-[#4FAEB2] focus:ring-[#4FAEB2]"
-                  />
-                  Visible en web <span className="text-xs text-slate-400">(catálogo público)</span>
-                </label>
-              )}
-              {isAdmin && (
-                <label className="flex items-center gap-2 text-sm text-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={destacadoWeb}
-                    onChange={(e) => setDestacadoWeb(e.target.checked)}
-                    className="h-4 w-4 rounded border-slate-300 text-[#4FAEB2] focus:ring-[#4FAEB2]"
-                  />
-                  Destacado <span className="text-xs text-slate-400">(home &quot;Más vendidas&quot;)</span>
-                </label>
-              )}
-              {!isAdmin && (
-                <p className="col-span-full text-xs text-slate-500 italic">
-                  La visibilidad en la página web pública solo la modifica el administrador.
-                </p>
-              )}
             </div>
           </div>
 
