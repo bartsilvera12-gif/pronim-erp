@@ -573,17 +573,44 @@ function FranjaCombobox({
   const [q, setQ] = useState("");
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
+  // Popover posicionado como `fixed` porque el <ul> padre en el modal
+  // tiene overflow-y-auto y clipeaba el desplegable adentro. Guardamos
+  // top/left/width calculados desde el bounding rect del trigger.
+  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
+
+  const recalcPos = () => {
+    const el = rootRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    setPos({ top: r.bottom + 4, left: r.left, width: Math.max(r.width, 220) });
+  };
 
   // Cerrar al hacer click fuera.
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
+      const t = e.target as Node;
+      if (rootRef.current?.contains(t)) return;
+      if (popRef.current?.contains(t)) return;
+      setOpen(false);
     };
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  // Recalcular posición si el layout cambia (scroll interno del modal,
+  // resize, o simplemente al abrir).
+  useEffect(() => {
+    if (!open) return;
+    recalcPos();
+    const onWinChange = () => recalcPos();
+    window.addEventListener("resize", onWinChange);
+    window.addEventListener("scroll", onWinChange, true);
+    return () => {
+      window.removeEventListener("resize", onWinChange);
+      window.removeEventListener("scroll", onWinChange, true);
+    };
   }, [open]);
 
   // Autofocus del input cuando abre.
@@ -632,9 +659,14 @@ function FranjaCombobox({
         </svg>
       </button>
 
-      {/* Popover: buscador + lista */}
-      {open && (
-        <div className="absolute z-30 mt-1 left-0 right-0 min-w-[220px] rounded-xl border border-slate-200 bg-white shadow-2xl overflow-hidden">
+      {/* Popover: buscador + lista. `fixed` para escapar del overflow del
+          <ul> padre del modal. */}
+      {open && pos && (
+        <div
+          ref={popRef}
+          className="fixed z-[70] rounded-xl border border-slate-200 bg-white shadow-2xl overflow-hidden"
+          style={{ top: pos.top, left: pos.left, width: pos.width }}
+        >
           <div className="p-2 border-b border-slate-100 sticky top-0 bg-white">
             <input
               ref={inputRef}
