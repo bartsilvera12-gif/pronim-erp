@@ -101,6 +101,13 @@ export default function NuevaAtencionPage() {
 
   // Modal "Cambio directo": prenda por otra del mismo precio, sin dinero de por medio.
   const [cambioDirectoOpen, setCambioDirectoOpen] = useState(false);
+  // Carga rápida por MONTO: para cuando la cajera evalúa "más o menos"
+  // ("trae 15 prendas por Gs. 1.000.000"). Genera N unidades prorrateadas
+  // usando la franja cuyo precio se parezca más al costo unitario.
+  // Después se ajusta franja-por-franja en /atencion/pendientes-ingreso.
+  const [cargaRapidaOpen, setCargaRapidaOpen] = useState(false);
+  const [cargaRapidaCantidad, setCargaRapidaCantidad] = useState<string>("");
+  const [cargaRapidaMonto, setCargaRapidaMonto] = useState<string>("");
 
   // Override manual del monto a pagar por la recepción — la cajera evalúa las
   // prendas por franja y a veces redondea a mano (140.000), a veces no
@@ -125,7 +132,10 @@ export default function NuevaAtencionPage() {
   // Default true: la mercadería que trae el cliente entra al stock ahora
   // mismo. Si la cajera tiene que catalogar/etiquetar después, puede
   // destildar y la recepción queda pendiente de ingreso.
-  const [ingresarAlStock, setIngresarAlStock] = useState<boolean>(true);
+  // Por default NO se ingresa al stock automáticamente — la cajera evalúa
+  // rápido en caja y después detalla franja por franja en la bandeja de
+  // recepciones pendientes (/atencion/pendientes-ingreso).
+  const [ingresarAlStock, setIngresarAlStock] = useState<boolean>(false);
 
   // ── Meta del día ────────────────────────────────────────────────────
   const [metaDia, setMetaDia] = useState<{ meta_diaria: number; vendido_dia: number; pct: number } | null>(null);
@@ -571,6 +581,37 @@ export default function NuevaAtencionPage() {
         return [...prev, nueva];
       });
     }
+  }
+
+  // Carga rápida por MONTO: crea N unidades prorrateadas usando la franja
+  // cuyo precio_venta esté más cerca del costo unitario resultante. La
+  // cajera detalla las franjas reales después en /atencion/pendientes-ingreso.
+  function cargarRapidoPorMonto(cantidad: number, monto: number) {
+    if (!(cantidad > 0) || !(monto > 0) || franjas.length === 0) return;
+    const costoUnit = Math.round(monto / cantidad);
+    // Elegimos la franja cuyo precio_venta sea el más cercano al costo_unit
+    // — así el margen inicial en la UI es razonable (no muy positivo ni muy
+    // negativo). Después la cajera lo ajusta al ingresar al stock.
+    const mejor = franjas.reduce((acc, f) => {
+      const diff = Math.abs(Number(f.precio_venta) - costoUnit);
+      if (acc == null || diff < acc.diff) return { franja: f, diff };
+      return acc;
+    }, null as null | { franja: typeof franjas[number]; diff: number });
+    if (!mejor) return;
+    const nueva: Linea = {
+      franja_id: mejor.franja.id,
+      precio_referencia: Number(mejor.franja.precio_venta) || 0,
+      precio_unitario: costoUnit,
+      cantidad,
+      tipo_prenda_id: null,
+    };
+    setTrae((prev) => [...prev, nueva]);
+    // También ajustamos el "monto final" para que el total cierre exacto
+    // aunque el costoUnit sea round().
+    setTraeMontoFinal(String(monto));
+    setCargaRapidaOpen(false);
+    setCargaRapidaCantidad("");
+    setCargaRapidaMonto("");
   }
 
   // Cambio directo: agrega la MISMA franja a TRAE y LLEVA a la vez.
@@ -1194,14 +1235,79 @@ export default function NuevaAtencionPage() {
           permitirEditarPrecio
           tiposPrenda={tiposPrenda}
           accionesHeader={
-            <button
-              type="button"
-              onClick={() => setCambioDirectoOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-md border border-emerald-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-50"
-              title="Cliente cambia una prenda por otra del mismo precio, sin pagar diferencia"
-            >
-              ⇄ Cambio directo
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setCambioDirectoOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-md border border-emerald-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-50"
+                title="Cliente cambia una prenda por otra del mismo precio, sin pagar diferencia"
+              >
+                ⇄ Cambio directo
+              </button>
+              <button
+                type="button"
+                onClick={() => setCargaRapidaOpen(v => !v)}
+                className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] font-semibold ${
+                  cargaRapidaOpen
+                    ? "border-emerald-500 bg-emerald-500 text-white"
+                    : "border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-50"
+                }`}
+                title="Cargar N prendas por un monto total sin elegir franja"
+              >
+                ⚡ Carga rápida
+              </button>
+              {cargaRapidaOpen && (
+                <div className="w-full mt-2 rounded-lg border border-emerald-300 bg-emerald-50/70 p-3">
+                  <p className="text-[11px] text-emerald-900 mb-2">
+                    Ingresá <strong>cuántas prendas</strong> trae y el <strong>monto total</strong> que le pagás.
+                    Se crearán N unidades prorrateadas; después ajustás las franjas al ingresar al stock.
+                  </p>
+                  <div className="flex flex-wrap items-end gap-2">
+                    <div>
+                      <label className="block text-[10px] uppercase font-semibold text-emerald-800">Cantidad</label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={cargaRapidaCantidad}
+                        onChange={(e) => setCargaRapidaCantidad(e.target.value)}
+                        placeholder="Ej: 15"
+                        className="w-24 rounded-md border border-emerald-300 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] uppercase font-semibold text-emerald-800">Monto total (Gs.)</label>
+                      <MontoInput
+                        value={cargaRapidaMonto === "" ? 0 : Number(cargaRapidaMonto) || 0}
+                        onChange={(n) => setCargaRapidaMonto(String(n))}
+                        decimals={false}
+                        placeholder="Ej: 1.000.000"
+                        className="w-36 rounded-md border border-emerald-300 px-2 py-1 text-sm text-right font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const n = parseInt(cargaRapidaCantidad, 10);
+                        const m = Number(cargaRapidaMonto) || 0;
+                        if (!(n > 0) || !(m > 0)) return;
+                        cargarRapidoPorMonto(n, m);
+                      }}
+                      disabled={!(parseInt(cargaRapidaCantidad, 10) > 0) || !((Number(cargaRapidaMonto) || 0) > 0)}
+                      className="rounded-md bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white text-xs font-semibold px-3 py-1.5"
+                    >
+                      Cargar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCargaRapidaOpen(false)}
+                      className="text-[11px] text-slate-500 hover:text-slate-700 underline"
+                    >
+                      cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           }
           slotDebajo={
             trae.length > 0 ? (
