@@ -1161,7 +1161,42 @@ export default function NuevaAtencionPage() {
         )
       )}
 
-      {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+      {error && (() => {
+        // Detectamos errores de stock para darles un tratamiento
+        // visual con jerarquía (título + detalle + hint accionable).
+        // Cualquier otro error usa el layout genérico.
+        const esStock = /sin stock|stock insuficiente/i.test(error);
+        const skuMatch = error.match(/\[SKU\s+([^\]]+)\]/i);
+        const cuerpo = skuMatch ? error.replace(skuMatch[0], "").trim() : error;
+        return (
+          <div className="rounded-xl border border-rose-200 bg-gradient-to-br from-rose-50 to-red-50/50 px-4 py-3 shadow-sm">
+            <div className="flex items-start gap-3">
+              <div className="h-9 w-9 shrink-0 rounded-lg bg-rose-500 text-white flex items-center justify-center shadow-sm">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} className="h-5 w-5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m0 3.75h.007v.008H12v-.008ZM12 4c-4 5-6 8-6 11a6 6 0 0 0 12 0c0-3-2-6-6-11Z" />
+                </svg>
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-bold text-rose-900">
+                  {esStock ? "No hay stock suficiente para cerrar la venta" : "No pudimos confirmar la atención"}
+                </p>
+                <p className="text-sm text-rose-800 mt-0.5 leading-snug">{cuerpo}</p>
+                {skuMatch && (
+                  <p className="text-[11px] text-rose-700/70 mt-1 font-mono">SKU {skuMatch[1]}</p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setError(null)}
+                className="text-rose-500 hover:text-rose-700 text-lg leading-none px-1"
+                aria-label="Cerrar aviso"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+        );
+      })()}
       {okMsg && <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{okMsg}</div>}
 
 
