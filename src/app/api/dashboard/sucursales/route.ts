@@ -7,6 +7,12 @@ import { assertAllowedChatDataSchema } from "@/lib/supabase/chat-data-schema";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
 
+// El endpoint arma ~10 queries agregadas contra tablas grandes; con el
+// volumen de la empresa puede tardar más que los 10s default de Vercel.
+// 60s es el máximo del plan actual y evita los HTTP 502 por timeout.
+export const maxDuration = 60;
+export const dynamic = "force-dynamic";
+
 /**
  * GET /api/dashboard/sucursales?desde=YYYY-MM-DD&hasta=YYYY-MM-DD&sucursal_id=...
  *

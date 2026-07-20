@@ -54,36 +54,45 @@ export default function DashClientes({ desde, hasta }: { desde: string; hasta: s
 
   const cargar = useCallback(async () => {
     setLoading(true); setErr(null);
-    try {
+    // Retry silencioso ante 502/503/504 o abort (cold start Vercel).
+    const attempt = async (): Promise<Payload> => {
       const params = new URLSearchParams({ desde, hasta });
       if (q.trim()) params.set("q", q.trim());
       if (segmento) params.set("segmento", segmento);
       const url = `/api/dashboard/clientes?${params.toString()}`;
-      // Timeout duro para no dejar la vista en "Cargando…" eterno si el
-      // endpoint no responde. Muestra error accionable en su lugar.
       const ctrl = new AbortController();
-      const to = setTimeout(() => ctrl.abort(), 20_000);
+      const to = setTimeout(() => ctrl.abort(), 55_000);
       let r: Response;
       try {
         r = await fetchWithSupabaseSession(url, { cache: "no-store", signal: ctrl.signal });
-      } finally {
-        clearTimeout(to);
+      } finally { clearTimeout(to); }
+      if (r.status === 502 || r.status === 503 || r.status === 504) {
+        throw new Error(`__RETRY__:${r.status}`);
       }
       const j = await r.json().catch(() => null);
       if (!r.ok || !j?.success) {
-        // Logueamos para poder diagnosticar desde consola sin adivinar.
         console.error("[DashClientes] fetch failed", { status: r.status, body: j, url });
         throw new Error((j && (j as { error?: string }).error) || `Error HTTP ${r.status}`);
       }
       const payload = (j as { data?: Payload }).data;
-      if (!payload) {
-        console.error("[DashClientes] empty payload", j);
-        throw new Error("El endpoint devolvió una respuesta vacía.");
+      if (!payload) throw new Error("El endpoint devolvió una respuesta vacía.");
+      return payload;
+    };
+    try {
+      let payload: Payload;
+      try { payload = await attempt(); }
+      catch (e) {
+        const msg = e instanceof Error ? e.message : "";
+        if (msg.startsWith("__RETRY__") || msg.includes("aborted") || msg.includes("AbortError")) {
+          await new Promise(res => setTimeout(res, 1500));
+          payload = await attempt();
+        } else { throw e; }
       }
       setData(payload);
     } catch (e) {
       console.error("[DashClientes] cargar()", e);
-      setErr(e instanceof Error ? e.message : "Error");
+      const msg = e instanceof Error ? e.message : "Error";
+      setErr(msg.startsWith("__RETRY__") ? "El servidor tardó demasiado. Reintentá." : msg);
     } finally {
       setLoading(false);
     }

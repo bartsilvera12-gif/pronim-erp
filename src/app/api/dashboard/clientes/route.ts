@@ -7,6 +7,9 @@ import { assertAllowedChatDataSchema } from "@/lib/supabase/chat-data-schema";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
 
+export const maxDuration = 60;
+export const dynamic = "force-dynamic";
+
 /**
  * GET /api/dashboard/clientes?desde=YYYY-MM-DD&hasta=YYYY-MM-DD&sucursal_id=...&segmento=...&q=...
  *

@@ -67,21 +67,37 @@ export default function DashSucursalDiario({
   const cargar = useCallback(async () => {
     if (!sucursalId) { setData(null); setLoading(false); return; }
     setLoading(true); setErr(null);
-    try {
+    const attempt = async (): Promise<Payload> => {
       const params = new URLSearchParams({ fecha, sucursal_id: sucursalId });
       const ctrl = new AbortController();
-      const to = setTimeout(() => ctrl.abort(), 20_000);
+      const to = setTimeout(() => ctrl.abort(), 55_000);
       let r: Response;
       try {
         r = await fetchWithSupabaseSession(`/api/dashboard/sucursales/dia?${params.toString()}`, {
           cache: "no-store", signal: ctrl.signal,
         });
       } finally { clearTimeout(to); }
+      if (r.status === 502 || r.status === 503 || r.status === 504) {
+        throw new Error(`__RETRY__:${r.status}`);
+      }
       const j = await r.json().catch(() => null);
       if (!r.ok || !j?.success) throw new Error(j?.error ?? `HTTP ${r.status}`);
-      setData(j.data as Payload);
+      return j.data as Payload;
+    };
+    try {
+      let payload: Payload;
+      try { payload = await attempt(); }
+      catch (e) {
+        const msg = e instanceof Error ? e.message : "";
+        if (msg.startsWith("__RETRY__") || msg.includes("aborted") || msg.includes("AbortError")) {
+          await new Promise(res => setTimeout(res, 1500));
+          payload = await attempt();
+        } else { throw e; }
+      }
+      setData(payload);
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Error");
+      const msg = e instanceof Error ? e.message : "Error";
+      setErr(msg.startsWith("__RETRY__") ? "El servidor tardó demasiado. Reintentá." : msg);
     } finally { setLoading(false); }
   }, [fecha, sucursalId]);
 

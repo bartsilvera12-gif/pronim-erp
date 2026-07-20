@@ -104,18 +104,39 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
 
   const cargar = useCallback(async () => {
     setLoading(true); setErr(null);
-    try {
+    // Intento con retry automático silencioso ante 502/503/504 o abort.
+    // Estos son fallos transitorios comunes en cold starts de Vercel.
+    const attempt = async (): Promise<Payload> => {
       const params = new URLSearchParams({ desde, hasta });
       if (sucursalFiltro) params.set("sucursal_id", sucursalFiltro);
       const ctrl = new AbortController();
-      const to = setTimeout(() => ctrl.abort(), 25_000);
+      const to = setTimeout(() => ctrl.abort(), 55_000); // < maxDuration del server
       let r: Response;
       try {
         r = await fetchWithSupabaseSession(`/api/dashboard/sucursales?${params.toString()}`, { cache: "no-store", signal: ctrl.signal });
       } finally { clearTimeout(to); }
+      // Errores transitorios: propagamos con marker para poder reintentar arriba.
+      if (r.status === 502 || r.status === 503 || r.status === 504) {
+        throw new Error(`__RETRY__:${r.status}`);
+      }
       const j = await r.json().catch(() => null);
       if (!r.ok || !j?.success) throw new Error(j?.error ?? `HTTP ${r.status}`);
-      const payload = j.data as Payload;
+      return j.data as Payload;
+    };
+    try {
+      let payload: Payload;
+      try {
+        payload = await attempt();
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "";
+        // Un solo retry con 1.5s de espera si fue transitorio o abort.
+        if (msg.startsWith("__RETRY__") || msg.includes("aborted") || msg.includes("AbortError")) {
+          await new Promise(res => setTimeout(res, 1500));
+          payload = await attempt();
+        } else {
+          throw e;
+        }
+      }
       setData(payload);
       setSucursalesConocidas((prev) => {
         const map = new Map(prev.map((s) => [s.id, s]));
@@ -125,7 +146,9 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
         return Array.from(map.values()).sort((a, b) => a.nombre.localeCompare(b.nombre));
       });
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Error");
+      const msg = e instanceof Error ? e.message : "Error";
+      // Limpiamos el marker si llegó al final.
+      setErr(msg.startsWith("__RETRY__") ? "El servidor tardó demasiado. Reintentá." : msg);
     } finally { setLoading(false); }
   }, [desde, hasta, sucursalFiltro]);
 
