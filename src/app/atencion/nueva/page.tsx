@@ -1740,6 +1740,54 @@ export default function NuevaAtencionPage() {
         />
       )}
 
+      {/* ─── Sticky note de recepciones pendientes — recordatorio para
+             la cajera de que hay bolsas evaluadas esperando ingreso
+             al stock. Aparece siempre que haya al menos 1. ─── */}
+      {pendientesIngresoCount > 0 && (
+        <aside
+          aria-label="Recepciones pendientes de ingreso"
+          className="hidden xl:block fixed right-6 z-30 w-64 pointer-events-auto"
+          style={{ top: metaAlcanzada ? "26rem" : "7rem" }}
+        >
+          <Link
+            href="/atencion/pendientes-ingreso"
+            className="block relative bg-gradient-to-br from-amber-200 via-amber-100 to-orange-100 border border-amber-300 px-4 pt-5 pb-4 shadow-[0_6px_16px_-4px_rgba(180,83,9,0.35)] transition-transform hover:rotate-0 hover:scale-[1.02]"
+            style={{ borderRadius: "2px 2px 14px 2px", transform: "rotate(2deg)" }}
+          >
+            <span
+              aria-hidden
+              className="absolute -top-2 left-1/2 -translate-x-1/2 h-4 w-16 bg-amber-400/70 rotate-[3deg] shadow-sm"
+            />
+            <div className="flex items-start gap-2">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-5 w-5 shrink-0 text-amber-800 mt-0.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m0 3.75h.007v.008H12v-.008ZM12 4c-4 5-6 8-6 11a6 6 0 0 0 12 0c0-3-2-6-6-11Z" />
+              </svg>
+              <div className="min-w-0">
+                <p className="text-[13px] font-bold leading-snug text-amber-900">
+                  {pendientesIngresoCount === 1
+                    ? "1 recepción pendiente de evaluar"
+                    : `${pendientesIngresoCount} recepciones pendientes de evaluar`}
+                </p>
+                <p className="text-[12px] mt-1 leading-snug text-amber-900/90">
+                  Hay bolsas esperando ser ingresadas al stock.
+                  {pendientesVencidasCount > 0 && (
+                    <>
+                      {" "}
+                      <span className="font-semibold text-rose-700">
+                        {pendientesVencidasCount} con más de 72h.
+                      </span>
+                    </>
+                  )}
+                </p>
+                <p className="text-[11px] mt-2 font-semibold text-amber-900 underline">
+                  Ir a la bandeja →
+                </p>
+              </div>
+            </div>
+          </Link>
+        </aside>
+      )}
+
       {/* ─── Sticky note de meta alcanzada — celebratorio, solo aparece
              cuando detectamos por primera vez que la sucursal llegó a
              la meta del mes. Va arriba de los recordatorios. ─── */}
