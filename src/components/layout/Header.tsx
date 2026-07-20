@@ -6,7 +6,15 @@ import { useRouter } from "next/navigation";
 import { Bell, ChevronDown, LogOut, Menu } from "lucide-react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { signOut } from "@/lib/auth";
-import { initNotifSounds, playCelebrationSound, playNotifSound } from "@/lib/audio/notif-sounds";
+import {
+  initNotifSounds,
+  playCelebrationSound,
+  playNotifSound,
+  playChaChing,
+  playChime,
+  playFanfare,
+  playPing,
+} from "@/lib/audio/notif-sounds";
 
 type HeaderUsuario = {
   nombre: string | null;
@@ -217,34 +225,62 @@ export default function Header({ onOpenMobileSidebar }: HeaderProps = {}) {
           </button>
           {notifOpen && (
             <div className="absolute right-0 mt-2 w-80 rounded-xl border border-slate-200 bg-white shadow-2xl overflow-hidden z-50">
-              <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-2">
-                <h4 className="text-sm font-bold text-slate-800">Notificaciones</h4>
-                <div className="flex items-center gap-2">
+              <div className="px-4 py-3 border-b border-slate-100">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-bold text-slate-800">Notificaciones</h4>
                   {totalNotif > 0 && (
                     <span className="text-[11px] text-slate-500 font-semibold">{totalNotif} nuevas</span>
                   )}
-                  {/* Botón de test: dispara el mismo sonido que llegaría con
-                      una notificación nueva. Como el click desbloquea el
-                      AudioContext, el segundo click (si querés celebrar)
-                      ya suena a 🎉. */}
-                  <button
-                    type="button"
-                    onClick={() => playNotifSound()}
-                    title="Probar sonido de notificación"
-                    className="rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 px-1.5 py-0.5 text-xs"
-                    aria-label="Probar sonido"
-                  >
-                    🔊
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => playCelebrationSound()}
-                    title="Probar sonido de meta alcanzada"
-                    className="rounded-md border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 px-1.5 py-0.5 text-xs"
-                    aria-label="Probar sonido celebratorio"
-                  >
-                    🎉
-                  </button>
+                </div>
+                {/* Selector de sonido — probá cada uno y decime cuál te
+                    gusta más y lo dejamos como default. Los actuales son
+                    Notif (por defecto arriba) y Celebrar. */}
+                <div className="mt-2">
+                  <p className="text-[10px] uppercase tracking-wide text-slate-400 font-semibold mb-1">Probar sonidos</p>
+                  <div className="grid grid-cols-3 gap-1">
+                    <button
+                      type="button"
+                      onClick={() => playNotifSound()}
+                      className="rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 px-1.5 py-1 text-[11px]"
+                    >
+                      🔔 Notif
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => playCelebrationSound()}
+                      className="rounded-md border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 px-1.5 py-1 text-[11px]"
+                    >
+                      🎉 Celebrar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => playFanfare()}
+                      className="rounded-md border border-amber-200 bg-amber-50 hover:bg-amber-100 px-1.5 py-1 text-[11px]"
+                    >
+                      🎺 Fanfare
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => playChaChing()}
+                      className="rounded-md border border-yellow-200 bg-yellow-50 hover:bg-yellow-100 px-1.5 py-1 text-[11px]"
+                    >
+                      💰 Caja
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => playChime()}
+                      className="rounded-md border border-sky-200 bg-sky-50 hover:bg-sky-100 px-1.5 py-1 text-[11px]"
+                    >
+                      🔔 Campana
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => playPing()}
+                      className="rounded-md border border-purple-200 bg-purple-50 hover:bg-purple-100 px-1.5 py-1 text-[11px]"
+                    >
+                      💫 Ping
+                    </button>
+                  </div>
                 </div>
               </div>
 

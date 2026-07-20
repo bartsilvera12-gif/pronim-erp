@@ -84,45 +84,115 @@ export function initNotifSounds() {
   window.addEventListener("click", onGesture, { passive: true });
 }
 
-function playNotes(
-  notes: number[],
-  { stepMs = 120, durMs = 350, gain = 0.18 }: { stepMs?: number; durMs?: number; gain?: number } = {},
-) {
+type NoteSpec = {
+  freq: number;
+  /** delay desde el inicio en ms */
+  at: number;
+  /** duración en ms */
+  dur?: number;
+  /** volumen 0-1 */
+  gain?: number;
+  /** timbre */
+  type?: OscillatorType;
+};
+
+function playNotes(notes: NoteSpec[]) {
   const c = ensureContext();
   if (!c) return;
   const doPlay = () => {
     if (!c) return;
     if (c.state === "suspended") { void c.resume(); }
     const now = c.currentTime;
-    notes.forEach((freq, i) => {
+    // Master gain para no clippear cuando se solapan notas.
+    const master = c.createGain();
+    master.gain.value = 0.9;
+    master.connect(c.destination);
+    notes.forEach((n) => {
       const o = c.createOscillator();
       const g = c.createGain();
-      o.type = "sine";
-      o.frequency.value = freq;
-      const start = now + (i * stepMs) / 1000;
+      o.type = n.type ?? "sine";
+      o.frequency.value = n.freq;
+      const start = now + n.at / 1000;
+      const dur = (n.dur ?? 350) / 1000;
+      const peak = n.gain ?? 0.3;
       g.gain.setValueAtTime(0, start);
-      g.gain.linearRampToValueAtTime(gain, start + 0.02);
-      g.gain.exponentialRampToValueAtTime(0.0001, start + durMs / 1000);
-      o.connect(g).connect(c.destination);
+      g.gain.linearRampToValueAtTime(peak, start + 0.015);
+      g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+      o.connect(g).connect(master);
       o.start(start);
-      o.stop(start + durMs / 1000 + 0.05);
+      o.stop(start + dur + 0.05);
     });
   };
   if (!unlocked) {
-    // Encolamos y esperamos primera interacción. Si el usuario nunca
-    // interactúa, se pierde — pero es lo esperable en autoplay policy.
     pendingBeforeUnlock.push(doPlay);
     return;
   }
   doPlay();
 }
 
-/** "Ding-ding-ding" ascendente (C5 → E5 → G5). Meta alcanzada. */
+/**
+ * Meta alcanzada — fanfare de 5 notas con timbre triangular (más brillante
+ * que sine, no tan agresivo como square). Volumen alto para que se oiga
+ * sobre el ruido de una tienda. Arpegio C-E-G-C-G en dos tiempos.
+ */
 export function playCelebrationSound() {
-  playNotes([523.25, 659.25, 783.99], { stepMs: 120, durMs: 350 });
+  playNotes([
+    { freq: 523.25, at:   0, dur: 180, gain: 0.35, type: "triangle" }, // C5
+    { freq: 659.25, at:  90, dur: 180, gain: 0.35, type: "triangle" }, // E5
+    { freq: 783.99, at: 180, dur: 200, gain: 0.35, type: "triangle" }, // G5
+    { freq: 1046.5, at: 320, dur: 420, gain: 0.40, type: "triangle" }, // C6 largo
+    { freq:  783.99, at: 320, dur: 420, gain: 0.25, type: "triangle" }, // G5 armónico
+  ]);
 }
 
-/** "Bloop" descendente (A5 → E5). Notificación no-celebratoria. */
+/**
+ * Notificación — dos notas cristalinas (E6, C6) con timbre triangular.
+ * Suficientemente distinta del sonido de meta para no confundir.
+ */
 export function playNotifSound() {
-  playNotes([880, 660], { stepMs: 90, durMs: 220, gain: 0.12 });
+  playNotes([
+    { freq: 1318.5, at:  0, dur: 200, gain: 0.28, type: "triangle" }, // E6
+    { freq: 1046.5, at: 90, dur: 260, gain: 0.28, type: "triangle" }, // C6
+  ]);
+}
+
+// ═══════════ Variantes de prueba — para que Karen elija cuál le gusta ══════════
+
+/** Cash register "cha-ching" — dos golpes brillantes. */
+export function playChaChing() {
+  playNotes([
+    { freq: 1568, at:  0, dur: 90,  gain: 0.35, type: "square" },
+    { freq: 2093, at: 40, dur: 180, gain: 0.30, type: "triangle" },
+    { freq: 1568, at: 200, dur: 90, gain: 0.30, type: "square" },
+    { freq: 2093, at: 240, dur: 250, gain: 0.28, type: "triangle" },
+  ]);
+}
+
+/** Campanita suave — bell chime. */
+export function playChime() {
+  playNotes([
+    { freq: 1046.5, at:  0, dur: 900, gain: 0.30, type: "sine" },
+    { freq: 1318.5, at:  0, dur: 900, gain: 0.20, type: "sine" },
+    { freq: 1568.0, at:  0, dur: 900, gain: 0.15, type: "sine" },
+  ]);
+}
+
+/** Fanfare largo — 6 notas ascendentes. Más celebratorio. */
+export function playFanfare() {
+  playNotes([
+    { freq: 523.25, at:   0, dur: 140, gain: 0.35, type: "triangle" },
+    { freq: 659.25, at:  90, dur: 140, gain: 0.35, type: "triangle" },
+    { freq: 783.99, at: 180, dur: 140, gain: 0.35, type: "triangle" },
+    { freq: 1046.5, at: 270, dur: 140, gain: 0.38, type: "triangle" },
+    { freq: 1318.5, at: 360, dur: 140, gain: 0.40, type: "triangle" },
+    { freq: 1568.0, at: 450, dur: 600, gain: 0.42, type: "triangle" },
+    { freq: 1046.5, at: 450, dur: 600, gain: 0.25, type: "triangle" },
+  ]);
+}
+
+/** Ping simple — un único tono claro. */
+export function playPing() {
+  playNotes([
+    { freq: 1760, at: 0, dur: 350, gain: 0.32, type: "triangle" },
+  ]);
 }
