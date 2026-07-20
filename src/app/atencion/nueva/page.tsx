@@ -446,14 +446,23 @@ export default function NuevaAtencionPage() {
       if (metas.length === 0) return;
       const now = new Date();
       const diaKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-      const seenRaw = localStorage.getItem("neura:metas-celebradas") ?? "{}";
+      const seenRaw = localStorage.getItem("neura:metas-celebradas:v2") ?? "{}";
       const seen = JSON.parse(seenRaw) as Record<string, string>;
+      // NO marcamos como "vista" al mostrar — así si Karen recarga
+      // sin cerrar la nota, vuelve a aparecer. El sonido sí lo tocamos
+      // una sola vez para no molestar en cada poll (misma sesión).
       const nueva = metas.find(m => seen[m.sucursal_id] !== diaKey);
       if (nueva) {
         setMetaAlcanzada(nueva);
-        playCelebrationSound();
-        seen[nueva.sucursal_id] = diaKey;
-        localStorage.setItem("neura:metas-celebradas", JSON.stringify(seen));
+        // Sound-guard por sesión (ventana de navegador). Recargar la
+        // página reinicia y vuelve a sonar — que es lo que quiere Karen.
+        const sonadoRaw = sessionStorage.getItem("neura:metas-sonadas") ?? "{}";
+        const sonado = JSON.parse(sonadoRaw) as Record<string, string>;
+        if (sonado[nueva.sucursal_id] !== diaKey) {
+          playCelebrationSound();
+          sonado[nueva.sucursal_id] = diaKey;
+          sessionStorage.setItem("neura:metas-sonadas", JSON.stringify(sonado));
+        }
       }
     } catch { /* silencioso */ }
   }
@@ -1785,134 +1794,120 @@ export default function NuevaAtencionPage() {
         />
       )}
 
-      {/* ─── Sticky note de recepciones pendientes — recordatorio para
-             la cajera de que hay bolsas evaluadas esperando ingreso
-             al stock. Aparece siempre que haya al menos 1. ─── */}
-      {pendientesIngresoCount > 0 && (
+      {/* ─── Rail de sticky notes (derecha) ─────────────────────────────
+             Todos los avisos comparten UN mismo container con
+             flex-col + gap, así se apilan sin superponerse.
+             Orden: 1) meta alcanzada (verde/amarillo, más destacado)
+                    2) recepciones pendientes (ámbar)
+                    3) recordatorios contextuales del cliente ─── */}
+      {(metaAlcanzada || pendientesIngresoCount > 0 || (cliente && alertasDisparadas.length > 0)) && (
         <aside
-          aria-label="Recepciones pendientes de ingreso"
-          className="hidden xl:block fixed right-6 z-30 w-64 pointer-events-auto"
-          style={{ top: metaAlcanzada ? "26rem" : "7rem" }}
+          aria-label="Recordatorios"
+          className="hidden xl:flex fixed top-24 right-6 z-30 flex-col gap-4 w-72 max-h-[calc(100vh-8rem)] overflow-y-auto pr-1 pointer-events-none"
         >
-          <Link
-            href="/atencion/pendientes-ingreso"
-            className="block relative bg-gradient-to-br from-amber-200 via-amber-100 to-orange-100 border border-amber-300 px-4 pt-5 pb-4 shadow-[0_6px_16px_-4px_rgba(180,83,9,0.35)] transition-transform hover:rotate-0 hover:scale-[1.02]"
-            style={{ borderRadius: "2px 2px 14px 2px", transform: "rotate(2deg)" }}
-          >
-            <span
-              aria-hidden
-              className="absolute -top-2 left-1/2 -translate-x-1/2 h-4 w-16 bg-amber-400/70 rotate-[3deg] shadow-sm"
-            />
-            <div className="flex items-start gap-2">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-5 w-5 shrink-0 text-amber-800 mt-0.5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m0 3.75h.007v.008H12v-.008ZM12 4c-4 5-6 8-6 11a6 6 0 0 0 12 0c0-3-2-6-6-11Z" />
-              </svg>
-              <div className="min-w-0">
-                <p className="text-[13px] font-bold leading-snug text-amber-900">
-                  {pendientesIngresoCount === 1
-                    ? "1 recepción pendiente de evaluar"
-                    : `${pendientesIngresoCount} recepciones pendientes de evaluar`}
-                </p>
-                <p className="text-[12px] mt-1 leading-snug text-amber-900/90">
-                  Hay bolsas esperando ser ingresadas al stock.
-                  {pendientesVencidasCount > 0 && (
-                    <>
-                      {" "}
-                      <span className="font-semibold text-rose-700">
-                        {pendientesVencidasCount} con más de 72h.
-                      </span>
-                    </>
-                  )}
-                </p>
-                <p className="text-[11px] mt-2 font-semibold text-amber-900 underline">
-                  Ir a la bandeja →
-                </p>
+          {/* ── 1) Meta alcanzada ── */}
+          {metaAlcanzada && (
+            <div style={{ animation: "metaDrop .5s ease-out" }} className="pointer-events-auto">
+              <style>{`
+                @keyframes metaDrop {
+                  0% { transform: translateY(-40px) rotate(-6deg); opacity: 0; }
+                  60% { transform: translateY(6px) rotate(-2deg); opacity: 1; }
+                  100% { transform: translateY(0) rotate(-3deg); opacity: 1; }
+                }
+                @keyframes metaWiggle {
+                  0%,100% { transform: rotate(-3deg); }
+                  50% { transform: rotate(-1deg); }
+                }
+                .meta-sticky { animation: metaWiggle 3s ease-in-out infinite; }
+              `}</style>
+              <div
+                className="meta-sticky relative bg-gradient-to-br from-yellow-200 via-yellow-100 to-amber-100 border border-amber-300 p-5 pt-6"
+                style={{
+                  borderRadius: "2px 2px 14px 2px",
+                  boxShadow: "0 15px 35px -5px rgba(146, 64, 14, 0.35), 0 8px 15px -3px rgba(0,0,0,0.1)",
+                }}
+              >
+                <span aria-hidden className="absolute -top-2 left-1/2 -translate-x-1/2 h-4 w-16 bg-emerald-400/70 rotate-[-3deg] shadow-sm" />
+                <button
+                  type="button"
+                  onClick={() => {
+                    // Persistir "vista" solo al cerrar explícitamente.
+                    try {
+                      const now = new Date();
+                      const diaKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+                      const raw = localStorage.getItem("neura:metas-celebradas:v2") ?? "{}";
+                      const seen = JSON.parse(raw) as Record<string, string>;
+                      seen[metaAlcanzada.sucursal_id] = diaKey;
+                      localStorage.setItem("neura:metas-celebradas:v2", JSON.stringify(seen));
+                    } catch { /* ignore */ }
+                    setMetaAlcanzada(null);
+                  }}
+                  className="absolute top-1 right-1 h-6 w-6 rounded-full text-amber-900/60 hover:bg-amber-900/10 hover:text-amber-900 flex items-center justify-center text-lg leading-none font-bold"
+                  aria-label="Cerrar"
+                >
+                  ×
+                </button>
+                <div className="text-center">
+                  <p className="text-lg font-bold text-emerald-900 font-serif">¡Felicidades!</p>
+                  <p className="text-sm text-amber-900 mt-1 leading-snug">
+                    <strong>{metaAlcanzada.nombre}</strong> alcanzó el{" "}
+                    <strong className="tabular-nums">{metaAlcanzada.pct_meta}%</strong>{" "}
+                    de la meta del día.
+                  </p>
+                  <div className="text-5xl mt-3 leading-none">🎉</div>
+                  <svg viewBox="0 0 200 40" className="mx-auto mt-1 w-40 h-10">
+                    <g fill="none" strokeWidth={2} strokeLinecap="round">
+                      <path d="M20 25 L28 10" stroke="#f59e0b" />
+                      <path d="M45 30 L52 15" stroke="#10b981" />
+                      <path d="M70 22 L78 8" stroke="#ef4444" />
+                      <path d="M100 32 L108 18" stroke="#3b82f6" />
+                      <path d="M130 22 L138 8" stroke="#f59e0b" />
+                      <path d="M155 30 L162 15" stroke="#10b981" />
+                      <path d="M180 25 L188 10" stroke="#a855f7" />
+                      <circle cx="35" cy="18" r="2" fill="#f59e0b" />
+                      <circle cx="88" cy="20" r="2" fill="#10b981" />
+                      <circle cx="120" cy="14" r="2" fill="#ef4444" />
+                      <circle cx="170" cy="20" r="2" fill="#3b82f6" />
+                    </g>
+                  </svg>
+                  <p className="text-[11px] text-amber-800/80 mt-2 italic">¡Gran trabajo del equipo!</p>
+                </div>
               </div>
             </div>
-          </Link>
-        </aside>
-      )}
+          )}
 
-      {/* ─── Sticky note de meta alcanzada — celebratorio, solo aparece
-             cuando detectamos por primera vez que la sucursal llegó a
-             la meta del mes. Va arriba de los recordatorios. ─── */}
-      {metaAlcanzada && (
-        <aside
-          aria-label="Meta alcanzada"
-          className="fixed top-24 right-6 z-40 w-72 pointer-events-auto"
-          style={{ animation: "metaDrop .5s ease-out" }}
-        >
-          <style>{`
-            @keyframes metaDrop {
-              0% { transform: translateY(-40px) rotate(-6deg); opacity: 0; }
-              60% { transform: translateY(6px) rotate(-2deg); opacity: 1; }
-              100% { transform: translateY(0) rotate(-3deg); opacity: 1; }
-            }
-            @keyframes metaWiggle {
-              0%,100% { transform: rotate(-3deg); }
-              50% { transform: rotate(-1deg); }
-            }
-            .meta-sticky { animation: metaWiggle 3s ease-in-out infinite; }
-          `}</style>
-          <div
-            className="meta-sticky relative bg-gradient-to-br from-yellow-200 via-yellow-100 to-amber-100 border border-amber-300 p-5 pt-6"
-            style={{
-              borderRadius: "2px 2px 14px 2px",
-              boxShadow: "0 15px 35px -5px rgba(146, 64, 14, 0.35), 0 8px 15px -3px rgba(0,0,0,0.1)",
-            }}
-          >
-            {/* Cinta verde arriba */}
-            <span
-              aria-hidden
-              className="absolute -top-2 left-1/2 -translate-x-1/2 h-4 w-16 bg-emerald-400/70 rotate-[-3deg] shadow-sm"
-            />
-            <button
-              type="button"
-              onClick={() => setMetaAlcanzada(null)}
-              className="absolute top-1 right-1 h-6 w-6 rounded-full text-amber-900/60 hover:bg-amber-900/10 hover:text-amber-900 flex items-center justify-center text-lg leading-none font-bold"
-              aria-label="Cerrar"
+          {/* ── 2) Recepciones pendientes ── */}
+          {pendientesIngresoCount > 0 && (
+            <Link
+              href="/atencion/pendientes-ingreso"
+              className="block relative bg-gradient-to-br from-amber-200 via-amber-100 to-orange-100 border border-amber-300 px-4 pt-5 pb-4 shadow-[0_6px_16px_-4px_rgba(180,83,9,0.35)] pointer-events-auto transition-transform hover:rotate-0 hover:scale-[1.02]"
+              style={{ borderRadius: "2px 2px 14px 2px", transform: "rotate(2deg)" }}
             >
-              ×
-            </button>
-            <div className="text-center">
-              <p className="text-lg font-bold text-emerald-900 font-serif">¡Felicidades!</p>
-              <p className="text-sm text-amber-900 mt-1 leading-snug">
-                <strong>{metaAlcanzada.nombre}</strong> alcanzó el{" "}
-                <strong className="tabular-nums">{metaAlcanzada.pct_meta}%</strong>{" "}
-                de la meta del día.
-              </p>
-              <div className="text-5xl mt-3 leading-none">🎉</div>
-              {/* Dibujito de confetti abajo del emoji */}
-              <svg viewBox="0 0 200 40" className="mx-auto mt-1 w-40 h-10">
-                <g fill="none" strokeWidth={2} strokeLinecap="round">
-                  <path d="M20 25 L28 10" stroke="#f59e0b" />
-                  <path d="M45 30 L52 15" stroke="#10b981" />
-                  <path d="M70 22 L78 8" stroke="#ef4444" />
-                  <path d="M100 32 L108 18" stroke="#3b82f6" />
-                  <path d="M130 22 L138 8" stroke="#f59e0b" />
-                  <path d="M155 30 L162 15" stroke="#10b981" />
-                  <path d="M180 25 L188 10" stroke="#a855f7" />
-                  <circle cx="35" cy="18" r="2" fill="#f59e0b" />
-                  <circle cx="88" cy="20" r="2" fill="#10b981" />
-                  <circle cx="120" cy="14" r="2" fill="#ef4444" />
-                  <circle cx="170" cy="20" r="2" fill="#3b82f6" />
-                </g>
-              </svg>
-              <p className="text-[11px] text-amber-800/80 mt-2 italic">
-                ¡Gran trabajo del equipo!
-              </p>
-            </div>
-          </div>
-        </aside>
-      )}
+              <span aria-hidden className="absolute -top-2 left-1/2 -translate-x-1/2 h-4 w-16 bg-amber-400/70 rotate-[3deg] shadow-sm" />
+              <div className="flex items-start gap-2">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-5 w-5 shrink-0 text-amber-800 mt-0.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m0 3.75h.007v.008H12v-.008ZM12 4c-4 5-6 8-6 11a6 6 0 0 0 12 0c0-3-2-6-6-11Z" />
+                </svg>
+                <div className="min-w-0">
+                  <p className="text-[13px] font-bold leading-snug text-amber-900">
+                    {pendientesIngresoCount === 1
+                      ? "1 recepción pendiente de evaluar"
+                      : `${pendientesIngresoCount} recepciones pendientes de evaluar`}
+                  </p>
+                  <p className="text-[12px] mt-1 leading-snug text-amber-900/90">
+                    Hay bolsas esperando ser ingresadas al stock.
+                    {pendientesVencidasCount > 0 && (
+                      <> <span className="font-semibold text-rose-700">{pendientesVencidasCount} con más de 72h.</span></>
+                    )}
+                  </p>
+                  <p className="text-[11px] mt-2 font-semibold text-amber-900 underline">Ir a la bandeja →</p>
+                </div>
+              </div>
+            </Link>
+          )}
 
-      {/* ─── Sticky notes: recordatorios contextuales al armar el ticket ─── */}
-      {cliente && alertasDisparadas.length > 0 && (
-        <aside
-          aria-label="Recordatorios para el vendedor"
-          className="hidden xl:flex fixed top-28 right-6 z-30 flex-col gap-4 w-64 pointer-events-none"
-        >
-          {alertasDisparadas.map((a, i) => {
+          {/* ── 3) Recordatorios contextuales del cliente ── */}
+          {cliente && alertasDisparadas.map((a, i) => {
             const s = STICKY_STYLES[i % STICKY_STYLES.length];
             return (
               <div
@@ -1920,16 +1915,9 @@ export default function NuevaAtencionPage() {
                 className={`relative ${s.bg} ${s.tilt} pointer-events-auto shadow-[0_6px_16px_-4px_rgba(0,0,0,0.25)] px-4 pt-5 pb-4 transition-transform hover:rotate-0 hover:scale-[1.02]`}
                 style={{ borderRadius: "2px 2px 14px 2px" }}
               >
-                <span
-                  aria-hidden
-                  className={`absolute -top-2 left-1/2 -translate-x-1/2 h-4 w-16 ${s.tape} rotate-[-3deg] shadow-sm`}
-                />
-                <p className={`text-[13px] font-bold leading-snug ${s.text}`}>
-                  {a.titulo}
-                </p>
-                <p className={`text-[12px] mt-1 leading-snug ${s.text} opacity-90`}>
-                  {a.mensaje}
-                </p>
+                <span aria-hidden className={`absolute -top-2 left-1/2 -translate-x-1/2 h-4 w-16 ${s.tape} rotate-[-3deg] shadow-sm`} />
+                <p className={`text-[13px] font-bold leading-snug ${s.text}`}>{a.titulo}</p>
+                <p className={`text-[12px] mt-1 leading-snug ${s.text} opacity-90`}>{a.mensaje}</p>
               </div>
             );
           })}
