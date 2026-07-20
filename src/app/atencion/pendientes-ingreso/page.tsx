@@ -39,6 +39,7 @@ export default function PendientesIngresoPage() {
   const [clientes, setClientes] = useState<Record<string, string>>({});
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [ok, setOk] = useState<string | null>(null);
   const [ingresandoId, setIngresandoId] = useState<string | null>(null);
   // Modal de preview antes de ingresar: muestra items + margen estimado.
   const [previewId, setPreviewId] = useState<string | null>(null);
@@ -96,6 +97,7 @@ export default function PendientesIngresoPage() {
       </div>
 
       {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+      {ok && <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">✓ {ok}</div>}
 
       {vencidas.length > 0 && (
         <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -167,15 +169,19 @@ export default function PendientesIngresoPage() {
           recepcionId={previewId}
           onClose={() => setPreviewId(null)}
           onConfirmar={async (cliId) => {
-            setIngresandoId(previewId);
+            const idQueSeIngresa = previewId;
+            setIngresandoId(idQueSeIngresa);
             setPreviewId(null);
+            setError(null); setOk(null);
             try {
               const rr = await fetchWithSupabaseSession(
-                `/api/clientes/${cliId}/recepciones/${previewId}/ingresar`,
+                `/api/clientes/${cliId}/recepciones/${idQueSeIngresa}/ingresar`,
                 { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" },
               );
               const j = await rr.json().catch(() => ({}));
               if (!rr.ok || j?.success === false) throw new Error(j?.error ?? `Error ${rr.status}`);
+              setOk("Recepción ingresada al stock. Las prendas ya están disponibles para vender.");
+              setTimeout(() => setOk(null), 6000);
               cargar();
             } catch (e) {
               setError(e instanceof Error ? e.message : "No se pudo ingresar la recepción.");
@@ -229,6 +235,9 @@ function PreviewIngresoModal({
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [confirmando, setConfirmando] = useState(false);
+  // Checklist: cada prenda que la cajera ya "sacó de la bolsa y revisó"
+  // se marca. Solo cuando están TODAS marcadas se habilita el confirmar.
+  const [revisados, setRevisados] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     let cancel = false;
@@ -244,6 +253,32 @@ function PreviewIngresoModal({
       .finally(() => { if (!cancel) setLoading(false); });
     return () => { cancel = true; };
   }, [recepcionId]);
+
+  // Cada "unidad revisable" es (item.id + índice de unidad). Si el item
+  // tiene cantidad 3, generamos 3 checkboxes independientes.
+  const unidades = (data?.items ?? []).flatMap(it =>
+    Array.from({ length: it.cantidad }, (_, i) => ({
+      key: `${it.id}::${i}`,
+      item: it,
+      unidad: i + 1,
+    }))
+  );
+  const totalUnidades = unidades.length;
+  const revisadasCount = unidades.filter(u => revisados.has(u.key)).length;
+  const todasRevisadas = totalUnidades > 0 && revisadasCount === totalUnidades;
+
+  const toggleUnidad = (key: string) => {
+    setRevisados(prev => {
+      const s = new Set(prev);
+      if (s.has(key)) s.delete(key);
+      else s.add(key);
+      return s;
+    });
+  };
+  const marcarTodas = () => {
+    setRevisados(new Set(unidades.map(u => u.key)));
+  };
+  const desmarcarTodas = () => setRevisados(new Set());
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
@@ -299,84 +334,118 @@ function PreviewIngresoModal({
                 )}
               </div>
 
-              {/* Tabla de items */}
-              <table className="w-full text-xs border border-slate-200 rounded-lg overflow-hidden">
-                <thead className="bg-slate-50 text-left text-[10px] uppercase text-slate-500">
-                  <tr>
-                    <th className="px-3 py-2">Franja / prenda</th>
-                    <th className="px-3 py-2">Tipo</th>
-                    <th className="px-3 py-2 text-right">Cant.</th>
-                    <th className="px-3 py-2 text-right">Costo unit.</th>
-                    <th className="px-3 py-2 text-right">Venta unit.</th>
-                    <th className="px-3 py-2 text-right">Margen unit.</th>
-                    <th className="px-3 py-2 text-right">Total costo</th>
-                    <th className="px-3 py-2 text-right">Total venta</th>
-                    <th className="px-3 py-2 text-right">Margen tot.</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {data.items.map(it => (
-                    <tr key={it.id}>
-                      <td className="px-3 py-2">
-                        <div className="font-medium text-slate-800 truncate max-w-[180px]">{it.producto_nombre}</div>
-                        {it.sku && <div className="text-[10px] text-slate-400">{it.sku}</div>}
-                      </td>
-                      <td className="px-3 py-2 text-slate-500">{it.tipo_nombre ?? "—"}</td>
-                      <td className="px-3 py-2 text-right tabular-nums">{it.cantidad}</td>
-                      <td className="px-3 py-2 text-right tabular-nums text-slate-700">
-                        {"Gs. " + it.costo_unit.toLocaleString("es-PY")}
-                      </td>
-                      <td className="px-3 py-2 text-right tabular-nums text-sky-700">
-                        {"Gs. " + it.venta_unit.toLocaleString("es-PY")}
-                      </td>
-                      <td className={`px-3 py-2 text-right tabular-nums font-semibold ${it.margen_unit >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
-                        {"Gs. " + it.margen_unit.toLocaleString("es-PY")}
-                        {it.margen_pct != null && (
-                          <div className="text-[10px] font-normal opacity-70">{it.margen_pct}%</div>
-                        )}
-                      </td>
-                      <td className="px-3 py-2 text-right tabular-nums">
-                        {"Gs. " + it.costo_total.toLocaleString("es-PY")}
-                      </td>
-                      <td className="px-3 py-2 text-right tabular-nums">
-                        {"Gs. " + it.venta_total.toLocaleString("es-PY")}
-                      </td>
-                      <td className={`px-3 py-2 text-right tabular-nums font-bold ${it.margen_total >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
-                        {"Gs. " + it.margen_total.toLocaleString("es-PY")}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              {/* Checklist: revisar cada prenda una por una */}
+              <div className="rounded-xl border border-slate-200 overflow-hidden">
+                <div className="flex items-center justify-between bg-slate-50 px-4 py-2 border-b border-slate-200">
+                  <div>
+                    <h5 className="text-sm font-bold text-slate-800">Revisar prendas físicamente</h5>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Marcá cada prenda a medida que la vas sacando de la bolsa.
+                      Cuando estén todas listas, confirmá el ingreso al stock.
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-slate-500">Progreso</p>
+                    <p className={`text-base font-bold tabular-nums ${todasRevisadas ? "text-emerald-700" : "text-slate-700"}`}>
+                      {revisadasCount} / {totalUnidades}
+                    </p>
+                  </div>
+                </div>
+                <div className="px-4 py-2 border-b border-slate-100 flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={marcarTodas}
+                    disabled={todasRevisadas}
+                    className="text-[11px] text-emerald-700 hover:text-emerald-800 underline disabled:text-slate-400 disabled:no-underline"
+                  >Marcar todas</button>
+                  <button
+                    type="button"
+                    onClick={desmarcarTodas}
+                    disabled={revisadasCount === 0}
+                    className="text-[11px] text-slate-500 hover:text-slate-700 underline disabled:text-slate-300 disabled:no-underline"
+                  >Desmarcar todas</button>
+                </div>
+                <ul className="divide-y divide-slate-100 max-h-[380px] overflow-y-auto">
+                  {unidades.map((u, idx) => {
+                    const it = u.item;
+                    const marcada = revisados.has(u.key);
+                    return (
+                      <li key={u.key}>
+                        <label className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer transition ${
+                          marcada ? "bg-emerald-50/60" : "hover:bg-slate-50"
+                        }`}>
+                          <input
+                            type="checkbox"
+                            checked={marcada}
+                            onChange={() => toggleUnidad(u.key)}
+                            className="h-5 w-5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                          />
+                          <span className="text-[10px] tabular-nums text-slate-400 w-6">{idx + 1}</span>
+                          <div className="flex-1 min-w-0">
+                            <div className={`text-sm font-medium truncate ${marcada ? "text-slate-500 line-through" : "text-slate-800"}`}>
+                              {it.producto_nombre}
+                              {it.cantidad > 1 && (
+                                <span className="ml-1.5 text-[10px] text-slate-400">unidad {u.unidad}/{it.cantidad}</span>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-slate-500">
+                              {it.tipo_nombre ?? "sin tipo"} · costo Gs. {it.costo_unit.toLocaleString("es-PY")} → venta Gs. {it.venta_unit.toLocaleString("es-PY")}
+                            </div>
+                          </div>
+                          <div className={`text-right shrink-0 text-xs font-bold tabular-nums ${
+                            it.margen_unit >= 0 ? "text-emerald-700" : "text-rose-700"
+                          }`}>
+                            {it.margen_unit >= 0 ? "+" : ""}{"Gs. " + it.margen_unit.toLocaleString("es-PY")}
+                            {it.margen_pct != null && (
+                              <div className="text-[10px] font-normal opacity-70">{it.margen_pct}%</div>
+                            )}
+                          </div>
+                        </label>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
 
               <p className="mt-3 text-[11px] text-slate-500">
-                El precio de venta es el de la franja de precio al momento de la recepción. El margen
-                real puede variar si vendés con descuento, cashback o alguna forma de pago con costo.
-                Los precios de venta se editan desde el catálogo de franjas, no acá.
+                El precio de venta es el de la franja al momento de la recepción. El margen real
+                puede variar si vendés con descuento, cashback o pago con costo. Los precios se
+                editan desde el catálogo de franjas.
               </p>
             </>
           )}
         </div>
 
-        <div className="border-t border-slate-100 px-5 py-3 flex items-center justify-end gap-2 shrink-0">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={confirmando}
-            className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
-          >Cancelar</button>
-          <button
-            type="button"
-            onClick={() => {
-              if (!data) return;
-              setConfirmando(true);
-              onConfirmar(data.recepcion.cliente_id);
-            }}
-            disabled={!data || confirmando || loading}
-            className="rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-sm font-semibold px-5 py-2 shadow-sm"
-          >
-            {confirmando ? "Ingresando…" : "Confirmar ingreso al stock"}
-          </button>
+        <div className="border-t border-slate-100 px-5 py-3 flex items-center justify-between gap-2 shrink-0">
+          <div className="text-xs text-slate-500">
+            {data && !todasRevisadas && totalUnidades > 0 && (
+              <span>Faltan <strong className="text-amber-700">{totalUnidades - revisadasCount}</strong> prenda{totalUnidades - revisadasCount === 1 ? "" : "s"} por revisar</span>
+            )}
+            {data && todasRevisadas && (
+              <span className="text-emerald-700 font-semibold">✓ Todas revisadas — podés confirmar</span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={confirmando}
+              className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+            >Cancelar</button>
+            <button
+              type="button"
+              onClick={() => {
+                if (!data) return;
+                setConfirmando(true);
+                onConfirmar(data.recepcion.cliente_id);
+              }}
+              disabled={!data || confirmando || loading || !todasRevisadas}
+              title={!todasRevisadas ? "Marcá todas las prendas antes de confirmar" : undefined}
+              className="rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-sm font-semibold px-5 py-2 shadow-sm"
+            >
+              {confirmando ? "Ingresando…" : "Confirmar ingreso al stock"}
+            </button>
+          </div>
         </div>
       </div>
     </div>
