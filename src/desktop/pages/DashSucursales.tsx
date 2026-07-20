@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import DashSucursalDiario from "./DashSucursalDiario";
+import PendientesEvaluacionBanner from "./PendientesEvaluacionBanner";
 
 /**
  * Dashboard OPERATIVO de Sucursales — rediseño visual.
@@ -160,6 +161,9 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
 
   return (
     <div className="space-y-6">
+      {/* Banner de recepciones pendientes de evaluar (siempre arriba de todo) */}
+      <PendientesEvaluacionBanner sucursalId={sucursalFiltro || null} />
+
       {/* ═════ Switcher de vista + filtro sucursal ═════ */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5">
