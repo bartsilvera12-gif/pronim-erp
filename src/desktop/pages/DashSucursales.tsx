@@ -86,6 +86,9 @@ const DOW = ["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"];
 export default function DashSucursales({ desde, hasta }: { desde: string; hasta: string }) {
   const [data, setData] = useState<Payload | null>(null);
   const [sucursalFiltro, setSucursalFiltro] = useState<string>("");
+  // Lista de todas las sucursales — se recuerda entre cambios de filtro
+  // para que el selector no desaparezca cuando el filtro reduce data.sucursales a 1 fila.
+  const [sucursalesConocidas, setSucursalesConocidas] = useState<{ id: string; nombre: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [drill, setDrill] = useState<{ metric: string; label: string } | null>(null);
@@ -103,7 +106,16 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
       } finally { clearTimeout(to); }
       const j = await r.json().catch(() => null);
       if (!r.ok || !j?.success) throw new Error(j?.error ?? `HTTP ${r.status}`);
-      setData(j.data as Payload);
+      const payload = j.data as Payload;
+      setData(payload);
+      // Extender la lista de sucursales conocidas (nunca la achica).
+      setSucursalesConocidas((prev) => {
+        const map = new Map(prev.map((s) => [s.id, s]));
+        for (const s of payload.sucursales) {
+          if (!map.has(s.sucursal_id)) map.set(s.sucursal_id, { id: s.sucursal_id, nombre: s.nombre });
+        }
+        return Array.from(map.values()).sort((a, b) => a.nombre.localeCompare(b.nombre));
+      });
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Error");
     } finally { setLoading(false); }
@@ -131,8 +143,8 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
 
   return (
     <div className="space-y-6">
-      {/* Filtro por sucursal */}
-      {data.alcance.es_admin && data.sucursales.length > 1 && (
+      {/* Filtro por sucursal — usa la lista acumulada (persiste al filtrar). */}
+      {data.alcance.es_admin && sucursalesConocidas.length > 1 && (
         <div className="flex items-center gap-2 text-sm">
           <label className="text-slate-500">Sucursal:</label>
           <select
@@ -141,8 +153,15 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
             className="rounded-md border border-slate-200 bg-white px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
           >
             <option value="">Todas</option>
-            {data.sucursales.map(s => <option key={s.sucursal_id} value={s.sucursal_id}>{s.nombre}</option>)}
+            {sucursalesConocidas.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
           </select>
+          {sucursalFiltro && (
+            <button
+              type="button"
+              onClick={() => setSucursalFiltro("")}
+              className="text-xs text-slate-500 hover:text-slate-700 underline"
+            >Limpiar filtro</button>
+          )}
         </div>
       )}
 
