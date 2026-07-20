@@ -183,7 +183,7 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
       {/* ═════ Hero KPIs — 4 tarjetas grandes ═════ */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <HeroCard
-          icon="💰"
+          iconType="ventas"
           label="Ventas del período"
           value={fmtGs(t.ventas)}
           delta={varTotal != null ? `${varTotal > 0 ? "▲" : "▼"} ${Math.abs(varTotal)}% vs período anterior` : null}
@@ -192,7 +192,7 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
           tip="SUM(total) de ventas no anuladas. Comparación con período anterior del mismo largo."
         />
         <HeroCard
-          icon="🚶"
+          iconType="visitas"
           label="Visitas"
           value={fmtN(data.flujo.visitas)}
           delta={`${fmtN(data.flujo.clientes_unicos)} clientes únicos`}
@@ -201,7 +201,7 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
           onClick={() => setDrill({ metric: "visitas", label: "Visitas del período" })}
         />
         <HeroCard
-          icon="🧾"
+          iconType="operaciones"
           label="Operaciones"
           value={fmtN(t.operaciones)}
           delta={`Ticket promedio: ${fmtGsCompact(t.operaciones > 0 ? t.ventas / t.operaciones : 0)}`}
@@ -209,7 +209,7 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
           tip="Cantidad de ventas no anuladas."
         />
         <HeroCard
-          icon="👕"
+          iconType="prendas"
           label="Prendas movidas"
           value={`${fmtN(t.prendas_recibidas)} / ${fmtN(t.prendas_vendidas)}`}
           delta="Recibidas / Vendidas"
@@ -441,8 +441,33 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
 
 /* ─── UI helpers ───────────────────────────────────────────────── */
 
-function HeroCard({ icon, label, value, delta, deltaTone, color, tip, onClick }: {
-  icon: string;
+type HeroIconType = "ventas" | "visitas" | "operaciones" | "prendas";
+
+function HeroIcon({ type }: { type: HeroIconType }) {
+  // SVGs minimalistas — heroicons style. Sin dependencia externa.
+  const paths: Record<HeroIconType, React.ReactNode> = {
+    ventas: (
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12M8.25 10.5a2.25 2.25 0 0 0 2.25 2.25h3a2.25 2.25 0 0 1 0 4.5H8.25M4.5 12a7.5 7.5 0 1 0 15 0 7.5 7.5 0 0 0-15 0Z" />
+    ),
+    visitas: (
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
+    ),
+    operaciones: (
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5.586a1 1 0 0 1 .707.293l5.414 5.414a1 1 0 0 1 .293.707V19a2 2 0 0 1-2 2Z" />
+    ),
+    prendas: (
+      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15a4.5 4.5 0 0 0 4.5 4.5H18a3.75 3.75 0 0 0 1.332-7.257 3 3 0 0 0-3.758-3.848 5.25 5.25 0 0 0-10.233 2.33A4.502 4.502 0 0 0 2.25 15Z" />
+    ),
+  };
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.7} stroke="currentColor" className="h-5 w-5">
+      {paths[type]}
+    </svg>
+  );
+}
+
+function HeroCard({ iconType, label, value, delta, deltaTone, color, tip, onClick }: {
+  iconType: HeroIconType;
   label: string; value: string;
   delta: string | null;
   deltaTone?: "up" | "down" | "neutral";
@@ -457,8 +482,8 @@ function HeroCard({ icon, label, value, delta, deltaTone, color, tip, onClick }:
     amber:   "bg-amber-50 border-amber-200",
   };
   const iconBg: Record<string, string> = {
-    emerald: "bg-emerald-500", sky: "bg-sky-500",
-    violet: "bg-violet-500", amber: "bg-amber-500",
+    emerald: "bg-emerald-500 text-white", sky: "bg-sky-500 text-white",
+    violet: "bg-violet-500 text-white",   amber: "bg-amber-500 text-white",
   };
   const deltaColor = deltaTone === "up" ? "text-emerald-700"
     : deltaTone === "down" ? "text-rose-700" : "text-slate-500";
@@ -470,7 +495,9 @@ function HeroCard({ icon, label, value, delta, deltaTone, color, tip, onClick }:
       className={`rounded-2xl border ${bg[color]} p-5 text-left transition ${onClick ? "hover:shadow-lg cursor-pointer" : ""}`}
     >
       <div className="flex items-start gap-3">
-        <div className={`h-10 w-10 rounded-xl ${iconBg[color]} text-white text-lg flex items-center justify-center shrink-0`}>{icon}</div>
+        <div className={`h-10 w-10 rounded-xl ${iconBg[color]} flex items-center justify-center shrink-0`}>
+          <HeroIcon type={iconType} />
+        </div>
         <div className="min-w-0 flex-1">
           <p className="text-[11px] uppercase tracking-wide text-slate-600 font-semibold">{label}</p>
           <p className="mt-1 text-2xl font-bold text-slate-900 tabular-nums truncate">{value}</p>
