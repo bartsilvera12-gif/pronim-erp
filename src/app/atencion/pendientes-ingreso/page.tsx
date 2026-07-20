@@ -152,7 +152,7 @@ export default function PendientesIngresoPage() {
                         disabled={ingresandoId === r.id}
                         className="rounded-lg bg-[#4FAEB2] hover:bg-[#3F8E91] disabled:opacity-50 text-white text-xs font-semibold px-3 py-1.5"
                       >
-                        {ingresandoId === r.id ? "Ingresando…" : "Revisar e ingresar"}
+                        {ingresandoId === r.id ? "Ingresando…" : "Ver margen e ingresar"}
                       </button>
                     </td>
                   </tr>
@@ -235,9 +235,6 @@ function PreviewIngresoModal({
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [confirmando, setConfirmando] = useState(false);
-  // Checklist: cada prenda que la cajera ya "sacó de la bolsa y revisó"
-  // se marca. Solo cuando están TODAS marcadas se habilita el confirmar.
-  const [revisados, setRevisados] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     let cancel = false;
@@ -253,32 +250,6 @@ function PreviewIngresoModal({
       .finally(() => { if (!cancel) setLoading(false); });
     return () => { cancel = true; };
   }, [recepcionId]);
-
-  // Cada "unidad revisable" es (item.id + índice de unidad). Si el item
-  // tiene cantidad 3, generamos 3 checkboxes independientes.
-  const unidades = (data?.items ?? []).flatMap(it =>
-    Array.from({ length: it.cantidad }, (_, i) => ({
-      key: `${it.id}::${i}`,
-      item: it,
-      unidad: i + 1,
-    }))
-  );
-  const totalUnidades = unidades.length;
-  const revisadasCount = unidades.filter(u => revisados.has(u.key)).length;
-  const todasRevisadas = totalUnidades > 0 && revisadasCount === totalUnidades;
-
-  const toggleUnidad = (key: string) => {
-    setRevisados(prev => {
-      const s = new Set(prev);
-      if (s.has(key)) s.delete(key);
-      else s.add(key);
-      return s;
-    });
-  };
-  const marcarTodas = () => {
-    setRevisados(new Set(unidades.map(u => u.key)));
-  };
-  const desmarcarTodas = () => setRevisados(new Set());
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
@@ -334,118 +305,86 @@ function PreviewIngresoModal({
                 )}
               </div>
 
-              {/* Checklist: revisar cada prenda una por una */}
+              {/* Lista simple: por cada prenda, precio de compra vs precio
+                  de venta lado a lado, y el margen calculado. No hay
+                  checklist ni edición — la evaluación ya se hizo y ahora
+                  solo revisamos que el margen cierre antes de mandar al
+                  inventario. */}
               <div className="rounded-xl border border-slate-200 overflow-hidden">
-                <div className="flex items-center justify-between bg-slate-50 px-4 py-2 border-b border-slate-200">
-                  <div>
-                    <h5 className="text-sm font-bold text-slate-800">Revisar prendas físicamente</h5>
-                    <p className="text-[11px] text-slate-500 mt-0.5">
-                      Marcá cada prenda a medida que la vas sacando de la bolsa.
-                      Cuando estén todas listas, confirmá el ingreso al stock.
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xs text-slate-500">Progreso</p>
-                    <p className={`text-base font-bold tabular-nums ${todasRevisadas ? "text-emerald-700" : "text-slate-700"}`}>
-                      {revisadasCount} / {totalUnidades}
-                    </p>
-                  </div>
+                <div className="grid grid-cols-[1fr_auto_auto_auto] gap-3 items-center bg-slate-50 px-4 py-2 border-b border-slate-200 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                  <span>Prenda</span>
+                  <span className="w-24 text-right">Compra</span>
+                  <span className="w-24 text-right">Venta</span>
+                  <span className="w-24 text-right">Margen</span>
                 </div>
-                <div className="px-4 py-2 border-b border-slate-100 flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={marcarTodas}
-                    disabled={todasRevisadas}
-                    className="text-[11px] text-emerald-700 hover:text-emerald-800 underline disabled:text-slate-400 disabled:no-underline"
-                  >Marcar todas</button>
-                  <button
-                    type="button"
-                    onClick={desmarcarTodas}
-                    disabled={revisadasCount === 0}
-                    className="text-[11px] text-slate-500 hover:text-slate-700 underline disabled:text-slate-300 disabled:no-underline"
-                  >Desmarcar todas</button>
-                </div>
-                <ul className="divide-y divide-slate-100 max-h-[380px] overflow-y-auto">
-                  {unidades.map((u, idx) => {
-                    const it = u.item;
-                    const marcada = revisados.has(u.key);
-                    return (
-                      <li key={u.key}>
-                        <label className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer transition ${
-                          marcada ? "bg-emerald-50/60" : "hover:bg-slate-50"
-                        }`}>
-                          <input
-                            type="checkbox"
-                            checked={marcada}
-                            onChange={() => toggleUnidad(u.key)}
-                            className="h-5 w-5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-                          />
-                          <span className="text-[10px] tabular-nums text-slate-400 w-6">{idx + 1}</span>
-                          <div className="flex-1 min-w-0">
-                            <div className={`text-sm font-medium truncate ${marcada ? "text-slate-500 line-through" : "text-slate-800"}`}>
-                              {it.producto_nombre}
-                              {it.cantidad > 1 && (
-                                <span className="ml-1.5 text-[10px] text-slate-400">unidad {u.unidad}/{it.cantidad}</span>
-                              )}
-                            </div>
-                            <div className="text-[11px] text-slate-500">
-                              {it.tipo_nombre ?? "sin tipo"} · costo Gs. {it.costo_unit.toLocaleString("es-PY")} → venta Gs. {it.venta_unit.toLocaleString("es-PY")}
-                            </div>
-                          </div>
-                          <div className={`text-right shrink-0 text-xs font-bold tabular-nums ${
-                            it.margen_unit >= 0 ? "text-emerald-700" : "text-rose-700"
-                          }`}>
-                            {it.margen_unit >= 0 ? "+" : ""}{"Gs. " + it.margen_unit.toLocaleString("es-PY")}
-                            {it.margen_pct != null && (
-                              <div className="text-[10px] font-normal opacity-70">{it.margen_pct}%</div>
+                <ul className="divide-y divide-slate-100 max-h-[420px] overflow-y-auto">
+                  {data.items.flatMap((it) =>
+                    Array.from({ length: it.cantidad }, (_, i) => (
+                      <li
+                        key={`${it.id}-${i}`}
+                        className="grid grid-cols-[1fr_auto_auto_auto] gap-3 items-center px-4 py-2.5 hover:bg-slate-50"
+                      >
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium text-slate-800 truncate">
+                            {it.producto_nombre}
+                            {it.cantidad > 1 && (
+                              <span className="ml-1.5 text-[10px] text-slate-400">({i + 1}/{it.cantidad})</span>
                             )}
                           </div>
-                        </label>
+                          <div className="text-[11px] text-slate-500">
+                            {it.tipo_nombre ?? "sin tipo"}
+                          </div>
+                        </div>
+                        <div className="w-24 text-right text-sm text-slate-700 tabular-nums">
+                          Gs. {it.costo_unit.toLocaleString("es-PY")}
+                        </div>
+                        <div className="w-24 text-right text-sm text-sky-700 font-medium tabular-nums">
+                          Gs. {it.venta_unit.toLocaleString("es-PY")}
+                        </div>
+                        <div
+                          className={`w-24 text-right text-sm font-bold tabular-nums ${
+                            it.margen_unit >= 0 ? "text-emerald-700" : "text-rose-700"
+                          }`}
+                        >
+                          {it.margen_unit >= 0 ? "+" : ""}Gs. {it.margen_unit.toLocaleString("es-PY")}
+                          {it.margen_pct != null && (
+                            <div className="text-[10px] font-normal opacity-70">{it.margen_pct}%</div>
+                          )}
+                        </div>
                       </li>
-                    );
-                  })}
+                    ))
+                  )}
                 </ul>
               </div>
 
               <p className="mt-3 text-[11px] text-slate-500">
-                El precio de venta es el de la franja al momento de la recepción. El margen real
-                puede variar si vendés con descuento, cashback o pago con costo. Los precios se
-                editan desde el catálogo de franjas.
+                El precio de compra es lo que efectivamente le pagaste al cliente por cada prenda
+                (prorrateado desde el total evaluado). El precio de venta es el de la franja al
+                momento de la recepción. Para editarlo, actualizá la franja en el catálogo.
               </p>
             </>
           )}
         </div>
 
-        <div className="border-t border-slate-100 px-5 py-3 flex items-center justify-between gap-2 shrink-0">
-          <div className="text-xs text-slate-500">
-            {data && !todasRevisadas && totalUnidades > 0 && (
-              <span>Faltan <strong className="text-amber-700">{totalUnidades - revisadasCount}</strong> prenda{totalUnidades - revisadasCount === 1 ? "" : "s"} por revisar</span>
-            )}
-            {data && todasRevisadas && (
-              <span className="text-emerald-700 font-semibold">✓ Todas revisadas — podés confirmar</span>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={confirmando}
-              className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
-            >Cancelar</button>
-            <button
-              type="button"
-              onClick={() => {
-                if (!data) return;
-                setConfirmando(true);
-                onConfirmar(data.recepcion.cliente_id);
-              }}
-              disabled={!data || confirmando || loading || !todasRevisadas}
-              title={!todasRevisadas ? "Marcá todas las prendas antes de confirmar" : undefined}
-              className="rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-sm font-semibold px-5 py-2 shadow-sm"
-            >
-              {confirmando ? "Ingresando…" : "Confirmar ingreso al stock"}
-            </button>
-          </div>
+        <div className="border-t border-slate-100 px-5 py-3 flex items-center justify-end gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={confirmando}
+            className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+          >Cancelar</button>
+          <button
+            type="button"
+            onClick={() => {
+              if (!data) return;
+              setConfirmando(true);
+              onConfirmar(data.recepcion.cliente_id);
+            }}
+            disabled={!data || confirmando || loading}
+            className="rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-sm font-semibold px-6 py-2.5 shadow-sm"
+          >
+            {confirmando ? "Ingresando…" : "Ingresar al stock"}
+          </button>
         </div>
       </div>
     </div>
