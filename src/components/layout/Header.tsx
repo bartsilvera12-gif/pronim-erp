@@ -58,6 +58,32 @@ type NotifMeta = {
   meta_periodo: number;
 };
 
+// Sonido corto tipo "bloop" para notificaciones no-celebratorias
+// (recepción pendiente nueva). Dos notas descendentes suaves.
+function playNotifSound() {
+  try {
+    const AC = (window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext);
+    if (!AC) return;
+    const ctx = new AC();
+    const now = ctx.currentTime;
+    const notes = [880, 660];
+    notes.forEach((freq, i) => {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = "sine";
+      o.frequency.value = freq;
+      const start = now + i * 0.09;
+      g.gain.setValueAtTime(0, start);
+      g.gain.linearRampToValueAtTime(0.12, start + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, start + 0.22);
+      o.connect(g).connect(ctx.destination);
+      o.start(start);
+      o.stop(start + 0.25);
+    });
+    setTimeout(() => ctx.close().catch(() => { /* ignore */ }), 800);
+  } catch { /* audio bloqueado */ }
+}
+
 
 export default function Header({ onOpenMobileSidebar }: HeaderProps = {}) {
   const router = useRouter();
@@ -103,15 +129,29 @@ export default function Header({ onOpenMobileSidebar }: HeaderProps = {}) {
 
   // Cargar notificaciones (recepciones pendientes) al montar + refrescar
   // cada 60s. El endpoint ya filtra por sucursal del usuario si tiene fija.
+  // Suena un "bloop" cuando aparece una nueva pendiente que no habíamos
+  // visto antes (comparamos ids contra la lista previa).
   useEffect(() => {
     let alive = true;
+    let seenIds = new Set<string>();
+    let esPrimerLoad = true;
     async function loadNotif() {
       try {
         const r = await fetchWithSupabaseSession("/api/recepciones/pendientes", { cache: "no-store" });
         const j = await r.json().catch(() => ({}));
         if (!alive || !j?.success) return;
-        setNotifPend((j.data?.recepciones as NotifRecep[]) ?? []);
+        const arr = (j.data?.recepciones as NotifRecep[]) ?? [];
+        setNotifPend(arr);
         setNotifClientes((j.data?.clientes as Record<string, string>) ?? {});
+        // Detectar nuevas: cualquier id que no estuviera en seenIds.
+        // En el primer load NO suena (evita sonar al abrir la página con
+        // pendientes viejos acumulados).
+        const nuevasHay = arr.some(n => !seenIds.has(n.id));
+        if (nuevasHay && !esPrimerLoad) {
+          playNotifSound();
+        }
+        seenIds = new Set(arr.map(n => n.id));
+        esPrimerLoad = false;
       } catch { /* silencioso */ }
     }
     void loadNotif();

@@ -160,6 +160,8 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
 
   // Poll de metas alcanzadas del día — se refresca cada 2 min. Independiente
   // del período seleccionado en el dashboard: acá siempre celebramos HOY.
+  // Suena un "ding-ding-ding" cuando aparece una NUEVA meta del día (no
+  // celebrada aún en localStorage por sucursal+día).
   useEffect(() => {
     let alive = true;
     async function loadMetas() {
@@ -167,7 +169,40 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
         const r = await fetchWithSupabaseSession("/api/notificaciones/metas", { cache: "no-store" });
         const j = await r.json().catch(() => ({}));
         if (!alive || !j?.success) return;
-        setMetasHoy((j.data?.metas as { sucursal_id: string; nombre: string; pct_meta: number }[]) ?? []);
+        const metas = (j.data?.metas as { sucursal_id: string; nombre: string; pct_meta: number }[]) ?? [];
+        setMetasHoy(metas);
+        // Chequear si hay meta nueva (no anunciada aún hoy en este navegador)
+        // y disparar el sonido celebratorio. La misma clave que usa la caja.
+        if (metas.length > 0 && typeof window !== "undefined") {
+          const now = new Date();
+          const diaKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+          const raw = localStorage.getItem("neura:metas-celebradas:v2") ?? "{}";
+          const seen = JSON.parse(raw) as Record<string, string>;
+          const nueva = metas.find(m => seen[m.sucursal_id] !== diaKey);
+          if (nueva) {
+            try {
+              const AC = (window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext);
+              if (AC) {
+                const ctx = new AC();
+                const t0 = ctx.currentTime;
+                [523.25, 659.25, 783.99].forEach((freq, i) => {
+                  const o = ctx.createOscillator();
+                  const g = ctx.createGain();
+                  o.type = "sine"; o.frequency.value = freq;
+                  const start = t0 + i * 0.12;
+                  g.gain.setValueAtTime(0, start);
+                  g.gain.linearRampToValueAtTime(0.18, start + 0.02);
+                  g.gain.exponentialRampToValueAtTime(0.0001, start + 0.35);
+                  o.connect(g).connect(ctx.destination);
+                  o.start(start); o.stop(start + 0.4);
+                });
+                setTimeout(() => ctx.close().catch(() => { /* ignore */ }), 1500);
+              }
+            } catch { /* audio bloqueado */ }
+            seen[nueva.sucursal_id] = diaKey;
+            localStorage.setItem("neura:metas-celebradas:v2", JSON.stringify(seen));
+          }
+        }
       } catch { /* silencioso */ }
     }
     void loadMetas();
