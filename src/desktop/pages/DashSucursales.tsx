@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
+import DashSucursalDiario from "./DashSucursalDiario";
 
 /**
  * Dashboard OPERATIVO de Sucursales — rediseño visual.
@@ -94,6 +95,7 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [drill, setDrill] = useState<{ metric: string; label: string } | null>(null);
+  const [vista, setVista] = useState<"resumen" | "diario">("resumen");
   const [abierto, setAbierto] = useState<Record<string, boolean>>({
     flujo: true, recepciones: false, credito: false, inventario: false, ventas: false, tipos: true,
   });
@@ -158,28 +160,74 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
 
   return (
     <div className="space-y-6">
-      {/* ═════ Filtro ═════ */}
-      {data.alcance.es_admin && sucursalesConocidas.length > 1 && (
-        <div className="flex items-center gap-2 text-sm">
-          <label className="text-slate-500 font-medium">Sucursal:</label>
-          <select
-            value={sucursalFiltro}
-            onChange={(e) => setSucursalFiltro(e.target.value)}
-            className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
-          >
-            <option value="">Todas las sucursales</option>
-            {sucursalesConocidas.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
-          </select>
-          {sucursalFiltro && (
-            <button
-              type="button"
-              onClick={() => setSucursalFiltro("")}
-              className="text-xs text-slate-500 hover:text-slate-700 underline"
-            >Limpiar</button>
-          )}
+      {/* ═════ Switcher de vista + filtro sucursal ═════ */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5">
+          <button
+            type="button"
+            onClick={() => setVista("resumen")}
+            className={`px-3 py-1.5 text-xs font-semibold rounded-md transition ${
+              vista === "resumen"
+                ? "bg-[#4FAEB2] text-white shadow-sm"
+                : "text-slate-500 hover:text-slate-800"
+            }`}
+          >Resumen del período</button>
+          <button
+            type="button"
+            onClick={() => {
+              // Al pasar a Diario, si no hay sucursal elegida, auto-elegir la primera.
+              if (!sucursalFiltro && sucursalesConocidas.length > 0) {
+                setSucursalFiltro(sucursalesConocidas[0].id);
+              }
+              setVista("diario");
+            }}
+            className={`px-3 py-1.5 text-xs font-semibold rounded-md transition ${
+              vista === "diario"
+                ? "bg-[#4FAEB2] text-white shadow-sm"
+                : "text-slate-500 hover:text-slate-800"
+            }`}
+          >Bitácora diaria</button>
         </div>
-      )}
+        {vista === "resumen" && data.alcance.es_admin && sucursalesConocidas.length > 1 && (
+          <div className="flex items-center gap-2 text-sm">
+            <label className="text-slate-500 font-medium">Sucursal:</label>
+            <select
+              value={sucursalFiltro}
+              onChange={(e) => setSucursalFiltro(e.target.value)}
+              className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
+            >
+              <option value="">Todas las sucursales</option>
+              {sucursalesConocidas.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+            </select>
+            {sucursalFiltro && (
+              <button
+                type="button"
+                onClick={() => setSucursalFiltro("")}
+                className="text-xs text-slate-500 hover:text-slate-700 underline"
+              >Limpiar</button>
+            )}
+          </div>
+        )}
+      </div>
 
+      {vista === "diario" ? (
+        <DashSucursalDiario
+          sucursales={sucursalesConocidas}
+          sucursalId={sucursalFiltro || (sucursalesConocidas[0]?.id ?? "")}
+          onChangeSucursal={setSucursalFiltro}
+        />
+      ) : (
+        <ResumenPeriodo />
+      )}
+    </div>
+  );
+
+  function ResumenPeriodo() {
+    // Defensivo: el componente principal ya garantiza data != null antes de
+    // renderizar, pero TS no sigue la narrowing dentro de esta función anidada.
+    if (!data) return null;
+    return (
+      <>
       {/* ═════ Hero KPIs — 4 tarjetas grandes ═════ */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <HeroCard
@@ -435,8 +483,9 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
           onClose={() => setDrill(null)}
         />
       )}
-    </div>
-  );
+      </>
+    );
+  }
 }
 
 /* ─── UI helpers ───────────────────────────────────────────────── */
