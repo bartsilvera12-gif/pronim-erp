@@ -270,7 +270,17 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
               <div className="flex items-center justify-end mt-3">
                 <button
                   type="button"
-                  onClick={() => setSucursalFiltro(metaAlcanzada.sucursal_id)}
+                  onClick={() => {
+                    // Filtramos por la sucursal ganadora + scroll a las
+                    // cards de rendimiento (donde se ve el detalle del
+                    // trabajo del período). Si el dashboard ya estaba
+                    // filtrado por esa sucursal, el scroll igual dispara.
+                    setSucursalFiltro(metaAlcanzada.sucursal_id);
+                    setTimeout(() => {
+                      document.getElementById("rendimiento-sucursales")
+                        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                    }, 50);
+                  }}
                   className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3 py-1.5 shadow-sm"
                 >
                   Ver cómo se logró
@@ -436,7 +446,7 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
 
       {/* ═════ Cards por sucursal ═════ */}
       {data.sucursales.length > 0 && (
-        <div>
+        <div id="rendimiento-sucursales">
           <h3 className="text-sm font-bold text-slate-800 mb-3">Rendimiento por sucursal</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {data.sucursales.map(s => <SucursalCard key={s.sucursal_id} s={s} />)}
