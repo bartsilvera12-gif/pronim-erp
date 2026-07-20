@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 
 type Recepcion = {
@@ -417,26 +417,19 @@ function PreviewIngresoModal({
                             return (
                               <li key={u.key} className={`flex items-center gap-2 px-3 py-2.5 ${asignada ? "bg-emerald-50/50" : ""}`}>
                                 <span className="w-6 text-[10px] tabular-nums text-slate-400">{i + 1}</span>
-                                <select
-                                  value={asignacion[u.key] ?? ""}
-                                  onChange={(e) => {
-                                    const v = e.target.value;
-                                    setAsignacion(prev => {
+                                <div className="flex-1 min-w-0">
+                                  <FranjaCombobox
+                                    franjas={franjas}
+                                    value={asignacion[u.key] ?? ""}
+                                    costoUnit={u.costo_unit}
+                                    onChange={(v) => setAsignacion(prev => {
                                       const next = { ...prev };
                                       if (v) next[u.key] = v;
                                       else delete next[u.key];
                                       return next;
-                                    });
-                                  }}
-                                  className="flex-1 min-w-0 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-400"
-                                >
-                                  <option value="">— usar franja original —</option>
-                                  {franjas.map(f => (
-                                    <option key={f.id} value={f.id}>
-                                      {f.nombre.replace(/^Prenda\s*-\s*Categor[ií]a\s*/i, "")} — Gs. {Number(f.precio_venta).toLocaleString("es-PY")}
-                                    </option>
-                                  ))}
-                                </select>
+                                    })}
+                                  />
+                                </div>
                                 <div className={`text-right shrink-0 w-24 text-xs font-bold tabular-nums ${
                                   margen >= 0 ? "text-emerald-700" : "text-rose-700"
                                 }`}>
@@ -558,6 +551,152 @@ function MarginStat({ label, value, sub, valueClass }: {
       <p className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold">{label}</p>
       <p className={`mt-0.5 text-lg font-bold tabular-nums ${valueClass ?? "text-slate-800"}`}>{value}</p>
       {sub && <p className="text-[11px] text-slate-500 mt-0.5">{sub}</p>}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Combobox estilizado con buscador para elegir franja de precio.
+// Al abrir, autofocus en el input; tipear filtra (número o nombre).
+// Enter selecciona la primera opción visible; Escape cierra.
+// ─────────────────────────────────────────────────────────────────────
+
+function FranjaCombobox({
+  franjas, value, costoUnit, onChange,
+}: {
+  franjas: Franja[];
+  value: string;
+  costoUnit: number;
+  onChange: (v: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const rootRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Cerrar al hacer click fuera.
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  // Autofocus del input cuando abre.
+  useEffect(() => {
+    if (open) setTimeout(() => inputRef.current?.focus(), 0);
+    else setQ("");
+  }, [open]);
+
+  const cleanName = (n: string) => n.replace(/^Prenda\s*-\s*Categor[ií]a\s*/i, "").trim();
+  const filtradas = franjas
+    .filter(f => {
+      if (!q.trim()) return true;
+      const term = q.replace(/\D/g, "");
+      const nombre = cleanName(f.nombre).toLowerCase();
+      const precio = String(Number(f.precio_venta));
+      return (term && precio.includes(term))
+        || nombre.includes(q.toLowerCase());
+    });
+
+  const selectedFranja = franjas.find(f => f.id === value);
+  const seleccionar = (id: string) => {
+    onChange(id);
+    setOpen(false);
+    setQ("");
+  };
+
+  return (
+    <div ref={rootRef} className="relative">
+      {/* Trigger — se ve como una tarjeta pill */}
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className={`w-full flex items-center justify-between gap-2 rounded-lg border px-3 py-1.5 text-left text-xs transition ${
+          selectedFranja
+            ? "border-emerald-400 bg-white shadow-sm hover:border-emerald-500"
+            : "border-slate-300 bg-white hover:border-emerald-300"
+        }`}
+      >
+        <span className={`truncate ${selectedFranja ? "text-slate-900 font-semibold" : "text-slate-400"}`}>
+          {selectedFranja
+            ? `Gs. ${Number(selectedFranja.precio_venta).toLocaleString("es-PY")}`
+            : "Elegí franja…"}
+        </span>
+        <svg viewBox="0 0 20 20" fill="currentColor" className={`h-4 w-4 shrink-0 text-slate-400 transition ${open ? "rotate-180" : ""}`}>
+          <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.06l3.71-3.83a.75.75 0 1 1 1.08 1.04l-4.25 4.4a.75.75 0 0 1-1.08 0l-4.25-4.4a.75.75 0 0 1 .02-1.06Z" clipRule="evenodd" />
+        </svg>
+      </button>
+
+      {/* Popover: buscador + lista */}
+      {open && (
+        <div className="absolute z-30 mt-1 left-0 right-0 min-w-[220px] rounded-xl border border-slate-200 bg-white shadow-2xl overflow-hidden">
+          <div className="p-2 border-b border-slate-100 sticky top-0 bg-white">
+            <input
+              ref={inputRef}
+              type="text"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") { e.preventDefault(); setOpen(false); }
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  if (filtradas.length > 0) seleccionar(filtradas[0].id);
+                }
+              }}
+              placeholder="Buscar (ej: 44)…"
+              className="w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:bg-white"
+            />
+          </div>
+          <ul className="max-h-56 overflow-y-auto py-1">
+            {value && (
+              <li>
+                <button
+                  type="button"
+                  onClick={() => seleccionar("")}
+                  className="w-full px-3 py-1.5 text-left text-[11px] text-slate-500 hover:bg-slate-50 italic"
+                >
+                  — usar franja original —
+                </button>
+              </li>
+            )}
+            {filtradas.length === 0 ? (
+              <li className="px-3 py-4 text-center text-[11px] text-slate-400">Sin franjas que coincidan.</li>
+            ) : (
+              filtradas.map(f => {
+                const precio = Number(f.precio_venta);
+                const margenPrev = precio - costoUnit;
+                const esSel = f.id === value;
+                return (
+                  <li key={f.id}>
+                    <button
+                      type="button"
+                      onClick={() => seleccionar(f.id)}
+                      className={`w-full flex items-center justify-between gap-2 px-3 py-1.5 text-left transition ${
+                        esSel ? "bg-emerald-100 text-emerald-900"
+                              : "text-slate-800 hover:bg-slate-50"
+                      }`}
+                    >
+                      <span className="font-semibold text-sm tabular-nums">
+                        Gs. {precio.toLocaleString("es-PY")}
+                      </span>
+                      <span className={`text-[10px] font-semibold tabular-nums ${
+                        margenPrev >= 0 ? "text-emerald-600" : "text-rose-600"
+                      }`}>
+                        {margenPrev >= 0 ? "+" : ""}{margenPrev.toLocaleString("es-PY")}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })
+            )}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
