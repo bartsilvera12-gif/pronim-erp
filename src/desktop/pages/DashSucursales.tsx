@@ -93,6 +93,11 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
   const [data, setData] = useState<Payload | null>(null);
   const [sucursalFiltro, setSucursalFiltro] = useState<string>("");
   const [sucursalesConocidas, setSucursalesConocidas] = useState<{ id: string; nombre: string }[]>([]);
+  // Metas alcanzadas HOY (endpoint liviano /api/notificaciones/metas).
+  // El banner celebratorio se dispara cuando alguna sucursal llegó al
+  // 100% del día — el pct_meta del payload principal es del período
+  // completo, así que suele quedar en 4-5% en la mayor parte del mes.
+  const [metasHoy, setMetasHoy] = useState<{ sucursal_id: string; nombre: string; pct_meta: number }[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [drill, setDrill] = useState<{ metric: string; label: string } | null>(null);
@@ -153,6 +158,23 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
 
   useEffect(() => { void cargar(); }, [cargar]);
 
+  // Poll de metas alcanzadas del día — se refresca cada 2 min. Independiente
+  // del período seleccionado en el dashboard: acá siempre celebramos HOY.
+  useEffect(() => {
+    let alive = true;
+    async function loadMetas() {
+      try {
+        const r = await fetchWithSupabaseSession("/api/notificaciones/metas", { cache: "no-store" });
+        const j = await r.json().catch(() => ({}));
+        if (!alive || !j?.success) return;
+        setMetasHoy((j.data?.metas as { sucursal_id: string; nombre: string; pct_meta: number }[]) ?? []);
+      } catch { /* silencioso */ }
+    }
+    void loadMetas();
+    const t = setInterval(loadMetas, 120_000);
+    return () => { alive = false; clearInterval(t); };
+  }, []);
+
   if (loading && !data) return <div className="py-10 text-center text-sm text-slate-500">Cargando…</div>;
   if (err) return (
     <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
@@ -182,11 +204,26 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
   const pctRecurrentes = data.flujo.clientes_unicos > 0
     ? Math.round((data.flujo.clientes_recurrentes / data.flujo.clientes_unicos) * 100) : null;
 
-  // Detectar la sucursal con meta ALCANZADA (la que más se pasó del 100%,
-  // si hay varias). El banner celebratorio solo aparece si hay alguna.
-  const metaAlcanzada = data.sucursales
+  // Detectar la sucursal con meta ALCANZADA. Se consideran dos fuentes:
+  //   1) pct_meta del período que devuelve el endpoint principal (útil a
+  //      fin de mes cuando la acumulación pasa el 100%).
+  //   2) metas alcanzadas HOY (/api/notificaciones/metas), que celebra
+  //      llegar a la meta diaria aunque el mes recién arranque.
+  // Si 1 no encuentra nada pero 2 sí, hacemos un merge con los datos del
+  // período (visitas/prendas) para poder pintar la row de métricas.
+  const metaAlcanzadaPeriodo = data.sucursales
     .filter(s => s.pct_meta != null && s.pct_meta >= 100)
     .sort((a, b) => (b.pct_meta ?? 0) - (a.pct_meta ?? 0))[0] ?? null;
+  const metaHoyTop = metasHoy.slice().sort((a, b) => b.pct_meta - a.pct_meta)[0] ?? null;
+  const metaHoyEnriquecida = metaHoyTop
+    ? (() => {
+        const s = data.sucursales.find(x => x.sucursal_id === metaHoyTop.sucursal_id);
+        if (!s) return null;
+        return { ...s, pct_meta: metaHoyTop.pct_meta };
+      })()
+    : null;
+  const metaAlcanzada = metaAlcanzadaPeriodo ?? metaHoyEnriquecida;
+  const metaEsDelDia = metaAlcanzada != null && metaAlcanzadaPeriodo == null;
 
   return (
     <div className="space-y-6">
@@ -206,8 +243,11 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
               </h3>
               <p className="text-sm text-emerald-800 mt-0.5">
                 La sucursal llegó al{" "}
-                <strong className="tabular-nums">{metaAlcanzada.pct_meta}%</strong> de su meta del período.
-                Este resultado se construyó con el trabajo de todo el período.
+                <strong className="tabular-nums">{metaAlcanzada.pct_meta}%</strong>{" "}
+                de su meta {metaEsDelDia ? "del día" : "del período"}.
+                {metaEsDelDia
+                  ? " ¡Un día para celebrar!"
+                  : " Este resultado se construyó con el trabajo de todo el período."}
               </p>
               {/* Métricas destacadas del logro */}
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 text-sm">
