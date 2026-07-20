@@ -446,12 +446,11 @@ export default function NuevaAtencionPage() {
       if (metas.length === 0) return;
       const now = new Date();
       const diaKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-      const seenRaw = localStorage.getItem("neura:metas-celebradas:v2") ?? "{}";
-      const seen = JSON.parse(seenRaw) as Record<string, string>;
-      // NO marcamos como "vista" al mostrar — así si Karen recarga
-      // sin cerrar la nota, vuelve a aparecer. El sonido sí lo tocamos
-      // una sola vez para no molestar en cada poll (misma sesión).
-      const nueva = metas.find(m => seen[m.sucursal_id] !== diaKey);
+      // Cerradas solo por sesión (× de la sticky). Sin persistencia entre
+      // sesiones — al recargar la pestaña la sticky vuelve.
+      const cerradasRaw = sessionStorage.getItem("neura:metas-cerradas") ?? "{}";
+      const cerradas = JSON.parse(cerradasRaw) as Record<string, string>;
+      const nueva = metas.find(m => cerradas[m.sucursal_id] !== diaKey);
       if (nueva) {
         setMetaAlcanzada(nueva);
         // Sound-guard por sesión (ventana de navegador). Recargar la
@@ -1819,13 +1818,18 @@ export default function NuevaAtencionPage() {
               <button
                 type="button"
                 onClick={() => {
+                  // Solo ocultar en la sesión actual (sessionStorage). Si
+                  // Karen recarga la página, la nota vuelve a aparecer —
+                  // así no se pierde si la cierra por accidente. El sonido
+                  // no se dispara de nuevo (guardado en el mismo namespace
+                  // por `sonado`).
                   try {
                     const now = new Date();
                     const diaKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-                    const raw = localStorage.getItem("neura:metas-celebradas:v2") ?? "{}";
+                    const raw = sessionStorage.getItem("neura:metas-cerradas") ?? "{}";
                     const seen = JSON.parse(raw) as Record<string, string>;
                     seen[metaAlcanzada.sucursal_id] = diaKey;
-                    localStorage.setItem("neura:metas-celebradas:v2", JSON.stringify(seen));
+                    sessionStorage.setItem("neura:metas-cerradas", JSON.stringify(seen));
                   } catch { /* ignore */ }
                   setMetaAlcanzada(null);
                 }}

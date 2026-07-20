@@ -171,14 +171,18 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
         if (!alive || !j?.success) return;
         const metas = (j.data?.metas as { sucursal_id: string; nombre: string; pct_meta: number }[]) ?? [];
         setMetasHoy(metas);
-        // Chequear si hay meta nueva (no anunciada aún hoy en este navegador)
-        // y disparar el sonido celebratorio. La misma clave que usa la caja.
+        // Sonar el "ding-ding-ding" cuando aparece meta nueva. Usamos
+        // sessionStorage (no localStorage) para que solo controle el
+        // sonido dentro de esta ventana, sin marcar la meta como
+        // "cerrada" — el sticky de la caja usa localStorage con el
+        // click × como acción explícita del usuario. Si escribiéramos
+        // acá, la caja nunca mostraría el sticky.
         if (metas.length > 0 && typeof window !== "undefined") {
           const now = new Date();
           const diaKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-          const raw = localStorage.getItem("neura:metas-celebradas:v2") ?? "{}";
-          const seen = JSON.parse(raw) as Record<string, string>;
-          const nueva = metas.find(m => seen[m.sucursal_id] !== diaKey);
+          const sonadoRaw = sessionStorage.getItem("neura:metas-sonadas") ?? "{}";
+          const sonado = JSON.parse(sonadoRaw) as Record<string, string>;
+          const nueva = metas.find(m => sonado[m.sucursal_id] !== diaKey);
           if (nueva) {
             try {
               const AC = (window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext);
@@ -199,8 +203,8 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
                 setTimeout(() => ctx.close().catch(() => { /* ignore */ }), 1500);
               }
             } catch { /* audio bloqueado */ }
-            seen[nueva.sucursal_id] = diaKey;
-            localStorage.setItem("neura:metas-celebradas:v2", JSON.stringify(seen));
+            sonado[nueva.sucursal_id] = diaKey;
+            sessionStorage.setItem("neura:metas-sonadas", JSON.stringify(sonado));
           }
         }
       } catch { /* silencioso */ }
