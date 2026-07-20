@@ -214,6 +214,18 @@ export async function GET(request: NextRequest) {
         args,
       );
 
+      // Costo total de las ventas del día (para calcular margen bruto).
+      // Usa el snapshot ventas_items.costo_unitario_snapshot.
+      const costoDiaQ = await client.query<{ total: string }>(
+        `SELECT COALESCE(SUM(vi.cantidad * COALESCE(vi.costo_unitario_snapshot, 0)), 0)::text AS total
+         FROM ${ventasItT} vi
+         JOIN ${ventasT} v ON v.id = vi.venta_id
+         WHERE v.empresa_id = $1 AND v.sucursal_id = $2
+           AND v.estado IN ('pendiente','completada')
+           AND v.fecha::date = $3`,
+        args,
+      );
+
       const operaciones = opsQ.rows.map(r => ({
         id: r.id, fecha: r.fecha, tipo: r.tipo,
         cliente: r.cliente_nombre ?? "(sin cliente)",
@@ -241,6 +253,11 @@ export async function GET(request: NextRequest) {
       const salidasHoy = Number(salidasHoyQ.rows[0]?.total ?? 0);
       const stockFinal = Number(stockFinalQ.rows[0]?.total ?? 0);
       const stockInicial = stockFinal - (entradasHoy - salidasHoy);
+      const costoTotalDia = Math.round(Number(costoDiaQ.rows[0]?.total ?? 0));
+      const margenBrutoDia = Math.round(ventasTotal - costoTotalDia);
+      const margenPctDia = ventasTotal > 0
+        ? Math.round((margenBrutoDia / ventasTotal) * 1000) / 10
+        : null;
 
       return NextResponse.json(successResponse({
         fecha, sucursal_id: sucursalId, sucursal_nombre: sucursalNombre,
@@ -255,6 +272,9 @@ export async function GET(request: NextRequest) {
           stock_final: stockFinal,
           ventas_total: ventasTotal,
           evaluado_total: evaluadoTotal,
+          costo_total: costoTotalDia,
+          margen_bruto: margenBrutoDia,
+          margen_pct: margenPctDia,
         },
         caja_del_dia: {
           ingresos: cajaQ.rows.map(r => ({ metodo: r.metodo, total: Number(r.total), ops: Number(r.ops) })),

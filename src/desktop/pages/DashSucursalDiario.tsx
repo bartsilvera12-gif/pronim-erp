@@ -22,6 +22,7 @@ type Payload = {
     prendas_recibidas: number; prendas_vendidas: number;
     stock_inicial: number; stock_final: number;
     ventas_total: number; evaluado_total: number;
+    costo_total: number; margen_bruto: number; margen_pct: number | null;
   };
   caja_del_dia: {
     ingresos: { metodo: string; total: number; ops: number }[];
@@ -150,6 +151,26 @@ export default function DashSucursalDiario({
               extra={`Δ ${data.resumen.stock_final - data.resumen.stock_inicial >= 0 ? "+" : ""}${data.resumen.stock_final - data.resumen.stock_inicial}`} />
             <StatCard label="Total vendido" value={fmtGs(data.resumen.ventas_total)} tone="sky" />
             <StatCard label="Total evaluado" value={fmtGs(data.resumen.evaluado_total)} tone="amber" />
+          </div>
+
+          {/* Margen de ganancia del día — compra vs venta.
+              Fórmula: SUM(precio_venta) − SUM(costo_unitario_snapshot × cantidad).
+              El costo unitario viene del WACP guardado al crear la venta. */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <StatCard label="Costo de venta" value={fmtGs(data.resumen.costo_total)} tone="slate"
+              extra="Costo WACP de las prendas vendidas hoy" />
+            <StatCard
+              label="Margen bruto"
+              value={fmtGs(data.resumen.margen_bruto)}
+              tone={data.resumen.margen_bruto >= 0 ? "emerald" : "slate"}
+              extra="Ventas − costo de venta"
+            />
+            <StatCard
+              label="Margen %"
+              value={data.resumen.margen_pct != null ? `${data.resumen.margen_pct}%` : "—"}
+              tone={data.resumen.margen_pct != null && data.resumen.margen_pct >= 0 ? "emerald" : "slate"}
+              extra="Margen bruto ÷ ventas × 100"
+            />
           </div>
 
           {/* 2 columnas: Caja del día + Bitácora */}

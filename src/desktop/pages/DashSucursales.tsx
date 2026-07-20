@@ -52,6 +52,7 @@ type Payload = {
   };
   ventas: {
     cantidad: number; prendas: number; total: number;
+    costo_total: number; margen_bruto: number; margen_pct: number | null;
     ticket_promedio: number; prendas_por_venta_prom: number | null;
     promociones_aplicadas: number; cashback_total: number; descuento_total: number;
     beneficios_entregados: number; cambios: number;
@@ -441,6 +442,27 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
         abierto={abierto.ventas}
         onToggle={() => setAbierto(p => ({ ...p, ventas: !p.ventas }))}
       >
+        {/* Bloque destacado: MARGEN de ganancia — lo que Karen pide.
+            Compra (costo WACP guardado en ventas_items.costo_unitario_snapshot)
+            vs venta (precio_venta × cantidad). El margen dice cuánto queda
+            de ganancia bruta después de "recuperar" lo que se pagó por la
+            ropa al cliente. */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3 p-3 rounded-xl bg-gradient-to-br from-emerald-50 to-slate-50 border border-emerald-200">
+          <MiniKpi label="Costo de venta" value={fmtGsCompact(data.ventas.costo_total)} tip="SUM(cantidad × costo_unitario_snapshot) de items de venta — WACP del producto al momento de vender." />
+          <MiniKpi
+            label="Margen bruto"
+            value={fmtGs(data.ventas.margen_bruto)}
+            valueClass={data.ventas.margen_bruto >= 0 ? "text-emerald-700" : "text-rose-700"}
+            tip="Ventas totales − costo de venta."
+          />
+          <MiniKpi
+            label="Margen %"
+            value={data.ventas.margen_pct != null ? `${data.ventas.margen_pct}%` : "—"}
+            valueClass={data.ventas.margen_pct != null && data.ventas.margen_pct >= 0 ? "text-emerald-700" : "text-rose-700"}
+            tip="Margen bruto ÷ ventas × 100."
+          />
+        </div>
+
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <MiniKpi label="Ventas" value={fmtN(data.ventas.cantidad)} />
           <MiniKpi label="Prendas" value={fmtN(data.ventas.prendas)} onClick={() => setDrill({ metric: "prendas_vendidas", label: "Prendas vendidas" })} />

@@ -351,6 +351,7 @@ export async function GET(request: NextRequest) {
         ventas: string; prendas: string; total: string;
         promociones: string; cashback_total: string; descuento_total: string;
         cambios_confirmados: string; anulaciones_venta: string; anulaciones_recep: string;
+        costo_total: string;
       }>(
         `SELECT
            COALESCE((
@@ -404,7 +405,19 @@ export async function GET(request: NextRequest) {
              WHERE r.empresa_id = $1 AND r.estado = 'anulada'
                AND r.fecha::date BETWEEN $2 AND $3
                ${sucursalFiltro ? "AND r.sucursal_id = $4" : ""}
-           ), 0)::text AS anulaciones_recep`,
+           ), 0)::text AS anulaciones_recep,
+           -- Costo total de las ventas del período. Basado en el
+           -- snapshot ventas_items.costo_unitario_snapshot que se guarda
+           -- al crear la venta (viene del WACP del producto). Habilita
+           -- el cálculo de margen bruto sin necesidad de recorrer FIFO.
+           COALESCE((
+             SELECT SUM(vi.cantidad * COALESCE(vi.costo_unitario_snapshot, 0))
+             FROM ${ventasItT} vi
+             JOIN ${ventasT} v ON v.id = vi.venta_id
+             WHERE v.empresa_id = $1 AND v.estado IN ('pendiente','completada')
+               AND v.fecha::date BETWEEN $2 AND $3
+               ${sucursalFiltro ? "AND v.sucursal_id = $4" : ""}
+           ), 0)::text AS costo_total`,
         args,
       );
       const vs = ventasQ.rows[0];
@@ -685,6 +698,11 @@ export async function GET(request: NextRequest) {
           cantidad: Number(vs.ventas),
           prendas: Number(vs.prendas),
           total: Number(vs.total),
+          costo_total: Math.round(Number(vs.costo_total)),
+          margen_bruto: Math.round(Number(vs.total) - Number(vs.costo_total)),
+          margen_pct: Number(vs.total) > 0
+            ? Math.round(((Number(vs.total) - Number(vs.costo_total)) / Number(vs.total)) * 1000) / 10
+            : null,
           ticket_promedio: Number(vs.ventas) > 0 ? Math.round(Number(vs.total) / Number(vs.ventas)) : 0,
           prendas_por_venta_prom: Number(vs.ventas) > 0
             ? Math.round((Number(vs.prendas) / Number(vs.ventas)) * 10) / 10 : null,
