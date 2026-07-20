@@ -1838,6 +1838,22 @@ export default function NuevaAtencionPage() {
                 <strong className="tabular-nums">{metaAlcanzada.pct_meta}%</strong>{" "}
                 de la meta del día.
               </p>
+              {/* Confetti decorativo */}
+              <svg viewBox="0 0 200 40" className="mx-auto mt-2 w-full h-8" aria-hidden>
+                <g fill="none" strokeWidth={2} strokeLinecap="round">
+                  <path d="M20 25 L28 10" stroke="#f59e0b" />
+                  <path d="M45 30 L52 15" stroke="#10b981" />
+                  <path d="M70 22 L78 8" stroke="#ef4444" />
+                  <path d="M100 32 L108 18" stroke="#3b82f6" />
+                  <path d="M130 22 L138 8" stroke="#f59e0b" />
+                  <path d="M155 30 L162 15" stroke="#10b981" />
+                  <path d="M180 25 L188 10" stroke="#a855f7" />
+                  <circle cx="35" cy="18" r="2" fill="#f59e0b" />
+                  <circle cx="88" cy="20" r="2" fill="#10b981" />
+                  <circle cx="120" cy="14" r="2" fill="#ef4444" />
+                  <circle cx="170" cy="20" r="2" fill="#3b82f6" />
+                </g>
+              </svg>
             </div>
           )}
 
