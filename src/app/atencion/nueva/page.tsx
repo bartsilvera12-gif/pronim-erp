@@ -725,6 +725,10 @@ export default function NuevaAtencionPage() {
     setPromoAplicada(null); setCuponInput(""); setPromoError(null);
     setTraeMontoFinal("");
     setError(null);
+    // Limpiar cliente para que la próxima venta arranque en blanco.
+    setCliente(null);
+    setClienteQuery("");
+    setClienteOpen(false);
   }
 
   async function aplicarPromocion(cuponManual: string | null) {
