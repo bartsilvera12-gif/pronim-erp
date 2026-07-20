@@ -168,6 +168,11 @@ export default function PendientesIngresoPage() {
         <PreviewIngresoModal
           recepcionId={previewId}
           onClose={() => setPreviewId(null)}
+          onRefresh={() => {
+            setOk("Recepción ingresada al stock. Las prendas ya están disponibles para vender.");
+            setTimeout(() => setOk(null), 6000);
+            cargar();
+          }}
           onConfirmar={async (cliId) => {
             const idQueSeIngresa = previewId;
             setIngresandoId(idQueSeIngresa);
@@ -222,29 +227,43 @@ type PreviewPayload = {
   };
 };
 
+type Franja = { id: string; nombre: string; precio_venta: number | string };
+
 function PreviewIngresoModal({
   recepcionId,
   onClose,
   onConfirmar,
+  onRefresh,
 }: {
   recepcionId: string;
   onClose: () => void;
-  onConfirmar: (clienteId: string) => void;
+  onConfirmar: (clienteId: string) => void; // "cargar todo así nomás"
+  onRefresh: () => void;
 }) {
   const [data, setData] = useState<PreviewPayload | null>(null);
+  const [franjas, setFranjas] = useState<Franja[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [confirmando, setConfirmando] = useState(false);
+  // asignacion[unidadKey] = producto_id de la franja elegida en la
+  // columna derecha para esa unidad específica. Si no se toca, queda
+  // sin asignar y no se incluye en el override — usa la original.
+  const [asignacion, setAsignacion] = useState<Record<string, string>>({});
 
   useEffect(() => {
     let cancel = false;
     setLoading(true);
-    fetchWithSupabaseSession(`/api/recepciones/${recepcionId}/preview`, { cache: "no-store" })
-      .then(r => r.json())
-      .then(j => {
+    Promise.all([
+      fetchWithSupabaseSession(`/api/recepciones/${recepcionId}/preview`, { cache: "no-store" }).then(r => r.json()),
+      fetchWithSupabaseSession("/api/franjas/publicas", { cache: "no-store" }).then(r => r.json()),
+    ])
+      .then(([jp, jf]) => {
         if (cancel) return;
-        if (!j?.success) throw new Error(j?.error ?? "Error");
-        setData(j.data as PreviewPayload);
+        if (!jp?.success) throw new Error(jp?.error ?? "Error cargando preview");
+        setData(jp.data as PreviewPayload);
+        const fr = (jf?.data?.franjas as Franja[] | undefined) ?? [];
+        setFranjas(fr.map(f => ({ ...f, precio_venta: Number(f.precio_venta) || 0 }))
+                     .sort((a, b) => (a.precio_venta as number) - (b.precio_venta as number)));
       })
       .catch(e => setErr(e instanceof Error ? e.message : "Error"))
       .finally(() => { if (!cancel) setLoading(false); });
@@ -268,7 +287,7 @@ function PreviewIngresoModal({
 
         <div className="overflow-auto flex-1 p-5">
           {loading && !data && <p className="py-8 text-center text-sm text-slate-400">Cargando detalle…</p>}
-          {err && <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{err}</div>}
+          {err && <div className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{err}</div>}
           {data && (
             <>
               {/* Bloque destacado: margen esperado */}
@@ -305,87 +324,227 @@ function PreviewIngresoModal({
                 )}
               </div>
 
-              {/* Lista simple: por cada prenda, precio de compra vs precio
-                  de venta lado a lado, y el margen calculado. No hay
-                  checklist ni edición — la evaluación ya se hizo y ahora
-                  solo revisamos que el margen cierre antes de mandar al
-                  inventario. */}
-              <div className="rounded-xl border border-slate-200 overflow-hidden">
-                <div className="grid grid-cols-[1fr_auto_auto_auto] gap-3 items-center bg-slate-50 px-4 py-2 border-b border-slate-200 text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                  <span>Prenda</span>
-                  <span className="w-24 text-right">Compra</span>
-                  <span className="w-24 text-right">Venta</span>
-                  <span className="w-24 text-right">Margen</span>
-                </div>
-                <ul className="divide-y divide-slate-100 max-h-[420px] overflow-y-auto">
-                  {data.items.flatMap((it) =>
-                    Array.from({ length: it.cantidad }, (_, i) => (
-                      <li
-                        key={`${it.id}-${i}`}
-                        className="grid grid-cols-[1fr_auto_auto_auto] gap-3 items-center px-4 py-2.5 hover:bg-slate-50"
-                      >
-                        <div className="min-w-0">
-                          <div className="text-sm font-medium text-slate-800 truncate">
-                            {it.producto_nombre}
-                            {it.cantidad > 1 && (
-                              <span className="ml-1.5 text-[10px] text-slate-400">({i + 1}/{it.cantidad})</span>
-                            )}
-                          </div>
-                          <div className="text-[11px] text-slate-500">
-                            {it.tipo_nombre ?? "sin tipo"}
-                          </div>
-                        </div>
-                        <div className="w-24 text-right text-sm text-slate-700 tabular-nums">
-                          Gs. {it.costo_unit.toLocaleString("es-PY")}
-                        </div>
-                        <div className="w-24 text-right text-sm text-sky-700 font-medium tabular-nums">
-                          Gs. {it.venta_unit.toLocaleString("es-PY")}
-                        </div>
-                        <div
-                          className={`w-24 text-right text-sm font-bold tabular-nums ${
-                            it.margen_unit >= 0 ? "text-emerald-700" : "text-rose-700"
-                          }`}
-                        >
-                          {it.margen_unit >= 0 ? "+" : ""}Gs. {it.margen_unit.toLocaleString("es-PY")}
-                          {it.margen_pct != null && (
-                            <div className="text-[10px] font-normal opacity-70">{it.margen_pct}%</div>
-                          )}
-                        </div>
-                      </li>
-                    ))
-                  )}
-                </ul>
-              </div>
+              {/* 2 paneles: IZQ prendas compradas (readonly, con su costo)
+                  DER franja de venta a asignar por unidad (dropdown).
+                  El margen se calcula en vivo cliente-side comparando el
+                  costo prorrateado con el precio_venta de la franja elegida. */}
+              {(() => {
+                // Aplanar items en "unidades" para poder asignar franja individual.
+                const unidades = data.items.flatMap((it) =>
+                  Array.from({ length: it.cantidad }, (_, i) => ({
+                    key: `${it.id}-${i}`,
+                    item_id: it.id,
+                    idx: i + 1,
+                    cantidad_total: it.cantidad,
+                    producto_original_id: it.producto_id,
+                    producto_original_nombre: it.producto_nombre,
+                    tipo_nombre: it.tipo_nombre,
+                    costo_unit: it.costo_unit,
+                    venta_original: it.venta_unit,
+                  }))
+                );
+                // Precio de venta actual por unidad (edición o valor original)
+                const precioVentaDe = (u: typeof unidades[number]): number => {
+                  const franjaId = asignacion[u.key];
+                  if (franjaId) {
+                    const f = franjas.find(f => f.id === franjaId);
+                    if (f) return Number(f.precio_venta);
+                  }
+                  return u.venta_original;
+                };
+                const asignadas = unidades.filter(u => asignacion[u.key]).length;
+                // Totales en vivo
+                const totalCosto = unidades.reduce((s, u) => s + u.costo_unit, 0);
+                const totalVenta = unidades.reduce((s, u) => s + precioVentaDe(u), 0);
+                const totalMargen = totalVenta - totalCosto;
+                const totalMargenPct = totalVenta > 0 ? Math.round((totalMargen / totalVenta) * 1000) / 10 : null;
 
-              <p className="mt-3 text-[11px] text-slate-500">
-                El precio de compra es lo que efectivamente le pagaste al cliente por cada prenda
-                (prorrateado desde el total evaluado). El precio de venta es el de la franja al
-                momento de la recepción. Para editarlo, actualizá la franja en el catálogo.
-              </p>
+                return (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* PANEL IZQUIERDO — Lo que compraste */}
+                      <div className="rounded-xl border border-slate-200 overflow-hidden">
+                        <div className="bg-slate-100 px-3 py-2 border-b border-slate-200">
+                          <h5 className="text-xs font-bold uppercase text-slate-600">
+                            Prendas compradas
+                          </h5>
+                          <p className="text-[10px] text-slate-500">Costo prorrateado por unidad</p>
+                        </div>
+                        <ul className="divide-y divide-slate-100 max-h-[420px] overflow-y-auto">
+                          {unidades.map((u, i) => (
+                            <li key={u.key} className="flex items-center gap-2 px-3 py-2.5">
+                              <span className="w-6 text-[10px] tabular-nums text-slate-400">{i + 1}</span>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-medium text-slate-800 truncate">
+                                  {u.producto_original_nombre}
+                                  {u.cantidad_total > 1 && (
+                                    <span className="ml-1 text-[10px] text-slate-400">({u.idx}/{u.cantidad_total})</span>
+                                  )}
+                                </div>
+                                <div className="text-[11px] text-slate-500">{u.tipo_nombre ?? "sin tipo"}</div>
+                              </div>
+                              <div className="text-right shrink-0">
+                                <div className="text-sm font-bold text-slate-800 tabular-nums">
+                                  Gs. {u.costo_unit.toLocaleString("es-PY")}
+                                </div>
+                                <div className="text-[10px] text-slate-500">costo</div>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      {/* PANEL DERECHO — Cargar franja de venta */}
+                      <div className="rounded-xl border-2 border-emerald-200 overflow-hidden">
+                        <div className="bg-emerald-50 px-3 py-2 border-b border-emerald-200 flex items-center justify-between">
+                          <div>
+                            <h5 className="text-xs font-bold uppercase text-emerald-800">
+                              Asignar precio de venta
+                            </h5>
+                            <p className="text-[10px] text-emerald-700">
+                              Elegí una franja por cada prenda; el margen se calcula en vivo
+                            </p>
+                          </div>
+                          <span className="text-xs font-bold text-emerald-800 tabular-nums shrink-0">
+                            {asignadas}/{unidades.length}
+                          </span>
+                        </div>
+                        <ul className="divide-y divide-slate-100 max-h-[420px] overflow-y-auto">
+                          {unidades.map((u, i) => {
+                            const asignada = Boolean(asignacion[u.key]);
+                            const precioVenta = precioVentaDe(u);
+                            const margen = precioVenta - u.costo_unit;
+                            return (
+                              <li key={u.key} className={`flex items-center gap-2 px-3 py-2.5 ${asignada ? "bg-emerald-50/50" : ""}`}>
+                                <span className="w-6 text-[10px] tabular-nums text-slate-400">{i + 1}</span>
+                                <select
+                                  value={asignacion[u.key] ?? ""}
+                                  onChange={(e) => {
+                                    const v = e.target.value;
+                                    setAsignacion(prev => {
+                                      const next = { ...prev };
+                                      if (v) next[u.key] = v;
+                                      else delete next[u.key];
+                                      return next;
+                                    });
+                                  }}
+                                  className="flex-1 min-w-0 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                                >
+                                  <option value="">— usar franja original —</option>
+                                  {franjas.map(f => (
+                                    <option key={f.id} value={f.id}>
+                                      {f.nombre.replace(/^Prenda\s*-\s*Categor[ií]a\s*/i, "")} — Gs. {Number(f.precio_venta).toLocaleString("es-PY")}
+                                    </option>
+                                  ))}
+                                </select>
+                                <div className={`text-right shrink-0 w-24 text-xs font-bold tabular-nums ${
+                                  margen >= 0 ? "text-emerald-700" : "text-rose-700"
+                                }`}>
+                                  {margen >= 0 ? "+" : ""}Gs. {margen.toLocaleString("es-PY")}
+                                  <div className="text-[10px] font-normal opacity-70">
+                                    {precioVenta > 0 ? Math.round((margen / precioVenta) * 100) : 0}%
+                                  </div>
+                                </div>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </div>
+                    </div>
+
+                    {/* Totales en vivo — cambia al asignar franjas */}
+                    <div className={`mt-4 rounded-xl border-2 p-4 ${
+                      totalMargen >= 0
+                        ? "border-emerald-300 bg-gradient-to-br from-emerald-50 to-slate-50"
+                        : "border-rose-300 bg-gradient-to-br from-rose-50 to-slate-50"
+                    }`}>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <MarginStat label="Costo total" value={"Gs. " + Math.round(totalCosto).toLocaleString("es-PY")} />
+                        <MarginStat label="Venta esperada" value={"Gs. " + Math.round(totalVenta).toLocaleString("es-PY")} valueClass="text-sky-800" />
+                        <MarginStat
+                          label="Margen bruto"
+                          value={"Gs. " + Math.round(totalMargen).toLocaleString("es-PY")}
+                          valueClass={totalMargen >= 0 ? "text-emerald-800" : "text-rose-800"}
+                          sub={totalMargen >= 0 ? "✓ Estás ganando" : "⚠ Estás perdiendo"}
+                        />
+                        <MarginStat
+                          label="Margen %"
+                          value={totalMargenPct != null ? `${totalMargenPct}%` : "—"}
+                          valueClass={totalMargenPct != null && totalMargenPct >= 0 ? "text-emerald-800" : "text-rose-800"}
+                        />
+                      </div>
+                    </div>
+
+                    <p className="mt-3 text-[11px] text-slate-500">
+                      Elegí la franja de venta prenda por prenda para asignar el precio real
+                      de cada una. Si dejás "franja original", se usa el precio con el que
+                      se cargó al recibir. Al confirmar se ingresan al stock con los precios
+                      aquí seleccionados.
+                    </p>
+
+                    {/* Footer con dos acciones */}
+                    <div className="mt-4 pt-4 border-t border-slate-200 flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:justify-between">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!data) return;
+                          setConfirmando(true);
+                          onConfirmar(data.recepcion.cliente_id);
+                        }}
+                        disabled={!data || confirmando || loading}
+                        className="text-xs text-slate-600 hover:text-slate-900 underline"
+                      >
+                        Cargar todo así nomás (sin cambiar franjas)
+                      </button>
+                      <div className="flex items-center gap-2 justify-end">
+                        <button
+                          type="button"
+                          onClick={onClose}
+                          disabled={confirmando}
+                          className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                        >Cancelar</button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (!data) return;
+                            setConfirmando(true);
+                            setErr(null);
+                            try {
+                              const overrides = Object.entries(asignacion).map(([key, producto_id]) => {
+                                const u = unidades.find(x => x.key === key);
+                                return u ? { item_id: u.item_id, producto_id } : null;
+                              }).filter(Boolean);
+                              const rr = await fetchWithSupabaseSession(
+                                `/api/recepciones/${recepcionId}/ingresar-con-overrides`,
+                                {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ overrides }),
+                                },
+                              );
+                              const j = await rr.json().catch(() => ({}));
+                              if (!rr.ok || j?.success === false) throw new Error(j?.error ?? `Error ${rr.status}`);
+                              onClose();
+                              onRefresh();
+                            } catch (e) {
+                              setErr(e instanceof Error ? e.message : "Error al ingresar.");
+                              setConfirmando(false);
+                            }
+                          }}
+                          disabled={!data || confirmando || loading}
+                          className="rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white text-sm font-semibold px-6 py-2.5 shadow-sm"
+                        >
+                          {confirmando ? "Ingresando…" : "Ingresar con estos precios"}
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
             </>
           )}
         </div>
 
-        <div className="border-t border-slate-100 px-5 py-3 flex items-center justify-end gap-2 shrink-0">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={confirmando}
-            className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
-          >Cancelar</button>
-          <button
-            type="button"
-            onClick={() => {
-              if (!data) return;
-              setConfirmando(true);
-              onConfirmar(data.recepcion.cliente_id);
-            }}
-            disabled={!data || confirmando || loading}
-            className="rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-sm font-semibold px-6 py-2.5 shadow-sm"
-          >
-            {confirmando ? "Ingresando…" : "Ingresar al stock"}
-          </button>
-        </div>
       </div>
     </div>
   );
