@@ -466,7 +466,7 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
 
       {/* ═════ Tipos de prenda ═════ */}
       <Accordion
-        titulo="Tipos de prenda más traídos"
+        titulo="Franjas más recibidas"
         abierto={abierto.tipos}
         onToggle={() => setAbierto(p => ({ ...p, tipos: !p.tipos }))}
       >

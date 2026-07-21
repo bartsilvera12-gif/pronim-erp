@@ -593,33 +593,29 @@ export async function GET(request: NextRequest) {
         args,
       );
 
-      // ═════ 9) Tipos de prenda (ranking mix) ═════
-      // Prioridad de agrupamiento:
-      //   1. tipo_prenda si el ítem lo tiene (categoría curada).
-      //   2. franja (producto.nombre) como fallback — así al menos se ve
-      //      la distribución por rango de precio en lugar de un genérico
-      //      "(sin tipo)" que no aporta nada operativamente.
+      // ═════ 9) Ranking por franja (mix de prendas recibidas) ═════
+      // Karen agrupa por FRANJA (rango de precio) — no usa tipos_prenda.
+      // Se muestra 'Franja Gs. X' normalizando el prefix 'Prenda -
+      // Categoría' que arrastra el producto.
       const tiposQ = await client.query<{
         tipo_id: string; tipo_nombre: string; cantidad: string;
       }>(
         `SELECT
-           COALESCE(t.id::text, 'franja:' || p.id::text, 'sin_tipo') AS tipo_id,
+           COALESCE('franja:' || p.id::text, 'sin_producto') AS tipo_id,
            COALESCE(
-             t.nombre,
              CASE WHEN p.nombre IS NOT NULL
                   THEN 'Franja ' || regexp_replace(p.nombre, '^Prenda\\s*-\\s*Categor[ií]a\\s*', '', 'i')
              END,
-             '(sin categoría)'
+             '(sin franja)'
            ) AS tipo_nombre,
            COALESCE(SUM(ri.cantidad), 0)::text AS cantidad
          FROM ${recepItT} ri
          JOIN ${recepT} r ON r.id = ri.recepcion_id
-         LEFT JOIN ${tiposT} t ON t.id = ri.tipo_prenda_id
          LEFT JOIN ${prodT} p ON p.id = ri.producto_id
          WHERE r.empresa_id = $1 AND r.estado <> 'anulada'
            AND r.fecha::date BETWEEN $2 AND $3
            ${sucursalFiltro ? "AND r.sucursal_id = $4" : ""}
-         GROUP BY t.id, t.nombre, p.id, p.nombre
+         GROUP BY p.id, p.nombre
          ORDER BY SUM(ri.cantidad) DESC NULLS LAST
          LIMIT 20`,
         args,
