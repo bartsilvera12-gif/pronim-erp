@@ -33,18 +33,6 @@ type Payload = {
 function fmtGs(n: number) { return "Gs. " + Math.round(n || 0).toLocaleString("es-PY"); }
 function fmtN(n: number) { return (n || 0).toLocaleString("es-PY"); }
 
-const SEGMENTO_LABEL: Record<Fila["segmento"], string> = {
-  vip: "VIP",
-  habitual: "Frecuente",
-  nuevo: "Nuevo",
-  dormido: "Dormido",
-};
-const SEG_COLOR: Record<Fila["segmento"], string> = {
-  vip: "bg-amber-100 text-amber-800 ring-amber-200",
-  habitual: "bg-emerald-100 text-emerald-800 ring-emerald-200",
-  nuevo: "bg-sky-100 text-sky-800 ring-sky-200",
-  dormido: "bg-violet-100 text-violet-800 ring-violet-200",
-};
 
 export default function DashClientes({ desde, hasta }: { desde: string; hasta: string }) {
   const [data, setData] = useState<Payload | null>(null);
@@ -171,50 +159,10 @@ export default function DashClientes({ desde, hasta }: { desde: string; hasta: s
              tip="AVG de días desde la última visita, sobre clientes con al menos 1 visita." />
       </div>
 
-      {/* Tabla principal */}
-      <div className="rounded-xl border border-slate-200 bg-white overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50 border-b border-slate-200">
-            <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
-              <th className="px-3 py-2">Cliente</th>
-              <th className="px-3 py-2">Segmento</th>
-              <th className="px-3 py-2 text-right">Última visita</th>
-              <th className="px-3 py-2 text-right">Días desde</th>
-              <th className="px-3 py-2 text-right">Prendas traídas</th>
-              <th className="px-3 py-2 text-right">Compras (período)</th>
-              <th className="px-3 py-2 text-right">Crédito</th>
-              <th className="px-3 py-2">Sucursal preferida</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {data.filas.map((c) => (
-              <tr key={c.cliente_id}>
-                <td className="px-3 py-2">
-                  <Link href={`/clientes/${c.cliente_id}`} className="font-medium text-slate-800 hover:underline">
-                    {c.nombre}
-                  </Link>
-                </td>
-                <td className="px-3 py-2">
-                  <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ${SEG_COLOR[c.segmento]}`}>
-                    {SEGMENTO_LABEL[c.segmento]}
-                  </span>
-                </td>
-                <td className="px-3 py-2 text-right text-slate-600">
-                  {c.ultima_visita ? new Date(c.ultima_visita).toLocaleDateString("es-PY") : "—"}
-                </td>
-                <td className="px-3 py-2 text-right">{c.dias_desde_ultima ?? "—"}</td>
-                <td className="px-3 py-2 text-right">{fmtN(c.prendas_traidas_periodo)}</td>
-                <td className="px-3 py-2 text-right">{fmtN(c.compras_periodo)}</td>
-                <td className="px-3 py-2 text-right">{fmtGs(Math.max(0, c.saldo_credito))}</td>
-                <td className="px-3 py-2 text-slate-600">{c.sucursal_preferida_nombre ?? "—"}</td>
-              </tr>
-            ))}
-            {data.filas.length === 0 && (
-              <tr><td colSpan={8} className="px-3 py-6 text-center text-slate-400">Sin clientes en el filtro.</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      {/* Distribución por segmento — donut compacto que reemplaza la
+          tabla plana de clientes (que era una lista sin agregación). */}
+      <DistribucionSegmentos kpis={k} />
+
 
       {/* Rankings */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
@@ -224,6 +172,85 @@ export default function DashClientes({ desde, hasta }: { desde: string; hasta: s
           getVal={(c) => `${fmtN(c.prendas_traidas_periodo)} u.`} />
         <Ranking titulo="Top 10 por visitas recientes" filas={data.rankings.por_visitas}
           getVal={(c) => `${fmtN(c.compras_periodo)} en período`} />
+      </div>
+    </div>
+  );
+}
+
+function DistribucionSegmentos({ kpis }: { kpis: Payload["kpis"] }) {
+  // 4 segmentos canónicos. El total del donut = suma de segmentos (no
+  // kpis.total, que puede incluir clientes sin actividad todavía).
+  const segs = [
+    { key: "vip",       label: "VIP",       n: kpis.vip,      color: "#f59e0b" },
+    { key: "habitual",  label: "Frecuente", n: kpis.habitual, color: "#10b981" },
+    { key: "nuevo",     label: "Nuevo",     n: kpis.nuevo,    color: "#38bdf8" },
+    { key: "dormido",   label: "Dormido",   n: kpis.dormido,  color: "#a78bfa" },
+  ];
+  const total = segs.reduce((s, x) => s + x.n, 0);
+
+  // Construimos los arcos del donut (SVG). Radio interno 40, externo 60.
+  const R = 60, r = 40, cx = 70, cy = 70;
+  let acc = 0;
+  const arcs = segs.filter(s => s.n > 0).map((s) => {
+    const start = acc / Math.max(1, total);
+    const end = (acc + s.n) / Math.max(1, total);
+    acc += s.n;
+    // Ángulos: 0° arriba, sentido horario.
+    const a0 = start * 2 * Math.PI - Math.PI / 2;
+    const a1 = end   * 2 * Math.PI - Math.PI / 2;
+    const large = (end - start) > 0.5 ? 1 : 0;
+    const x0o = cx + R * Math.cos(a0), y0o = cy + R * Math.sin(a0);
+    const x1o = cx + R * Math.cos(a1), y1o = cy + R * Math.sin(a1);
+    const x0i = cx + r * Math.cos(a1), y0i = cy + r * Math.sin(a1);
+    const x1i = cx + r * Math.cos(a0), y1i = cy + r * Math.sin(a0);
+    const d = [
+      `M ${x0o} ${y0o}`,
+      `A ${R} ${R} 0 ${large} 1 ${x1o} ${y1o}`,
+      `L ${x0i} ${y0i}`,
+      `A ${r} ${r} 0 ${large} 0 ${x1i} ${y1i}`,
+      "Z",
+    ].join(" ");
+    return { d, color: s.color, key: s.key };
+  });
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-5">
+      <div className="flex items-center gap-2 mb-1">
+        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 inline-block" />
+        <h3 className="text-xs uppercase tracking-wide text-slate-500 font-semibold">
+          Distribución de clientes
+        </h3>
+      </div>
+      <p className="text-xs text-slate-400 mb-4">Por segmento (según actividad reciente).</p>
+      <div className="flex items-center gap-6 flex-wrap">
+        <div className="relative shrink-0">
+          <svg viewBox="0 0 140 140" className="w-40 h-40">
+            {total === 0 ? (
+              <circle cx={cx} cy={cy} r={(R + r) / 2} fill="none" stroke="#e2e8f0" strokeWidth={R - r} />
+            ) : (
+              arcs.map(a => <path key={a.key} d={a.d} fill={a.color} />)
+            )}
+          </svg>
+          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+            <p className="text-2xl font-bold text-slate-800 tabular-nums leading-none">{fmtN(total)}</p>
+            <p className="text-[10px] uppercase tracking-wide text-slate-400 mt-1">clientes</p>
+          </div>
+        </div>
+        <ul className="flex-1 min-w-[180px] space-y-1.5">
+          {segs.map(s => {
+            const pct = total > 0 ? (s.n / total) * 100 : 0;
+            return (
+              <li key={s.key} className="flex items-center gap-2 text-sm">
+                <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: s.color }} />
+                <span className="flex-1 text-slate-700">{s.label}</span>
+                <span className="tabular-nums font-semibold text-slate-800">{fmtN(s.n)}</span>
+                <span className="tabular-nums text-slate-400 text-xs w-14 text-right">
+                  {pct.toFixed(1)}%
+                </span>
+              </li>
+            );
+          })}
+        </ul>
       </div>
     </div>
   );
