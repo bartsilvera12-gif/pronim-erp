@@ -795,6 +795,22 @@ function MultiLineChart({
 
   return (
     <div className="w-full">
+      {/* Leyenda ARRIBA del chart para que se vea de una qué color es
+          cada sucursal (antes solo aparecía debajo y si había >1). */}
+      {sucursales.length > 0 && (
+        <div className="flex flex-wrap gap-x-4 gap-y-1 mb-3 text-xs">
+          {sucursales.map(s => (
+            <span key={s.id} className="inline-flex items-center gap-1.5 text-slate-700 font-medium">
+              <span className="h-3 w-3 rounded-sm" style={{ background: s.color }} />
+              {s.nombre}
+            </span>
+          ))}
+          <span className="inline-flex items-center gap-1.5 text-slate-500">
+            <span className="h-0.5 w-4 border-t-2 border-dashed border-slate-400" />
+            Total (ref.)
+          </span>
+        </div>
+      )}
       <div className="w-full relative">
         <svg
           ref={svgRef}
@@ -821,14 +837,15 @@ function MultiLineChart({
             <path
               key={s.id}
               d={s.serie.map((v, i) => `${i === 0 ? "M" : "L"} ${xOf(i)} ${yOf(v)}`).join(" ")}
-              fill="none" stroke={s.color} strokeWidth={2.2}
+              fill="none" stroke={s.color} strokeWidth={3}
               strokeLinejoin="round" strokeLinecap="round"
             />
           ))}
           {/* Marcadores en cada punto de cada sucursal */}
           {sucursales.map(s =>
             s.serie.map((v, i) => (
-              <circle key={`${s.id}-${i}`} cx={xOf(i)} cy={yOf(v)} r={2} fill={s.color} />
+              <circle key={`${s.id}-${i}`} cx={xOf(i)} cy={yOf(v)} r={3.5} fill={s.color}
+                      stroke="#fff" strokeWidth={1.5} />
             ))
           )}
           {/* Línea vertical de hover */}
@@ -880,20 +897,6 @@ function MultiLineChart({
         <span>{dias[0] ?? ""}</span>
         <span>{dias[dias.length - 1] ?? ""}</span>
       </div>
-      {sucursales.length > 1 && (
-        <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-[11px]">
-          {sucursales.map(s => (
-            <span key={s.id} className="inline-flex items-center gap-1.5 text-slate-600">
-              <span className="h-2 w-2 rounded-full" style={{ background: s.color }} />
-              {s.nombre}
-            </span>
-          ))}
-          <span className="inline-flex items-center gap-1.5 text-slate-500">
-            <span className="h-0.5 w-4 border-t-2 border-dashed border-slate-400" />
-            Total
-          </span>
-        </div>
-      )}
     </div>
   );
 }
