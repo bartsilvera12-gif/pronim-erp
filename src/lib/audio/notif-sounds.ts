@@ -146,13 +146,14 @@ export function playCelebrationSound() {
 }
 
 /**
- * Notificación — dos notas cristalinas (E6, C6) con timbre triangular.
- * Suficientemente distinta del sonido de meta para no confundir.
+ * Notificación — campana (bell chime): 3 armónicos sine C6+E6+G6
+ * sostenidos que dan una vibración tipo campanita, elegida por Karen.
  */
 export function playNotifSound() {
   playNotes([
-    { freq: 1318.5, at:  0, dur: 200, gain: 0.28, type: "triangle" }, // E6
-    { freq: 1046.5, at: 90, dur: 260, gain: 0.28, type: "triangle" }, // C6
+    { freq: 1046.5, at: 0, dur: 900, gain: 0.30, type: "sine" },
+    { freq: 1318.5, at: 0, dur: 900, gain: 0.20, type: "sine" },
+    { freq: 1568.0, at: 0, dur: 900, gain: 0.15, type: "sine" },
   ]);
 }
 
