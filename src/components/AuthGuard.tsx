@@ -107,8 +107,15 @@ function AuthGuardInner({ children }: { children: React.ReactNode }) {
     if (isPublic || !access || !pathname) return;
 
     if (pathname.startsWith("/admin") && !access.superAdmin) {
-      router.replace(firstAccessibleHref(access.slugs, { superAdmin: false }));
-      return;
+      // Whitelist: /admin/categorias es la pantalla real de "Franjas"
+      // (categorías de precio). Los usuarios con módulo `inventario`
+      // deben poder entrar aunque no sean super_admin.
+      const admitidos = ["/admin/categorias"];
+      const permitido = admitidos.some(p => pathname === p || pathname.startsWith(p + "/"));
+      if (!permitido) {
+        router.replace(firstAccessibleHref(access.slugs, { superAdmin: false }));
+        return;
+      }
     }
 
     const slug = pathRequiresModuleSlug(pathname);
