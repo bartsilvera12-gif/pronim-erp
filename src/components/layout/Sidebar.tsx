@@ -48,6 +48,7 @@ import { supabase } from "@/lib/supabase";
 import type { ModuloEmpresa } from "@/lib/empresas/actions";
 import { getFavoritos, toggleFavorito } from "@/lib/favorites";
 import { canAccessSidebarSlug } from "@/lib/modulos/route-slug-map";
+import { useT } from "@/lib/i18n/context";
 import { useBoot } from "@/components/BootContext";
 import { useUsuarioActual } from "@/shared/hooks/useUsuarioActual";
 
@@ -303,6 +304,10 @@ function NavItem({
 }) {
   const Icon = item.icon;
   const p = usePathname() ?? "";
+  const t = useT();
+  // Todos los labels del menú están en español en la definición estática
+  // y se traducen en render vía diccionario. Ver src/lib/i18n/dict.ts.
+  const label = t(item.label);
 
   if (!hasAccess) return null;
 
@@ -328,14 +333,14 @@ function NavItem({
           <Link
             href={item.href}
             className={`flex min-w-0 flex-1 items-center gap-3 px-3 py-2.5 ${active ? "font-semibold" : "font-medium"}`}
-            title={item.label}
+            title={label}
           >
             <Icon
               className={`h-[18px] w-[18px] shrink-0 transition-colors ${
                 active ? "text-[#7DCFD2]" : "text-slate-400 group-hover/parent:text-slate-200"
               }`}
             />
-            {!collapsed && <span className="flex-1 truncate">{item.label}</span>}
+            {!collapsed && <span className="flex-1 truncate">{label}</span>}
           </Link>
           {!collapsed && (
             <>
@@ -391,7 +396,7 @@ function NavItem({
                           className="absolute -left-[13px] top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-[#7DCFD2] shadow-[0_0_10px_rgba(125,207,210,0.8)]"
                         />
                       ) : null}
-                      {c.label}
+                      {t(c.label)}
                     </Link>
                   );
                 })}
@@ -426,7 +431,7 @@ function NavItem({
       />
       {!collapsed && (
         <>
-          <span className="flex-1 truncate">{item.label}</span>
+          <span className="flex-1 truncate">{label}</span>
           <button
             type="button"
             onClick={(e) => { e.preventDefault(); onToggleFavorito(itemId); }}

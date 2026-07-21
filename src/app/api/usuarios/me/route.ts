@@ -6,6 +6,7 @@ type UsuarioMeRow = {
   email: string | null;
   rol: string | null;
   sucursal_id?: string | null;
+  lang?: string | null;
 };
 
 function pickAuthMetadataName(authUser: { user_metadata?: Record<string, unknown> | null }): string | null {
@@ -36,7 +37,7 @@ export async function GET(request: Request) {
     if (catalogUsuario?.id) {
       const { data, error } = await supabaseSr
         .from("usuarios")
-        .select("nombre, email, rol, sucursal_id")
+        .select("nombre, email, rol, sucursal_id, lang")
         .eq("id", catalogUsuario.id)
         .maybeSingle();
 
@@ -51,15 +52,18 @@ export async function GET(request: Request) {
     const rol = (row?.rol ?? catalogUsuario?.rol ?? "").trim() || null;
     const sucursalId = row?.sucursal_id ?? catalogUsuario?.sucursal_id ?? null;
 
-    // Marca es_principal para gate de UI (categorias/web solo Principal).
+    // Marca es_principal + moneda para gate de UI y formateo.
     let sucursalEsPrincipal = false;
+    let sucursalMoneda: string | null = null;
     if (sucursalId) {
       const { data: suc } = await supabaseSr
         .from("sucursales")
-        .select("es_principal")
+        .select("es_principal, moneda")
         .eq("id", sucursalId)
         .maybeSingle();
-      sucursalEsPrincipal = (suc as { es_principal?: boolean } | null)?.es_principal === true;
+      const s = suc as { es_principal?: boolean; moneda?: string } | null;
+      sucursalEsPrincipal = s?.es_principal === true;
+      sucursalMoneda = typeof s?.moneda === "string" ? s.moneda : null;
     }
 
     return NextResponse.json({
@@ -69,6 +73,8 @@ export async function GET(request: Request) {
         email,
         sucursal_id: sucursalId,
         sucursal_es_principal: sucursalEsPrincipal,
+        sucursal_moneda: sucursalMoneda,
+        lang: (row?.lang ?? "").trim() || "es",
       },
     });
   } catch (err) {

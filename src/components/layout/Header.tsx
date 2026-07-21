@@ -7,6 +7,7 @@ import { Bell, ChevronDown, LogOut, Menu } from "lucide-react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { signOut } from "@/lib/auth";
 import { initNotifSounds, playNotifSound } from "@/lib/audio/notif-sounds";
+import { useT } from "@/lib/i18n/context";
 
 type HeaderUsuario = {
   nombre: string | null;
@@ -64,6 +65,7 @@ type NotifMeta = {
 
 export default function Header({ onOpenMobileSidebar }: HeaderProps = {}) {
   const router = useRouter();
+  const t = useT();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [usuario, setUsuario] = useState<HeaderUsuario | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -221,7 +223,7 @@ export default function Header({ onOpenMobileSidebar }: HeaderProps = {}) {
           {notifOpen && (
             <div className="absolute right-0 mt-2 w-80 rounded-xl border border-slate-200 bg-white shadow-2xl overflow-hidden z-50">
               <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-                <h4 className="text-sm font-bold text-slate-800">Notificaciones</h4>
+                <h4 className="text-sm font-bold text-slate-800">{t("Notificaciones")}</h4>
                 {totalNotif > 0 && (
                   <span className="text-[11px] text-slate-500 font-semibold">{totalNotif} nuevas</span>
                 )}
@@ -233,9 +235,9 @@ export default function Header({ onOpenMobileSidebar }: HeaderProps = {}) {
                   <div className="flex items-start gap-2">
                     <span className="text-2xl leading-none">🎉</span>
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-bold text-emerald-900">¡Felicidades!</p>
+                      <p className="text-sm font-bold text-emerald-900">{t("¡Felicidades!")}</p>
                       <p className="text-xs text-emerald-800 mt-0.5 leading-tight">
-                        <strong>{m.nombre}</strong> alcanzó el <strong>{m.pct_meta}%</strong> de la meta del día.
+                        <strong>{m.nombre}</strong> {t("alcanzó el")} <strong>{m.pct_meta}%</strong> {t("de la meta del día.")}
                       </p>
                     </div>
                   </div>
@@ -243,9 +245,9 @@ export default function Header({ onOpenMobileSidebar }: HeaderProps = {}) {
               ))}
 
               {notifPend.length === 0 && notifMetas.length === 0 ? (
-                <p className="px-4 py-6 text-center text-xs text-slate-400">Todo al día, sin pendientes.</p>
+                <p className="px-4 py-6 text-center text-xs text-slate-400">{t("Todo al día, sin pendientes.")}</p>
               ) : notifPend.length === 0 ? (
-                <div className="px-4 py-4 text-center text-xs text-slate-400">Sin pendientes de evaluar.</div>
+                <div className="px-4 py-4 text-center text-xs text-slate-400">{t("Todo al día, sin pendientes.")}</div>
               ) : (
                 <>
                   <div className="px-4 py-3 bg-amber-50/50 border-b border-amber-100">
@@ -256,11 +258,11 @@ export default function Header({ onOpenMobileSidebar }: HeaderProps = {}) {
                       <div className="min-w-0">
                         <p className="text-xs font-semibold text-amber-900">
                           {notifPend.length === 1
-                            ? "1 recepción pendiente de evaluar"
-                            : `${notifPend.length} recepciones pendientes de evaluar`}
+                            ? `1 ${t("recepción pendiente de evaluar")}`
+                            : `${notifPend.length} ${t("recepciones pendientes de evaluar")}`}
                         </p>
                         <p className="text-[11px] text-amber-800 mt-0.5">
-                          Ropas del cliente que aún no fueron ingresadas al stock.
+                          {t("Hay bolsas esperando ser ingresadas al stock.")}
                         </p>
                       </div>
                     </div>
@@ -309,7 +311,7 @@ export default function Header({ onOpenMobileSidebar }: HeaderProps = {}) {
                     onClick={() => setNotifOpen(false)}
                     className="flex items-center justify-center gap-1 px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold border-t border-amber-700"
                   >
-                    Ir a la bandeja de pendientes →
+                    {t("Ir a la bandeja de pendientes")} →
                   </Link>
                 </>
               )}
@@ -351,7 +353,7 @@ export default function Header({ onOpenMobileSidebar }: HeaderProps = {}) {
               className="flex w-full items-center gap-2 px-4 py-2 text-sm text-[#475569] transition-colors hover:bg-slate-50 hover:text-[#4FAEB2]"
             >
               <LogOut className="h-4 w-4" />
-              Cerrar sesión
+              {t("Cerrar sesión")}
             </button>
           </div>
         </div>

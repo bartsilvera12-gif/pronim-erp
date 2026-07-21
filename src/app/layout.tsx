@@ -5,6 +5,7 @@ import MobileAppShell from "../mobile/layout/MobileAppShell";
 import DeviceRouter from "../shared/device/DeviceRouter";
 import SWRPersistedProvider from "../shared/swr/SWRPersistedProvider";
 import { ThemeProvider } from "../components/ThemeProvider";
+import { I18nProvider } from "../lib/i18n/context";
 import AuthGuard from "../components/AuthGuard";
 import { DialogHost } from "../components/ui/dialog";
 import "./globals.css";
@@ -34,15 +35,17 @@ export default function RootLayout({
     <html lang="es" suppressHydrationWarning>
       <body className={`${plusJakarta.variable} ${geistMono.variable} antialiased`}>
         <ThemeProvider>
-          <SWRPersistedProvider>
-            <AuthGuard>
-              <DeviceRouter
-                desktop={<AppShell>{children}</AppShell>}
-                mobile={<MobileAppShell>{children}</MobileAppShell>}
-              />
-            </AuthGuard>
-            <DialogHost />
-          </SWRPersistedProvider>
+          <I18nProvider>
+            <SWRPersistedProvider>
+              <AuthGuard>
+                <DeviceRouter
+                  desktop={<AppShell>{children}</AppShell>}
+                  mobile={<MobileAppShell>{children}</MobileAppShell>}
+                />
+              </AuthGuard>
+              <DialogHost />
+            </SWRPersistedProvider>
+          </I18nProvider>
         </ThemeProvider>
       </body>
     </html>

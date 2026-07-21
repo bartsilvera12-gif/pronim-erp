@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { playCelebrationSound } from "@/lib/audio/notif-sounds";
+import { useT, useMoney } from "@/lib/i18n/context";
 import MontoInput from "@/components/ui/MontoInput";
 import {
   ALERTAS_DEFAULTS,
@@ -63,6 +64,8 @@ function short(str: string): string {
 
 export default function NuevaAtencionPage() {
   const router = useRouter();
+  const t = useT();
+  const money = useMoney();
 
   // ── Catálogo ──────────────────────────────────────────────────────────
   const [franjas, setFranjas] = useState<Franja[]>([]);
@@ -1040,9 +1043,9 @@ export default function NuevaAtencionPage() {
     <div className="space-y-4 max-w-7xl">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Caja</h1>
+          <h1 className="text-2xl font-bold text-slate-900">{t("Caja")}</h1>
           <p className="text-sm text-slate-500 mt-0.5">
-            Cargá lo que el cliente <span className="font-medium text-slate-700">trae</span> y lo que <span className="font-medium text-slate-700">lleva</span>. El sistema calcula el resto.
+            {t("Cargá lo que el cliente trae y lo que lleva. El sistema calcula el resto.")}
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -1074,14 +1077,14 @@ export default function NuevaAtencionPage() {
                 : "Recepciones pendientes de ingreso al stock"}
             >
               {pendientesVencidasCount > 0 ? "⚠ " : "📦 "}
-              {pendientesIngresoCount} pendiente{pendientesIngresoCount === 1 ? "" : "s"} ↗
+              {pendientesIngresoCount} {pendientesIngresoCount === 1 ? t("pendiente") : t("pendientes")} ↗
             </Link>
           )}
           <Link
             href="/ventas"
             className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
           >
-            Historial ↗
+            {t("Historial")} ↗
           </Link>
         </div>
       </div>
@@ -1093,7 +1096,7 @@ export default function NuevaAtencionPage() {
             <div className="flex flex-wrap items-center gap-2 text-sm text-emerald-900">
               <span className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-wide text-xs text-emerald-700">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                Caja abierta
+                {t("CAJA ABIERTA")}
               </span>
               {cajasAbiertas.length > 1 ? (
                 <span className="inline-flex items-center gap-1 text-emerald-700">
@@ -1115,10 +1118,10 @@ export default function NuevaAtencionPage() {
               ) : cajaNumero ? (
                 <span className="text-emerald-700">· N° {cajaNumero}</span>
               ) : null}
-              <span className="text-emerald-700">· Monto inicial <strong>Gs. {Math.round(cajaMontoApertura).toLocaleString("es-PY")}</strong></span>
+              <span className="text-emerald-700">· {t("Monto inicial")} <strong>{money.format(Math.round(cajaMontoApertura))}</strong></span>
               {cajaAperturaHora && (
                 <span className="text-emerald-700/80 text-xs">
-                  · desde {new Date(cajaAperturaHora).toLocaleTimeString("es-PY", { hour: "2-digit", minute: "2-digit" })}
+                  · {t("desde")} {new Date(cajaAperturaHora).toLocaleTimeString("es-PY", { hour: "2-digit", minute: "2-digit" })}
                 </span>
               )}
             </div>
@@ -1128,14 +1131,14 @@ export default function NuevaAtencionPage() {
                 onClick={() => { setMovError(null); setCajaModalOpen("mov"); }}
                 className="rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-sm font-medium text-emerald-800 hover:bg-emerald-100"
               >
-                Movimiento
+                {t("Movimiento")}
               </button>
               <button
                 type="button"
                 onClick={() => { setCierreError(null); setCierreResumen(null); setCajaModalOpen("cerrar"); cargarResumenCierre(); }}
                 className="rounded-lg bg-rose-600 hover:bg-rose-700 text-white px-3 py-1.5 text-sm font-semibold"
               >
-                Cerrar caja
+                {t("Cerrar caja")}
               </button>
             </div>
           </div>
@@ -1144,16 +1147,16 @@ export default function NuevaAtencionPage() {
             <div className="text-sm text-amber-900">
               <span className="inline-flex items-center gap-1.5 font-semibold uppercase tracking-wide text-xs text-amber-700">
                 <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                Caja cerrada
+                {t("CAJA CERRADA")}
               </span>
-              <span className="ml-2 text-amber-800">Abrí la caja para poder registrar atenciones.</span>
+              <span className="ml-2 text-amber-800">{t("Abrí la caja para poder registrar atenciones.")}</span>
             </div>
             <button
               type="button"
               onClick={() => { setAperturaError(null); setCajaModalOpen("abrir"); }}
               className="rounded-lg bg-[#4FAEB2] hover:bg-[#3F8E91] text-white px-4 py-1.5 text-sm font-semibold shadow-sm"
             >
-              Abrir caja
+              {t("Abrir caja")}
             </button>
           </div>
         )
@@ -1201,7 +1204,7 @@ export default function NuevaAtencionPage() {
       {/* ─── Cliente ─── */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 sm:p-5">
         <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">
-          Cliente <span className="text-red-500">*</span>
+          {t("CLIENTE")} <span className="text-red-500">*</span>
         </label>
         {cliente ? (
           <div className="flex items-center justify-between gap-3">
@@ -1274,7 +1277,7 @@ export default function NuevaAtencionPage() {
               value={clienteQuery}
               onChange={(e) => { setClienteQuery(e.target.value); setClienteOpen(true); }}
               onFocus={() => setClienteOpen(true)}
-              placeholder="Buscar por nombre o RUC…"
+              placeholder={t("Buscar por nombre o RUC…")}
               className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
             />
             {clienteOpen && (
@@ -1312,8 +1315,8 @@ export default function NuevaAtencionPage() {
       {/* ─── Dos columnas: TRAE | LLEVA ─── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <ColumnaAtencion
-          titulo="El cliente TRAE"
-          descripcion="Cargá las prendas que entrega para acreditar."
+          titulo={t("EL CLIENTE TRAE")}
+          descripcion={t("Cargá las prendas que entrega para acreditar.")}
           tono="emerald"
           franjas={franjas}
           cargando={cargando}
@@ -1333,7 +1336,7 @@ export default function NuevaAtencionPage() {
                 className="inline-flex items-center gap-1.5 rounded-md border border-emerald-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-50"
                 title="Cliente cambia una prenda por otra del mismo precio, sin pagar diferencia"
               >
-                ⇄ Cambio directo
+                ⇄ {t("Cambio directo")}
               </button>
               <button
                 type="button"
@@ -1345,7 +1348,7 @@ export default function NuevaAtencionPage() {
                 }`}
                 title="Cargar N prendas por un monto total sin elegir franja"
               >
-                ⚡ Carga rápida
+                ⚡ {t("Carga rápida")}
               </button>
               {cargaRapidaOpen && (
                 <div className="w-full mt-2 rounded-lg border border-emerald-300 bg-emerald-50/70 p-3">
@@ -1445,8 +1448,8 @@ export default function NuevaAtencionPage() {
           }
         />
         <ColumnaAtencion
-          titulo="El cliente LLEVA"
-          descripcion="Cargá las prendas que se lleva de la tienda."
+          titulo={t("EL CLIENTE LLEVA")}
+          descripcion={t("Cargá las prendas que se lleva de la tienda.")}
           tono="sky"
           franjas={franjas}
           cargando={cargando}
@@ -1711,13 +1714,13 @@ export default function NuevaAtencionPage() {
 
         <div>
           <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
-            Observaciones (opcional)
+            {t("Observaciones (opcional)")}
           </label>
           <input
             type="text"
             value={observaciones}
             onChange={(e) => setObservaciones(e.target.value)}
-            placeholder="Notas de la atención"
+            placeholder={t("Notas de la atención")}
             className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
           />
         </div>
@@ -1729,7 +1732,7 @@ export default function NuevaAtencionPage() {
             disabled={enviando || !cliente || (trae.length === 0 && lleva.length === 0)}
             className="rounded-lg bg-[#4FAEB2] hover:bg-[#3F8E91] disabled:bg-slate-200 disabled:text-slate-500 disabled:cursor-not-allowed text-white text-sm font-semibold px-6 py-2.5 transition-colors shadow-sm active:scale-95"
           >
-            {enviando ? "Registrando…" : "Confirmar atención"}
+            {enviando ? t("Registrando…") : t("Confirmar atención")}
           </button>
           <button
             type="button"
@@ -1737,14 +1740,14 @@ export default function NuevaAtencionPage() {
             disabled={enviando}
             className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50"
           >
-            Limpiar
+            {t("Limpiar")}
           </button>
           <button
             type="button"
             onClick={() => router.push("/ventas")}
             className="text-sm text-slate-400 hover:text-slate-700"
           >
-            Cancelar
+            {t("Cancelar")}
           </button>
         </div>
       </div>
