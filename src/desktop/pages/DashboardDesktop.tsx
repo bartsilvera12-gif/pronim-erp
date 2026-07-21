@@ -6,6 +6,7 @@ import MetasWidget from "@/components/metas/MetasWidget";
 import DashSucursales from "./DashSucursales";
 import DashClientes from "./DashClientes";
 import PendientesEvaluacionBanner from "./PendientesEvaluacionBanner";
+import InventarioPorSucursalPanels from "./InventarioPorSucursalPanels";
 import { getConfig } from "@/lib/config/storage";
 import { getUsuarios } from "@/lib/usuarios/storage";
 import { getUsuariosActivosEmpresa } from "@/lib/usuarios/empresa";
@@ -2005,6 +2006,11 @@ function DashInventario({
 
   return (
     <div className="space-y-6">
+      {/* Desglose por sucursal (recepciones + inventario). Movido desde
+          el dash de Sucursales — Karen prefiere consultarlo dividido acá,
+          en el contexto de inventario. */}
+      <InventarioPorSucursalPanels />
+
       {/* Recepciones pendientes de evaluar — al tope del dash de inventario
           porque son bolsas que aún no entran al stock (afectan el conteo
           real disponible). */}
