@@ -22,7 +22,7 @@ import { assertAllowedChatDataSchema } from "@/lib/supabase/chat-data-schema";
 
 const FRANJA_COLS =
   "id,empresa_id,nombre,sku,precio_venta,stock_actual,stock_minimo," +
-  "activo,es_franja_precio,unidad_medida,categoria_principal_id,created_at,updated_at";
+  "activo,es_franja_precio,unidad_medida,categoria_principal_id,created_at,updated_at,sucursal_id";
 
 // Nombre/SKU de la franja. Cuando la crea un usuario con sucursal fija,
 // suffixamos el sku con los últimos 4 chars del sucursal_id para evitar
@@ -43,9 +43,13 @@ export async function GET(request: NextRequest) {
     const ctx = await getTenantSupabaseFromAuth(request);
     if (!ctx) return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
     const auth = await getAuthWithRol(request);
-    if (!isSuperAdmin(auth)) {
+    // Autorización: super_admin ve todas las franjas; usuarios con
+    // sucursal fija ven SOLO las de su sucursal + las globales.
+    // Sin sucursal y sin super → 403.
+    const esSuper = isSuperAdmin(auth);
+    if (!esSuper && !auth?.sucursal_id) {
       return NextResponse.json(
-        errorResponse("Solo super_admin puede consultar la administración de categorías."),
+        errorResponse("Necesitás sucursal asignada para administrar categorías."),
         { status: 403 },
       );
     }
@@ -58,6 +62,10 @@ export async function GET(request: NextRequest) {
       order: "precio_venta.asc",
       limit: "200",
     });
+    // Aislamiento por sucursal para usuarios no-super.
+    if (!esSuper && auth?.sucursal_id) {
+      qs.set("or", `(sucursal_id.eq.${auth.sucursal_id},sucursal_id.is.null)`);
+    }
     const r = await postgrestGet<Record<string, unknown>>("productos", qs.toString(), {
       role: "jwt",
       jwt,

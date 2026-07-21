@@ -16,10 +16,11 @@ import { assertAllowedChatDataSchema } from "@/lib/supabase/chat-data-schema";
  * ("Prenda - Categoría Gs. X" / "FRJ-{precio}"). No hay nombre libre.
  */
 
-function franjaLabel(precio: number): { nombre: string; sku: string } {
+function franjaLabel(precio: number, sucursalId: string | null): { nombre: string; sku: string } {
   const p = Math.round(precio);
-  const nombre = "Prenda - Categoría Gs. " + p.toLocaleString("es-PY").replace(/,/g, ".");
-  const sku = "FRJ-" + p;
+  const nombre = "Prenda - Categoría " + p.toLocaleString("es-PY").replace(/,/g, ".");
+  const sufijo = sucursalId ? "-" + sucursalId.replace(/-/g, "").slice(-6).toUpperCase() : "";
+  const sku = "FRJ-" + p + sufijo;
   return { nombre, sku };
 }
 
@@ -32,8 +33,12 @@ export async function PATCH(
     const ctx = await getTenantSupabaseFromAuth(request);
     if (!ctx) return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
     const auth = await getAuthWithRol(request);
-    if (!isSuperAdmin(auth)) {
-      return NextResponse.json(errorResponse("Solo super_admin."), { status: 403 });
+    // Autorización: super_admin O usuario con sucursal fija. Los usuarios
+    // solo pueden tocar franjas de su propia sucursal (WHERE agrega el
+    // filtro más abajo).
+    const esSuper = isSuperAdmin(auth);
+    if (!esSuper && !auth?.sucursal_id) {
+      return NextResponse.json(errorResponse("Necesitás sucursal asignada."), { status: 403 });
     }
     const empresaId = ctx.auth.empresa_id;
 
@@ -60,7 +65,9 @@ export async function PATCH(
       if (!Number.isFinite(p) || p <= 0) {
         return NextResponse.json(errorResponse("Precio inválido."), { status: 400 });
       }
-      const { nombre, sku } = franjaLabel(p);
+      // sku scoped por sucursal (mismo criterio que el POST) para no
+      // colisionar con franjas globales o de otras sucursales.
+      const { nombre, sku } = franjaLabel(p, auth?.sucursal_id ?? null);
       sets.push(`precio_venta = $${i++}`, `nombre = $${i++}`, `sku = $${i++}`);
       values.push(p, nombre, sku);
     }
@@ -80,11 +87,20 @@ export async function PATCH(
       return NextResponse.json(errorResponse("Nada para actualizar."), { status: 400 });
     }
     sets.push(`updated_at = now()`);
+    const idIdx = i++;
+    const empIdx = i++;
     values.push(id, empresaId);
-
+    // Aislamiento: super_admin toca cualquier franja; usuario con
+    // sucursal fija solo las suyas (o las globales NULL).
+    let scopeCond = "";
+    if (!esSuper && auth?.sucursal_id) {
+      const sucIdx = i++;
+      scopeCond = ` AND (sucursal_id = $${sucIdx} OR sucursal_id IS NULL)`;
+      values.push(auth.sucursal_id);
+    }
     const sql = `UPDATE ${productosT}
                  SET ${sets.join(", ")}
-                 WHERE id = $${i++} AND empresa_id = $${i++} AND es_franja_precio = true
+                 WHERE id = $${idIdx} AND empresa_id = $${empIdx} AND es_franja_precio = true${scopeCond}
                  RETURNING id, nombre, sku, precio_venta, activo, stock_actual, stock_minimo`;
 
     const client = await pool.connect();
