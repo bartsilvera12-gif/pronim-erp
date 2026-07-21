@@ -16,7 +16,16 @@ export type Lang = "es" | "pt-BR" | "en";
 type Dict = Record<string, string>;
 
 const es: Dict = {
-  // Sidebar / menús
+  // Sidebar / menús — categorías
+  "Inicio": "Inicio",
+  "Comercial": "Comercial",
+  "Finanzas": "Finanzas",
+  "Operaciones": "Operaciones",
+  "Omnicanal": "Omnicanal",
+  "Marketing y Automatización": "Marketing y Automatización",
+  "Administración": "Administración",
+  "Otros": "Otros",
+  // Sidebar / menús — ítems
   "Caja": "Caja",
   "Clientes": "Clientes",
   "Inventario": "Inventario",
@@ -84,6 +93,30 @@ const es: Dict = {
   "Todo al día, sin pendientes.": "Todo al día, sin pendientes.",
 
   // Genéricos
+  // Clientes
+  "Base de clientes activos de la empresa": "Base de clientes activos de la empresa",
+  "Nuevo cliente": "Nuevo cliente",
+  "Buscar por nombre, código, email, RUC...": "Buscar por nombre, código, email, RUC...",
+  "Todos los estados": "Todos los estados",
+  "Todos los tipos": "Todos los tipos",
+  "Todos los orígenes": "Todos los orígenes",
+  "Tipo servicio": "Tipo servicio",
+  "clientes": "clientes",
+  "activos": "activos",
+  "empresas": "empresas",
+  "Columnas": "Columnas",
+  "Código": "Código",
+  "Empresa / Nombre": "Empresa / Nombre",
+  "Contacto": "Contacto",
+  "Teléfono": "Teléfono",
+  "Plan activo": "Plan activo",
+  "Origen": "Origen",
+  "Estado": "Estado",
+  "Desde": "Desde",
+  "Activo": "Activo",
+  "Inactivo": "Inactivo",
+  "Sin suscripción": "Sin suscripción",
+
   // Inventario
   "Gestión de productos y control de stock": "Gestión de productos y control de stock",
   "Total productos": "Total productos",
@@ -129,7 +162,16 @@ const es: Dict = {
 };
 
 const ptBR: Dict = {
-  // Sidebar / menús
+  // Sidebar / menús — categorías
+  "Inicio": "Início",
+  "Comercial": "Comercial",
+  "Finanzas": "Financeiro",
+  "Operaciones": "Operações",
+  "Omnicanal": "Omnichannel",
+  "Marketing y Automatización": "Marketing e Automação",
+  "Administración": "Administração",
+  "Otros": "Outros",
+  // Sidebar / menús — ítems
   "Caja": "Caixa",
   "Clientes": "Clientes",
   "Inventario": "Estoque",
@@ -197,6 +239,30 @@ const ptBR: Dict = {
   "Todo al día, sin pendientes.": "Tudo em dia, sem pendências.",
 
   // Genéricos
+  // Clientes
+  "Base de clientes activos de la empresa": "Base de clientes ativos da empresa",
+  "Nuevo cliente": "Novo cliente",
+  "Buscar por nombre, código, email, RUC...": "Buscar por nome, código, email, CPF/CNPJ...",
+  "Todos los estados": "Todos os status",
+  "Todos los tipos": "Todos os tipos",
+  "Todos los orígenes": "Todas as origens",
+  "Tipo servicio": "Tipo de serviço",
+  "clientes": "clientes",
+  "activos": "ativos",
+  "empresas": "empresas",
+  "Columnas": "Colunas",
+  "Código": "Código",
+  "Empresa / Nombre": "Empresa / Nome",
+  "Contacto": "Contato",
+  "Teléfono": "Telefone",
+  "Plan activo": "Plano ativo",
+  "Origen": "Origem",
+  "Estado": "Status",
+  "Desde": "Desde",
+  "Activo": "Ativo",
+  "Inactivo": "Inativo",
+  "Sin suscripción": "Sem assinatura",
+
   // Inventario
   "Gestión de productos y control de stock": "Gestão de produtos e controle de estoque",
   "Total productos": "Total de produtos",

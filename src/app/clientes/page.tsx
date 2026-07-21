@@ -414,7 +414,7 @@ export default function ClientesPage() {
             </p>
           </div>
           <h1 className="mt-1 text-lg font-semibold tracking-tight text-slate-900">{t("Clientes")}</h1>
-          <p className="mt-0.5 text-xs text-slate-500">Base de clientes activos de la empresa</p>
+          <p className="mt-0.5 text-xs text-slate-500">{t("Base de clientes activos de la empresa")}</p>
         </div>
         <Link
           href="/clientes/nuevo"
@@ -423,7 +423,7 @@ export default function ClientesPage() {
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
             <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
           </svg>
-          Nuevo cliente
+          {t("Nuevo cliente")}
         </Link>
       </div>
 
@@ -431,7 +431,7 @@ export default function ClientesPage() {
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm ring-1 ring-[#4FAEB2]/15 p-4 flex flex-wrap gap-3 items-center">
         <input
           type="text"
-          placeholder="Buscar por nombre, código, email, RUC..."
+          placeholder={t("Buscar por nombre, código, email, RUC...")}
           value={busqueda}
           onChange={(e) => setBusqueda(e.target.value)}
           className="flex-1 min-w-48 border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-[#4FAEB2] focus:outline-none transition-all"
@@ -443,9 +443,9 @@ export default function ClientesPage() {
           className="w-44"
           size="sm"
           options={[
-            { value: "", label: "Todos los estados" },
-            { value: "activo", label: "Activo" },
-            { value: "inactivo", label: "Inactivo" },
+            { value: "", label: t("Todos los estados") },
+            { value: "activo", label: t("Activo") },
+            { value: "inactivo", label: t("Inactivo") },
           ]}
         />
         <FancySelect
@@ -455,7 +455,7 @@ export default function ClientesPage() {
           className="w-44"
           size="sm"
           options={[
-            { value: "", label: "Todos los tipos" },
+            { value: "", label: t("Todos los tipos") },
             { value: "empresa", label: "Empresa" },
             { value: "persona", label: "Persona" },
           ]}
@@ -467,7 +467,7 @@ export default function ClientesPage() {
           className="w-44"
           size="sm"
           options={[
-            { value: "", label: "Todos los orígenes" },
+            { value: "", label: t("Todos los orígenes") },
             { value: "CRM", label: "CRM" },
             { value: "VENTA", label: "Venta" },
             { value: "MANUAL", label: "Manual" },
@@ -480,7 +480,7 @@ export default function ClientesPage() {
           className="w-44"
           size="sm"
           options={[
-            { value: "", label: "Tipo servicio" },
+            { value: "", label: t("Tipo servicio") },
             ...filasTipoCatalogo.map((t) => ({ value: t.slug, label: t.nombre })),
             ...slugsExtraFiltro.map((slug) => ({
               value: slug,
@@ -493,7 +493,7 @@ export default function ClientesPage() {
             onClick={() => { setBusqueda(""); setFiltroEstado(""); setFiltroOrigen(""); setFiltroTipo(""); setFiltroTipoServicio(""); }}
             className="text-xs text-gray-500 hover:text-gray-900 border border-gray-300 rounded-lg px-3 py-2 hover:bg-gray-50 transition-colors"
           >
-            Limpiar
+            {t("Limpiar")}
           </button>
         )}
       </div>
@@ -502,13 +502,13 @@ export default function ClientesPage() {
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <p className="text-sm text-gray-500">
           <span className="font-semibold text-gray-800">{filtrados.length}</span> de{" "}
-          <span className="font-semibold text-gray-800">{clientes.length}</span> clientes
+          <span className="font-semibold text-gray-800">{clientes.length}</span> {t("clientes")}
         </p>
         <div className="flex items-center gap-3">
           <div className="hidden sm:flex gap-3 text-xs text-gray-400">
-            <span>{clientes.filter((c) => c.estado === "activo").length} activos</span>
+            <span>{clientes.filter((c) => c.estado === "activo").length} {t("activos")}</span>
             <span>·</span>
-            <span>{clientes.filter((c) => c.tipo_cliente === "empresa").length} empresas</span>
+            <span>{clientes.filter((c) => c.tipo_cliente === "empresa").length} {t("empresas")}</span>
           </div>
           <div className="relative">
             <button
@@ -517,7 +517,7 @@ export default function ClientesPage() {
               className="inline-flex items-center gap-2 border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 px-3 py-2 rounded-lg text-xs font-medium shadow-sm transition-colors"
               aria-expanded={columnasOpen}
             >
-              <span>Columnas</span>
+              <span>{t("Columnas")}</span>
               <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">
                 {visibleColumns.length}/{clienteColumns.length}
               </span>
@@ -525,7 +525,7 @@ export default function ClientesPage() {
             {columnasOpen && (
               <div className="absolute right-0 z-20 mt-2 w-80 rounded-xl border border-slate-200 bg-white shadow-lg">
                 <div className="p-4 border-b border-slate-100">
-                  <p className="text-sm font-semibold text-slate-800">Columnas</p>
+                  <p className="text-sm font-semibold text-slate-800">{t("Columnas")}</p>
                   <p className="text-xs text-slate-500 mt-1">Personalizá qué información querés ver en esta tabla.</p>
                 </div>
                 <div className="p-2 max-h-80 overflow-y-auto">
@@ -538,7 +538,7 @@ export default function ClientesPage() {
                           col.required ? "text-slate-500 bg-slate-50" : "text-slate-700 hover:bg-slate-50 cursor-pointer"
                         }`}
                       >
-                        <span>{col.label}</span>
+                        <span>{t(col.label)}</span>
                         <input
                           type="checkbox"
                           checked={checked}
@@ -597,7 +597,7 @@ export default function ClientesPage() {
                 <tr className="border-b border-slate-200 bg-slate-50">
                   {visibleColumns.map((col) => (
                     <th key={col.key} className={col.headerClassName}>
-                      {col.label}
+                      {t(col.label)}
                     </th>
                   ))}
                 </tr>
