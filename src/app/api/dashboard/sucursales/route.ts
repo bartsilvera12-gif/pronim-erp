@@ -540,6 +540,7 @@ export async function GET(request: NextRequest) {
          )
          SELECT
            s.id AS sucursal_id, s.nombre,
+           COALESCE(s.moneda, 'PYG') AS moneda,
            COALESCE((SELECT SUM(total) FROM ventas_periodo WHERE sucursal_id = s.id), 0)::text AS ventas,
            COALESCE((SELECT COUNT(*) FROM ventas_periodo WHERE sucursal_id = s.id), 0)::text AS operaciones,
            COALESCE(
@@ -664,6 +665,7 @@ export async function GET(request: NextRequest) {
       const sucursales = rowsQ.rows.map((r) => ({
         sucursal_id: r.sucursal_id,
         nombre: r.nombre,
+        moneda: (r as { moneda?: string }).moneda ?? "PYG",
         ventas: Number(r.ventas),
         operaciones: Number(r.operaciones),
         ticket_promedio: Math.round(Number(r.ticket_promedio)),

@@ -62,7 +62,7 @@ type Payload = {
     evolucion_por_sucursal: { dia: string; sucursal_id: string; nombre: string; total: number }[];
   };
   sucursales: {
-    sucursal_id: string; nombre: string;
+    sucursal_id: string; nombre: string; moneda: string;
     ventas: number; operaciones: number; ticket_promedio: number;
     clientes_atendidos: number; prendas_vendidas: number; prendas_recibidas: number;
     stock: number; cajas_abiertas: number; cajas_cerradas: number;
@@ -760,6 +760,21 @@ function SucursalCard({ s }: {
   const deltaColor = s.var_ventas_pct == null ? "text-slate-400"
     : s.var_ventas_pct >= 0 ? "text-emerald-700" : "text-rose-700";
   const creditoNeto = s.credito_generado - s.credito_usado;
+
+  // Formateo con la moneda de LA SUCURSAL (no la del viewer). Betim/BH/
+  // El Dorado se ven en R$ aunque el admin PY las esté mirando.
+  const monedaSuc = (s.moneda ?? "PYG") as "PYG" | "BRL" | "USD" | "ARS";
+  const langSuc = monedaSuc === "BRL" ? "pt-BR" : "es";
+  const fmt = (n: number) => {
+    const abs = Math.abs(n);
+    const sym = monedaSuc === "BRL" ? "R$" : monedaSuc === "USD" ? "US$" : monedaSuc === "ARS" ? "$" : "Gs.";
+    const locale = monedaSuc === "BRL" ? "pt-BR" : "es-PY";
+    if (abs >= 1_000_000) return `${sym} ${(n / 1_000_000).toLocaleString(locale, { minimumFractionDigits: abs >= 10_000_000 ? 0 : 1, maximumFractionDigits: 1 })}M`;
+    if (abs >= 1_000) return `${sym} ${(n / 1_000).toLocaleString(locale, { maximumFractionDigits: 0 })}K`;
+    const decimals = monedaSuc === "PYG" || monedaSuc === "ARS" ? 0 : 2;
+    return `${sym} ${n.toLocaleString(locale, { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
+  };
+  void langSuc; // reservado para eventuales usos i18n contextuales.
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5 hover:shadow-md transition">
       <div className="flex items-start justify-between mb-4">
@@ -779,9 +794,9 @@ function SucursalCard({ s }: {
       <div className="mb-3">
         <p className="text-[10px] uppercase tracking-wide text-slate-400 font-semibold mb-1.5">Ventas</p>
         <div className="grid grid-cols-3 gap-2">
-          <SucMini label="Total" value={fmtGsCompact(s.ventas)} />
+          <SucMini label="Total" value={fmt(s.ventas)} />
           <SucMini label="Ops." value={fmtN(s.operaciones)} />
-          <SucMini label="Ticket" value={fmtGsCompact(s.ticket_promedio)} />
+          <SucMini label="Ticket" value={fmt(s.ticket_promedio)} />
         </div>
       </div>
 
@@ -816,11 +831,11 @@ function SucursalCard({ s }: {
         <div className="mb-3">
           <p className="text-[10px] uppercase tracking-wide text-slate-400 font-semibold mb-1.5">Crédito</p>
           <div className="grid grid-cols-3 gap-2">
-            <SucMini label="Generado" value={fmtGsCompact(s.credito_generado)} />
-            <SucMini label="Usado" value={fmtGsCompact(s.credito_usado)} />
+            <SucMini label="Generado" value={fmt(s.credito_generado)} />
+            <SucMini label="Usado" value={fmt(s.credito_usado)} />
             <SucMini
               label="Neto"
-              value={(creditoNeto >= 0 ? "+" : "") + fmtGsCompact(creditoNeto)}
+              value={(creditoNeto >= 0 ? "+" : "") + fmt(creditoNeto)}
             />
           </div>
         </div>
@@ -833,7 +848,7 @@ function SucursalCard({ s }: {
             <span className="text-[11px] text-slate-500">
               Meta del período
               <span className="text-slate-400 ml-1">
-                (meta {fmtGsCompact(s.meta_diaria * s.dias_periodo)})
+                (meta {fmt(s.meta_diaria * s.dias_periodo)})
               </span>
             </span>
             <span className={`text-xs font-bold tabular-nums ${
