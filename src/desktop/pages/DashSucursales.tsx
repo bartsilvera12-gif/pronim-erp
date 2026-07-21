@@ -372,6 +372,7 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
           <MultiLineChart
             totalPorDia={[]}
             porSucursal={data.ventas.evolucion_por_sucursal}
+            baseSucursales={data.sucursales.map(s => ({ sucursal_id: s.sucursal_id, nombre: s.nombre }))}
           />
         </div>
       )}
@@ -585,9 +586,14 @@ function SaludBar({ label, pct, countValue, tip }: {
 function MultiLineChart({
   totalPorDia,
   porSucursal,
+  baseSucursales,
 }: {
   totalPorDia: { dia: string; total: number; ops: number }[];
   porSucursal: { dia: string; sucursal_id: string; nombre: string; total: number }[];
+  /** Lista canónica de sucursales — así el chart siempre pinta todas
+   *  (aunque no tengan ventas → línea en 0), no solo las que aparecen
+   *  en porSucursal. */
+  baseSucursales?: { sucursal_id: string; nombre: string }[];
 }) {
   const w = 800, h = 160, padL = 8, padR = 8, padT = 16, padB = 24;
   // El eje X canónico es totalPorDia si está; si no, deriva del union
@@ -598,8 +604,18 @@ function MultiLineChart({
     : Array.from(new Set(porSucursal.map(p => p.dia))).sort();
   // Paleta estable — se recicla si hay más de 8 sucursales.
   const PAL = ["#10b981", "#3b82f6", "#f59e0b", "#a855f7", "#ef4444", "#06b6d4", "#84cc16", "#ec4899"];
-  // Agrupamos por sucursal: nombre + serie [{dia,total}]
+  // Agrupamos por sucursal: nombre + serie [{dia,total}]. Semillamos con
+  // baseSucursales para que todas aparezcan aunque no tengan ventas.
   const sucMap = new Map<string, { nombre: string; color: string; porDia: Map<string, number> }>();
+  if (baseSucursales) {
+    for (const b of baseSucursales) {
+      sucMap.set(b.sucursal_id, {
+        nombre: b.nombre,
+        color: PAL[sucMap.size % PAL.length],
+        porDia: new Map(),
+      });
+    }
+  }
   porSucursal.forEach(row => {
     if (!sucMap.has(row.sucursal_id)) {
       sucMap.set(row.sucursal_id, {
@@ -623,7 +639,9 @@ function MultiLineChart({
     ...sucursales.flatMap(s => s.serie),
   );
   const step = dias.length > 1 ? (w - padL - padR) / (dias.length - 1) : 0;
-  const xOf = (i: number) => padL + i * step;
+  // Cuando solo hay 1 día, centramos el punto único horizontalmente en
+  // lugar de dejarlo pegado a la izquierda con step=0.
+  const xOf = (i: number) => dias.length === 1 ? (w / 2) : (padL + i * step);
   const yOf = (v: number) => h - padB - (v / max) * (h - padT - padB);
 
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
