@@ -79,6 +79,7 @@ type Payload = {
     cajas_abiertas: number; cajas_cerradas: number; ventas_prev: number;
   };
   tipos_prenda: { tipo_id: string | null; tipo_nombre: string; cantidad: number }[];
+  tipos_prenda_por_sucursal: { sucursal_id: string; sucursal_nombre: string; tipo_id: string; tipo_nombre: string; cantidad: number }[];
 };
 
 function fmtGs(n: number) { return "Gs. " + Math.round(n || 0).toLocaleString("es-PY"); }
@@ -349,92 +350,27 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
     if (!data) return null;
     return (
       <>
-      {/* ═════ Hero KPIs — 4 tarjetas grandes (TOTAL consolidado) ═════ */}
-      <div className="flex items-center gap-2 -mb-2">
-        <span className="h-1.5 w-1.5 rounded-full bg-slate-400 inline-block" />
-        <p className="text-[11px] uppercase tracking-wide text-slate-500 font-semibold">
-          Total consolidado — todas las sucursales
-        </p>
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <HeroCard
-          iconType="ventas"
-          label="Ventas del período"
-          value={fmtGs(t.ventas)}
-          delta={varTotal != null ? `${varTotal > 0 ? "▲" : "▼"} ${Math.abs(varTotal)}% vs período anterior` : null}
-          deltaTone={varTotal == null ? "neutral" : varTotal >= 0 ? "up" : "down"}
-          color="emerald"
-          tip="SUM(total) de ventas no anuladas. Comparación con período anterior del mismo largo."
-        />
-        <HeroCard
-          iconType="visitas"
-          label="Visitas"
-          value={fmtN(data.flujo.visitas)}
-          delta={`${fmtN(data.flujo.clientes_unicos)} clientes únicos`}
-          color="sky"
-          tip="Trae+lleva cuenta 1. Recepción o venta sueltas cuentan 1 c/u. Excluye anuladas."
-          onClick={() => setDrill({ metric: "visitas", label: "Visitas del período" })}
-        />
-        <HeroCard
-          iconType="operaciones"
-          label="Operaciones"
-          value={fmtN(t.operaciones)}
-          delta={`Ticket promedio: ${fmtGsCompact(t.operaciones > 0 ? t.ventas / t.operaciones : 0)}`}
-          color="violet"
-          tip="Cantidad de ventas no anuladas."
-        />
-        <HeroCard
-          iconType="prendas"
-          label="Prendas movidas"
-          value={`${fmtN(t.prendas_recibidas)} / ${fmtN(t.prendas_vendidas)}`}
-          delta="Recibidas / Vendidas"
-          color="amber"
-          tip="Items de recepciones no anuladas vs items de ventas no anuladas."
-        />
-      </div>
+      {/* Hero KPIs y Salud del período REMOVIDOS.
+          Razón: hay sucursales que operan en guaraníes y otras en reales,
+          entonces un total consolidado en Gs. no es fiel al negocio.
+          Karen: 'no quiero total de nada porque hay sucursales que usan
+          reales y otros guaranies asi que no va a quedar bien usar el
+          total'. Toda la info vive en las cards por sucursal + la
+          evolución diaria (que ya venía separada por sucursal). */}
 
-      {/* ═════ Salud del período — barras de progreso ═════ */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-5">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-bold text-slate-800">Salud del período</h3>
-          <span className="text-[11px] text-slate-400">{data.periodo.desde} → {data.periodo.hasta}</span>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
-          <SaludBar
-            label="Cumplimiento de meta (prom sucursales)"
-            pct={metaPromedio ?? 0}
-            tip="Promedio de % de meta cumplido entre sucursales con meta activa."
-          />
-          <SaludBar
-            label="Conversión visita → venta"
-            pct={conversionGeneral ?? 0}
-            tip="Operaciones ÷ visitas × 100."
-          />
-          <SaludBar
-            label="Rotación de stock"
-            pct={data.inventario.rotacion_pct ?? 0}
-            tip="Prendas salidas del período ÷ stock actual × 100."
-          />
-          <SaludBar
-            label="Clientes recurrentes"
-            pct={pctRecurrentes ?? 0}
-            countValue={`${data.flujo.clientes_recurrentes} / ${data.flujo.clientes_unicos}`}
-            tip="Clientes con ≥ 2 visitas en el período, sobre el total de únicos."
-          />
-        </div>
-      </div>
-
-      {/* ═════ Evolución diaria (mini area chart) ═════ */}
-      {data.ventas.evolucion_diaria.length > 1 && (
+      {/* ═════ Evolución diaria — chart con línea por sucursal ═════ */}
+      {data.ventas.evolucion_por_sucursal.length > 0 && (
         <div className="rounded-2xl border border-slate-200 bg-white p-5">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-sm font-bold text-slate-800">Evolución de ventas por día</h3>
             <span className="text-[11px] text-slate-400">
-              Total {fmtGsCompact(t.ventas)} en {data.ventas.evolucion_diaria.length} días
+              Cada línea = una sucursal
             </span>
           </div>
+          {/* Se pasa la lista pivoteada sin la línea 'Total' (evita mezclar
+              monedas). El MultiLineChart la oculta si totalPorDia = []. */}
           <MultiLineChart
-            totalPorDia={data.ventas.evolucion_diaria}
+            totalPorDia={[]}
             porSucursal={data.ventas.evolucion_por_sucursal}
           />
         </div>
@@ -453,30 +389,16 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
         </div>
       )}
 
-      {/* ═════ Tipos de prenda ═════ */}
+      {/* ═════ Franjas más recibidas — DIVIDIDO POR SUCURSAL ═════
+          Karen: 'me gusta el grafico de franjas quiero tener uno por
+          sucursal'. Renderizamos una card por sucursal, cada una con
+          su propio ranking + barras. */}
       <Accordion
-        titulo="Franjas más recibidas"
+        titulo="Franjas más recibidas — por sucursal"
         abierto={abierto.tipos}
         onToggle={() => setAbierto(p => ({ ...p, tipos: !p.tipos }))}
       >
-        {data.tipos_prenda.length === 0 ? (
-          <p className="text-sm text-slate-400 py-2">Sin datos en el período.</p>
-        ) : (
-          <ul className="space-y-2">
-            {data.tipos_prenda.map(t => (
-              <li key={t.tipo_id ?? "sin_tipo"} className="flex items-center gap-3">
-                <button
-                  className="w-40 shrink-0 text-sm text-left text-slate-700 truncate hover:underline"
-                  onClick={() => setDrill({ metric: "tipos_prenda_top", label: `Tipo: ${t.tipo_nombre}` })}
-                >{t.tipo_nombre}</button>
-                <div className="flex-1 h-2.5 rounded-full bg-slate-100 overflow-hidden">
-                  <div className="h-full bg-gradient-to-r from-emerald-400 to-emerald-500" style={{ width: `${(t.cantidad / maxTipo) * 100}%` }} />
-                </div>
-                <span className="w-16 text-right text-sm font-semibold text-slate-800 tabular-nums">{fmtN(t.cantidad)}</span>
-              </li>
-            ))}
-          </ul>
-        )}
+        <FranjasPorSucursal filas={data.tipos_prenda_por_sucursal} />
       </Accordion>
 
       {/* Secciones detalladas de totales removidas — Karen pidió ver todo
@@ -502,6 +424,66 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
       </>
     );
   }
+}
+
+/**
+ * Ranking de franjas más recibidas — una card por sucursal.
+ * Top 8 franjas por sucursal, con barra proporcional al máximo LOCAL
+ * (no cross-sucursal, así cada gráfico se lee independientemente).
+ */
+function FranjasPorSucursal({
+  filas,
+}: {
+  filas: { sucursal_id: string; sucursal_nombre: string; tipo_id: string; tipo_nombre: string; cantidad: number }[];
+}) {
+  if (filas.length === 0) {
+    return <p className="text-sm text-slate-400 py-2">Sin datos en el período.</p>;
+  }
+  const map = new Map<string, { nombre: string; items: { tipo_id: string; tipo_nombre: string; cantidad: number }[] }>();
+  for (const r of filas) {
+    if (!map.has(r.sucursal_id)) map.set(r.sucursal_id, { nombre: r.sucursal_nombre, items: [] });
+    map.get(r.sucursal_id)!.items.push({ tipo_id: r.tipo_id, tipo_nombre: r.tipo_nombre, cantidad: r.cantidad });
+  }
+  const sucursales = Array.from(map.entries()).sort((a, b) => a[1].nombre.localeCompare(b[1].nombre));
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {sucursales.map(([id, s]) => {
+        const items = s.items.slice(0, 8);
+        const maxLocal = Math.max(1, ...items.map(i => i.cantidad));
+        const total = s.items.reduce((sum, i) => sum + i.cantidad, 0);
+        return (
+          <div key={id} className="rounded-xl border border-slate-200 bg-slate-50/40 p-4">
+            <div className="flex items-baseline justify-between mb-3">
+              <h4 className="text-sm font-bold text-slate-900">{s.nombre}</h4>
+              <span className="text-[11px] text-slate-500 tabular-nums">
+                {fmtN(total)} prenda{total === 1 ? "" : "s"}
+              </span>
+            </div>
+            <ul className="space-y-1.5">
+              {items.map(i => (
+                <li key={i.tipo_id} className="flex items-center gap-2">
+                  <span className="w-24 shrink-0 text-xs text-slate-700 truncate">{i.tipo_nombre}</span>
+                  <div className="flex-1 h-2 rounded-full bg-white overflow-hidden">
+                    <div className="h-full bg-gradient-to-r from-emerald-400 to-emerald-500"
+                         style={{ width: `${(i.cantidad / maxLocal) * 100}%` }} />
+                  </div>
+                  <span className="w-8 text-right text-xs font-semibold text-slate-800 tabular-nums">
+                    {fmtN(i.cantidad)}
+                  </span>
+                </li>
+              ))}
+              {s.items.length > 8 && (
+                <li className="text-[10px] text-slate-400 italic pt-1">
+                  +{s.items.length - 8} franjas más
+                </li>
+              )}
+            </ul>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 /* ─── UI helpers ───────────────────────────────────────────────── */
@@ -608,7 +590,12 @@ function MultiLineChart({
   porSucursal: { dia: string; sucursal_id: string; nombre: string; total: number }[];
 }) {
   const w = 800, h = 160, padL = 8, padR = 8, padT = 16, padB = 24;
-  const dias = totalPorDia.map(d => d.dia);
+  // El eje X canónico es totalPorDia si está; si no, deriva del union
+  // de días vistos en porSucursal (caso donde el chart se usa sin línea
+  // total para evitar mezclar monedas entre sucursales).
+  const dias = totalPorDia.length > 0
+    ? totalPorDia.map(d => d.dia)
+    : Array.from(new Set(porSucursal.map(p => p.dia))).sort();
   // Paleta estable — se recicla si hay más de 8 sucursales.
   const PAL = ["#10b981", "#3b82f6", "#f59e0b", "#a855f7", "#ef4444", "#06b6d4", "#84cc16", "#ec4899"];
   // Agrupamos por sucursal: nombre + serie [{dia,total}]
@@ -628,7 +615,13 @@ function MultiLineChart({
     serie: dias.map(d => v.porDia.get(d) ?? 0),
   }));
 
-  const max = Math.max(1, ...totalPorDia.map(d => d.total));
+  // Máximo: si hay total lo usamos; si no, el máximo entre todas las
+  // series de sucursales (para mantener escala correcta sin la línea total).
+  const max = Math.max(
+    1,
+    ...totalPorDia.map(d => d.total),
+    ...sucursales.flatMap(s => s.serie),
+  );
   const step = dias.length > 1 ? (w - padL - padR) / (dias.length - 1) : 0;
   const xOf = (i: number) => padL + i * step;
   const yOf = (v: number) => h - padB - (v / max) * (h - padT - padB);
@@ -658,10 +651,12 @@ function MultiLineChart({
               {s.nombre}
             </span>
           ))}
-          <span className="inline-flex items-center gap-1.5 text-slate-500">
-            <span className="h-0.5 w-4 border-t-2 border-dashed border-slate-400" />
-            Total (ref.)
-          </span>
+          {totalPorDia.length > 0 && (
+            <span className="inline-flex items-center gap-1.5 text-slate-500">
+              <span className="h-0.5 w-4 border-t-2 border-dashed border-slate-400" />
+              Total (ref.)
+            </span>
+          )}
         </div>
       )}
       <div className="w-full relative">
@@ -734,13 +729,15 @@ function MultiLineChart({
                     <span className="tabular-nums font-semibold text-slate-800">{fmtGsCompact(s.valor)}</span>
                   </li>
                 ))}
-              <li className="flex items-center gap-2 pt-1 mt-1 border-t border-slate-100">
-                <span className="h-2 w-2 rounded-full shrink-0 bg-slate-400" />
-                <span className="flex-1 text-slate-500">Total</span>
-                <span className="tabular-nums font-bold text-slate-900">
-                  {fmtGsCompact(totalPorDia[hoverIdx]?.total ?? 0)}
-                </span>
-              </li>
+              {totalPorDia.length > 0 && (
+                <li className="flex items-center gap-2 pt-1 mt-1 border-t border-slate-100">
+                  <span className="h-2 w-2 rounded-full shrink-0 bg-slate-400" />
+                  <span className="flex-1 text-slate-500">Total</span>
+                  <span className="tabular-nums font-bold text-slate-900">
+                    {fmtGsCompact(totalPorDia[hoverIdx]?.total ?? 0)}
+                  </span>
+                </li>
+              )}
             </ul>
           </div>
         )}

@@ -593,10 +593,7 @@ export async function GET(request: NextRequest) {
         args,
       );
 
-      // ═════ 9) Ranking por franja (mix de prendas recibidas) ═════
-      // Karen agrupa por FRANJA (rango de precio) — no usa tipos_prenda.
-      // Se muestra 'Franja Gs. X' normalizando el prefix 'Prenda -
-      // Categoría' que arrastra el producto.
+      // ═════ 9) Ranking por franja — GLOBAL (compat) ═════
       const tiposQ = await client.query<{
         tipo_id: string; tipo_nombre: string; cantidad: string;
       }>(
@@ -618,6 +615,36 @@ export async function GET(request: NextRequest) {
          GROUP BY p.id, p.nombre
          ORDER BY SUM(ri.cantidad) DESC NULLS LAST
          LIMIT 20`,
+        args,
+      );
+
+      // ═════ 9b) Ranking por franja POR SUCURSAL ═════
+      // Karen: no quiere totales cruzados de monedas → un ranking por
+      // sucursal. Top 8 por sucursal.
+      const tiposPorSucQ = await client.query<{
+        sucursal_id: string; sucursal_nombre: string;
+        tipo_id: string; tipo_nombre: string; cantidad: string;
+      }>(
+        `SELECT
+           s.id::text AS sucursal_id,
+           s.nombre AS sucursal_nombre,
+           COALESCE('franja:' || p.id::text, 'sin_producto') AS tipo_id,
+           COALESCE(
+             CASE WHEN p.nombre IS NOT NULL
+                  THEN 'Franja ' || regexp_replace(p.nombre, '^Prenda\\s*-\\s*Categor[ií]a\\s*', '', 'i')
+             END,
+             '(sin franja)'
+           ) AS tipo_nombre,
+           COALESCE(SUM(ri.cantidad), 0)::text AS cantidad
+         FROM ${recepItT} ri
+         JOIN ${recepT} r ON r.id = ri.recepcion_id
+         JOIN ${sucT} s ON s.id = r.sucursal_id
+         LEFT JOIN ${prodT} p ON p.id = ri.producto_id
+         WHERE r.empresa_id = $1 AND r.estado <> 'anulada'
+           AND r.fecha::date BETWEEN $2 AND $3
+           ${sucursalFiltro ? "AND r.sucursal_id = $4" : ""}
+         GROUP BY s.id, s.nombre, p.id, p.nombre
+         ORDER BY s.nombre, SUM(ri.cantidad) DESC NULLS LAST`,
         args,
       );
 
@@ -759,6 +786,13 @@ export async function GET(request: NextRequest) {
         totales,
         tipos_prenda: tiposQ.rows.map(t => ({
           tipo_id: t.tipo_id, tipo_nombre: t.tipo_nombre, cantidad: Number(t.cantidad),
+        })),
+        tipos_prenda_por_sucursal: tiposPorSucQ.rows.map(t => ({
+          sucursal_id: t.sucursal_id,
+          sucursal_nombre: t.sucursal_nombre,
+          tipo_id: t.tipo_id,
+          tipo_nombre: t.tipo_nombre,
+          cantidad: Number(t.cantidad),
         })),
       }));
     } finally {
