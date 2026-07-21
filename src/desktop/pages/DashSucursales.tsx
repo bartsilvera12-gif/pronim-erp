@@ -647,6 +647,47 @@ function MultiLineChart({
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
 
+  // Con un solo día en el rango, un chart de líneas no aporta — solo
+  // puntos aislados. Cambiamos a barras horizontales por sucursal
+  // (más leíble). Ordenamos por valor descendente.
+  if (dias.length <= 1) {
+    const rows = sucursales
+      .map(s => ({ id: s.id, nombre: s.nombre, color: s.color, valor: s.serie[0] ?? 0 }))
+      .sort((a, b) => b.valor - a.valor);
+    const localMax = Math.max(1, ...rows.map(r => r.valor));
+    return (
+      <div className="w-full">
+        <div className="flex flex-wrap gap-x-4 gap-y-1 mb-3 text-xs">
+          {rows.map(s => (
+            <span key={s.id} className="inline-flex items-center gap-1.5 text-slate-700 font-medium">
+              <span className="h-3 w-3 rounded-sm" style={{ background: s.color }} />
+              {s.nombre}
+            </span>
+          ))}
+        </div>
+        <ul className="space-y-2">
+          {rows.map(s => (
+            <li key={s.id} className="flex items-center gap-3 text-xs">
+              <span className="w-24 shrink-0 text-slate-700 truncate">{s.nombre}</span>
+              <div className="flex-1 h-4 rounded-full bg-slate-100 overflow-hidden">
+                <div
+                  className="h-full rounded-full"
+                  style={{ background: s.color, width: `${(s.valor / localMax) * 100}%` }}
+                />
+              </div>
+              <span className="w-24 text-right text-slate-800 tabular-nums font-semibold">
+                {fmtGsCompact(s.valor)}
+              </span>
+            </li>
+          ))}
+        </ul>
+        <p className="text-[10px] text-slate-400 mt-3 italic">
+          Vista de barras: hay un solo día en el rango. Ampliá el filtro para ver evolución en el tiempo.
+        </p>
+      </div>
+    );
+  }
+
   const handleMove = (e: React.MouseEvent<SVGSVGElement>) => {
     const svg = svgRef.current;
     if (!svg || dias.length === 0) return;

@@ -114,27 +114,8 @@ export default function DashClientes({ desde, hasta }: { desde: string; hasta: s
 
   return (
     <div className="space-y-6">
-      {/* Filtros */}
-      <div className="flex flex-wrap items-center gap-2 text-sm">
-        <input
-          type="text"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Buscar por nombre…"
-          className="flex-1 min-w-[180px] max-w-xs rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
-        />
-        <select
-          value={segmento}
-          onChange={(e) => setSegmento(e.target.value)}
-          className="rounded-md border border-slate-200 bg-white px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
-        >
-          <option value="">Todos los segmentos</option>
-          <option value="vip">VIP</option>
-          <option value="habitual">Frecuentes</option>
-          <option value="nuevo">Nuevos</option>
-          <option value="dormido">Dormidos</option>
-        </select>
-      </div>
+      {/* Filtros removidos — Karen los pidió fuera. Los KPIs y el donut
+          siguen mostrando el total de clientes sin filtrar. */}
 
       {/* KPIs de segmentos — cada uno con tooltip que explica la fórmula.
           Docs completos en docs/dashboards-formulas.md. */}
