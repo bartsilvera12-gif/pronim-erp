@@ -11,6 +11,33 @@ import type { Lang } from "./dict";
 
 export type Moneda = "PYG" | "BRL" | "USD" | "ARS";
 
+/**
+ * Registro global de la moneda/lang activos (los mismos que expone el
+ * I18nProvider). Útil para funciones de formateo que se ejecutan fuera
+ * del render de React (helpers a nivel de módulo, callbacks async,
+ * etc.), donde no se puede llamar a un hook. El provider lo actualiza
+ * en cada render con setActiveCfg.
+ */
+let ACTIVE_MONEDA: Moneda = "PYG";
+let ACTIVE_LANG: Lang = "es";
+export function setActiveCfg(m: Moneda, l: Lang) {
+  ACTIVE_MONEDA = m;
+  ACTIVE_LANG = l;
+}
+export function getActiveMoneda(): Moneda { return ACTIVE_MONEDA; }
+export function getActiveLang(): Lang { return ACTIVE_LANG; }
+/**
+ * Formatea SEGÚN la moneda activa. Reemplazo drop-in del viejo
+ * fmtGs / formatGs — devuelve "Gs. X" para usuarios PYG y "R$ X,00"
+ * para usuarios BRL. Sin hooks; safe para llamar desde cualquier lado.
+ */
+export function fmtActive(n: number): string {
+  return fmtMoneda(n, ACTIVE_MONEDA, ACTIVE_LANG);
+}
+export function fmtActiveCompact(n: number): string {
+  return fmtMonedaCompact(n, ACTIVE_MONEDA, ACTIVE_LANG);
+}
+
 export function monedaSymbol(m: Moneda): string {
   switch (m) {
     case "BRL": return "R$";

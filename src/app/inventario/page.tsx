@@ -13,6 +13,7 @@ import EdgeScrollArea from "@/components/ui/EdgeScrollArea";
 import StatCard from "@/components/ui/StatCard";
 import { useIsAdmin, useIsSuperAdmin } from "@/lib/auth/use-is-admin";
 import { useUsuarioActual } from "@/shared/hooks/useUsuarioActual";
+import { useT } from "@/lib/i18n/context";
 
 const inputFilterClass =
   "border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-[#4FAEB2] focus:outline-none";
@@ -51,6 +52,7 @@ interface UbicacionMin { id: string; nombre: string; tipo: string }
 interface CategoriaMin { id: string; nombre: string }
 
 export default function InventarioPage() {
+  const t = useT();
   const { isAdmin } = useIsAdmin();
   const { isSuperAdmin } = useIsSuperAdmin();
   const { usuario } = useUsuarioActual();
@@ -370,7 +372,7 @@ export default function InventarioPage() {
               Zentra · Stock
             </p>
           </div>
-          <h1 className="mt-1 text-lg font-semibold tracking-tight text-slate-900">Inventario</h1>
+          <h1 className="mt-1 text-lg font-semibold tracking-tight text-slate-900">{t("Inventario")}</h1>
           <p className="mt-0.5 text-xs text-slate-500">Gestión de productos y control de stock</p>
         </div>
         <div className="flex items-center gap-2 mt-1">
@@ -410,7 +412,7 @@ export default function InventarioPage() {
 
         <div className="flex flex-wrap justify-between items-center gap-3 mb-5">
           <div className="flex items-center gap-3 flex-wrap">
-            <h2 className="text-xl font-semibold">Productos</h2>
+            <h2 className="text-xl font-semibold">{t("Productos")}</h2>
             {isSuperAdmin && (
               <Link
                 href="/inventario/nuevo"

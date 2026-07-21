@@ -7,6 +7,7 @@ import EdgeScrollArea from "@/components/ui/EdgeScrollArea";
 import { FancySelect } from "@/components/ui/FancySelect";
 import MobileFab from "@/components/ui/MobileFab";
 import { getClientes, clienteNombre } from "@/lib/clientes/storage";
+import { useT } from "@/lib/i18n/context";
 import type { Cliente } from "@/lib/clientes/types";
 import { etiquetaVisibleTipoServicio, type ClienteTipoServicioRow } from "@/lib/clientes/tipo-servicio-catalogo";
 import { filasTiposDesdeSistemaEstatico, fetchTiposFormCliente } from "@/lib/clientes/fetch-tipos-servicio-form";
@@ -276,6 +277,7 @@ function buildClienteColumns(mapNombreTipo: Record<string, string>): ClienteColu
 // ── Componente principal ──────────────────────────────────────────────────────
 
 export default function ClientesPage() {
+  const t = useT();
   const searchParams = useSearchParams();
   const [clientes,    setClientes]    = useState<Cliente[]>([]);
   const [cargando,    setCargando]    = useState(true);
@@ -411,7 +413,7 @@ export default function ClientesPage() {
               Zentra · Base
             </p>
           </div>
-          <h1 className="mt-1 text-lg font-semibold tracking-tight text-slate-900">Clientes</h1>
+          <h1 className="mt-1 text-lg font-semibold tracking-tight text-slate-900">{t("Clientes")}</h1>
           <p className="mt-0.5 text-xs text-slate-500">Base de clientes activos de la empresa</p>
         </div>
         <Link

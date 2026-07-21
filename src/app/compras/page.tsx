@@ -8,13 +8,14 @@ import EdgeScrollArea from "@/components/ui/EdgeScrollArea";
 import { FancySelect } from "@/components/ui/FancySelect";
 import MobileFab from "@/components/ui/MobileFab";
 import type { Compra, TipoPago } from "@/lib/compras/types";
+import { useT } from "@/lib/i18n/context";
+import { fmtActive } from "@/lib/i18n/currency";
 
 const inputFilterClass =
   "border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#4FAEB2] focus:outline-none bg-white";
 
-function formatGs(valor: number) {
-  return `Gs. ${Math.round(valor).toLocaleString("es-PY")}`;
-}
+// formatGs → moneda activa (Gs. o R$ según sucursal del usuario).
+const formatGs = fmtActive;
 
 function formatFecha(iso: string) {
   try {
@@ -81,6 +82,7 @@ function resumenProductos(items: Compra[]): string {
 }
 
 export default function ComprasPage() {
+  const t = useT();
   const [todas, setTodas] = useState<Compra[]>([]);
   const [busqueda, setBusqueda] = useState("");
   const [filtroTipoPago, setFiltroTipoPago] = useState<TipoPago | "">("");
@@ -134,14 +136,14 @@ export default function ComprasPage() {
             style={{ boxShadow: "0 0 0 3px rgba(79, 174, 178, 0.18)" }} />
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#4FAEB2]">Zentra · Adquisiciones</p>
         </div>
-        <h1 className="mt-1 text-lg font-semibold tracking-tight text-slate-900">Compras</h1>
+        <h1 className="mt-1 text-lg font-semibold tracking-tight text-slate-900">{t("Compras")}</h1>
         <p className="mt-0.5 text-xs text-slate-500">Registro de órdenes de compra a proveedores</p>
       </div>
 
       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm ring-1 ring-[#4FAEB2]/15 sm:p-5 lg:p-6">
 
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-xl font-semibold">Órdenes de compra</h2>
+          <h2 className="text-xl font-semibold">{t("Órdenes de compra")}</h2>
           <div className="flex items-center gap-3">
             <ExportExcelButton url="/api/compras/export" />
             <Link href="/compras/nueva"

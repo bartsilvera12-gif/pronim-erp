@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { playCelebrationSound } from "@/lib/audio/notif-sounds";
 import { useT, useMoney } from "@/lib/i18n/context";
+import { fmtActive } from "@/lib/i18n/currency";
 import MontoInput from "@/components/ui/MontoInput";
 import {
   ALERTAS_DEFAULTS,
@@ -54,9 +55,9 @@ type Linea = {
 
 type TipoPrenda = { id: string; nombre: string; orden: number; activo: boolean };
 
-function fmtGs(n: number): string {
-  return "Gs. " + Math.round(n || 0).toLocaleString("es-PY");
-}
+// fmtGs es un alias legacy de fmtActive — devuelve la moneda del
+// usuario activo (Gs. para paraguayos, R$ para brasileños).
+const fmtGs = fmtActive;
 
 function short(str: string): string {
   return str.replace(/^Prenda\s*-\s*Categor[ií]a\s*/i, "");
@@ -832,7 +833,7 @@ export default function NuevaAtencionPage() {
       return;
     }
     if (aCobrar > 0 && metodoCobro === "efectivo" && recibidoNum < aCobrar) {
-      setError(`Falta cobrar Gs. ${Math.round(aCobrar - recibidoNum).toLocaleString("es-PY")} en efectivo. Ingresá el monto recibido.`);
+      setError(`Falta cobrar ${fmtGs(aCobrar - recibidoNum)} en efectivo. Ingresá el monto recibido.`);
       return;
     }
     // Caja: exigimos selección explícita cuando hay >1 abierta.
@@ -877,7 +878,7 @@ export default function NuevaAtencionPage() {
           body: JSON.stringify({
             tipo: cfg.tipo_evento,
             titulo: cfg.label,
-            descripcion: `Entregado en atención · ${cfg.label}${monto > 0 ? ` — Gs. ${monto.toLocaleString("es-PY")}` : ""}`,
+            descripcion: `Entregado en atención · ${cfg.label}${monto > 0 ? ` — ${fmtGs(monto)}` : ""}`,
             monto: cfg.pide_monto ? monto : null,
             generar_credito: false,
           }),
@@ -1059,7 +1060,7 @@ export default function NuevaAtencionPage() {
                     ? "border-sky-200 bg-sky-50 text-sky-800 hover:bg-sky-100"
                     : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
               }`}
-              title={`Meta hoy: Gs. ${Math.round(metaDia.vendido_dia).toLocaleString("es-PY")} de ${Math.round(metaDia.meta_diaria).toLocaleString("es-PY")}`}
+              title={`Meta hoy: ${money.format(Math.round(metaDia.vendido_dia))} de ${money.format(Math.round(metaDia.meta_diaria))}`}
             >
               🎯 Meta hoy: <strong>{metaDia.pct}%</strong>
             </Link>
@@ -1369,7 +1370,7 @@ export default function NuevaAtencionPage() {
                       />
                     </div>
                     <div>
-                      <label className="block text-[10px] uppercase font-semibold text-emerald-800">Monto total (Gs.)</label>
+                      <label className="block text-[10px] uppercase font-semibold text-emerald-800">Monto total ({money.symbol})</label>
                       <MontoInput
                         value={cargaRapidaMonto === "" ? 0 : Number(cargaRapidaMonto) || 0}
                         onChange={(n) => setCargaRapidaMonto(String(n))}
@@ -1599,7 +1600,7 @@ export default function NuevaAtencionPage() {
             {aCobrar > 0 && (
               <div className="space-y-2">
                 <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
-                  Cobrar Gs. {Math.round(aCobrar).toLocaleString("es-PY")} en
+                  Cobrar {fmtGs(Math.round(aCobrar))} en
                 </label>
                 <div className="grid grid-cols-3 gap-1.5">
                   {(["efectivo", "tarjeta", "transferencia"] as const).map((m) => (
@@ -1948,7 +1949,7 @@ export default function NuevaAtencionPage() {
                             [b.id]: { marcado: true, monto: String(n) },
                           }))
                         }
-                        placeholder="Gs."
+                        placeholder={money.symbol}
                         decimals={false}
                         className="w-32 rounded-lg border border-slate-300 px-2 py-1 text-sm text-right"
                       />
@@ -1995,7 +1996,7 @@ export default function NuevaAtencionPage() {
                 )}
                 <div className="mt-4 space-y-3">
                   <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Monto inicial en efectivo (Gs.)</label>
+                    <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">{t("Monto inicial")} en efectivo ({money.symbol})</label>
                     <MontoInput
                       value={aperturaMonto} onChange={(n) => setAperturaMonto(String(n))}
                       placeholder="Ej: 200.000" autoFocus decimals={false}
@@ -2074,7 +2075,7 @@ export default function NuevaAtencionPage() {
                 <div className="mt-4 space-y-3">
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Cierre</p>
                   <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">Efectivo físico contado en caja (Gs.)</label>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1">Efectivo físico contado en caja ({money.symbol})</label>
                     <MontoInput
                       value={cierreContado} onChange={(n) => setCierreContado(String(n))}
                       placeholder="Ej: 160.000" autoFocus decimals={false}
@@ -2141,7 +2142,7 @@ export default function NuevaAtencionPage() {
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Monto (Gs.) *</label>
+                      <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Monto ({money.symbol}) *</label>
                       <MontoInput
                         value={movMonto} onChange={(n) => setMovMonto(String(n))}
                         placeholder="Ej: 20.000" decimals={false}

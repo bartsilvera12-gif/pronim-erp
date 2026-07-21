@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { translate, type Lang } from "./dict";
-import { fmtMoneda, fmtMonedaCompact, monedaSymbol, type Moneda } from "./currency";
+import { fmtMoneda, fmtMonedaCompact, monedaSymbol, setActiveCfg, type Moneda } from "./currency";
 
 /**
  * Provider global que carga la config del usuario (lang + moneda de su
@@ -45,6 +45,10 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     return () => { cancel = true; };
   }, []);
 
+  // Publicar la config al registro global — permite que helpers module-scope
+  // (fmtActive/fmtActiveCompact) devuelvan valores en la moneda del usuario
+  // sin necesidad de hooks.
+  setActiveCfg(cfg.moneda, cfg.lang);
   return <Ctx.Provider value={cfg}>{children}</Ctx.Provider>;
 }
 
