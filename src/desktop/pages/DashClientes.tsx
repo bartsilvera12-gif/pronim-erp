@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
-import PendientesEvaluacionBanner from "./PendientesEvaluacionBanner";
 
 type Fila = {
   cliente_id: string; nombre: string;
@@ -115,11 +114,6 @@ export default function DashClientes({ desde, hasta }: { desde: string; hasta: s
 
   return (
     <div className="space-y-6">
-      {/* Banner de recepciones pendientes de evaluar — va acá porque
-          conceptualmente pertenece al recorrido del cliente: 'esta ropa
-          la trajo el cliente X, todavía no la evaluaste'. */}
-      <PendientesEvaluacionBanner />
-
       {/* Filtros */}
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <input

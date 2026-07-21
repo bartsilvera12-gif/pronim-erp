@@ -501,8 +501,6 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
           <MiniKpi label="Solo trae" value={fmtN(data.flujo.solo_trae)} onClick={() => setDrill({ metric: "visitas_solo_trae", label: "Visitas: solo trae" })} />
           <MiniKpi label="Solo lleva" value={fmtN(data.flujo.solo_lleva)} onClick={() => setDrill({ metric: "visitas_solo_lleva", label: "Visitas: solo lleva" })} />
           <MiniKpi label="Trae + lleva" value={fmtN(data.flujo.trae_lleva)} onClick={() => setDrill({ metric: "visitas_trae_lleva", label: "Visitas: trae+lleva" })} />
-          <MiniKpi label="Prendas/visita" value={data.flujo.prendas_por_visita_prom != null ? String(data.flujo.prendas_por_visita_prom) : "—"} />
-          <MiniKpi label="Días entre visitas" value={data.flujo.dias_entre_visitas_prom != null ? `${data.flujo.dias_entre_visitas_prom} d` : "—"} />
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <MiniBars titulo="Días con más atención" datos={DOW.map((d, i) => ({ label: d, n: data.flujo.dow.find(x => x.dow === i)?.n ?? 0 }))} max={maxDow} tono="sky" />

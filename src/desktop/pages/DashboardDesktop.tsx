@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import MetasWidget from "@/components/metas/MetasWidget";
 import DashSucursales from "./DashSucursales";
 import DashClientes from "./DashClientes";
+import PendientesEvaluacionBanner from "./PendientesEvaluacionBanner";
 import { getConfig } from "@/lib/config/storage";
 import { getUsuarios } from "@/lib/usuarios/storage";
 import { getUsuariosActivosEmpresa } from "@/lib/usuarios/empresa";
@@ -2004,6 +2005,10 @@ function DashInventario({
 
   return (
     <div className="space-y-6">
+      {/* Recepciones pendientes de evaluar — al tope del dash de inventario
+          porque son bolsas que aún no entran al stock (afectan el conteo
+          real disponible). */}
+      <PendientesEvaluacionBanner />
       {/* KPIs */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard
