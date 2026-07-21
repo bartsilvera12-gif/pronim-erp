@@ -1,10 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { getSession, getCurrentUser } from "@/lib/auth";
 import { isBootstrapSuperAdminEmail } from "@/lib/auth/super-admin-bootstrap-email";
+
+// Rutas dentro de /admin que aceptan usuarios NO super_admin (siempre que
+// tengan sesión). El backend de cada endpoint valida autorización granular
+// por sucursal.
+const ADMIN_ABIERTAS_NO_SUPER = ["/admin/categorias"];
+function esAdminAbierta(p: string): boolean {
+  return ADMIN_ABIERTAS_NO_SUPER.some(x => p === x || p.startsWith(x + "/"));
+}
 
 /**
  * No usar solo getCurrentUser() aquí: el cliente anon + RLS en `zentra_erp.usuarios`
@@ -13,6 +21,7 @@ import { isBootstrapSuperAdminEmail } from "@/lib/auth/super-admin-bootstrap-ema
  */
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname() ?? "";
   const [ok, setOk] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -25,6 +34,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         if (cancelled) return;
         if (!session?.user) {
           router.replace("/login");
+          return;
+        }
+
+        // Bypass del check de super_admin para rutas whitelisted (ej.
+        // /admin/categorias). El backend gate-ea granular por sucursal.
+        if (esAdminAbierta(pathname)) {
+          setOk(true);
           return;
         }
 
@@ -74,7 +90,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     return () => {
       cancelled = true;
     };
-  }, [router]);
+  }, [router, pathname]);
 
   if (loading) {
     return (
