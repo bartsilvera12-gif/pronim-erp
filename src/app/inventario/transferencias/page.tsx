@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
+import { useT } from "@/lib/i18n/context";
 
 type Sucursal = { id: string; nombre: string; es_principal?: boolean; activo?: boolean };
 type ItemBorrador = { producto_id: string; producto_nombre: string; cantidad: string };
@@ -33,6 +34,7 @@ async function unwrap<T>(r: Response): Promise<T> {
 }
 
 export default function TransferenciasStockPage() {
+  const t = useT();
   const [sucursales, setSucursales] = useState<Sucursal[]>([]);
   const [origen, setOrigen] = useState("");
   const [destino, setDestino] = useState("");
@@ -184,15 +186,15 @@ export default function TransferenciasStockPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2 text-sm text-gray-400">
-        <Link href="/inventario" className="hover:text-[#4FAEB2] transition-colors">Inventario</Link>
+        <Link href="/inventario" className="hover:text-[#4FAEB2] transition-colors">{t("Inventario")}</Link>
         <span>/</span>
-        <span className="text-gray-700 font-medium">Transferencias entre sucursales</span>
+        <span className="text-gray-700 font-medium">{t("Transferencias entre sucursales")}</span>
       </div>
 
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Transferencias entre sucursales</h1>
+        <h1 className="text-2xl font-bold text-gray-900">{t("Transferencias entre sucursales")}</h1>
         <p className="text-sm text-gray-500 mt-0.5">
-          Mueve productos de una sucursal a otra. El stock se actualiza en el momento.
+          {t("Mueve productos de una sucursal a otra. El stock se actualiza en el momento.")}
         </p>
       </div>
 
@@ -202,28 +204,28 @@ export default function TransferenciasStockPage() {
       <form onSubmit={enviar} className="bg-white rounded-xl border border-slate-200 shadow-sm ring-1 ring-[#4FAEB2]/15 p-6 space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Desde (origen) *</label>
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">{t("Desde (origen)")} *</label>
             <select
               value={origen}
               onChange={(e) => setOrigen(e.target.value)}
               className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#4FAEB2] bg-white"
               required
             >
-              <option value="">Elegí sucursal…</option>
+              <option value="">{t("Elegí sucursal…")}</option>
               {sucursales.map((s) => (
                 <option key={s.id} value={s.id}>{s.nombre}{s.es_principal ? " (Principal)" : ""}</option>
               ))}
             </select>
           </div>
           <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Hacia (destino) *</label>
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">{t("Hacia (destino)")} *</label>
             <select
               value={destino}
               onChange={(e) => setDestino(e.target.value)}
               className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#4FAEB2] bg-white"
               required
             >
-              <option value="">Elegí sucursal…</option>
+              <option value="">{t("Elegí sucursal…")}</option>
               {sucursales.filter((s) => s.id !== origen).map((s) => (
                 <option key={s.id} value={s.id}>{s.nombre}{s.es_principal ? " (Principal)" : ""}</option>
               ))}
@@ -232,12 +234,12 @@ export default function TransferenciasStockPage() {
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Elegí producto o franja</label>
+          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">{t("Elegí producto o franja")}</label>
           <input
             type="text"
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
-            placeholder="Filtrar por nombre o SKU (ej: 19.000, FRJ-19000)…"
+            placeholder={t("Filtrar por nombre o SKU (ej: 19.000, FRJ-19000)…")}
             className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#4FAEB2] bg-white"
           />
           {buscando ? (
@@ -305,13 +307,13 @@ export default function TransferenciasStockPage() {
         )}
 
         <div>
-          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Observación (opcional)</label>
+          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">{t("Observación (opcional)")}</label>
           <textarea
             value={observacion}
             onChange={(e) => setObservacion(e.target.value)}
             rows={2}
             className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#4FAEB2] bg-white"
-            placeholder="Motivo, referencia interna, etc."
+            placeholder={t("Motivo, referencia interna, etc.")}
           />
         </div>
 
@@ -321,7 +323,7 @@ export default function TransferenciasStockPage() {
             disabled={!puedeEnviar}
             className="rounded-lg bg-[#4FAEB2] hover:bg-[#3F8E91] disabled:bg-slate-200 disabled:text-slate-500 disabled:cursor-not-allowed text-white text-sm font-semibold px-6 py-2.5 transition-colors shadow-sm active:scale-95"
           >
-            {enviando ? "Registrando…" : "Registrar transferencia"}
+            {enviando ? t("Registrando…") : t("Registrar transferencia")}
           </button>
         </div>
       </form>

@@ -117,6 +117,31 @@ const es: Dict = {
   "Inactivo": "Inactivo",
   "Sin suscripción": "Sin suscripción",
 
+  // Movimientos
+  "Movimientos de inventario": "Movimientos de inventario",
+  "Registro de entradas, salidas y ajustes de stock": "Registro de entradas, salidas y ajustes de stock",
+  "Nuevo movimiento": "Nuevo movimiento",
+  "registro": "registro", "registros": "registros",
+  "de": "de", "filtrado": "filtrado",
+  "Los movimientos se generan automáticamente desde": "Los movimientos se generan automáticamente desde",
+  "Buscar por producto o SKU...": "Buscar por producto o SKU...",
+  "Compra": "Compra", "Venta": "Venta", "Ajuste manual": "Ajuste manual",
+  "Hasta": "Hasta",
+  "Producto": "Producto", "Tipo": "Tipo", "Cantidad": "Cantidad",
+  "Costo unit.": "Costo unit.", "Fecha": "Fecha",
+
+  // Transferencias
+  "Transferencias entre sucursales": "Transferencias entre sucursales",
+  "Mueve productos de una sucursal a otra. El stock se actualiza en el momento.":
+    "Mueve productos de una sucursal a otra. El stock se actualiza en el momento.",
+  "Desde (origen)": "Desde (origen)",
+  "Hacia (destino)": "Hacia (destino)",
+  "Elegí sucursal…": "Elegí sucursal…",
+  "Elegí producto o franja": "Elegí producto o franja",
+  "Filtrar por nombre o SKU (ej: 19.000, FRJ-19000)…": "Filtrar por nombre o SKU (ej: 19.000, FRJ-19000)…",
+  "Motivo, referencia interna, etc.": "Motivo, referencia interna, etc.",
+  "Registrar transferencia": "Registrar transferencia",
+
   // Inventario
   "Gestión de productos y control de stock": "Gestión de productos y control de stock",
   "Total productos": "Total productos",
@@ -262,6 +287,31 @@ const ptBR: Dict = {
   "Activo": "Ativo",
   "Inactivo": "Inativo",
   "Sin suscripción": "Sem assinatura",
+
+  // Movimientos
+  "Movimientos de inventario": "Movimentações de estoque",
+  "Registro de entradas, salidas y ajustes de stock": "Registro de entradas, saídas e ajustes de estoque",
+  "Nuevo movimiento": "Nova movimentação",
+  "registro": "registro", "registros": "registros",
+  "de": "de", "filtrado": "filtrado",
+  "Los movimientos se generan automáticamente desde": "As movimentações são geradas automaticamente a partir de",
+  "Buscar por producto o SKU...": "Buscar por produto ou SKU...",
+  "Compra": "Compra", "Venta": "Venda", "Ajuste manual": "Ajuste manual",
+  "Hasta": "Até",
+  "Producto": "Produto", "Tipo": "Tipo", "Cantidad": "Quantidade",
+  "Costo unit.": "Custo unit.", "Fecha": "Data",
+
+  // Transferencias
+  "Transferencias entre sucursales": "Transferências entre filiais",
+  "Mueve productos de una sucursal a otra. El stock se actualiza en el momento.":
+    "Movimenta produtos de uma filial para outra. O estoque é atualizado na hora.",
+  "Desde (origen)": "De (origem)",
+  "Hacia (destino)": "Para (destino)",
+  "Elegí sucursal…": "Escolha uma filial…",
+  "Elegí producto o franja": "Escolha produto ou faixa",
+  "Filtrar por nombre o SKU (ej: 19.000, FRJ-19000)…": "Filtrar por nome ou SKU (ex: 19.000, FRJ-19000)…",
+  "Motivo, referencia interna, etc.": "Motivo, referência interna, etc.",
+  "Registrar transferencia": "Registrar transferência",
 
   // Inventario
   "Gestión de productos y control de stock": "Gestão de produtos e controle de estoque",

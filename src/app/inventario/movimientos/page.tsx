@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { getMovimientos } from "@/lib/inventario/storage";
 import type { MovimientoInventario, TipoMovimiento, OrigenMovimiento } from "@/lib/inventario/types";
+import { useT } from "@/lib/i18n/context";
+import { fmtActive } from "@/lib/i18n/currency";
 
 type PageSize = 10 | 50 | 100 | "todos";
 
@@ -27,9 +29,8 @@ const origenBadge: Record<OrigenMovimiento, string> = {
   inventario_inicial: "bg-orange-50 text-orange-600",
 };
 
-function formatGs(valor: number) {
-  return `Gs. ${valor.toLocaleString("es-PY")}`;
-}
+// formatGs → moneda activa del usuario (Gs. o R$).
+const formatGs = fmtActive;
 
 function formatFecha(iso: string) {
   try {
@@ -49,6 +50,7 @@ const inputFilterClass =
   "border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400 transition-colors bg-white";
 
 export default function MovimientosPage() {
+  const t = useT();
   const [todos, setTodos] = useState<MovimientoInventario[]>([]);
 
   // Filtros
@@ -104,8 +106,8 @@ export default function MovimientosPage() {
     <div className="space-y-8">
 
       <div>
-        <h1 className="text-3xl font-bold text-gray-800">Movimientos de inventario</h1>
-        <p className="text-gray-600">Registro de entradas, salidas y ajustes de stock</p>
+        <h1 className="text-3xl font-bold text-gray-800">{t("Movimientos de inventario")}</h1>
+        <p className="text-gray-600">{t("Registro de entradas, salidas y ajustes de stock")}</p>
       </div>
 
       <div className="bg-white rounded-xl shadow p-6">
@@ -113,21 +115,21 @@ export default function MovimientosPage() {
         {/* Header */}
         <div className="flex justify-between items-center mb-5">
           <div className="flex items-center gap-3">
-            <h2 className="text-xl font-semibold">Historial</h2>
+            <h2 className="text-xl font-semibold">{t("Historial")}</h2>
             <Link
               href="/inventario/movimientos/nuevo"
               className="text-sm text-gray-600 hover:text-gray-900 underline"
             >
-              Nuevo movimiento
+              {t("Nuevo movimiento")}
             </Link>
             <span className="text-sm text-gray-400">
               {filtrados.length === todos.length
-                ? `${todos.length} registro${todos.length === 1 ? "" : "s"}`
-                : `${filtrados.length} de ${todos.length} (filtrado)`}
+                ? `${todos.length} ${todos.length === 1 ? t("registro") : t("registros")}`
+                : `${filtrados.length} ${t("de")} ${todos.length} (${t("filtrado")})`}
             </span>
           </div>
           <p className="text-xs text-gray-400">
-            Los movimientos se generan automáticamente desde <span className="font-medium text-gray-500">Compras</span>
+            {t("Los movimientos se generan automáticamente desde")} <span className="font-medium text-gray-500">{t("Compras")}</span>
           </p>
         </div>
 
@@ -136,7 +138,7 @@ export default function MovimientosPage() {
           {/* Fila 1: búsqueda + tipo + origen */}
           <input
             type="text"
-            placeholder="Buscar por producto o SKU..."
+            placeholder={t("Buscar por producto o SKU...")}
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
             className={`${inputFilterClass} min-w-56`}
@@ -146,7 +148,7 @@ export default function MovimientosPage() {
             onChange={(e) => setFiltroTipo(e.target.value as TipoMovimiento | "")}
             className={inputFilterClass}
           >
-            <option value="">Todos los tipos</option>
+            <option value="">{t("Todos los tipos")}</option>
             <option value="ENTRADA">ENTRADA</option>
             <option value="SALIDA">SALIDA</option>
             <option value="AJUSTE">AJUSTE</option>
@@ -156,16 +158,16 @@ export default function MovimientosPage() {
             onChange={(e) => setFiltroOrigen(e.target.value as OrigenMovimiento | "")}
             className={inputFilterClass}
           >
-            <option value="">Todos los orígenes</option>
-            <option value="compra">Compra</option>
-            <option value="venta">Venta</option>
-            <option value="ajuste_manual">Ajuste manual</option>
+            <option value="">{t("Todos los orígenes")}</option>
+            <option value="compra">{t("Compra")}</option>
+            <option value="venta">{t("Venta")}</option>
+            <option value="ajuste_manual">{t("Ajuste manual")}</option>
           </select>
 
           {/* Separador visual entre grupos */}
           <div className="w-full flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-2">
-              <label className="text-xs text-gray-400 whitespace-nowrap">Desde</label>
+              <label className="text-xs text-gray-400 whitespace-nowrap">{t("Desde")}</label>
               <input
                 type="date"
                 value={fechaDesde}
@@ -175,7 +177,7 @@ export default function MovimientosPage() {
               />
             </div>
             <div className="flex items-center gap-2">
-              <label className="text-xs text-gray-400 whitespace-nowrap">Hasta</label>
+              <label className="text-xs text-gray-400 whitespace-nowrap">{t("Hasta")}</label>
               <input
                 type="date"
                 value={fechaHasta}
@@ -195,7 +197,7 @@ export default function MovimientosPage() {
                 }}
                 className="text-sm text-gray-400 hover:text-gray-600 transition-colors px-2"
               >
-                Limpiar filtros
+                {t("Limpiar filtros")}
               </button>
             )}
           </div>
@@ -221,14 +223,14 @@ export default function MovimientosPage() {
           <table className="w-full min-w-[860px] sm:min-w-0 text-left text-sm">
             <thead>
               <tr className="border-b text-gray-500">
-                <th className="py-3 pr-4 font-medium">Producto</th>
+                <th className="py-3 pr-4 font-medium">{t("Producto")}</th>
                 <th className="py-3 pr-4 font-medium hidden md:table-cell">SKU</th>
-                <th className="py-3 pr-4 font-medium">Tipo</th>
-                <th className="py-3 pr-4 font-medium text-right">Cantidad</th>
-                <th className="py-3 pr-4 font-medium text-right hidden lg:table-cell">Costo unit.</th>
-                <th className="py-3 pr-4 font-medium hidden md:table-cell">Origen</th>
-                <th className="py-3 pr-4 font-medium hidden lg:table-cell">Usuario</th>
-                <th className="py-3 font-medium">Fecha</th>
+                <th className="py-3 pr-4 font-medium">{t("Tipo")}</th>
+                <th className="py-3 pr-4 font-medium text-right">{t("Cantidad")}</th>
+                <th className="py-3 pr-4 font-medium text-right hidden lg:table-cell">{t("Costo unit.")}</th>
+                <th className="py-3 pr-4 font-medium hidden md:table-cell">{t("Origen")}</th>
+                <th className="py-3 pr-4 font-medium hidden lg:table-cell">{t("Usuario")}</th>
+                <th className="py-3 font-medium">{t("Fecha")}</th>
               </tr>
             </thead>
             <tbody>

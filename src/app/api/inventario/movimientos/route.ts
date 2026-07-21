@@ -43,6 +43,7 @@ export async function GET(request: NextRequest) {
     const movT = quoteSchemaTable(schema, "movimientos_inventario");
     const ventasT = quoteSchemaTable(schema, "ventas");
     const recepT = quoteSchemaTable(schema, "cliente_recepciones");
+    const comprasT = quoteSchemaTable(schema, "compras");
 
     const client = await pool.connect();
     try {
@@ -57,7 +58,8 @@ export async function GET(request: NextRequest) {
         sucCond = `AND (
           (mi.origen = 'venta'     AND v.sucursal_id = $2)
        OR (mi.origen = 'recepcion' AND r.sucursal_id = $2)
-       OR mi.origen NOT IN ('venta','recepcion')
+       OR (mi.origen = 'compra'    AND c.sucursal_id = $2)
+       OR mi.origen NOT IN ('venta','recepcion','compra')
         )`;
       }
 
@@ -67,10 +69,11 @@ export async function GET(request: NextRequest) {
            mi.producto_sku, mi.tipo, mi.cantidad, mi.costo_unitario,
            mi.origen, mi.referencia, mi.fecha, mi.created_at, mi.updated_at,
            mi.created_by, mi.usuario_nombre,
-           COALESCE(v.sucursal_id, r.sucursal_id) AS sucursal_derivada_id
+           COALESCE(v.sucursal_id, r.sucursal_id, c.sucursal_id) AS sucursal_derivada_id
          FROM ${movT} mi
-         LEFT JOIN ${ventasT} v ON mi.origen = 'venta'     AND v.numero_control = mi.referencia AND v.empresa_id = $1
-         LEFT JOIN ${recepT} r  ON mi.origen = 'recepcion' AND r.numero_control = mi.referencia AND r.empresa_id = $1
+         LEFT JOIN ${ventasT}  v ON mi.origen = 'venta'     AND v.numero_control = mi.referencia AND v.empresa_id = $1
+         LEFT JOIN ${recepT}   r ON mi.origen = 'recepcion' AND r.numero_control = mi.referencia AND r.empresa_id = $1
+         LEFT JOIN ${comprasT} c ON mi.origen = 'compra'    AND c.numero_control = mi.referencia AND c.empresa_id = $1
          WHERE mi.empresa_id = $1
          ${sucCond}
          ORDER BY mi.fecha DESC

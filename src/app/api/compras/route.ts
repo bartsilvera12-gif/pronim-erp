@@ -13,7 +13,7 @@ const COMPRAS_COLS =
   "id,empresa_id,proveedor_id,proveedor_nombre,producto_id,producto_nombre," +
   "cantidad,moneda,tipo_cambio,costo_unitario_original,costo_unitario," +
   "iva_tipo,subtotal,monto_iva,total,precio_venta,margen_venta,tipo_pago,plazo_dias," +
-  "nro_timbrado,numero_control,estado,fecha,created_at,updated_at,created_by,usuario_nombre";
+  "nro_timbrado,numero_control,estado,fecha,created_at,updated_at,created_by,usuario_nombre,sucursal_id";
 
 /**
  * GET /api/compras — listado vía PostgREST HTTPS (JWT).
@@ -30,6 +30,10 @@ export async function GET(request: NextRequest) {
       order: "fecha.desc",
       limit: "1000",
     });
+    // Aislar por sucursal: si el usuario tiene sucursal fija, solo sus compras.
+    if (ctx.auth.sucursal_id) {
+      qs.set("sucursal_id", `eq.${ctx.auth.sucursal_id}`);
+    }
     const r = await postgrestGet<Record<string, unknown>>("compras", qs.toString(), {
       role: "jwt",
       jwt,
