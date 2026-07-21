@@ -7,6 +7,7 @@ import DashSucursales from "./DashSucursales";
 import DashClientes from "./DashClientes";
 import PendientesEvaluacionBanner from "./PendientesEvaluacionBanner";
 import InventarioPorSucursalPanels from "./InventarioPorSucursalPanels";
+import VentasPorSucursalPanel from "./VentasPorSucursalPanel";
 import { getConfig } from "@/lib/config/storage";
 import { getUsuarios } from "@/lib/usuarios/storage";
 import { getUsuariosActivosEmpresa } from "@/lib/usuarios/empresa";
@@ -2314,6 +2315,10 @@ function DashVentas({
 
   return (
     <div className="space-y-6">
+      {/* Desglose de ventas POR SUCURSAL — reemplaza la sección global
+          'Ventas — detalle' que Karen tenía en el dash de sucursales. */}
+      <VentasPorSucursalPanel />
+
       {/* KPIs principales */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard
