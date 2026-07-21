@@ -139,22 +139,23 @@ export async function GET(request: NextRequest) {
         args,
       ).catch(() => ({ rows: [] as { sucursal_id: string; cantidad: string }[] }));
 
-      // Formas de pago por sucursal.
+      // Formas de pago por sucursal. La tabla usa metodo_pago (no metodo)
+      // y ya tiene sucursal_id, así que preferimos ese al de la venta.
       const pagosQ = await client.query<{
         sucursal_id: string; metodo: string; ops: string; total: string;
       }>(
         `SELECT
-           v.sucursal_id::text AS sucursal_id,
-           COALESCE(pd.metodo, 'sin_metodo') AS metodo,
+           pd.sucursal_id::text AS sucursal_id,
+           COALESCE(pd.metodo_pago, 'sin_metodo') AS metodo,
            COUNT(*)::text AS ops,
            COALESCE(SUM(pd.monto), 0)::text AS total
          FROM ${pagoDetT} pd
          JOIN ${ventasT} v ON v.id = pd.venta_id
-         WHERE v.empresa_id = $1
+         WHERE pd.empresa_id = $1
            AND v.fecha::date BETWEEN $2 AND $3
            AND v.estado IN ('pendiente','completada')
-         GROUP BY v.sucursal_id, pd.metodo
-         ORDER BY v.sucursal_id, SUM(pd.monto) DESC`,
+         GROUP BY pd.sucursal_id, pd.metodo_pago
+         ORDER BY pd.sucursal_id, SUM(pd.monto) DESC`,
         args,
       );
 

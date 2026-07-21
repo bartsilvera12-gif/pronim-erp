@@ -52,7 +52,8 @@ export async function GET(request: NextRequest) {
     const recepT = quoteSchemaTable(schema, "cliente_recepciones");
     const recepItT = quoteSchemaTable(schema, "cliente_recepciones_items");
     const stockT = quoteSchemaTable(schema, "producto_stock_sucursal");
-    const movInvT = quoteSchemaTable(schema, "movimientos_inventario");
+    const ventasT = quoteSchemaTable(schema, "ventas");
+    const ventasItT = quoteSchemaTable(schema, "ventas_items");
 
     const client = await pool.connect();
     try {
@@ -110,20 +111,30 @@ export async function GET(request: NextRequest) {
         args.slice(0, 3),
       );
 
-      // 4) Inventario por sucursal: entradas/salidas del período +
-      //    stock actual + antigüedad prom aproximada (días desde
-      //    último ingreso positivo).
-      const movQ = await client.query<{
-        sucursal_id: string; entradas: string; salidas: string;
-      }>(
-        `SELECT
-           mi.sucursal_id::text AS sucursal_id,
-           COALESCE(SUM(GREATEST(mi.cantidad, 0)), 0)::text AS entradas,
-           COALESCE(SUM(GREATEST(-mi.cantidad, 0)), 0)::text AS salidas
-         FROM ${movInvT} mi
-         WHERE mi.empresa_id = $1
-           AND mi.fecha::date BETWEEN $2 AND $3
-         GROUP BY mi.sucursal_id`,
+      // 4) Inventario por sucursal — la tabla movimientos_inventario no
+      //    tiene sucursal_id (es global), así que derivamos:
+      //      - Entradas = SUM(ri.cantidad) por r.sucursal_id
+      //      - Salidas  = SUM(vi.cantidad) por v.sucursal_id
+      //    Ambos del período pedido.
+      const entQ = await client.query<{ sucursal_id: string; entradas: string }>(
+        `SELECT r.sucursal_id::text AS sucursal_id,
+                COALESCE(SUM(ri.cantidad), 0)::text AS entradas
+         FROM ${recepItT} ri
+         JOIN ${recepT} r ON r.id = ri.recepcion_id
+         WHERE r.empresa_id = $1 AND r.estado <> 'anulada'
+           AND r.fecha::date BETWEEN $2 AND $3
+         GROUP BY r.sucursal_id`,
+        args.slice(0, 3),
+      );
+      const salQ = await client.query<{ sucursal_id: string; salidas: string }>(
+        `SELECT v.sucursal_id::text AS sucursal_id,
+                COALESCE(SUM(vi.cantidad), 0)::text AS salidas
+         FROM ${ventasItT} vi
+         JOIN ${ventasT} v ON v.id = vi.venta_id
+         WHERE v.empresa_id = $1
+           AND v.estado IN ('pendiente','completada')
+           AND v.fecha::date BETWEEN $2 AND $3
+         GROUP BY v.sucursal_id`,
         args.slice(0, 3),
       );
 
@@ -137,11 +148,11 @@ export async function GET(request: NextRequest) {
       // Ensamblado — por cada sucursal armamos su bloque.
       type RecepRow = { sucursal_id: string; cantidad: string; subtotal_evaluado: string; ajuste_positivo: string; ajuste_negativo: string; total_final: string; prendas_recibidas: string };
       type EvalRow = { sucursal_id: string; usuario: string; recepciones: string; total_final: string };
-      type MovRow = { sucursal_id: string; entradas: string; salidas: string };
       type StockRow = { sucursal_id: string; stock: string };
 
       const recepMap = new Map<string, RecepRow>(recepQ.rows.map(r => [r.sucursal_id, r]));
-      const movMap = new Map<string, MovRow>(movQ.rows.map(r => [r.sucursal_id, r]));
+      const entMap = new Map<string, string>(entQ.rows.map(r => [r.sucursal_id, r.entradas]));
+      const salMap = new Map<string, string>(salQ.rows.map(r => [r.sucursal_id, r.salidas]));
       const stockMap = new Map<string, StockRow>(stockQ.rows.map(r => [r.sucursal_id, r]));
       const evalMap = new Map<string, EvalRow[]>();
       for (const row of evalQ.rows) {
@@ -152,7 +163,6 @@ export async function GET(request: NextRequest) {
 
       const sucursales = sucQ.rows.map(s => {
         const rec = recepMap.get(s.id);
-        const mov = movMap.get(s.id);
         const stock = stockMap.get(s.id);
 
         const cantidadRec = Number(rec?.cantidad ?? 0);
@@ -162,8 +172,8 @@ export async function GET(request: NextRequest) {
         const totalFinal = Number(rec?.total_final ?? 0);
         const prendasRecibidas = Number(rec?.prendas_recibidas ?? 0);
 
-        const entradas = Number(mov?.entradas ?? 0);
-        const salidas = Number(mov?.salidas ?? 0);
+        const entradas = Number(entMap.get(s.id) ?? 0);
+        const salidas = Number(salMap.get(s.id) ?? 0);
         const stockActual = Number(stock?.stock ?? 0);
 
         // Ratio ajuste = (ajuste_positivo + ajuste_negativo) / subtotal_evaluado × 100.
