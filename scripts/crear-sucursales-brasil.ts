@@ -22,16 +22,19 @@ config({ path: path.join(process.cwd(), ".env.local") });
 const SCHEMA = "pronimerp";
 const EMPRESA_SLUG = "akakua"; // ajustar si es distinto en tu tenant
 
+// Las 3 sucursales YA existen en la UI — solo las buscamos por nombre
+// (case-insensitive, tolerante a variantes: "El Dorado", "Eldorado",
+// "Belo Horizonte", "BH") y les seteamos moneda=BRL. NO se crean.
 const SUCURSALES = [
-  { nombre: "El Dorado", slug: "el-dorado", moneda: "BRL" },
-  { nombre: "Betim",     slug: "betim",     moneda: "BRL" },
-  { nombre: "BH",        slug: "bh",        moneda: "BRL" },
+  { nombreLike: "%dorado%", moneda: "BRL", key: "eldorado" },
+  { nombreLike: "%betim%",  moneda: "BRL", key: "betim"    },
+  { nombreLike: "%bh%",     moneda: "BRL", key: "bh"       },
 ];
 
 const USUARIOS = [
-  { email: "usuario@eldorado.com", nombre: "Operador El Dorado", password: "Akakua2026", sucursalSlug: "el-dorado" },
-  { email: "usuario@betim.com",    nombre: "Operador Betim",     password: "Akakua2026", sucursalSlug: "betim"     },
-  { email: "usuario@bh.com",       nombre: "Operador BH",        password: "Akakua2026", sucursalSlug: "bh"        },
+  { email: "usuario@eldorado.com", nombre: "Operador El Dorado", password: "Akakua2026", sucursalKey: "eldorado" },
+  { email: "usuario@betim.com",    nombre: "Operador Betim",     password: "Akakua2026", sucursalKey: "betim"    },
+  { email: "usuario@bh.com",       nombre: "Operador BH",        password: "Akakua2026", sucursalKey: "bh"       },
 ];
 
 const MODULOS_SLUGS = ["clientes", "atencion", "inventario", "compras"];
@@ -62,33 +65,33 @@ async function main() {
   const empresaId = (empresa as { id: string }).id;
   console.log(`Empresa: ${(empresa as { nombre: string }).nombre} (${empresaId})`);
 
-  // 2) Sucursales — upsert por (empresa_id, slug)
+  // 2) Sucursales — BUSCAR (ya creadas por Karen desde la UI) y setear
+  //    moneda=BRL. NO se crean; si no se encuentra, error.
   const sucIds: Record<string, string> = {};
   for (const s of SUCURSALES) {
-    const { data: existing } = await sb
+    const { data: matches, error: em } = await sb
       .from("sucursales")
-      .select("id")
+      .select("id, nombre")
       .eq("empresa_id", empresaId)
-      .eq("slug", s.slug)
-      .maybeSingle();
-    if (existing?.id) {
-      const { error: eu } = await sb
-        .from("sucursales")
-        .update({ nombre: s.nombre, moneda: s.moneda, activo: true })
-        .eq("id", existing.id);
-      if (eu) { console.error(`update sucursal ${s.slug}:`, eu.message); process.exit(1); }
-      sucIds[s.slug] = existing.id as string;
-      console.log(`✓ Sucursal existente actualizada: ${s.nombre} (moneda=${s.moneda})`);
-    } else {
-      const { data: ins, error: ei } = await sb
-        .from("sucursales")
-        .insert({ empresa_id: empresaId, nombre: s.nombre, slug: s.slug, moneda: s.moneda, es_principal: false, activo: true })
-        .select("id")
-        .single();
-      if (ei) { console.error(`insert sucursal ${s.slug}:`, ei.message); process.exit(1); }
-      sucIds[s.slug] = (ins as { id: string }).id;
-      console.log(`✓ Sucursal creada: ${s.nombre} (moneda=${s.moneda})`);
+      .ilike("nombre", s.nombreLike);
+    if (em) { console.error(`buscar sucursal ${s.key}:`, em.message); process.exit(1); }
+    const rows = (matches ?? []) as { id: string; nombre: string }[];
+    if (rows.length === 0) {
+      console.error(`❌ No se encontró sucursal que matchee '${s.nombreLike}'. Creá desde la UI primero.`);
+      process.exit(1);
     }
+    if (rows.length > 1) {
+      console.error(`❌ Ambiguo: ${rows.length} sucursales matchean '${s.nombreLike}': ${rows.map(r => r.nombre).join(", ")}. Ajustá nombreLike en el script.`);
+      process.exit(1);
+    }
+    const suc = rows[0];
+    const { error: eu } = await sb
+      .from("sucursales")
+      .update({ moneda: s.moneda })
+      .eq("id", suc.id);
+    if (eu) { console.error(`update moneda ${suc.nombre}:`, eu.message); process.exit(1); }
+    sucIds[s.key] = suc.id;
+    console.log(`✓ ${suc.nombre} → moneda=${s.moneda}`);
   }
 
   // 3) Módulos: buscar los ids por slug.
@@ -125,8 +128,8 @@ async function main() {
 
   // 4) Usuarios
   for (const u of USUARIOS) {
-    const sucursalId = sucIds[u.sucursalSlug];
-    if (!sucursalId) { console.error(`Sucursal ${u.sucursalSlug} no encontrada`); process.exit(1); }
+    const sucursalId = sucIds[u.sucursalKey];
+    if (!sucursalId) { console.error(`Sucursal ${u.sucursalKey} no encontrada`); process.exit(1); }
 
     const emailLc = u.email.toLowerCase();
 
@@ -206,7 +209,7 @@ async function main() {
     const { error: eIns } = await sb.from("usuario_modulos").insert(rows);
     if (eIns) { console.error(`ins usuario_modulos ${emailLc}:`, eIns.message); process.exit(1); }
 
-    console.log(`✓ Usuario listo: ${emailLc} → ${u.sucursalSlug} (pt-BR, 4 módulos)`);
+    console.log(`✓ Usuario listo: ${emailLc} → ${u.sucursalKey} (pt-BR, 4 módulos)`);
   }
 
   console.log("\nHecho. Login inicial:");
