@@ -14,6 +14,7 @@ import StatCard from "@/components/ui/StatCard";
 import { useIsAdmin, useIsSuperAdmin } from "@/lib/auth/use-is-admin";
 import { useUsuarioActual } from "@/shared/hooks/useUsuarioActual";
 import { useT } from "@/lib/i18n/context";
+import { fmtActive } from "@/lib/i18n/currency";
 
 const inputFilterClass =
   "border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-[#4FAEB2] focus:outline-none";
@@ -24,9 +25,8 @@ const metodoBadge: Record<MetodoValuacion, string> = {
   LIFO: "bg-purple-100 text-purple-700",
 };
 
-function formatGs(valor: number) {
-  return `Gs. ${valor.toLocaleString("es-PY")}`;
-}
+// formatGs → moneda activa del usuario (Gs. o R$).
+const formatGs = fmtActive;
 
 /** Cantidad de stock con hasta 3 decimales (los insumos pueden quedar fraccionados). */
 function formatStock(valor: number) {
@@ -373,7 +373,7 @@ export default function InventarioPage() {
             </p>
           </div>
           <h1 className="mt-1 text-lg font-semibold tracking-tight text-slate-900">{t("Inventario")}</h1>
-          <p className="mt-0.5 text-xs text-slate-500">Gestión de productos y control de stock</p>
+          <p className="mt-0.5 text-xs text-slate-500">{t("Gestión de productos y control de stock")}</p>
         </div>
         <div className="flex items-center gap-2 mt-1">
           <ExportExcelButton url="/api/inventario/productos/export" />
@@ -397,15 +397,15 @@ export default function InventarioPage() {
 
       {/* Resumen por pestaña */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard compact label="Total productos" value={String(resumen.total)} accent
-          hint={tab === "reventa" ? "Reventa" : tab === "menu" ? "Menú" : "Materia prima"} />
-        <StatCard compact label="Stock valorizado" value={formatGs(Math.round(resumen.stockValorizado))}
-          hint="stock × costo prom." />
-        <StatCard compact label="Stock bajo" value={String(resumen.bajo)}
-          hint="≤ stock mínimo" />
+        <StatCard compact label={t("Total productos")} value={String(resumen.total)} accent
+          hint={tab === "reventa" ? t("Reventa") : tab === "menu" ? "Menú" : "Materia prima"} />
+        <StatCard compact label={t("Stock valorizado")} value={formatGs(Math.round(resumen.stockValorizado))}
+          hint={t("stock × costo prom.")} />
+        <StatCard compact label={t("Stock bajo")} value={String(resumen.bajo)}
+          hint={t("≤ stock mínimo")} />
         <StatCard compact
-          label={tab === "materia" ? "Materias disponibles" : "Con stock disponible"}
-          value={String(resumen.disponibles)} hint="stock > 0" />
+          label={tab === "materia" ? "Materias disponibles" : t("Con stock disponible")}
+          value={String(resumen.disponibles)} hint={t("stock > 0")} />
       </div>
 
       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm ring-1 ring-[#4FAEB2]/15 sm:p-5 lg:p-6">
@@ -418,7 +418,7 @@ export default function InventarioPage() {
                 href="/inventario/nuevo"
                 className="rounded-lg bg-[#4FAEB2] px-3 py-1.5 text-xs font-semibold text-white shadow-sm shadow-[#4FAEB2]/25 transition-colors hover:bg-[#3F8E91] active:scale-95"
               >
-                Nuevo producto
+                {t("Nuevo producto")}
               </Link>
             )}
             {isSuperAdmin && (
@@ -426,12 +426,12 @@ export default function InventarioPage() {
                 href="/admin/categorias"
                 className="rounded-lg border border-[#4FAEB2]/60 px-3 py-1.5 text-xs font-semibold text-[#3F8E91] transition-colors hover:bg-[#4FAEB2]/10 active:scale-95"
               >
-                Administrar categorías
+                {t("Administrar categorías")}
               </Link>
             )}
             <input
               type="text"
-              placeholder="Buscar por nombre..."
+              placeholder={t("Buscar por nombre...")}
               value={filtroPorNombre}
               onChange={(e) => setFiltroPorNombre(e.target.value)}
               className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#4FAEB2] focus:outline-none sm:w-64 sm:flex-none"
@@ -443,10 +443,10 @@ export default function InventarioPage() {
               className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-[#4FAEB2]/30"
               title="Estado de stock"
             >
-              <option value="todos">Stock: todos</option>
-              <option value="con_stock">Con stock (&gt;0)</option>
-              <option value="sin_stock">Sin stock (=0)</option>
-              <option value="bajo">Stock bajo (≤ mín.)</option>
+              <option value="todos">{t("Stock: todos")}</option>
+              <option value="con_stock">{t("Con stock (>0)")}</option>
+              <option value="sin_stock">{t("Sin stock (=0)")}</option>
+              <option value="bajo">{t("Stock bajo (≤ mín.)")}</option>
             </select>
             <select
               value={filtroDistribuidor}
@@ -457,8 +457,8 @@ export default function InventarioPage() {
             >
               <option value="">
                 {distribuidoresDisponibles.length === 0
-                  ? "Sin proveedores cargados"
-                  : "Proveedor: todos"}
+                  ? t("Sin proveedores cargados")
+                  : t("Proveedor: todos")}
               </option>
               {distribuidoresDisponibles.map((d) => (
                 <option key={d} value={d}>{d}</option>
@@ -470,7 +470,7 @@ export default function InventarioPage() {
                 onClick={() => { setFiltroStock("todos"); setFiltroDistribuidor(""); }}
                 className="text-xs text-slate-500 hover:text-slate-800 underline"
               >
-                Limpiar filtros
+                {t("Limpiar filtros")}
               </button>
             )}
           </div>
@@ -585,7 +585,7 @@ export default function InventarioPage() {
                 onClick={limpiarFiltros}
                 className="mt-4 text-sm text-gray-400 hover:text-gray-600 transition-colors px-2"
               >
-                Limpiar filtros
+                {t("Limpiar filtros")}
               </button>
             )}
             <span className="ml-auto text-sm text-gray-400 self-end mb-0.5">
@@ -666,13 +666,13 @@ export default function InventarioPage() {
             <thead>
               <tr className="bg-slate-50 text-slate-600 text-sm font-semibold">
                 <th className="py-3 pr-4 font-medium w-20"></th>
-                <th className="py-3 pr-4 font-medium">Nombre</th>
-                <th className="hidden py-3 pr-4 font-medium lg:table-cell">Categoría</th>
-                <th className="py-3 pr-4 font-medium">Costo Prom.</th>
-                {tab !== "materia" && <th className="py-3 pr-4 font-medium">Precio Venta</th>}
-                <th className="py-3 pr-4 font-medium text-center">Stock actual</th>
-                <th className="py-3 pr-4 font-medium text-center hidden md:table-cell">Sucursal</th>
-                <th className="py-3 pr-4 text-center font-medium hidden lg:table-cell">Stock Mín.</th>
+                <th className="py-3 pr-4 font-medium">{t("Nombre")}</th>
+                <th className="hidden py-3 pr-4 font-medium lg:table-cell">{t("Categoría")}</th>
+                <th className="py-3 pr-4 font-medium">{t("Costo Prom.")}</th>
+                {tab !== "materia" && <th className="py-3 pr-4 font-medium">{t("Precio Venta")}</th>}
+                <th className="py-3 pr-4 font-medium text-center">{t("Stock actual")}</th>
+                <th className="py-3 pr-4 font-medium text-center hidden md:table-cell">{t("Sucursal")}</th>
+                <th className="py-3 pr-4 text-center font-medium hidden lg:table-cell">{t("Stock Mín.")}</th>
                 {puedeEditarWeb && (
                   <>
                     <th className="py-3 pr-4 font-medium text-center">Visible web</th>
@@ -681,10 +681,10 @@ export default function InventarioPage() {
                 )}
                 {tab !== "materia" && (
                   <th className="hidden py-3 pr-6 text-right font-medium lg:table-cell">
-                    <span title="(precio - costo) / precio × 100">Margen s/venta</span>
+                    <span title="(precio - costo) / precio × 100">{t("Margen s/venta")}</span>
                   </th>
                 )}
-                <th className="py-3 pl-4 font-medium text-center w-32">Acción</th>
+                <th className="py-3 pl-4 font-medium text-center w-32">{t("Acción")}</th>
               </tr>
             </thead>
 
@@ -706,7 +706,7 @@ export default function InventarioPage() {
                 <tr>
                   <td colSpan={11} className="py-16 text-center text-sm text-slate-400">
                     {todos.length === 0
-                      ? "Todavía no cargaste productos. Probá con \"+ Nuevo producto\" o \"Importar Excel\"."
+                      ? t("Todavía no cargaste productos. Probá con \"+ Nuevo producto\" o \"Importar Excel\".")
                       : "No hay productos que coincidan con los filtros aplicados."}
                   </td>
                 </tr>
