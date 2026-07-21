@@ -38,6 +38,7 @@ type Recepcion = {
 type Payload = {
   recepciones: Recepcion[];
   clientes: Record<string, string>;
+  sucursales: Record<string, string>;
 };
 
 export default function PendientesEvaluacionBanner({
@@ -107,24 +108,40 @@ export default function PendientesEvaluacionBanner({
             Revisá cada bolsa, definí el monto final si corresponde y confirmalas para que aparezcan en el inventario.
           </p>
 
-          {/* Lista compacta */}
-          <div className="mt-3 space-y-1">
-            {mostradas.map(r => {
-              const cliente = (r.cliente_id && data.clientes[r.cliente_id]) || "(sin cliente)";
-              const horas = Math.floor((now - new Date(r.fecha).getTime()) / (3600 * 1000));
-              const dias = Math.floor(horas / 24);
-              const cuantoHace = dias >= 1 ? `hace ${dias}d` : `hace ${horas}h`;
-              const vencida = horas > 72;
-              return (
-                <div key={r.id} className={`flex items-center gap-2 rounded-md px-2 py-1 text-xs ${vencida ? "bg-rose-50" : "bg-white/60"}`}>
-                  <span className={`inline-block w-2 h-2 rounded-full ${vencida ? "bg-rose-500" : "bg-amber-500"}`} />
-                  <span className="font-mono text-[10px] text-slate-500 shrink-0">{r.numero_control}</span>
-                  <span className="flex-1 truncate text-slate-700">{cliente}</span>
-                  <span className={`text-[10px] font-semibold shrink-0 ${vencida ? "text-rose-700" : "text-amber-700"}`}>{cuantoHace}</span>
-                </div>
-              );
-            })}
-          </div>
+          {/* Lista compacta — el pill de sucursal aparece solo si hay más
+              de una involucrada (típicamente admin viendo global). */}
+          {(() => {
+            const sucursalesMap = data.sucursales ?? {};
+            const mostrarSuc = Object.keys(sucursalesMap).length > 1;
+            return (
+              <div className="mt-3 space-y-1">
+                {mostradas.map(r => {
+                  const cliente = (r.cliente_id && data.clientes[r.cliente_id]) || "(sin cliente)";
+                  const sucursalNombre = (r.sucursal_id && sucursalesMap[r.sucursal_id]) || null;
+                  const horas = Math.floor((now - new Date(r.fecha).getTime()) / (3600 * 1000));
+                  const dias = Math.floor(horas / 24);
+                  const cuantoHace = dias >= 1 ? `hace ${dias}d` : `hace ${horas}h`;
+                  const vencida = horas > 72;
+                  return (
+                    <div key={r.id} className={`flex items-center gap-2 rounded-md px-2 py-1 text-xs ${vencida ? "bg-rose-50" : "bg-white/60"}`}>
+                      <span className={`inline-block w-2 h-2 rounded-full ${vencida ? "bg-rose-500" : "bg-amber-500"}`} />
+                      <span className="font-mono text-[10px] text-slate-500 shrink-0">{r.numero_control}</span>
+                      <span className="flex-1 truncate text-slate-700">{cliente}</span>
+                      {mostrarSuc && sucursalNombre && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-white border border-amber-200 text-amber-800 text-[10px] px-1.5 py-0.5 font-semibold shrink-0">
+                          <svg viewBox="0 0 20 20" fill="currentColor" className="h-2.5 w-2.5">
+                            <path fillRule="evenodd" d="M9.69 18.933a1 1 0 0 0 .62 0C13.03 18.113 17 14.628 17 9a7 7 0 1 0-14 0c0 5.628 3.97 9.113 6.69 9.933ZM10 11a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" clipRule="evenodd" />
+                          </svg>
+                          {sucursalNombre}
+                        </span>
+                      )}
+                      <span className={`text-[10px] font-semibold shrink-0 ${vencida ? "text-rose-700" : "text-amber-700"}`}>{cuantoHace}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
 
           <div className="flex items-center gap-3 mt-3">
             {recepciones.length > 5 && (

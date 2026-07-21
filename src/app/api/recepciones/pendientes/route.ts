@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
       console.error("[recepciones/pendientes GET]", msg);
       return NextResponse.json(errorResponse("No se pudieron cargar las recepciones pendientes."), { status: 500 });
     }
-    const rows = (data ?? []) as Array<{ id: string; cliente_id: string; fecha: string }>;
+    const rows = (data ?? []) as Array<{ id: string; cliente_id: string; fecha: string; sucursal_id: string | null }>;
 
     // Hidratar nombres de clientes involucrados.
     const clienteIds = Array.from(new Set(rows.map((r) => r.cliente_id).filter(Boolean)));
@@ -62,9 +62,24 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Hidratar nombres de sucursales — el admin ve las pendientes de
+    // TODAS las sucursales; sin este dato no sabe dónde cae cada bolsa.
+    const sucursalIds = Array.from(new Set(rows.map((r) => r.sucursal_id).filter((x): x is string => !!x)));
+    const sucursalesMap: Record<string, string> = {};
+    if (sucursalIds.length > 0) {
+      const { data: ss } = await sb
+        .from("sucursales")
+        .select("id, nombre")
+        .in("id", sucursalIds);
+      for (const s of (ss ?? []) as Array<{ id: string; nombre: string | null }>) {
+        sucursalesMap[s.id] = (s.nombre ?? "").trim() || "Sucursal";
+      }
+    }
+
     return NextResponse.json(successResponse({
       recepciones: rows,
       clientes: clientesMap,
+      sucursales: sucursalesMap,
       generated_at: new Date().toISOString(),
     }));
   } catch (e) {

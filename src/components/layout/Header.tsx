@@ -49,6 +49,7 @@ type NotifRecep = {
   numero_control: string | null;
   cliente_id: string | null;
   fecha: string;
+  sucursal_id: string | null;
 };
 
 type NotifMeta = {
@@ -70,6 +71,7 @@ export default function Header({ onOpenMobileSidebar }: HeaderProps = {}) {
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifPend, setNotifPend] = useState<NotifRecep[]>([]);
   const [notifClientes, setNotifClientes] = useState<Record<string, string>>({});
+  const [notifSucursales, setNotifSucursales] = useState<Record<string, string>>({});
   const notifRef = useRef<HTMLDivElement>(null);
   // Notificaciones — metas alcanzadas. Se muestran en el popover del bell.
   // El sticky note celebratorio + sonido viven en /atencion/nueva (caja).
@@ -124,6 +126,7 @@ export default function Header({ onOpenMobileSidebar }: HeaderProps = {}) {
         const arr = (j.data?.recepciones as NotifRecep[]) ?? [];
         setNotifPend(arr);
         setNotifClientes((j.data?.clientes as Record<string, string>) ?? {});
+        setNotifSucursales((j.data?.sucursales as Record<string, string>) ?? {});
         const nuevasHay = arr.some(n => !seenIds.has(n.id));
         if (nuevasHay) {
           playNotifSound();
@@ -265,10 +268,15 @@ export default function Header({ onOpenMobileSidebar }: HeaderProps = {}) {
                   <ul className="max-h-64 overflow-y-auto divide-y divide-slate-100">
                     {notifPend.slice(0, 8).map(n => {
                       const cliente = (n.cliente_id && notifClientes[n.cliente_id]) || "(sin cliente)";
+                      const sucursalNombre = (n.sucursal_id && notifSucursales[n.sucursal_id]) || null;
                       const horas = Math.max(0, Math.floor((Date.now() - new Date(n.fecha).getTime()) / (3600 * 1000)));
                       const dias = Math.floor(horas / 24);
                       const cuantoHace = dias >= 1 ? `hace ${dias}d` : `hace ${horas}h`;
                       const vencida = horas > 72;
+                      // Solo mostramos el pill de sucursal si el usuario ve
+                      // >1 sucursal (admin sin filtrar). Para usuarios con
+                      // sucursal fija el dato es redundante.
+                      const mostrarSucursal = Object.keys(notifSucursales).length > 1;
                       return (
                         <li key={n.id} className="px-4 py-2 hover:bg-slate-50">
                           <div className="flex items-center gap-2 text-xs">
@@ -277,6 +285,16 @@ export default function Header({ onOpenMobileSidebar }: HeaderProps = {}) {
                             <span className="flex-1 truncate text-slate-700">{cliente}</span>
                             <span className={`text-[10px] font-semibold shrink-0 ${vencida ? "text-rose-700" : "text-slate-500"}`}>{cuantoHace}</span>
                           </div>
+                          {mostrarSucursal && sucursalNombre && (
+                            <div className="mt-0.5 ml-4">
+                              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 text-slate-600 text-[10px] px-1.5 py-0.5 font-medium">
+                                <svg viewBox="0 0 20 20" fill="currentColor" className="h-2.5 w-2.5">
+                                  <path fillRule="evenodd" d="M9.69 18.933a1 1 0 0 0 .62 0C13.03 18.113 17 14.628 17 9a7 7 0 1 0-14 0c0 5.628 3.97 9.113 6.69 9.933ZM10 11a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" clipRule="evenodd" />
+                                </svg>
+                                {sucursalNombre}
+                              </span>
+                            </div>
+                          )}
                         </li>
                       );
                     })}
