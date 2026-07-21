@@ -89,7 +89,6 @@ function fmtGsCompact(n: number) {
   return "Gs. " + v.toLocaleString("es-PY");
 }
 function fmtN(n: number) { return (n || 0).toLocaleString("es-PY"); }
-const DOW = ["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"];
 
 export default function DashSucursales({ desde, hasta }: { desde: string; hasta: string }) {
   const [data, setData] = useState<Payload | null>(null);
@@ -197,8 +196,6 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
     ? Math.round(((t.ventas - t.ventas_prev) / t.ventas_prev) * 100)
     : null;
 
-  const maxDow = Math.max(1, ...data.flujo.dow.map(x => x.n));
-  const maxHora = Math.max(1, ...data.flujo.hora.map(x => x.n));
   const maxTipo = Math.max(1, ...data.tipos_prenda.map(x => x.cantidad));
 
   // Cálculos de salud del período
@@ -329,26 +326,9 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
             }`}
           >Bitácora diaria</button>
         </div>
-        {vista === "resumen" && data.alcance.es_admin && sucursalesConocidas.length > 1 && (
-          <div className="flex items-center gap-2 text-sm">
-            <label className="text-slate-500 font-medium">Sucursal:</label>
-            <select
-              value={sucursalFiltro}
-              onChange={(e) => setSucursalFiltro(e.target.value)}
-              className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
-            >
-              <option value="">Todas las sucursales</option>
-              {sucursalesConocidas.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
-            </select>
-            {sucursalFiltro && (
-              <button
-                type="button"
-                onClick={() => setSucursalFiltro("")}
-                className="text-xs text-slate-500 hover:text-slate-700 underline"
-              >Limpiar</button>
-            )}
-          </div>
-        )}
+        {/* Selector de sucursal removido en la vista Resumen — Karen quiere
+            ver todo dividido por sucursal en lugar de filtrar. El selector
+            de la vista Diario vive dentro de DashSucursalDiario. */}
       </div>
 
       {vista === "diario" ? (
@@ -369,7 +349,13 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
     if (!data) return null;
     return (
       <>
-      {/* ═════ Hero KPIs — 4 tarjetas grandes ═════ */}
+      {/* ═════ Hero KPIs — 4 tarjetas grandes (TOTAL consolidado) ═════ */}
+      <div className="flex items-center gap-2 -mb-2">
+        <span className="h-1.5 w-1.5 rounded-full bg-slate-400 inline-block" />
+        <p className="text-[11px] uppercase tracking-wide text-slate-500 font-semibold">
+          Total consolidado — todas las sucursales
+        </p>
+      </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <HeroCard
           iconType="ventas"
@@ -457,7 +443,10 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
       {/* ═════ Cards por sucursal ═════ */}
       {data.sucursales.length > 0 && (
         <div id="rendimiento-sucursales">
-          <h3 className="text-sm font-bold text-slate-800 mb-3">Rendimiento por sucursal</h3>
+          <div className="flex items-baseline justify-between mb-3">
+            <h3 className="text-base font-bold text-slate-800">Detalle por sucursal</h3>
+            <span className="text-[11px] text-slate-400">Cada card es una sucursal — no es un promedio</span>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {data.sucursales.map(s => <SucursalCard key={s.sucursal_id} s={s} />)}
           </div>
@@ -490,150 +479,14 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
         )}
       </Accordion>
 
-      {/* ═════ SECCIONES DETALLADAS (acordeón) ═════ */}
-      <Accordion
-        titulo="Flujo de atención — detalle"
-        abierto={abierto.flujo}
-        onToggle={() => setAbierto(p => ({ ...p, flujo: !p.flujo }))}
-      >
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-          <MiniKpi label="Nuevos" value={fmtN(data.flujo.clientes_nuevos)} tip="Clientes cuya primera visita cayó en el período." />
-          <MiniKpi label="Solo trae" value={fmtN(data.flujo.solo_trae)} onClick={() => setDrill({ metric: "visitas_solo_trae", label: "Visitas: solo trae" })} />
-          <MiniKpi label="Solo lleva" value={fmtN(data.flujo.solo_lleva)} onClick={() => setDrill({ metric: "visitas_solo_lleva", label: "Visitas: solo lleva" })} />
-          <MiniKpi label="Trae + lleva" value={fmtN(data.flujo.trae_lleva)} onClick={() => setDrill({ metric: "visitas_trae_lleva", label: "Visitas: trae+lleva" })} />
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <MiniBars titulo="Días con más atención" datos={DOW.map((d, i) => ({ label: d, n: data.flujo.dow.find(x => x.dow === i)?.n ?? 0 }))} max={maxDow} tono="sky" />
-          <MiniBars titulo="Horas con más atención" datos={data.flujo.hora.map(x => ({ label: `${x.hora}h`, n: x.n }))} max={maxHora} tono="violet" />
-        </div>
-      </Accordion>
-
-      <Accordion
-        titulo="Recepciones y evaluaciones — detalle"
-        abierto={abierto.recepciones}
-        onToggle={() => setAbierto(p => ({ ...p, recepciones: !p.recepciones }))}
-      >
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <MiniKpi label="Recepciones" value={fmtN(data.recepciones.recepciones)} />
-          <MiniKpi label="Subtotal" value={fmtGsCompact(data.recepciones.subtotal_evaluado)} tip="Antes de ajustes." />
-          <MiniKpi label="Ajuste +" value={fmtGsCompact(data.recepciones.ajuste_positivo)} valueClass="text-emerald-700" />
-          <MiniKpi label="Ajuste −" value={fmtGsCompact(data.recepciones.ajuste_negativo)} valueClass="text-rose-700" />
-          <MiniKpi label="Total final" value={fmtGsCompact(data.recepciones.total_final)} tip="Lo acreditado al cliente." />
-          <MiniKpi label="Ratio ajuste" value={data.recepciones.ratio_ajuste_pct != null ? `${data.recepciones.ratio_ajuste_pct}%` : "—"} />
-          <MiniKpi label="Eval prom/prenda" value={data.recepciones.eval_prom_prenda != null ? fmtGsCompact(data.recepciones.eval_prom_prenda) : "—"} />
-          <MiniKpi label="Prendas recibidas" value={fmtN(data.recepciones.prendas)} onClick={() => setDrill({ metric: "prendas_recibidas", label: "Prendas recibidas" })} />
-        </div>
-        {data.recepciones.evaluadores.length > 0 && (
-          <div className="mt-4">
-            <p className="text-xs uppercase font-bold text-slate-500 mb-2">Operadores evaluadores</p>
-            <table className="w-full text-sm border border-slate-200 rounded-lg overflow-hidden">
-              <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
-                <tr><th className="px-3 py-2">Operador</th><th className="px-3 py-2 text-right">Recepciones</th><th className="px-3 py-2 text-right">Total final</th></tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {data.recepciones.evaluadores.map((e, i) => (
-                  <tr key={i}>
-                    <td className="px-3 py-2">{e.usuario}</td>
-                    <td className="px-3 py-2 text-right">{fmtN(e.recepciones)}</td>
-                    <td className="px-3 py-2 text-right">{fmtGs(e.total_final)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Accordion>
-
-      <Accordion
-        titulo="Crédito — detalle"
-        abierto={abierto.credito}
-        onToggle={() => setAbierto(p => ({ ...p, credito: !p.credito }))}
-      >
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <MiniKpi label="Generado" value={fmtGsCompact(data.credito.generado)} onClick={() => setDrill({ metric: "credito_generado", label: "Crédito generado" })} valueClass="text-emerald-700" />
-          <MiniKpi label="Usado" value={fmtGsCompact(data.credito.usado)} onClick={() => setDrill({ metric: "credito_usado", label: "Crédito usado" })} valueClass="text-sky-700" />
-          <MiniKpi label="100% con crédito" value={fmtN(data.credito.ventas_100_credito)} tip="Ventas donde crédito ≈ total." />
-          <MiniKpi label="Mixto" value={fmtN(data.credito.ventas_mixto)} tip="Crédito + otro método." />
-          <MiniKpi label="Días gen → uso" value={data.credito.tiempo_gen_uso_dias_prom != null ? `${data.credito.tiempo_gen_uso_dias_prom} d` : "—"} />
-          <MiniKpi label="Con crédito, sin volver" value={fmtN(data.credito.clientes_con_credito_sin_volver)} onClick={() => setDrill({ metric: "clientes_con_credito_sin_volver", label: "Clientes con crédito sin volver" })} valueClass="text-amber-700" />
-        </div>
-      </Accordion>
-
-      <Accordion
-        titulo="Inventario — detalle"
-        abierto={abierto.inventario}
-        onToggle={() => setAbierto(p => ({ ...p, inventario: !p.inventario }))}
-      >
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <MiniKpi label="Ingresadas" value={fmtN(data.inventario.prendas_entradas)} valueClass="text-emerald-700" />
-          <MiniKpi label="Salidas" value={fmtN(data.inventario.prendas_salidas)} valueClass="text-sky-700" />
-          <MiniKpi label="Diferencia neta" value={fmtN(data.inventario.diferencia_neta)} valueClass={data.inventario.diferencia_neta >= 0 ? "text-emerald-700" : "text-rose-700"} />
-          <MiniKpi label="Stock actual" value={fmtN(data.inventario.stock_actual)} />
-          <MiniKpi label="Antigüedad prom" value={data.inventario.antig_dias_prom != null ? `${data.inventario.antig_dias_prom} d` : "—"} />
-          <MiniKpi label="Rotación" value={data.inventario.rotacion_pct != null ? `${data.inventario.rotacion_pct}%` : "—"} />
-        </div>
-      </Accordion>
-
-      <Accordion
-        titulo="Ventas — detalle"
-        abierto={abierto.ventas}
-        onToggle={() => setAbierto(p => ({ ...p, ventas: !p.ventas }))}
-      >
-        {/* Bloque destacado: MARGEN de ganancia — lo que Karen pide.
-            Compra (costo WACP guardado en ventas_items.costo_unitario_snapshot)
-            vs venta (precio_venta × cantidad). El margen dice cuánto queda
-            de ganancia bruta después de "recuperar" lo que se pagó por la
-            ropa al cliente. */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3 p-3 rounded-xl bg-gradient-to-br from-emerald-50 to-slate-50 border border-emerald-200">
-          <MiniKpi label="Costo de venta" value={fmtGsCompact(data.ventas.costo_total)} tip="SUM(cantidad × costo_unitario_snapshot) de items de venta — WACP del producto al momento de vender." />
-          <MiniKpi
-            label="Margen bruto"
-            value={fmtGs(data.ventas.margen_bruto)}
-            valueClass={data.ventas.margen_bruto >= 0 ? "text-emerald-700" : "text-rose-700"}
-            tip="Ventas totales − costo de venta."
-          />
-          <MiniKpi
-            label="Margen %"
-            value={data.ventas.margen_pct != null ? `${data.ventas.margen_pct}%` : "—"}
-            valueClass={data.ventas.margen_pct != null && data.ventas.margen_pct >= 0 ? "text-emerald-700" : "text-rose-700"}
-            tip="Margen bruto ÷ ventas × 100."
-          />
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <MiniKpi label="Ventas" value={fmtN(data.ventas.cantidad)} />
-          <MiniKpi label="Prendas" value={fmtN(data.ventas.prendas)} onClick={() => setDrill({ metric: "prendas_vendidas", label: "Prendas vendidas" })} />
-          <MiniKpi label="Ticket promedio" value={fmtGsCompact(data.ventas.ticket_promedio)} />
-          <MiniKpi label="Prendas/venta" value={data.ventas.prendas_por_venta_prom != null ? String(data.ventas.prendas_por_venta_prom) : "—"} />
-          <MiniKpi label="Promociones" value={fmtN(data.ventas.promociones_aplicadas)} />
-          <MiniKpi label="Cashback" value={fmtGsCompact(data.ventas.cashback_total)} />
-          <MiniKpi label="Descuentos" value={fmtGsCompact(data.ventas.descuento_total)} />
-          <MiniKpi label="Beneficios entregados" value={fmtN(data.ventas.beneficios_entregados)} />
-          <MiniKpi label="Cambios" value={fmtN(data.ventas.cambios)} />
-          <MiniKpi label="Anulaciones venta" value={fmtN(data.ventas.anulaciones_venta)} valueClass="text-rose-700" onClick={() => setDrill({ metric: "anulaciones", label: "Anulaciones" })} />
-          <MiniKpi label="Anulaciones recep." value={fmtN(data.ventas.anulaciones_recep)} valueClass="text-rose-700" />
-        </div>
-        {data.ventas.pagos.length > 0 && (
-          <div className="mt-4">
-            <p className="text-xs uppercase font-bold text-slate-500 mb-2">Formas de pago</p>
-            <div className="space-y-1.5">
-              {data.ventas.pagos.map((p, i) => {
-                const pct = data.ventas.total > 0 ? Math.round((p.total / data.ventas.total) * 100) : 0;
-                return (
-                  <div key={i} className="flex items-center gap-3 text-sm">
-                    <span className="w-28 capitalize text-slate-700">{p.metodo}</span>
-                    <div className="flex-1 h-2 bg-slate-100 rounded overflow-hidden">
-                      <div className="h-full bg-violet-500" style={{ width: `${pct}%` }} />
-                    </div>
-                    <span className="w-16 text-right text-xs text-slate-500">{p.ops} ops</span>
-                    <span className="w-24 text-right text-sm font-semibold text-slate-800 tabular-nums">{fmtGsCompact(p.total)}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-      </Accordion>
+      {/* Secciones detalladas de totales removidas — Karen pidió ver todo
+          dividido por sucursal (no un total agregado). Las mismas métricas
+          viven ahora dentro de las SucursalCard: ventas, ops, ticket,
+          visitas, clientes atendidos, recurrentes, conversión, prendas
+          recibidas/vendidas, stock, crédito y meta. Los operativos
+          transversales (evaluadores, formas de pago, días/horas de más
+          atención, flujo de atención global, margen bruto) siguen
+          accesibles vía la Bitácora diaria. */}
 
       {/* Drill modal */}
       {drill && (
@@ -909,32 +762,88 @@ function SucursalCard({ s }: {
     : s.pct_meta >= 50 ? "bg-sky-500" : "bg-amber-500";
   const deltaColor = s.var_ventas_pct == null ? "text-slate-400"
     : s.var_ventas_pct >= 0 ? "text-emerald-700" : "text-rose-700";
+  const creditoNeto = s.credito_generado - s.credito_usado;
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 hover:shadow-md transition">
-      <div className="flex items-start justify-between mb-3">
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 hover:shadow-md transition">
+      <div className="flex items-start justify-between mb-4">
         <div>
-          <h4 className="text-base font-bold text-slate-900">{s.nombre}</h4>
+          <h4 className="text-lg font-bold text-slate-900">{s.nombre}</h4>
           <p className="text-[11px] text-slate-400">
-            {s.cajas_abiertas} abierta{s.cajas_abiertas !== 1 ? "s" : ""} · {s.cajas_cerradas} cerrada{s.cajas_cerradas !== 1 ? "s" : ""}
+            {s.cajas_abiertas} caja{s.cajas_abiertas !== 1 ? "s" : ""} abierta{s.cajas_abiertas !== 1 ? "s" : ""}
+            {" · "}{s.cajas_cerradas} cerrada{s.cajas_cerradas !== 1 ? "s" : ""}
           </p>
         </div>
-        <span className={`text-xs font-semibold ${deltaColor} tabular-nums`}>
+        <span className={`text-xs font-semibold ${deltaColor} tabular-nums shrink-0`}>
           {s.var_ventas_pct == null ? "—" : `${s.var_ventas_pct > 0 ? "▲" : "▼"} ${Math.abs(s.var_ventas_pct)}%`}
         </span>
       </div>
-      <div className="grid grid-cols-2 gap-2 mb-3">
-        <SucMini label="Ventas" value={fmtGsCompact(s.ventas)} />
-        <SucMini label="Ticket prom" value={fmtGsCompact(s.ticket_promedio)} />
-        <SucMini label="Visitas" value={fmtN(s.visitas)} />
-        <SucMini label="Recurrentes" value={fmtN(s.recurrentes)} />
-        <SucMini label="Recibidas" value={fmtN(s.prendas_recibidas)} />
-        <SucMini label="Vendidas" value={fmtN(s.prendas_vendidas)} />
+
+      {/* Bloque VENTAS */}
+      <div className="mb-3">
+        <p className="text-[10px] uppercase tracking-wide text-slate-400 font-semibold mb-1.5">Ventas</p>
+        <div className="grid grid-cols-3 gap-2">
+          <SucMini label="Total" value={fmtGsCompact(s.ventas)} />
+          <SucMini label="Ops." value={fmtN(s.operaciones)} />
+          <SucMini label="Ticket" value={fmtGsCompact(s.ticket_promedio)} />
+        </div>
       </div>
+
+      {/* Bloque VISITAS + CLIENTES */}
+      <div className="mb-3">
+        <p className="text-[10px] uppercase tracking-wide text-slate-400 font-semibold mb-1.5">Clientes</p>
+        <div className="grid grid-cols-3 gap-2">
+          <SucMini label="Visitas" value={fmtN(s.visitas)} />
+          <SucMini label="Atendidos" value={fmtN(s.clientes_atendidos)} />
+          <SucMini label="Recurrent." value={fmtN(s.recurrentes)} />
+        </div>
+        {s.conversion_pct != null && (
+          <p className="text-[10px] text-slate-500 mt-1.5">
+            Conversión visita → venta:{" "}
+            <span className="font-semibold text-slate-700 tabular-nums">{s.conversion_pct}%</span>
+          </p>
+        )}
+      </div>
+
+      {/* Bloque PRENDAS */}
+      <div className="mb-3">
+        <p className="text-[10px] uppercase tracking-wide text-slate-400 font-semibold mb-1.5">Prendas</p>
+        <div className="grid grid-cols-3 gap-2">
+          <SucMini label="Recibidas" value={fmtN(s.prendas_recibidas)} />
+          <SucMini label="Vendidas" value={fmtN(s.prendas_vendidas)} />
+          <SucMini label="Stock" value={fmtN(s.stock)} />
+        </div>
+      </div>
+
+      {/* Bloque CRÉDITO */}
+      {(s.credito_generado > 0 || s.credito_usado > 0) && (
+        <div className="mb-3">
+          <p className="text-[10px] uppercase tracking-wide text-slate-400 font-semibold mb-1.5">Crédito</p>
+          <div className="grid grid-cols-3 gap-2">
+            <SucMini label="Generado" value={fmtGsCompact(s.credito_generado)} />
+            <SucMini label="Usado" value={fmtGsCompact(s.credito_usado)} />
+            <SucMini
+              label="Neto"
+              value={(creditoNeto >= 0 ? "+" : "") + fmtGsCompact(creditoNeto)}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Meta del período */}
       {s.meta_diaria != null && (
-        <div className="pt-2 border-t border-slate-100">
+        <div className="pt-3 border-t border-slate-100">
           <div className="flex items-baseline justify-between mb-1">
-            <span className="text-[11px] text-slate-500">Meta del período</span>
-            <span className="text-xs font-bold text-slate-800">{s.pct_meta ?? 0}%</span>
+            <span className="text-[11px] text-slate-500">
+              Meta del período
+              <span className="text-slate-400 ml-1">
+                (meta {fmtGsCompact(s.meta_diaria * s.dias_periodo)})
+              </span>
+            </span>
+            <span className={`text-xs font-bold tabular-nums ${
+              s.pct_meta != null && s.pct_meta >= 100 ? "text-emerald-700" : "text-slate-800"
+            }`}>
+              {s.pct_meta ?? 0}%
+            </span>
           </div>
           <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
             <div className={`h-full rounded-full ${metaColor}`} style={{ width: `${Math.min(100, s.pct_meta ?? 0)}%` }} />
@@ -985,28 +894,6 @@ function MiniKpi({ label, value, tip, onClick, valueClass }: {
       <p className="text-[10px] uppercase tracking-wide text-slate-500">{label}</p>
       <p className={`mt-0.5 text-base font-bold tabular-nums ${valueClass ?? "text-slate-800"}`}>{value}</p>
     </Base>
-  );
-}
-
-function MiniBars({ titulo, datos, max, tono }: {
-  titulo: string; datos: { label: string; n: number }[]; max: number; tono: "sky" | "violet" | "emerald";
-}) {
-  const color = tono === "sky" ? "bg-sky-500" : tono === "violet" ? "bg-violet-500" : "bg-emerald-500";
-  return (
-    <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
-      <p className="text-[11px] uppercase font-bold text-slate-500 mb-2">{titulo}</p>
-      <ul className="space-y-1">
-        {datos.map((d, i) => (
-          <li key={i} className="flex items-center gap-2 text-xs">
-            <span className="w-10 shrink-0 text-slate-500">{d.label}</span>
-            <div className="flex-1 h-1.5 bg-white rounded overflow-hidden">
-              <div className={`h-full ${color}`} style={{ width: `${(d.n / max) * 100}%` }} />
-            </div>
-            <span className="w-10 text-right tabular-nums text-slate-700">{d.n}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
   );
 }
 
