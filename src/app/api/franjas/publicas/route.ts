@@ -17,13 +17,21 @@ export async function GET(request: NextRequest) {
   const ctx = await getTenantSupabaseFromAuth(request);
   if (!ctx) return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
   try {
-    const { data, error } = await ctx.supabase
+    // Aislar franjas por sucursal: si el usuario tiene sucursal_id fija,
+    // solo devolvemos las franjas de su sucursal. Admin (sin sucursal) ve
+    // todas las de la empresa. Las franjas con sucursal_id IS NULL se
+    // consideran globales/legacy y aparecen para todos.
+    let q = ctx.supabase
       .from("productos")
-      .select("id, nombre, sku, precio_venta, stock_actual, activo")
+      .select("id, nombre, sku, precio_venta, stock_actual, activo, sucursal_id")
       .eq("empresa_id", ctx.auth.empresa_id)
       .eq("es_franja_precio", true)
       .eq("activo", true)
       .order("precio_venta", { ascending: true });
+    if (ctx.auth.sucursal_id) {
+      q = q.or(`sucursal_id.eq.${ctx.auth.sucursal_id},sucursal_id.is.null`);
+    }
+    const { data, error } = await q;
     if (error) {
       console.error("[/api/franjas/publicas] query", error.message);
       return NextResponse.json(successResponse({ franjas: [] }));

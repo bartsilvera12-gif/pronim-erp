@@ -24,10 +24,17 @@ const FRANJA_COLS =
   "id,empresa_id,nombre,sku,precio_venta,stock_actual,stock_minimo," +
   "activo,es_franja_precio,unidad_medida,categoria_principal_id,created_at,updated_at";
 
-function franjaLabel(precio: number): { nombre: string; sku: string } {
+// Nombre/SKU de la franja. Cuando la crea un usuario con sucursal fija,
+// suffixamos el sku con los últimos 4 chars del sucursal_id para evitar
+// choques del UNIQUE(empresa, sku) contra franjas globales con el mismo
+// precio (ej.: Gs. 6.000 en Principal + R\$ 6,00 en El Dorado ambos serían
+// FRJ-6000). El nombre queda genérico — el símbolo de moneda lo muestra
+// el frontend en runtime.
+function franjaLabel(precio: number, sucursalId: string | null): { nombre: string; sku: string } {
   const p = Math.round(precio);
-  const nombre = "Prenda - Categoría Gs. " + p.toLocaleString("es-PY").replace(/,/g, ".");
-  const sku = "FRJ-" + p;
+  const nombre = "Prenda - Categoría " + p.toLocaleString("es-PY").replace(/,/g, ".");
+  const sufijo = sucursalId ? "-" + sucursalId.replace(/-/g, "").slice(-6).toUpperCase() : "";
+  const sku = "FRJ-" + p + sufijo;
   return { nombre, sku };
 }
 
@@ -71,13 +78,22 @@ export async function POST(request: NextRequest) {
     const ctx = await getTenantSupabaseFromAuth(request);
     if (!ctx) return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
     const auth = await getAuthWithRol(request);
-    if (!isSuperAdmin(auth)) {
+    // Autorización: super_admin puede crear globales/scoped; usuarios con
+    // sucursal_id fija pueden crear franjas para SU sucursal. Sin sucursal
+    // y sin super_admin → rechazo (evita que un usuario random cree
+    // franjas globales).
+    const esSuper = isSuperAdmin(auth);
+    if (!esSuper && !auth?.sucursal_id) {
       return NextResponse.json(
-        errorResponse("Solo super_admin puede crear categorías."),
+        errorResponse("Necesitás sucursal asignada para crear categorías."),
         { status: 403 },
       );
     }
     const empresaId = ctx.auth.empresa_id;
+    // sucursal_id de la franja: si el usuario tiene sucursal fija, va esa
+    // (scoped). Si es super_admin sin sucursal, la franja queda global
+    // (sucursal_id = NULL) — visible para todas las sucursales.
+    const franjaSucursalId: string | null = auth?.sucursal_id ?? null;
 
     let body: Record<string, unknown>;
     try {
@@ -103,7 +119,7 @@ export async function POST(request: NextRequest) {
     const stockSucT = quoteSchemaTable(schema, "producto_stock_sucursal");
     const sucursalesT = quoteSchemaTable(schema, "sucursales");
 
-    const { nombre, sku } = franjaLabel(precio);
+    const { nombre, sku } = franjaLabel(precio, franjaSucursalId);
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
@@ -125,16 +141,19 @@ export async function POST(request: NextRequest) {
       }
 
       // Insertar: si ya existe una franja con ese SKU (=precio), reactivarla.
+      // Nuevo: `sucursal_id` se setea desde el usuario que crea la franja
+      // (fija para BR, NULL para super_admin/global).
       const ins = await client.query<{ id: string }>(
         `INSERT INTO ${productosT} (
            empresa_id, nombre, sku, precio_venta, costo_promedio,
            stock_actual, stock_minimo, unidad_medida, metodo_valuacion,
-           activo, es_franja_precio, visible_web, categoria_principal_id
-         ) VALUES ($1, $2, $3, $4, 0, 0, 0, 'Unidad', 'CPP', true, true, false, $5)
+           activo, es_franja_precio, visible_web, categoria_principal_id,
+           sucursal_id
+         ) VALUES ($1, $2, $3, $4, 0, 0, 0, 'Unidad', 'CPP', true, true, false, $5, $6)
          ON CONFLICT (empresa_id, sku) DO UPDATE
            SET activo = true, nombre = EXCLUDED.nombre, precio_venta = EXCLUDED.precio_venta
          RETURNING id`,
-        [empresaId, nombre, sku, precio, catId],
+        [empresaId, nombre, sku, precio, catId, franjaSucursalId],
       );
       const productoId = ins.rows[0].id;
 

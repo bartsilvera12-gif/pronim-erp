@@ -606,17 +606,10 @@ export default function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarPr
 
   // Gate por sucursal: operativos de sucursal NO Principal no ven Categorias
   // (solo Principal edita el catalogo web).
-  const { usuario } = useUsuarioActual();
-  const esOperativoNoPrincipal =
-    !!usuario?.sucursal_id && usuario.sucursal_es_principal === false;
-  const filterItemChildren = (item: MenuItem): MenuItem => {
-    if (!esOperativoNoPrincipal) return item;
-    if (item.key !== "inventario" || !item.children) return item;
-    return {
-      ...item,
-      children: item.children.filter((c) => c.href !== "/inventario/categorias"),
-    };
-  };
+  // usuario ya no se lee acá — filterItemChildren pasa todo tal cual.
+  // Categorías se muestra a todos — Karen quiere que las sucursales no-principales
+  // puedan administrar sus propias franjas/categorías por sucursal.
+  const filterItemChildren = (item: MenuItem): MenuItem => item;
 
   const isActive = (slug: string, href: string) => {
     const p = pathname ?? "";
@@ -640,7 +633,7 @@ export default function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarPr
         access(item.slug) &&
         menuItemMatchesQuery(item, menuSearchQuery)
     ).map(filterItemChildren);
-  }, [favoritos, menuSearchQuery, modulos, esSuperAdmin, esOperativoNoPrincipal]);
+  }, [favoritos, menuSearchQuery, modulos, esSuperAdmin]);
 
   const mainItemsFiltered = useMemo(() => {
     const slugs = new Set(modulos.map((m) => m.slug));
@@ -652,7 +645,7 @@ export default function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarPr
         access(item.slug) &&
         menuItemMatchesQuery(item, menuSearchQuery)
     ).map(filterItemChildren);
-  }, [favoritos, menuSearchQuery, modulos, esSuperAdmin, esOperativoNoPrincipal]);
+  }, [favoritos, menuSearchQuery, modulos, esSuperAdmin]);
 
   /** Agrupa `mainItemsFiltered` por familia (preservando acceso/búsqueda/favoritos ya aplicados). */
   const familiesToRender = useMemo(() => {
