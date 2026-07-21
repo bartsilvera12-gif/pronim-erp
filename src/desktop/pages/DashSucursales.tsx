@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { playCelebrationSound } from "@/lib/audio/notif-sounds";
 import DashSucursalDiario from "./DashSucursalDiario";
@@ -59,6 +59,7 @@ type Payload = {
     anulaciones_venta: number; anulaciones_recep: number;
     pagos: { metodo: string; total: number; ops: number }[];
     evolucion_diaria: { dia: string; total: number; ops: number }[];
+    evolucion_por_sucursal: { dia: string; sucursal_id: string; nombre: string; total: number }[];
   };
   sucursales: {
     sucursal_id: string; nombre: string;
@@ -446,7 +447,10 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
               Total {fmtGsCompact(t.ventas)} en {data.ventas.evolucion_diaria.length} días
             </span>
           </div>
-          <AreaChart data={data.ventas.evolucion_diaria} />
+          <MultiLineChart
+            totalPorDia={data.ventas.evolucion_diaria}
+            porSucursal={data.ventas.evolucion_por_sucursal}
+          />
         </div>
       )}
 
@@ -738,38 +742,160 @@ function SaludBar({ label, pct, countValue, tip }: {
   );
 }
 
-function AreaChart({ data }: { data: { dia: string; total: number; ops: number }[] }) {
-  const w = 800, h = 120, pad = 8;
-  const max = Math.max(1, ...data.map(d => d.total));
-  const step = data.length > 1 ? (w - 2 * pad) / (data.length - 1) : 0;
-  const pts = data.map((d, i) => {
-    const x = pad + i * step;
-    const y = h - pad - ((d.total / max) * (h - 2 * pad));
-    return { x, y, d };
+/**
+ * Chart de líneas — una línea por sucursal + una línea "Total" gris más
+ * gruesa por debajo. Hover muestra tooltip con el detalle del día.
+ *
+ * `totalPorDia` es el eje X canónico (fechas). `porSucursal` puede
+ * tener huecos (una sucursal no vende ese día) — se toma 0 en esos casos.
+ */
+function MultiLineChart({
+  totalPorDia,
+  porSucursal,
+}: {
+  totalPorDia: { dia: string; total: number; ops: number }[];
+  porSucursal: { dia: string; sucursal_id: string; nombre: string; total: number }[];
+}) {
+  const w = 800, h = 160, padL = 8, padR = 8, padT = 16, padB = 24;
+  const dias = totalPorDia.map(d => d.dia);
+  // Paleta estable — se recicla si hay más de 8 sucursales.
+  const PAL = ["#10b981", "#3b82f6", "#f59e0b", "#a855f7", "#ef4444", "#06b6d4", "#84cc16", "#ec4899"];
+  // Agrupamos por sucursal: nombre + serie [{dia,total}]
+  const sucMap = new Map<string, { nombre: string; color: string; porDia: Map<string, number> }>();
+  porSucursal.forEach(row => {
+    if (!sucMap.has(row.sucursal_id)) {
+      sucMap.set(row.sucursal_id, {
+        nombre: row.nombre,
+        color: PAL[sucMap.size % PAL.length],
+        porDia: new Map(),
+      });
+    }
+    sucMap.get(row.sucursal_id)!.porDia.set(row.dia, row.total);
   });
-  const linePath = pts.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
-  const areaPath = `${linePath} L ${pts[pts.length - 1].x} ${h - pad} L ${pts[0].x} ${h - pad} Z`;
+  const sucursales = Array.from(sucMap.entries()).map(([id, v]) => ({
+    id, nombre: v.nombre, color: v.color,
+    serie: dias.map(d => v.porDia.get(d) ?? 0),
+  }));
+
+  const max = Math.max(1, ...totalPorDia.map(d => d.total));
+  const step = dias.length > 1 ? (w - padL - padR) / (dias.length - 1) : 0;
+  const xOf = (i: number) => padL + i * step;
+  const yOf = (v: number) => h - padB - (v / max) * (h - padT - padB);
+
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+
+  const handleMove = (e: React.MouseEvent<SVGSVGElement>) => {
+    const svg = svgRef.current;
+    if (!svg || dias.length === 0) return;
+    const rect = svg.getBoundingClientRect();
+    // El viewBox es 0..w, el elemento se estira al 100%. Escala x real.
+    const relX = ((e.clientX - rect.left) / rect.width) * w;
+    const i = Math.max(0, Math.min(dias.length - 1, Math.round((relX - padL) / (step || 1))));
+    setHoverIdx(i);
+  };
+
   return (
-    <div className="w-full overflow-hidden">
-      <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-24" preserveAspectRatio="none">
-        <defs>
-          <linearGradient id="grad-area" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#10b981" stopOpacity="0.3" />
-            <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        <path d={areaPath} fill="url(#grad-area)" />
-        <path d={linePath} fill="none" stroke="#10b981" strokeWidth="2" />
-        {pts.map((p, i) => (
-          <circle key={i} cx={p.x} cy={p.y} r="2.5" fill="#10b981">
-            <title>{p.d.dia}: {fmtGs(p.d.total)} · {p.d.ops} ops</title>
-          </circle>
-        ))}
-      </svg>
-      <div className="flex items-center justify-between text-[10px] text-slate-400 mt-1 px-1">
-        <span>{data[0]?.dia ?? ""}</span>
-        <span>{data[data.length - 1]?.dia ?? ""}</span>
+    <div className="w-full">
+      <div className="w-full relative">
+        <svg
+          ref={svgRef}
+          viewBox={`0 0 ${w} ${h}`}
+          className="w-full h-40"
+          preserveAspectRatio="none"
+          onMouseMove={handleMove}
+          onMouseLeave={() => setHoverIdx(null)}
+        >
+          {/* Grid horizontal */}
+          {[0.25, 0.5, 0.75].map((f) => (
+            <line key={f} x1={padL} x2={w - padR} y1={padT + (h - padT - padB) * f} y2={padT + (h - padT - padB) * f}
+                  stroke="#f1f5f9" strokeWidth={1} />
+          ))}
+          {/* Línea Total (gris tenue) por debajo — referencia */}
+          {totalPorDia.length > 1 && (
+            <path
+              d={totalPorDia.map((d, i) => `${i === 0 ? "M" : "L"} ${xOf(i)} ${yOf(d.total)}`).join(" ")}
+              fill="none" stroke="#cbd5e1" strokeWidth={2} strokeDasharray="4 3"
+            />
+          )}
+          {/* Una línea por sucursal */}
+          {sucursales.map(s => (
+            <path
+              key={s.id}
+              d={s.serie.map((v, i) => `${i === 0 ? "M" : "L"} ${xOf(i)} ${yOf(v)}`).join(" ")}
+              fill="none" stroke={s.color} strokeWidth={2.2}
+              strokeLinejoin="round" strokeLinecap="round"
+            />
+          ))}
+          {/* Marcadores en cada punto de cada sucursal */}
+          {sucursales.map(s =>
+            s.serie.map((v, i) => (
+              <circle key={`${s.id}-${i}`} cx={xOf(i)} cy={yOf(v)} r={2} fill={s.color} />
+            ))
+          )}
+          {/* Línea vertical de hover */}
+          {hoverIdx != null && (
+            <line x1={xOf(hoverIdx)} x2={xOf(hoverIdx)} y1={padT} y2={h - padB}
+                  stroke="#94a3b8" strokeWidth={1} strokeDasharray="3 3" />
+          )}
+          {/* Puntos grandes en hover */}
+          {hoverIdx != null && sucursales.map(s => (
+            <circle key={`h-${s.id}`} cx={xOf(hoverIdx)} cy={yOf(s.serie[hoverIdx])} r={4}
+                    fill="#fff" stroke={s.color} strokeWidth={2} />
+          ))}
+        </svg>
+        {/* Tooltip flotante */}
+        {hoverIdx != null && (
+          <div
+            className="absolute top-1 pointer-events-none rounded-lg bg-white border border-slate-200 shadow-lg px-3 py-2 text-xs min-w-[180px] z-10"
+            style={{
+              left: `calc(${(xOf(hoverIdx) / w) * 100}% + 8px)`,
+              maxWidth: 240,
+              transform: xOf(hoverIdx) > w * 0.6 ? "translateX(calc(-100% - 24px))" : "none",
+            }}
+          >
+            <p className="font-bold text-slate-800 mb-1">{dias[hoverIdx]}</p>
+            <ul className="space-y-0.5">
+              {sucursales
+                .map(s => ({ ...s, valor: s.serie[hoverIdx] }))
+                .sort((a, b) => b.valor - a.valor)
+                .map(s => (
+                  <li key={s.id} className="flex items-center gap-2">
+                    <span className="h-2 w-2 rounded-full shrink-0" style={{ background: s.color }} />
+                    <span className="flex-1 truncate text-slate-600">{s.nombre}</span>
+                    <span className="tabular-nums font-semibold text-slate-800">{fmtGsCompact(s.valor)}</span>
+                  </li>
+                ))}
+              <li className="flex items-center gap-2 pt-1 mt-1 border-t border-slate-100">
+                <span className="h-2 w-2 rounded-full shrink-0 bg-slate-400" />
+                <span className="flex-1 text-slate-500">Total</span>
+                <span className="tabular-nums font-bold text-slate-900">
+                  {fmtGsCompact(totalPorDia[hoverIdx]?.total ?? 0)}
+                </span>
+              </li>
+            </ul>
+          </div>
+        )}
       </div>
+      {/* Leyenda + eje X */}
+      <div className="flex items-center justify-between text-[10px] text-slate-400 mt-1 px-1">
+        <span>{dias[0] ?? ""}</span>
+        <span>{dias[dias.length - 1] ?? ""}</span>
+      </div>
+      {sucursales.length > 1 && (
+        <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-[11px]">
+          {sucursales.map(s => (
+            <span key={s.id} className="inline-flex items-center gap-1.5 text-slate-600">
+              <span className="h-2 w-2 rounded-full" style={{ background: s.color }} />
+              {s.nombre}
+            </span>
+          ))}
+          <span className="inline-flex items-center gap-1.5 text-slate-500">
+            <span className="h-0.5 w-4 border-t-2 border-dashed border-slate-400" />
+            Total
+          </span>
+        </div>
+      )}
     </div>
   );
 }

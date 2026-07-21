@@ -444,7 +444,8 @@ export async function GET(request: NextRequest) {
         args,
       );
 
-      // Evolución diaria de ventas (total por día)
+      // Evolución diaria de ventas (total por día) — usado para el label
+      // "Total X en N días" arriba del chart.
       const evolQ = await client.query<{ dia: string; total: string; ops: string }>(
         `SELECT v.fecha::date::text AS dia,
                 COALESCE(SUM(v.total), 0)::text AS total,
@@ -455,6 +456,26 @@ export async function GET(request: NextRequest) {
            ${sucursalFiltro ? "AND v.sucursal_id = $4" : ""}
          GROUP BY v.fecha::date
          ORDER BY 1 ASC`,
+        args,
+      );
+
+      // Evolución diaria POR SUCURSAL — para pintar una línea por sucursal
+      // en el chart con tooltip. Se devuelve JOIN con nombre; el frontend
+      // arma el pivot dia×sucursal.
+      const evolPorSucQ = await client.query<{
+        dia: string; sucursal_id: string; nombre: string; total: string;
+      }>(
+        `SELECT v.fecha::date::text AS dia,
+                v.sucursal_id::text AS sucursal_id,
+                s.nombre,
+                COALESCE(SUM(v.total), 0)::text AS total
+         FROM ${ventasT} v
+         JOIN ${sucT} s ON s.id = v.sucursal_id
+         WHERE v.empresa_id = $1 AND v.estado IN ('pendiente','completada')
+           AND v.fecha::date BETWEEN $2 AND $3
+           ${sucursalFiltro ? "AND v.sucursal_id = $4" : ""}
+         GROUP BY v.fecha::date, v.sucursal_id, s.nombre
+         ORDER BY 1 ASC, s.nombre ASC`,
         args,
       );
 
@@ -721,6 +742,9 @@ export async function GET(request: NextRequest) {
           anulaciones_recep: Number(vs.anulaciones_recep),
           pagos: pagosQ.rows.map(p => ({ metodo: p.metodo, total: Number(p.total), ops: Number(p.ops) })),
           evolucion_diaria: evolQ.rows.map(e => ({ dia: e.dia, total: Number(e.total), ops: Number(e.ops) })),
+          evolucion_por_sucursal: evolPorSucQ.rows.map(e => ({
+            dia: e.dia, sucursal_id: e.sucursal_id, nombre: e.nombre, total: Number(e.total),
+          })),
         },
         sucursales,
         totales,
