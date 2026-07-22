@@ -2007,15 +2007,15 @@ function DashInventario({
 
   return (
     <div className="space-y-6">
+      {/* Recepciones pendientes — al TOPE del dash de inventario. Es lo
+          primero que debe ver la cajera al entrar: bolsas que aún no
+          fueron ingresadas al stock (afectan el conteo real). */}
+      <PendientesEvaluacionBanner />
+
       {/* Desglose por sucursal (recepciones + inventario). Movido desde
           el dash de Sucursales — Karen prefiere consultarlo dividido acá,
           en el contexto de inventario. */}
       <InventarioPorSucursalPanels />
-
-      {/* Recepciones pendientes de evaluar — al tope del dash de inventario
-          porque son bolsas que aún no entran al stock (afectan el conteo
-          real disponible). */}
-      <PendientesEvaluacionBanner />
       {/* KPIs */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard
