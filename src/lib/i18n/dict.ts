@@ -117,6 +117,27 @@ const es: Dict = {
   "Inactivo": "Inactivo",
   "Sin suscripción": "Sin suscripción",
 
+  // Categorías (franjas)
+  "Categorías de precio": "Categorías de precio",
+  "Cada categoría es un rango de precio con su propio stock. Crear, editar precio, activar/desactivar y ajustar stock.":
+    "Cada categoría es un rango de precio con su propio stock. Crear, editar precio, activar/desactivar y ajustar stock.",
+  "Volver a inventario": "Volver a inventario",
+  "Todavía no hay categorías cargadas": "Todavía no hay categorías cargadas",
+  "Podés sembrar el conjunto inicial acordado con el cliente (Gs. 6.000, 9.000, 14.000, 19.000, 24.000, 29.000 y luego cada 5.000 hasta 99.000) o crear las tuyas manualmente abajo.":
+    "Podés sembrar el conjunto inicial acordado con el cliente (Gs. 6.000, 9.000, 14.000, 19.000, 24.000, 29.000 y luego cada 5.000 hasta 99.000) o crear las tuyas manualmente abajo.",
+  "Sembrando…": "Sembrando…",
+  "Sembrar categorías iniciales": "Sembrar categorías iniciales",
+  "Creá manualmente abajo las categorías de tu sucursal.": "Creá manualmente abajo las categorías de tu sucursal.",
+  "Crear nueva categoría": "Crear nueva categoría",
+  "Precio en {sym} (ej: {ej})": "Precio en {sym} (ej: {ej})",
+  "Creando…": "Creando…",
+  "Crear categoría": "Crear categoría",
+  "Cada categoría se identifica solo por su precio. Nombre y código se generan automáticamente. Solo puede haber una categoría activa por precio.":
+    "Cada categoría se identifica solo por su precio. Nombre y código se generan automáticamente. Solo puede haber una categoría activa por precio.",
+  "Categorías existentes": "Categorías existentes",
+  "Cargando…": "Cargando…",
+  "No hay categorías cargadas todavía.": "No hay categorías cargadas todavía.",
+
   // Movimientos
   "Movimientos de inventario": "Movimientos de inventario",
   "Registro de entradas, salidas y ajustes de stock": "Registro de entradas, salidas y ajustes de stock",
@@ -287,6 +308,23 @@ const ptBR: Dict = {
   "Activo": "Ativo",
   "Inactivo": "Inativo",
   "Sin suscripción": "Sem assinatura",
+
+  // Categorías (franjas)
+  "Categorías de precio": "Categorias de preço",
+  "Cada categoría es un rango de precio con su propio stock. Crear, editar precio, activar/desactivar y ajustar stock.":
+    "Cada categoria é uma faixa de preço com seu próprio estoque. Criar, editar preço, ativar/desativar e ajustar estoque.",
+  "Volver a inventario": "Voltar ao estoque",
+  "Todavía no hay categorías cargadas": "Ainda não há categorias cadastradas",
+  "Creá manualmente abajo las categorías de tu sucursal.": "Cadastre manualmente abaixo as categorias da sua filial.",
+  "Crear nueva categoría": "Criar nova categoria",
+  "Precio en {sym} (ej: {ej})": "Preço em {sym} (ex: {ej})",
+  "Creando…": "Criando…",
+  "Crear categoría": "Criar categoria",
+  "Cada categoría se identifica solo por su precio. Nombre y código se generan automáticamente. Solo puede haber una categoría activa por precio.":
+    "Cada categoria é identificada apenas pelo seu preço. Nome e código se geram automaticamente. Só pode haver uma categoria ativa por preço.",
+  "Categorías existentes": "Categorias existentes",
+  "Cargando…": "Carregando…",
+  "No hay categorías cargadas todavía.": "Ainda não há categorias cadastradas.",
 
   // Movimientos
   "Movimientos de inventario": "Movimentações de estoque",

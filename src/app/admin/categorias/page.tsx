@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
+import { useT, useMoney } from "@/lib/i18n/context";
+import { fmtActive } from "@/lib/i18n/currency";
 
 /**
  * Administración de Categorías de precio (modelo Pronim).
@@ -25,11 +27,16 @@ type Categoria = {
 
 type Sucursal = { id: string; nombre: string; es_principal: boolean };
 
-function formatGs(n: number): string {
-  return "Gs. " + Math.round(n).toLocaleString("es-PY").replace(/,/g, ".");
-}
+// formatGs → moneda activa del usuario (Gs. o R$).
+const formatGs = fmtActive;
 
 export default function AdminCategoriasPage() {
+  const t = useT();
+  const money = useMoney();
+  // El botón "Sembrar categorías iniciales" solo tiene sentido para
+  // sucursales en guaraníes — los valores (Gs. 6.000, 9.000, ...) son
+  // específicos de Paraguay. Para R$/USD/otras monedas se oculta.
+  const puedeSembrar = money.moneda === "PYG";
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -166,17 +173,16 @@ export default function AdminCategoriasPage() {
     <div className="mx-auto max-w-5xl space-y-6 p-4 sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Categorías de precio</h1>
+          <h1 className="text-2xl font-bold text-slate-900">{t("Categorías de precio")}</h1>
           <p className="text-sm text-slate-600">
-            Cada categoría es un rango de precio con su propio stock. Crear, editar precio,
-            activar/desactivar y ajustar stock.
+            {t("Cada categoría es un rango de precio con su propio stock. Crear, editar precio, activar/desactivar y ajustar stock.")}
           </p>
         </div>
         <Link
           href="/inventario"
           className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
         >
-          ← Volver a inventario
+          ← {t("Volver a inventario")}
         </Link>
       </div>
 
@@ -189,27 +195,33 @@ export default function AdminCategoriasPage() {
       {!loading && categorias.length === 0 && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
           <p className="text-sm font-semibold text-amber-800">
-            Todavía no hay categorías cargadas
+            {t("Todavía no hay categorías cargadas")}
           </p>
-          <p className="mt-1 text-xs text-amber-700">
-            Podés sembrar el conjunto inicial acordado con el cliente
-            (Gs. 6.000, 9.000, 14.000, 19.000, 24.000, 29.000 y luego cada 5.000 hasta 99.000)
-            o crear las tuyas manualmente abajo.
-          </p>
-          <button
-            type="button"
-            onClick={sembrarIniciales}
-            disabled={sembrando}
-            className="mt-3 rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-amber-700 disabled:opacity-40"
-          >
-            {sembrando ? "Sembrando…" : "Sembrar categorías iniciales"}
-          </button>
+          {puedeSembrar ? (
+            <>
+              <p className="mt-1 text-xs text-amber-700">
+                {t("Podés sembrar el conjunto inicial acordado con el cliente (Gs. 6.000, 9.000, 14.000, 19.000, 24.000, 29.000 y luego cada 5.000 hasta 99.000) o crear las tuyas manualmente abajo.")}
+              </p>
+              <button
+                type="button"
+                onClick={sembrarIniciales}
+                disabled={sembrando}
+                className="mt-3 rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-amber-700 disabled:opacity-40"
+              >
+                {sembrando ? t("Sembrando…") : t("Sembrar categorías iniciales")}
+              </button>
+            </>
+          ) : (
+            <p className="mt-1 text-xs text-amber-700">
+              {t("Creá manualmente abajo las categorías de tu sucursal.")}
+            </p>
+          )}
         </div>
       )}
 
       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-          Crear nueva categoría
+          {t("Crear nueva categoría")}
         </p>
         <div className="flex items-center gap-2">
           <input
@@ -217,7 +229,10 @@ export default function AdminCategoriasPage() {
             min={1}
             value={nuevoPrecio}
             onChange={(e) => setNuevoPrecio(e.target.value)}
-            placeholder="Precio en Gs. (ej: 104000)"
+            placeholder={t("Precio en {sym} (ej: {ej})", {
+              sym: money.symbol,
+              ej: money.moneda === "PYG" ? "104000" : "104",
+            })}
             className="w-full max-w-sm rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]/40"
           />
           <button
@@ -226,23 +241,22 @@ export default function AdminCategoriasPage() {
             disabled={creando || !nuevoPrecio}
             className="rounded-lg bg-[#4FAEB2] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#3F8E91] disabled:opacity-40"
           >
-            {creando ? "Creando…" : "Crear categoría"}
+            {creando ? t("Creando…") : t("Crear categoría")}
           </button>
         </div>
         <p className="mt-2 text-[11px] text-slate-400">
-          Cada categoría se identifica solo por su precio. Nombre y código se generan
-          automáticamente. Solo puede haber una categoría activa por precio.
+          {t("Cada categoría se identifica solo por su precio. Nombre y código se generan automáticamente. Solo puede haber una categoría activa por precio.")}
         </p>
       </div>
 
       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-          Categorías existentes
+          {t("Categorías existentes")}
         </p>
         {loading ? (
-          <p className="text-sm text-slate-500">Cargando…</p>
+          <p className="text-sm text-slate-500">{t("Cargando…")}</p>
         ) : categorias.length === 0 ? (
-          <p className="text-sm text-slate-500">No hay categorías cargadas todavía.</p>
+          <p className="text-sm text-slate-500">{t("No hay categorías cargadas todavía.")}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
