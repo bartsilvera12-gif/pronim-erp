@@ -10,6 +10,7 @@ import { getClientes, clienteNombre } from "@/lib/clientes/storage";
 import type { Cliente } from "@/lib/clientes/types";
 import { etiquetaVisibleTipoServicio, type ClienteTipoServicioRow } from "@/lib/clientes/tipo-servicio-catalogo";
 import { filasTiposDesdeSistemaEstatico, fetchTiposFormCliente } from "@/lib/clientes/fetch-tipos-servicio-form";
+import { useUserCfg } from "@/lib/i18n/context";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -298,7 +299,17 @@ export default function ClientesPage() {
     for (const t of filasTipoCatalogo) m[t.slug] = t.nombre;
     return m;
   }, [filasTipoCatalogo]);
-  const clienteColumns = useMemo(() => buildClienteColumns(mapNombreTipo), [mapNombreTipo]);
+  const { moneda } = useUserCfg();
+  const esSucursalBR = moneda === "BRL";
+  const clienteColumns = useMemo(() => {
+    const cols = buildClienteColumns(mapNombreTipo);
+    // Sucursales BR (Betim, BH, El Dorado): ocultar columnas que no aplican al
+    // modelo de compra/venta de prendas — ni siquiera aparecen en el selector.
+    if (esSucursalBR) {
+      return cols.filter((c) => c.key !== "plan_activo" && c.key !== "tipo_servicio");
+    }
+    return cols;
+  }, [mapNombreTipo, esSucursalBR]);
   const visibleColumnSet = useMemo(() => new Set(visibleColumnKeys), [visibleColumnKeys]);
   const visibleColumns = useMemo(
     () => clienteColumns.filter((col) => visibleColumnSet.has(col.key)),
