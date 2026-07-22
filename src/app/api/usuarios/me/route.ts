@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { getServiceAuthUsuario } from "@/lib/auth/get-service-auth-usuario";
 
+// Fuerza SSR dinámico: sin esto, Next.js podía servir la respuesta cacheada
+// entre usuarios distintos, con el resultado de que Betim/BH veían la lang
+// de un login previo (o el default 'es' si el primer visitante era admin).
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 type UsuarioMeRow = {
   nombre: string | null;
   email: string | null;
@@ -75,6 +81,10 @@ export async function GET(request: Request) {
         sucursal_es_principal: sucursalEsPrincipal,
         sucursal_moneda: sucursalMoneda,
         lang: (row?.lang ?? "").trim() || "es",
+      },
+    }, {
+      headers: {
+        "Cache-Control": "no-store, no-cache, must-revalidate",
       },
     });
   } catch (err) {
