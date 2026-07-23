@@ -123,8 +123,11 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
     // Intento con retry automático silencioso ante 502/503/504 o abort.
     // Estos son fallos transitorios comunes en cold starts de Vercel.
     const attempt = async (): Promise<Payload> => {
+      // El Resumen SIEMPRE trae todas las sucursales — Karen sacó el
+      // selector de acá justamente para ver todo dividido. El filtro
+      // sucursalFiltro solo aplica a la Bitácora diaria (que hace su
+      // propio fetch en DashSucursalDiario) y al DrillPanel.
       const params = new URLSearchParams({ desde, hasta });
-      if (sucursalFiltro) params.set("sucursal_id", sucursalFiltro);
       const ctrl = new AbortController();
       const to = setTimeout(() => ctrl.abort(), 55_000); // < maxDuration del server
       let r: Response;
@@ -166,7 +169,7 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
       // Limpiamos el marker si llegó al final.
       setErr(msg.startsWith("__RETRY__") ? "El servidor tardó demasiado. Reintentá." : msg);
     } finally { setLoading(false); }
-  }, [desde, hasta, sucursalFiltro]);
+  }, [desde, hasta]);
 
   useEffect(() => { void cargar(); }, [cargar]);
 
