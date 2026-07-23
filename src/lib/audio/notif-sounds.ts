@@ -23,6 +23,11 @@ let ctx: AudioContext | null = null;
 let unlocked = false;
 const pendingBeforeUnlock: Array<() => void> = [];
 let initialized = false;
+// Elemento HTMLAudio precargado para el mp3 de notificación. Se "arma"
+// en el primer gesto del usuario (play + pause inmediato) para que
+// llamadas posteriores desde el poll ya no estén bloqueadas por
+// autoplay policy.
+let notifAudioPrimed = false;
 
 type ACConstructor = typeof AudioContext;
 
@@ -58,6 +63,17 @@ async function unlock() {
     src.connect(c.destination);
     src.start(0);
     unlocked = true;
+    // "Primar" el elemento HTMLAudio del mp3 de notif — un play() en
+    // volumen 0 dentro del mismo gesto lo whitelistea para plays
+    // futuros disparados desde timers/fetch.
+    try {
+      const primer = new Audio(NOTIF_MP3);
+      primer.volume = 0;
+      await primer.play().catch(() => { /* ignore */ });
+      primer.pause();
+      primer.currentTime = 0;
+      notifAudioPrimed = true;
+    } catch { /* ignore */ }
     // Drenar cualquier sonido pendiente que llegó antes de la interacción.
     while (pendingBeforeUnlock.length > 0) {
       const fn = pendingBeforeUnlock.shift();
@@ -157,13 +173,23 @@ export function playCelebrationSound() {
  * próximo bloop.
  */
 const NOTIF_MP3 = "/sounds/universfield-new-notification-036-485897.mp3";
-export function playNotifSound() {
+function playNotifMp3() {
   if (typeof window === "undefined") return;
   try {
     const a = new Audio(NOTIF_MP3);
     a.volume = 0.7;
     void a.play().catch(() => { /* autoplay bloqueado — se ignora */ });
   } catch { /* ignore */ }
+}
+export function playNotifSound() {
+  // Si todavía no hubo gesto del usuario, encolamos — se dispara al
+  // desbloquear (mismo mecanismo que WebAudio). Después del primer
+  // gesto ya suena directo.
+  if (!unlocked || !notifAudioPrimed) {
+    pendingBeforeUnlock.push(playNotifMp3);
+    return;
+  }
+  playNotifMp3();
 }
 
 // ═══════════ Variantes de prueba — para que Karen elija cuál le gusta ══════════
