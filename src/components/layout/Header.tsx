@@ -129,10 +129,14 @@ export default function Header({ onOpenMobileSidebar }: HeaderProps = {}) {
         setNotifPend(arr);
         setNotifClientes((j.data?.clientes as Record<string, string>) ?? {});
         setNotifSucursales((j.data?.sucursales as Record<string, string>) ?? {});
-        const nuevasHay = arr.some(n => !seenIds.has(n.id));
-        if (nuevasHay) {
-          playNotifSound();
-        }
+        // Contamos NUEVAS: cada id que no estaba en seenIds. Karen: si
+        // hay 3 pendientes nuevas, deben sonar 3 "bloops" seguidos, no
+        // encimados. Espaciamos las llamadas ~450ms (más largo que la
+        // duración del bloop, que es 90+220ms) para evitar solaparse.
+        const nuevas = arr.filter(n => !seenIds.has(n.id));
+        nuevas.forEach((_, i) => {
+          setTimeout(() => playNotifSound(), i * 450);
+        });
         seenIds = new Set(arr.map(n => n.id));
       } catch { /* silencioso */ }
     }
