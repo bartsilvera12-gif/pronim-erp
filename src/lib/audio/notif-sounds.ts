@@ -146,15 +146,24 @@ export function playCelebrationSound() {
 }
 
 /**
- * Notificación — campana (bell chime): 3 armónicos sine C6+E6+G6
- * sostenidos que dan una vibración tipo campanita, elegida por Karen.
+ * Notificación — MP3 provisto por Karen. Usamos HTMLAudioElement en vez
+ * de WebAudio porque el mp3 ya es el sonido final. Cada llamada crea un
+ * elemento nuevo para permitir solapamientos (N pendientes → N bloops
+ * separados por el delay del Header).
+ *
+ * Volumen fijo a 0.7. Si el navegador todavía no desbloqueó el audio,
+ * el play() puede rechazar silenciosamente — no hace falta encolarlo
+ * porque el listener de `pointerdown` ya habilita el audio para el
+ * próximo bloop.
  */
+const NOTIF_MP3 = "/sounds/universfield-new-notification-036-485897.mp3";
 export function playNotifSound() {
-  playNotes([
-    { freq: 1046.5, at: 0, dur: 900, gain: 0.30, type: "sine" },
-    { freq: 1318.5, at: 0, dur: 900, gain: 0.20, type: "sine" },
-    { freq: 1568.0, at: 0, dur: 900, gain: 0.15, type: "sine" },
-  ]);
+  if (typeof window === "undefined") return;
+  try {
+    const a = new Audio(NOTIF_MP3);
+    a.volume = 0.7;
+    void a.play().catch(() => { /* autoplay bloqueado — se ignora */ });
+  } catch { /* ignore */ }
 }
 
 // ═══════════ Variantes de prueba — para que Karen elija cuál le gusta ══════════
