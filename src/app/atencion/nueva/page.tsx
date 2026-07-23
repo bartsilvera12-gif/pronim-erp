@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { playCelebrationSound } from "@/lib/audio/notif-sounds";
@@ -132,6 +132,11 @@ export default function NuevaAtencionPage() {
   // persistencia de "ya celebrada" vive en la DB (metas_celebradas),
   // así que sobrevive a recargas/dispositivos y no se duplica ante
   // updates concurrentes. Ver src/components/metas/MetaCelebrationModal.tsx
+  // Set en memoria de sucursales cuyo modal ya se mostró EN ESTA SESIÓN
+  // (se resetea al recargar). Karen quiere ver la animación cada vez
+  // que entra a caja con la meta cumplida, no solo la primera vez del
+  // día — pero sí evitar que se dispare 2 veces en el mismo tab.
+  const metaMostradaSessionRef = useRef<Set<string>>(new Set());
   const [metaAlcanzada, setMetaAlcanzada] = useState<{
     sucursal_id: string; nombre: string; pct_meta: number;
     vendido: number; meta_periodo: number;
@@ -445,15 +450,18 @@ export default function NuevaAtencionPage() {
         vendido: number; meta_periodo: number; ya_celebrada?: boolean;
       }>) ?? [];
       if (metas.length === 0) return;
-      // El backend indica `ya_celebrada = true` cuando existe fila en
-      // pronimerp.metas_celebradas para (sucursal, hoy). No modal para
-      // esas — solo el badge discreto (visible aunque el estado
-      // se actualice después con setMetasCumplidasHoy).
-      const nueva = metas.find(m => !m.ya_celebrada);
+      // El modal se dispara la PRIMERA vez que aparece la meta en esta
+      // sesión (por sucursal), aunque el backend indique ya_celebrada.
+      // Karen quiere ver la animación en cada recarga si la meta sigue
+      // cumplida — el flag ya_celebrada del backend sirve para el badge
+      // discreto, no para bloquear la celebración.
+      const nueva = metas.find(m => !metaMostradaSessionRef.current.has(m.sucursal_id));
       if (nueva && !metaAlcanzada) {
+        metaMostradaSessionRef.current.add(nueva.sucursal_id);
         setMetaAlcanzada(nueva);
       }
-      // Cache las cumplidas para el badge.
+      // Cache las cumplidas para el badge (todas las que ya tienen ack
+      // en el backend).
       setMetasCumplidasHoy(metas.filter(m => m.ya_celebrada).map(m => ({
         sucursal_id: m.sucursal_id, nombre: m.nombre,
       })));
