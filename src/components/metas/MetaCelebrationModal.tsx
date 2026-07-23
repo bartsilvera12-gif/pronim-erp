@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useT, useMoney } from "@/lib/i18n/context";
-import { playCelebrationSound } from "@/lib/audio/notif-sounds";
+import { playCelebrationSound, playFanfare, initNotifSounds } from "@/lib/audio/notif-sounds";
 
 /**
  * Modal celebratorio de meta alcanzada.
@@ -47,14 +47,30 @@ export function MetaCelebrationModal({
     return () => mq.removeEventListener?.("change", onChange);
   }, []);
 
+  // Solo dep del id de sucursal — así el effect no re-corre en cada
+  // render (onSeguir cambia de referencia cada render). Antes, el
+  // sonido se cortaba porque playCelebrationSound() se llamaba varias
+  // veces seguidas y cada AudioContext se pisaba al siguiente.
+  const metaKey = meta?.sucursal_id ?? null;
   useEffect(() => {
-    if (!meta) return;
-    // Sonido celebratorio (respeta bloqueo de autoplay del navegador).
+    if (!metaKey) return;
+    // Asegura que el listener de unlock está instalado (idempotente).
+    initNotifSounds();
+    // Doble sonido: playCelebrationSound (ding-ding-ding rápido) +
+    // playFanfare (6 notas ascendentes más celebratorio). Se solapan
+    // como una fanfarria festiva.
     playCelebrationSound();
-    // Autocierre a los 4s: cerrar la tarjeta y dispara ack backend.
-    const timer = setTimeout(() => onSeguir(), 4000);
+    playFanfare();
+    // Autocierre a los 4s.
+    const timer = setTimeout(() => onSeguirRef.current(), 4000);
     return () => clearTimeout(timer);
-  }, [meta, onSeguir]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [metaKey]);
+
+  // Ref estable a onSeguir para el timer del effect (evita re-run al
+  // cambiar la identidad de la función entre renders).
+  const onSeguirRef = useRef(onSeguir);
+  onSeguirRef.current = onSeguir;
 
   // Confeti — SVG absolut, se recalcula solo cuando cambia la meta.
   const confetti = useMemo(() => {
