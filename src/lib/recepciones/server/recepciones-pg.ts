@@ -513,6 +513,13 @@ export async function crearRecepcionEnClientePg(
     // Se hace DENTRO de la tx: si algo falla después, no queda compra
     // huérfana. Si Postgres no tiene la función (instancia sin migración
     // aplicada), no reventamos la operación — solo logueamos.
+    // SAVEPOINT: si la migración de compras no está aplicada (o cualquier
+    // otro error tolerable) el catch limpia el estado abortado y el resto
+    // de la tx puede continuar. SIN el savepoint, un fallo acá dejaba la
+    // tx en estado "aborted" y todas las queries siguientes (crédito,
+    // eventos, ingreso de stock) reventaban con "current transaction is
+    // aborted, commands ignored until end of transaction block".
+    await client.query("SAVEPOINT sp_compras_link");
     try {
       const provQ = await client.query<{ p: string }>(
         `SELECT pronimerp.ensure_proveedor_from_cliente($1::uuid, $2::uuid) AS p`,
@@ -552,9 +559,13 @@ export async function crearRecepcionEnClientePg(
           p.createdBy, p.usuarioNombre,
         ],
       );
+      await client.query("RELEASE SAVEPOINT sp_compras_link");
     } catch (e) {
-      // Instancia sin la función/migración aplicada — no bloqueamos la
-      // recepción por eso. Se loguea; el backfill posterior arregla.
+      // El ROLLBACK TO SAVEPOINT libera el estado abortado dejando la tx
+      // sana para continuar. Sin esto, quedaba "aborted" y la próxima
+      // query (INSERT en cliente_creditos_movimientos) reventaba.
+      await client.query("ROLLBACK TO SAVEPOINT sp_compras_link");
+      await client.query("RELEASE SAVEPOINT sp_compras_link");
       const msg = e instanceof Error ? e.message : String(e);
       if (msg.includes("ensure_proveedor_from_cliente")
           || msg.includes("column \"cliente_id\"")
@@ -581,7 +592,11 @@ export async function crearRecepcionEnClientePg(
       );
     }
 
-    // Evento historial
+    // Evento historial — SAVEPOINT: si el INSERT falla (tabla ausente,
+    // schema desalineado, check constraint) el ROLLBACK TO SAVEPOINT deja
+    // la tx sana. Sin esto, un fallo acá abortaba toda la operación de
+    // /caja con "current transaction is aborted".
+    await client.query("SAVEPOINT sp_evento_recep");
     try {
       const desc = [
         `Recepción ${numero} — total Gs. ${Math.round(totalCompra)}.`,
@@ -600,7 +615,13 @@ export async function crearRecepcionEnClientePg(
           totalCompra, recepcionId, numero, p.createdBy, p.usuarioNombre,
         ],
       );
-    } catch { /* opcional */ }
+      await client.query("RELEASE SAVEPOINT sp_evento_recep");
+    } catch (e) {
+      await client.query("ROLLBACK TO SAVEPOINT sp_evento_recep");
+      await client.query("RELEASE SAVEPOINT sp_evento_recep");
+      console.warn("[recepciones] evento historial opcional falló:",
+        e instanceof Error ? e.message : e);
+    }
 
     let estadoFinal: "pendiente_ingreso" | "ingresada" = "pendiente_ingreso";
     let ingresadaAt: string | null = null;
@@ -1096,6 +1117,7 @@ export async function anularRecepcionPg(p: RecepcionAnularInput): Promise<Recepc
     // Anular en cascada las compras espejo generadas por esta recepción.
     // Tolerante: si la columna recepcion_id no existe (instancia sin
     // migración 20260824), se saltea sin romper la anulación.
+    await client.query("SAVEPOINT sp_compras_cascade");
     try {
       await client.query(
         `UPDATE ${quoteSchemaTable(schema, "compras")}
@@ -1103,7 +1125,10 @@ export async function anularRecepcionPg(p: RecepcionAnularInput): Promise<Recepc
           WHERE recepcion_id = $1 AND empresa_id = $2 AND estado <> 'anulada'`,
         [p.recepcionId, p.empresaId],
       );
+      await client.query("RELEASE SAVEPOINT sp_compras_cascade");
     } catch (e) {
+      await client.query("ROLLBACK TO SAVEPOINT sp_compras_cascade");
+      await client.query("RELEASE SAVEPOINT sp_compras_cascade");
       const msg = e instanceof Error ? e.message : String(e);
       if (msg.includes("column \"recepcion_id\"")) {
         console.warn("[recepciones anular] compras cascade skip: migracion 20260824 no aplicada");
@@ -1112,7 +1137,8 @@ export async function anularRecepcionPg(p: RecepcionAnularInput): Promise<Recepc
       }
     }
 
-    // Evento
+    // Evento — SAVEPOINT para no abortar la tx si falla.
+    await client.query("SAVEPOINT sp_evento_anular");
     try {
       await client.query(
         `INSERT INTO ${eventosT} (
@@ -1126,7 +1152,13 @@ export async function anularRecepcionPg(p: RecepcionAnularInput): Promise<Recepc
           p.recepcionId, rec.numero_control, p.actorId, p.actorNombre,
         ],
       );
-    } catch { /* opcional */ }
+      await client.query("RELEASE SAVEPOINT sp_evento_anular");
+    } catch (e) {
+      await client.query("ROLLBACK TO SAVEPOINT sp_evento_anular");
+      await client.query("RELEASE SAVEPOINT sp_evento_anular");
+      console.warn("[recepciones anular] evento opcional falló:",
+        e instanceof Error ? e.message : e);
+    }
 
     void recepPagosT; // append-only, no borramos filas
 
