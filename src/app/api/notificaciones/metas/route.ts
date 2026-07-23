@@ -31,13 +31,30 @@ export async function GET(request: NextRequest) {
     const pool = getChatPostgresPool();
     if (!pool) return NextResponse.json(errorResponse("Sin conexión Postgres."), { status: 500 });
 
-    // Aislar por sucursal: si el usuario tiene sucursal_id asignada,
-    // solo ve las metas de SU sucursal — aunque el rol sea admin. Solo
-    // el admin GLOBAL (sin sucursal_id) ve todas. Antes cualquier admin
-    // veía todas y en la campana de Sucursal 2 salían las celebraciones
-    // de Principal, lo cual confundía a la cajera.
+    // Reglas de scope:
+    //   - Principal (sucursales.es_principal = true) → ve TODAS las
+    //     sucursales. Es el nodo central que supervisa a las demás.
+    //   - Sin sucursal_id + rol admin → también ve todas (admin global).
+    //   - Cualquier otra sucursal → solo la suya.
+    // Antes, cualquier rol admin veía todo y a la cajera de Sucursal 2
+    // le aparecía "Principal alcanzó su meta" en la campana.
     const esAdmin = esRolAdminEmpresaOGlobal(auth.rol ?? undefined);
-    const sucScope = auth.sucursal_id ?? (esAdmin ? null : null);
+    let esUsuarioPrincipal = false;
+    if (auth.sucursal_id) {
+      const sucChkT = quoteSchemaTable(schema, "sucursales");
+      const clientChk = await pool.connect();
+      try {
+        const chk = await clientChk.query<{ es_principal: boolean | null }>(
+          `SELECT es_principal FROM ${sucChkT} WHERE id = $1 AND empresa_id = $2 LIMIT 1`,
+          [auth.sucursal_id, auth.empresa_id],
+        );
+        esUsuarioPrincipal = chk.rows[0]?.es_principal === true;
+      } finally {
+        clientChk.release();
+      }
+    }
+    const veTodas = esUsuarioPrincipal || (esAdmin && !auth.sucursal_id);
+    const sucScope = veTodas ? null : (auth.sucursal_id ?? null);
 
     const sucT = quoteSchemaTable(schema, "sucursales");
     const ventasT = quoteSchemaTable(schema, "ventas");

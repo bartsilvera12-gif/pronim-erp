@@ -23,6 +23,19 @@ export async function GET(request: NextRequest) {
     const schema = await fetchDataSchemaForEmpresaId(auth.empresa_id);
     const sb = createServiceRoleClientWithDbSchema(schema);
 
+    // Scope: Principal supervisa TODAS las sucursales; el resto solo ve
+    // sus propias pendientes. Si el usuario no tiene sucursal_id (admin
+    // global) también ve todas.
+    let esUsuarioPrincipal = false;
+    if (auth.sucursal_id) {
+      const { data: sucChk } = await sb
+        .from("sucursales")
+        .select("es_principal")
+        .eq("id", auth.sucursal_id)
+        .maybeSingle();
+      esUsuarioPrincipal = (sucChk as { es_principal?: boolean } | null)?.es_principal === true;
+    }
+
     let q = sb
       .from("cliente_recepciones")
       .select("id, numero_control, cliente_id, fecha, total_compra, total_credito, observaciones, sucursal_id, ingresada_at, estado, created_by, usuario_nombre")
@@ -32,7 +45,7 @@ export async function GET(request: NextRequest) {
       .order("fecha", { ascending: false })
       .limit(200);
 
-    if (auth.sucursal_id) q = q.eq("sucursal_id", auth.sucursal_id);
+    if (auth.sucursal_id && !esUsuarioPrincipal) q = q.eq("sucursal_id", auth.sucursal_id);
 
     const { data, error } = await q;
     if (error) {
