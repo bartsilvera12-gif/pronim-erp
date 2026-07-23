@@ -316,13 +316,6 @@ export default function AdminCategoriasPage() {
                       >
                         Editar precio
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => setAjusteAbierto(c)}
-                        className="rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
-                      >
-                        Ajustar stock
-                      </button>
                     </td>
                   </tr>
                 ))}
