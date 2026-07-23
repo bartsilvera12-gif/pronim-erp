@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
+import MontoInput from "@/components/ui/MontoInput";
 
 type MetaSucursal = {
   sucursal_id: string;
@@ -181,10 +182,13 @@ export default function AdminMetasPage() {
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div>
                         <label className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1">Meta diaria (Gs.)</label>
-                        <input
-                          type="number" min={0} step="1000"
+                        {/* MontoInput formatea con separador de miles
+                            (1.000.000). Guardamos el value como string
+                            del número, y MontoInput lo renderiza formateado. */}
+                        <MontoInput
                           value={d.meta}
-                          onChange={(e) => setDrafts((p) => ({ ...p, [m.sucursal_id]: { ...p[m.sucursal_id], meta: e.target.value } }))}
+                          decimals={false}
+                          onChange={(n) => setDrafts((p) => ({ ...p, [m.sucursal_id]: { ...p[m.sucursal_id], meta: n > 0 ? String(n) : "" } }))}
                           className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
                         />
                       </div>
