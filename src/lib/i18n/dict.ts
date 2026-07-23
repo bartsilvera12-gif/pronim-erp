@@ -82,6 +82,13 @@ const es: Dict = {
   "Cerrar aviso": "Cerrar aviso",
 
   // Meta alcanzada
+  "¡Meta alcanzada!": "¡Meta alcanzada!",
+  "Cumplimos el": "Cumplimos el",
+  "de la meta": "de la meta",
+  "¡Excelente trabajo, equipo!": "¡Excelente trabajo, equipo!",
+  "Ver resultados": "Ver resultados",
+  "Seguir trabajando": "Seguir trabajando",
+  "Meta cumplida": "Meta cumplida",
   "¡Felicidades!": "¡Felicidades!",
   "alcanzó el": "alcanzó el",
   "de la meta del día.": "de la meta del día.",
@@ -274,6 +281,13 @@ const ptBR: Dict = {
   "Cerrar aviso": "Fechar aviso",
 
   // Meta alcanzada
+  "¡Meta alcanzada!": "Meta alcançada!",
+  "Cumplimos el": "Cumprimos",
+  "de la meta": "da meta",
+  "¡Excelente trabajo, equipo!": "Excelente trabalho, equipe!",
+  "Ver resultados": "Ver resultados",
+  "Seguir trabajando": "Continuar trabalhando",
+  "Meta cumplida": "Meta cumprida",
   "¡Felicidades!": "Parabéns!",
   "alcanzó el": "alcançou",
   "de la meta del día.": "da meta do dia.",

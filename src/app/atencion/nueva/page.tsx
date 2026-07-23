@@ -7,6 +7,7 @@ import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session"
 import { playCelebrationSound } from "@/lib/audio/notif-sounds";
 import { useT, useMoney } from "@/lib/i18n/context";
 import { fmtActive } from "@/lib/i18n/currency";
+import { MetaCelebrationModal, MetaCumplidaBadge } from "@/components/metas/MetaCelebrationModal";
 import MontoInput from "@/components/ui/MontoInput";
 import {
   ALERTAS_DEFAULTS,
@@ -127,11 +128,15 @@ export default function NuevaAtencionPage() {
   // rail derecho (usuarios comunes que no ven el dashboard también se
   // enteran de que hay bolsas esperando).
   const [pendientesEvaluar, setPendientesEvaluar] = useState(0);
-  // Meta alcanzada — sticky note celebratorio con sonido para que la
-  // cajera se entere del logro sin tener que ir al dashboard.
+  // Meta alcanzada — MODAL celebratorio con confetti + sonido. La
+  // persistencia de "ya celebrada" vive en la DB (metas_celebradas),
+  // así que sobrevive a recargas/dispositivos y no se duplica ante
+  // updates concurrentes. Ver src/components/metas/MetaCelebrationModal.tsx
   const [metaAlcanzada, setMetaAlcanzada] = useState<{
     sucursal_id: string; nombre: string; pct_meta: number;
+    vendido: number; meta_periodo: number;
   } | null>(null);
+  const [metasCumplidasHoy, setMetasCumplidasHoy] = useState<{ sucursal_id: string; nombre: string }[]>([]);
 
   // Override manual del monto a pagar por la recepción — la cajera evalúa las
   // prendas por franja y a veces redondea a mano (140.000), a veces no
@@ -435,25 +440,48 @@ export default function NuevaAtencionPage() {
     try {
       const r = await fetchWithSupabaseSession("/api/notificaciones/metas", { cache: "no-store" });
       const j = await r.json().catch(() => ({}));
-      const metas = (j?.data?.metas as { sucursal_id: string; nombre: string; pct_meta: number }[] | undefined) ?? [];
+      const metas = (j?.data?.metas as Array<{
+        sucursal_id: string; nombre: string; pct_meta: number;
+        vendido: number; meta_periodo: number; ya_celebrada?: boolean;
+      }>) ?? [];
       if (metas.length === 0) return;
-      const now = new Date();
-      const diaKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-      // Cerradas solo por sesión (× de la sticky). Sin persistencia entre
-      // sesiones — al recargar la pestaña la sticky vuelve.
-      const cerradasRaw = sessionStorage.getItem("neura:metas-cerradas") ?? "{}";
-      const cerradas = JSON.parse(cerradasRaw) as Record<string, string>;
-      const nueva = metas.find(m => cerradas[m.sucursal_id] !== diaKey);
-      if (nueva) {
+      // El backend indica `ya_celebrada = true` cuando existe fila en
+      // pronimerp.metas_celebradas para (sucursal, hoy). No modal para
+      // esas — solo el badge discreto (visible aunque el estado
+      // se actualice después con setMetasCumplidasHoy).
+      const nueva = metas.find(m => !m.ya_celebrada);
+      if (nueva && !metaAlcanzada) {
         setMetaAlcanzada(nueva);
-        // MODO PRUEBA: sonamos en cada detección (incluye refresh) para
-        // que Karen pueda verificar el audio. Con el sound-guard estaba
-        // sonando solo la primera vez por sesión y no se podía re-probar
-        // sin borrar sessionStorage. Volver a poner el guard cuando esté
-        // todo verificado.
-        playCelebrationSound();
       }
+      // Cache las cumplidas para el badge.
+      setMetasCumplidasHoy(metas.filter(m => m.ya_celebrada).map(m => ({
+        sucursal_id: m.sucursal_id, nombre: m.nombre,
+      })));
     } catch { /* silencioso */ }
+  }
+
+  // Ack backend + cerrar modal. El insert es idempotente: dos requests
+  // simultáneos → 1 sola fila.
+  async function celebrarMetaAck(cerradoPorUsuario: boolean) {
+    const m = metaAlcanzada;
+    setMetaAlcanzada(null);
+    if (!m) return;
+    try {
+      await fetchWithSupabaseSession("/api/notificaciones/metas/celebrar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sucursal_id: m.sucursal_id,
+          pct_meta: m.pct_meta,
+          vendido: m.vendido,
+          meta_diaria: m.meta_periodo,
+          cerrado_por_usuario: cerradoPorUsuario,
+        }),
+      });
+      setMetasCumplidasHoy(prev => prev.some(x => x.sucursal_id === m.sucursal_id)
+        ? prev
+        : [...prev, { sucursal_id: m.sucursal_id, nombre: m.nombre }]);
+    } catch { /* backend ya deduplica; falla silente */ }
   }
 
   async function refrescarMetaDia() {
@@ -1793,53 +1821,29 @@ export default function NuevaAtencionPage() {
              Orden: 1) meta alcanzada (verde/amarillo, más destacado)
                     2) recepciones pendientes (ámbar)
                     3) recordatorios contextuales del cliente ─── */}
-      {(metaAlcanzada || pendientesIngresoCount > 0 || (cliente && alertasDisparadas.length > 0)) && (
+      {/* ── Modal celebratorio de meta alcanzada. Se auto-cierra a los 4s
+             y hace ack al backend (metas_celebradas). Confetti 2s. ── */}
+      <MetaCelebrationModal
+        meta={metaAlcanzada}
+        onSeguir={() => celebrarMetaAck(true)}
+        onVerResultados={() => router.push("/admin/metas")}
+      />
+
+      {(pendientesIngresoCount > 0 || (cliente && alertasDisparadas.length > 0) || metasCumplidasHoy.length > 0) && (
         <aside
           aria-label="Recordatorios"
           className="hidden xl:flex fixed top-24 right-6 z-30 flex-col gap-4 w-64 max-h-[calc(100vh-8rem)] overflow-y-auto overflow-x-hidden py-2 pr-1 pointer-events-none"
         >
-          {/* ── 1) Meta alcanzada — mismo formato que las otras notas ── */}
-          {metaAlcanzada && (
-            <div
-              className="relative bg-emerald-100 -rotate-2 pointer-events-auto shadow-[0_6px_16px_-4px_rgba(0,0,0,0.25)] px-4 pt-5 pb-4 transition-transform hover:rotate-0 hover:scale-[1.02]"
-              style={{ borderRadius: "2px 2px 14px 2px" }}
-            >
-              <span aria-hidden className="absolute -top-2 left-1/2 -translate-x-1/2 h-4 w-16 bg-emerald-300/70 rotate-[-3deg] shadow-sm" />
-              <button
-                type="button"
-                onClick={() => {
-                  // Solo ocultar en la sesión actual (sessionStorage). Si
-                  // Karen recarga la página, la nota vuelve a aparecer —
-                  // así no se pierde si la cierra por accidente. El sonido
-                  // no se dispara de nuevo (guardado en el mismo namespace
-                  // por `sonado`).
-                  try {
-                    const now = new Date();
-                    const diaKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-                    const raw = sessionStorage.getItem("neura:metas-cerradas") ?? "{}";
-                    const seen = JSON.parse(raw) as Record<string, string>;
-                    seen[metaAlcanzada.sucursal_id] = diaKey;
-                    sessionStorage.setItem("neura:metas-cerradas", JSON.stringify(seen));
-                  } catch { /* ignore */ }
-                  setMetaAlcanzada(null);
-                }}
-                className="absolute top-1 right-1 h-5 w-5 rounded-full text-emerald-900/60 hover:bg-emerald-900/10 hover:text-emerald-900 flex items-center justify-center text-base leading-none font-bold"
-                aria-label="Cerrar"
-              >
-                ×
-              </button>
-              <p className="text-[13px] font-bold leading-snug text-emerald-900">
-                ¡Felicidades! 🎉
-              </p>
-              <p className="text-[12px] mt-1 leading-snug text-emerald-900 opacity-90">
-                <strong>{metaAlcanzada.nombre}</strong> alcanzó el{" "}
-                <strong className="tabular-nums">{metaAlcanzada.pct_meta}%</strong>{" "}
-                de la meta del día.
-              </p>
+          {/* ── Badge discreto: metas ya cumplidas hoy ── */}
+          {metasCumplidasHoy.length > 0 && (
+            <div className="pointer-events-auto flex flex-wrap gap-1.5">
+              {metasCumplidasHoy.map(m => (
+                <MetaCumplidaBadge key={m.sucursal_id} nombre={m.nombre} />
+              ))}
             </div>
           )}
 
-          {/* ── 2) Recepciones pendientes — mismo formato que las otras notas ── */}
+          {/* ── Recepciones pendientes — mismo formato que las otras notas ── */}
           {pendientesIngresoCount > 0 && (
             <Link
               href="/atencion/pendientes-ingreso"

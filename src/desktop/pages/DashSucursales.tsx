@@ -173,8 +173,12 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
         if (!alive || !j?.success) return;
         const metas = (j.data?.metas as { sucursal_id: string; nombre: string; pct_meta: number }[]) ?? [];
         setMetasHoy(metas);
-        // MODO PRUEBA: cada detección con meta > 0 dispara el sonido.
-        if (metas.length > 0) playCelebrationSound();
+        // Sonido celebratorio SOLO cuando la meta AÚN NO fue ack'd en el
+        // backend (metas_celebradas). El modal de la Caja se encarga de
+        // hacer ack; el dash de sucursales solo respeta ese flag para
+        // no repetir el ding en cada refresh.
+        const noAckeada = metas.some(m => (m as { ya_celebrada?: boolean }).ya_celebrada !== true);
+        if (noAckeada) playCelebrationSound();
       } catch { /* silencioso */ }
     }
     void loadMetas();
