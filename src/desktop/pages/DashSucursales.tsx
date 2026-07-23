@@ -461,6 +461,8 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
             totalPorDia={[]}
             porSucursal={data.ventas.evolucion_por_sucursal}
             baseSucursales={data.sucursales.map(s => ({ sucursal_id: s.sucursal_id, nombre: s.nombre }))}
+            desde={data.periodo.desde}
+            hasta={data.periodo.hasta}
           />
         </div>
       )}
@@ -675,6 +677,8 @@ function MultiLineChart({
   totalPorDia,
   porSucursal,
   baseSucursales,
+  desde,
+  hasta,
 }: {
   totalPorDia: { dia: string; total: number; ops: number }[];
   porSucursal: { dia: string; sucursal_id: string; nombre: string; total: number }[];
@@ -682,14 +686,40 @@ function MultiLineChart({
    *  (aunque no tengan ventas → línea en 0), no solo las que aparecen
    *  en porSucursal. */
   baseSucursales?: { sucursal_id: string; nombre: string }[];
+  /** Rango del período. Cuando se pasa, el eje X se genera para TODOS
+   *  los días entre desde/hasta (los días sin ventas quedan en 0), en
+   *  vez de saltearse. Sin esto la línea "sube" directo de un día con
+   *  ventas al próximo, dando la ilusión de tramos rectos entre puntos
+   *  lejanos en el tiempo. */
+  desde?: string;
+  hasta?: string;
 }) {
   const w = 800, h = 160, padL = 8, padR = 8, padT = 16, padB = 24;
-  // El eje X canónico es totalPorDia si está; si no, deriva del union
-  // de días vistos en porSucursal (caso donde el chart se usa sin línea
-  // total para evitar mezclar monedas entre sucursales).
-  const dias = totalPorDia.length > 0
-    ? totalPorDia.map(d => d.dia)
-    : Array.from(new Set(porSucursal.map(p => p.dia))).sort();
+  // Eje X canónico:
+  //   - Si tenemos desde/hasta → generamos TODOS los días del rango
+  //     para que se vea el ancho real del período aunque solo haya
+  //     ventas en 1 o 2 días (los demás quedan en 0).
+  //   - Si no, caemos al comportamiento previo (totalPorDia o union
+  //     de porSucursal).
+  const diasRango = (() => {
+    if (!desde || !hasta) return null;
+    const out: string[] = [];
+    const d0 = new Date(desde + "T00:00:00");
+    const d1 = new Date(hasta + "T00:00:00");
+    if (Number.isNaN(d0.getTime()) || Number.isNaN(d1.getTime())) return null;
+    // Cap defensivo: si el rango se disparó (bug de UI), no generamos
+    // 10k puntos — mostramos solo los que ya vinieron con data.
+    const maxDias = 366;
+    for (let d = new Date(d0); d <= d1; d.setDate(d.getDate() + 1)) {
+      out.push(d.toISOString().slice(0, 10));
+      if (out.length > maxDias) return null;
+    }
+    return out;
+  })();
+  const dias = diasRango
+    ?? (totalPorDia.length > 0
+      ? totalPorDia.map(d => d.dia)
+      : Array.from(new Set(porSucursal.map(p => p.dia))).sort());
   // Paleta estable — se recicla si hay más de 8 sucursales.
   const PAL = ["#10b981", "#3b82f6", "#f59e0b", "#a855f7", "#ef4444", "#06b6d4", "#84cc16", "#ec4899"];
   // Agrupamos por sucursal: nombre + serie [{dia,total}]. Semillamos con
