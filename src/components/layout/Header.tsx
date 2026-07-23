@@ -129,14 +129,11 @@ export default function Header({ onOpenMobileSidebar }: HeaderProps = {}) {
         setNotifPend(arr);
         setNotifClientes((j.data?.clientes as Record<string, string>) ?? {});
         setNotifSucursales((j.data?.sucursales as Record<string, string>) ?? {});
-        // Contamos NUEVAS: cada id que no estaba en seenIds. Karen: si
-        // hay 3 pendientes nuevas, deben sonar 3 "bloops" seguidos, no
-        // encimados. Espaciamos las llamadas ~450ms (más largo que la
-        // duración del bloop, que es 90+220ms) para evitar solaparse.
-        const nuevas = arr.filter(n => !seenIds.has(n.id));
-        nuevas.forEach((_, i) => {
-          setTimeout(() => playNotifSound(), i * 450);
-        });
+        // Suena UNA sola vez si hay al menos una notificación nueva
+        // (por más pendientes que sean). Karen quiere un solo bloop al
+        // recargar, no una ráfaga.
+        const hayNuevas = arr.some(n => !seenIds.has(n.id));
+        if (hayNuevas) playNotifSound();
         seenIds = new Set(arr.map(n => n.id));
       } catch { /* silencioso */ }
     }
