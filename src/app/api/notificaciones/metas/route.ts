@@ -31,8 +31,13 @@ export async function GET(request: NextRequest) {
     const pool = getChatPostgresPool();
     if (!pool) return NextResponse.json(errorResponse("Sin conexión Postgres."), { status: 500 });
 
+    // Aislar por sucursal: si el usuario tiene sucursal_id asignada,
+    // solo ve las metas de SU sucursal — aunque el rol sea admin. Solo
+    // el admin GLOBAL (sin sucursal_id) ve todas. Antes cualquier admin
+    // veía todas y en la campana de Sucursal 2 salían las celebraciones
+    // de Principal, lo cual confundía a la cajera.
     const esAdmin = esRolAdminEmpresaOGlobal(auth.rol ?? undefined);
-    const sucScope = esAdmin ? null : (auth.sucursal_id ?? null);
+    const sucScope = auth.sucursal_id ?? (esAdmin ? null : null);
 
     const sucT = quoteSchemaTable(schema, "sucursales");
     const ventasT = quoteSchemaTable(schema, "ventas");
