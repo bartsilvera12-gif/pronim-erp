@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useT, useMoney } from "@/lib/i18n/context";
 import { playCelebrationSound, playFanfare, initNotifSounds } from "@/lib/audio/notif-sounds";
 
@@ -61,18 +61,14 @@ export function MetaCelebrationModal({
     // como una fanfarria festiva.
     playCelebrationSound();
     playFanfare();
-    // Autocierre a los 4s.
-    const timer = setTimeout(() => onSeguirRef.current(), 4000);
-    return () => clearTimeout(timer);
+    // NO hay autocierre — Karen pidió que el modal quede hasta que
+    // alguien apriete "Ver resultados" o "Seguir trabajando". Así la
+    // celebración se ve aunque nadie esté mirando la pantalla en el
+    // momento exacto en que se cumple la meta.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [metaKey]);
 
-  // Ref estable a onSeguir para el timer del effect (evita re-run al
-  // cambiar la identidad de la función entre renders).
-  const onSeguirRef = useRef(onSeguir);
-  onSeguirRef.current = onSeguir;
-
-  // Confeti — SVG absolut, se recalcula solo cuando cambia la meta.
+// Confeti — SVG absolut, se recalcula solo cuando cambia la meta.
   const confetti = useMemo(() => {
     if (!meta || reducedMotion) return null;
     const colors = ["#4FAEB2", "#f59e0b", "#10b981", "#ec4899", "#8b5cf6", "#f43f5e"];
