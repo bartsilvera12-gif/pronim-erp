@@ -5,11 +5,6 @@ import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session"
 import { MetaCelebrationModal } from "@/components/metas/MetaCelebrationModal";
 import DashSucursalDiario from "./DashSucursalDiario";
 
-// Sucursales cuyo modal ya se mostró en esta sesión (se resetea al
-// recargar). Karen quiere ver la animación en cada recarga aunque la
-// meta ya haya sido "celebrada" ayer/hoy en el backend — el flag
-// ya_celebrada solo controla el badge post-cierre.
-
 /**
  * Dashboard OPERATIVO de Sucursales — rediseño visual.
  *
@@ -115,7 +110,6 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
     sucursal_id: string; nombre: string; pct_meta: number;
     vendido: number; meta_periodo: number;
   } | null>(null);
-  const metaMostradaSessionRef = useRef<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [drill, setDrill] = useState<{ metric: string; label: string } | null>(null);
@@ -198,12 +192,12 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
         // por eso NO lo repetimos acá.
         setMetaModal((actual) => {
           if (actual) return actual; // ya hay uno abierto → esperar ack
-          // Ignoramos ya_celebrada — la animación se dispara la primera
-          // vez que aparece esta sucursal en la sesión, aunque haya sido
-          // celebrada en el backend en un tab anterior.
-          const pendiente = metas.find(m => !metaMostradaSessionRef.current.has(m.sucursal_id));
+          // Solo se dispara cuando la meta se cruza por primera vez
+          // (backend marca ya_celebrada=false). Una vez celebrada
+          // (fila en metas_celebradas para hoy), no se repite el modal
+          // en las próximas recargas.
+          const pendiente = metas.find(m => m.ya_celebrada !== true);
           if (!pendiente) return null;
-          metaMostradaSessionRef.current.add(pendiente.sucursal_id);
           return {
             sucursal_id: pendiente.sucursal_id,
             nombre: pendiente.nombre,
@@ -248,9 +242,8 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
     // termine antes de la próxima.
     setTimeout(() => {
       setMetasHoy((prev) => {
-        const pend = prev.find(x => !metaMostradaSessionRef.current.has(x.sucursal_id));
+        const pend = prev.find(x => x.sucursal_id !== m.sucursal_id && x.ya_celebrada !== true);
         if (pend) {
-          metaMostradaSessionRef.current.add(pend.sucursal_id);
           setMetaModal({
             sucursal_id: pend.sucursal_id, nombre: pend.nombre, pct_meta: pend.pct_meta,
             vendido: pend.vendido, meta_periodo: pend.meta_periodo,
