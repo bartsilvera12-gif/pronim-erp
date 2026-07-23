@@ -2,10 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
-import { Eye, EyeOff, Star, Trash2, ImageOff } from "lucide-react";
+import { Eye, EyeOff, Star, Trash2 } from "lucide-react";
 import { getProductos } from "@/lib/inventario/storage";
-import { publicProductoImagenUrl } from "@/lib/inventario/imagen-storage";
 import type { Producto, MetodoValuacion } from "@/lib/inventario/types";
 import ExportExcelButton from "@/components/ui/ExportExcelButton";
 import ImportExcelButton from "@/components/ui/ImportExcelButton";
@@ -48,6 +46,31 @@ function margenColor(margen: number): string {
   return "text-red-600";
 }
 
+/** Primera letra visible del nombre del producto para el avatar (Ñ, tildes, etc.). */
+function inicialProducto(nombre: string): string {
+  const limpio = (nombre ?? "").trim();
+  if (!limpio) return "?";
+  return limpio.charAt(0).toUpperCase();
+}
+
+/** Paleta suave y determinística para el avatar: mismo nombre → mismo color. */
+const AVATAR_PALETTE = [
+  "bg-rose-100 text-rose-700",
+  "bg-amber-100 text-amber-700",
+  "bg-emerald-100 text-emerald-700",
+  "bg-sky-100 text-sky-700",
+  "bg-indigo-100 text-indigo-700",
+  "bg-fuchsia-100 text-fuchsia-700",
+  "bg-teal-100 text-teal-700",
+  "bg-orange-100 text-orange-700",
+];
+function avatarColor(nombre: string): string {
+  const s = nombre ?? "";
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return AVATAR_PALETTE[h % AVATAR_PALETTE.length];
+}
+
 interface UbicacionMin { id: string; nombre: string; tipo: string }
 interface CategoriaMin { id: string; nombre: string }
 
@@ -62,7 +85,6 @@ export default function InventarioPage() {
   const [todos, setTodos] = useState<Producto[]>([]);
   const [ubicaciones, setUbicaciones] = useState<UbicacionMin[]>([]);
   const [categorias, setCategorias] = useState<CategoriaMin[]>([]);
-  const [imagenesPrincipales, setImagenesPrincipales] = useState<Map<string, string>>(new Map());
   const [refreshKey, setRefreshKey] = useState(0);
 
   // Filtros por columna
@@ -115,19 +137,6 @@ export default function InventarioPage() {
       .then((j) => {
         if (cancelled || !j?.success) return;
         setCategorias((j.data?.categorias ?? j.data ?? []) as CategoriaMin[]);
-      })
-      .catch(() => undefined);
-    // Imagen principal de cada producto (galería — misma fuente que el web).
-    fetch("/api/inventario/imagenes-principales", { credentials: "include", cache: "no-store" })
-      .then((r) => r.json())
-      .then((j) => {
-        if (cancelled || !j?.success) return;
-        const m = new Map<string, string>();
-        const items = (j.data?.items ?? []) as Array<{ producto_id: string; imagen_url: string | null }>;
-        for (const it of items) {
-          if (it.imagen_url) m.set(it.producto_id, it.imagen_url);
-        }
-        setImagenesPrincipales(m);
       })
       .catch(() => undefined);
     return () => { cancelled = true; };
@@ -664,34 +673,33 @@ export default function InventarioPage() {
           <table className="w-full min-w-[780px] lg:min-w-0 text-left text-sm">
 
             <thead>
-              <tr className="bg-slate-50 text-slate-600 text-sm font-semibold">
-                <th className="py-3 pr-4 font-medium w-20"></th>
-                <th className="py-3 pr-4 font-medium">{t("Nombre")}</th>
-                <th className="hidden py-3 pr-4 font-medium lg:table-cell">{t("Categoría")}</th>
-                <th className="py-3 pr-4 font-medium">{t("Costo Prom.")}</th>
-                {tab !== "materia" && <th className="py-3 pr-4 font-medium">{t("Precio Venta")}</th>}
-                <th className="py-3 pr-4 font-medium text-center">{t("Stock actual")}</th>
-                <th className="py-3 pr-4 font-medium text-center hidden md:table-cell">{t("Sucursal")}</th>
-                <th className="py-3 pr-4 text-center font-medium hidden lg:table-cell">{t("Stock Mín.")}</th>
+              <tr className="bg-gradient-to-b from-slate-50 to-slate-100/60 text-slate-500 text-[11px] font-semibold uppercase tracking-wider border-b border-slate-200">
+                <th className="py-3 pl-4 pr-4 font-semibold">{t("Nombre")}</th>
+                <th className="hidden py-3 pr-4 font-semibold lg:table-cell">{t("Categoría")}</th>
+                <th className="py-3 pr-4 font-semibold">{t("Costo Prom.")}</th>
+                {tab !== "materia" && <th className="py-3 pr-4 font-semibold">{t("Precio Venta")}</th>}
+                <th className="py-3 pr-4 font-semibold text-center">{t("Stock actual")}</th>
+                <th className="py-3 pr-4 font-semibold text-center hidden md:table-cell">{t("Sucursal")}</th>
+                <th className="py-3 pr-4 text-center font-semibold hidden lg:table-cell">{t("Stock Mín.")}</th>
                 {puedeEditarWeb && (
                   <>
-                    <th className="py-3 pr-4 font-medium text-center">Visible web</th>
-                    <th className="py-3 pr-4 font-medium text-center">Destacado</th>
+                    <th className="py-3 pr-4 font-semibold text-center">Visible web</th>
+                    <th className="py-3 pr-4 font-semibold text-center">Destacado</th>
                   </>
                 )}
                 {tab !== "materia" && (
-                  <th className="hidden py-3 pr-6 text-right font-medium lg:table-cell">
+                  <th className="hidden py-3 pr-6 text-right font-semibold lg:table-cell">
                     <span title="(precio - costo) / precio × 100">{t("Margen s/venta")}</span>
                   </th>
                 )}
-                <th className="py-3 pl-4 font-medium text-center w-32">{t("Acción")}</th>
+                <th className="py-3 pl-4 pr-4 font-semibold text-center w-32">{t("Acción")}</th>
               </tr>
             </thead>
 
             <tbody>
               {cargandoLista && (
                 <tr>
-                  <td colSpan={11} className="py-16 text-center text-sm text-slate-400">
+                  <td colSpan={10} className="py-16 text-center text-sm text-slate-400">
                     <div className="inline-flex items-center gap-2">
                       <svg className="h-4 w-4 animate-spin text-[#4FAEB2]" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
                         <circle cx="12" cy="12" r="10" stroke="currentColor" strokeOpacity="0.25" strokeWidth="3" />
@@ -704,7 +712,7 @@ export default function InventarioPage() {
               )}
               {!cargandoLista && productosPagina.length === 0 && (
                 <tr>
-                  <td colSpan={11} className="py-16 text-center text-sm text-slate-400">
+                  <td colSpan={10} className="py-16 text-center text-sm text-slate-400">
                     {todos.length === 0
                       ? t("Todavía no cargaste productos. Probá con \"+ Nuevo producto\" o \"Importar Excel\".")
                       : "No hay productos que coincidan con los filtros aplicados."}
@@ -719,16 +727,13 @@ export default function InventarioPage() {
                 const sinControl =
                   p.controla_stock === false && p.es_insumo !== true && p.modo_receta !== "produccion_previa";
                 return (
-                  <tr key={p.id} className="border-b border-slate-200 last:border-0 hover:bg-[#4FAEB2]/[0.04] transition-colors">
-                    <td className="py-2 pr-4">
-                      <ProductoThumb
-                        producto={p}
-                        urlPrincipal={imagenesPrincipales.get(p.id) ?? null}
-                      />
-                    </td>
-                    <td className="py-4 pr-4 font-medium text-gray-800">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span>{p.nombre}</span>
+                  <tr key={p.id} className="border-b border-slate-100 last:border-0 hover:bg-[#4FAEB2]/[0.05] transition-colors">
+                    <td className="py-4 pl-4 pr-4 font-medium text-gray-800">
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <span className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${avatarColor(p.nombre)}`}>
+                          {inicialProducto(p.nombre)}
+                        </span>
+                        <span className="text-slate-800">{p.nombre}</span>
                         {(() => {
                           const v = p.es_vendible !== false;
                           const i = p.es_insumo === true;
@@ -974,44 +979,3 @@ export default function InventarioPage() {
   );
 }
 
-/**
- * Thumbnail con fallback a placeholder cuando la imagen no carga.
- * Cubre 3 casos típicos:
- *   1. imagen_url apunta a un archivo borrado del bucket.
- *   2. signed URL expirada (TTL vencido).
- *   3. imagen_path con typo o re-subida con otro nombre.
- * En cualquiera de esos, `onError` dispara y mostramos el ícono de roto
- * (en gris) en vez del 404 feo del navegador.
- */
-function ProductoThumb({
-  producto, urlPrincipal,
-}: { producto: Producto; urlPrincipal: string | null }) {
-  const urlInicial =
-    urlPrincipal ?? producto.imagen_url ?? publicProductoImagenUrl(producto.imagen_path);
-  const [error, setError] = useState(false);
-  // Re-evaluar cuando el producto o la URL principal cambia (cache-bust al
-  // re-subir una imagen). El reseteo evita quedar "trancado" en error si el
-  // admin re-subió la imagen y volvió a la página.
-  useEffect(() => { setError(false); }, [urlInicial, producto.id]);
-
-  if (!urlInicial || error) {
-    return (
-      <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-slate-50 ring-1 ring-slate-200 text-slate-300">
-        <ImageOff className="h-5 w-5" />
-      </div>
-    );
-  }
-  return (
-    <div className="relative h-16 w-16 overflow-hidden rounded-lg bg-slate-50 ring-1 ring-slate-200">
-      <Image
-        src={urlInicial}
-        alt={producto.nombre}
-        fill
-        sizes="64px"
-        className="object-cover"
-        unoptimized
-        onError={() => setError(true)}
-      />
-    </div>
-  );
-}
