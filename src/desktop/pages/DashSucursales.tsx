@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
-import { playCelebrationSound } from "@/lib/audio/notif-sounds";
+import { MetaCelebrationModal } from "@/components/metas/MetaCelebrationModal";
 import DashSucursalDiario from "./DashSucursalDiario";
 
 /**
@@ -99,7 +99,17 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
   // El banner celebratorio se dispara cuando alguna sucursal llegó al
   // 100% del día — el pct_meta del payload principal es del período
   // completo, así que suele quedar en 4-5% en la mayor parte del mes.
-  const [metasHoy, setMetasHoy] = useState<{ sucursal_id: string; nombre: string; pct_meta: number }[]>([]);
+  const [metasHoy, setMetasHoy] = useState<{
+    sucursal_id: string; nombre: string; pct_meta: number;
+    vendido: number; meta_periodo: number; ya_celebrada?: boolean;
+  }[]>([]);
+  // Meta actualmente en modal celebratorio (admin ve una animación por
+  // cada sucursal que alcance su meta; después del ack se pasa a la
+  // siguiente pendiente).
+  const [metaModal, setMetaModal] = useState<{
+    sucursal_id: string; nombre: string; pct_meta: number;
+    vendido: number; meta_periodo: number;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [drill, setDrill] = useState<{ metric: string; label: string } | null>(null);
@@ -171,20 +181,74 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
         const r = await fetchWithSupabaseSession("/api/notificaciones/metas", { cache: "no-store" });
         const j = await r.json().catch(() => ({}));
         if (!alive || !j?.success) return;
-        const metas = (j.data?.metas as { sucursal_id: string; nombre: string; pct_meta: number }[]) ?? [];
+        const metas = (j.data?.metas as {
+          sucursal_id: string; nombre: string; pct_meta: number;
+          vendido: number; meta_periodo: number; ya_celebrada?: boolean;
+        }[]) ?? [];
         setMetasHoy(metas);
-        // Sonido celebratorio SOLO cuando la meta AÚN NO fue ack'd en el
-        // backend (metas_celebradas). El modal de la Caja se encarga de
-        // hacer ack; el dash de sucursales solo respeta ese flag para
-        // no repetir el ding en cada refresh.
-        const noAckeada = metas.some(m => (m as { ya_celebrada?: boolean }).ya_celebrada !== true);
-        if (noAckeada) playCelebrationSound();
+        // Encolar modal celebratorio: si hay una meta NO celebrada aún
+        // y no estamos mostrando otro modal, abrir el primero. El sonido
+        // lo dispara el propio modal (playCelebrationSound + playFanfare),
+        // por eso NO lo repetimos acá.
+        setMetaModal((actual) => {
+          if (actual) return actual; // ya hay uno abierto → esperar ack
+          const pendiente = metas.find(m => m.ya_celebrada !== true);
+          if (!pendiente) return null;
+          return {
+            sucursal_id: pendiente.sucursal_id,
+            nombre: pendiente.nombre,
+            pct_meta: pendiente.pct_meta,
+            vendido: pendiente.vendido,
+            meta_periodo: pendiente.meta_periodo,
+          };
+        });
       } catch { /* silencioso */ }
     }
     void loadMetas();
     const t = setInterval(loadMetas, 120_000);
     return () => { alive = false; clearInterval(t); };
   }, []);
+
+  // Ack del modal celebratorio (admin): registra la celebración en el
+  // backend (metas_celebradas, INSERT idempotente), marca localmente
+  // ya_celebrada=true y encola la siguiente meta pendiente (si hay).
+  const celebrarMetaAckAdmin = useCallback(async (cerradoPorUsuario: boolean) => {
+    const m = metaModal;
+    setMetaModal(null);
+    if (!m) return;
+    // Marca local para no re-encolar la misma en el próximo poll.
+    setMetasHoy((prev) => prev.map(x =>
+      x.sucursal_id === m.sucursal_id ? { ...x, ya_celebrada: true } : x
+    ));
+    try {
+      await fetchWithSupabaseSession("/api/notificaciones/metas/celebrar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sucursal_id: m.sucursal_id,
+          pct_meta: m.pct_meta,
+          vendido: m.vendido,
+          meta_diaria: m.meta_periodo,
+          cerrado_por_usuario: cerradoPorUsuario,
+        }),
+      });
+    } catch { /* silencioso — el próximo poll lo reintenta si sigue pendiente */ }
+    // Siguiente sucursal pendiente (si el admin todavía tiene metas por
+    // celebrar en la cola). Delay chico para que la animación anterior
+    // termine antes de la próxima.
+    setTimeout(() => {
+      setMetasHoy((prev) => {
+        const pend = prev.find(x => x.sucursal_id !== m.sucursal_id && x.ya_celebrada !== true);
+        if (pend) {
+          setMetaModal({
+            sucursal_id: pend.sucursal_id, nombre: pend.nombre, pct_meta: pend.pct_meta,
+            vendido: pend.vendido, meta_periodo: pend.meta_periodo,
+          });
+        }
+        return prev;
+      });
+    }, 400);
+  }, [metaModal]);
 
   if (loading && !data) return <div className="py-10 text-center text-sm text-slate-500">Cargando…</div>;
   if (err) return (
@@ -236,6 +300,15 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
 
   return (
     <div className="space-y-6">
+      {/* Modal celebratorio con confetti + fanfarria — se muestra por
+          CADA sucursal que llega al 100%. Cuando el admin cierra (o el
+          autocierre a 4s dispara), se hace ack en el backend y encola
+          la siguiente sucursal pendiente. */}
+      <MetaCelebrationModal
+        meta={metaModal}
+        onSeguir={() => void celebrarMetaAckAdmin(true)}
+      />
+
       {/* ═════ Banner: meta alcanzada por alguna sucursal ═════ */}
       {metaAlcanzada && (
         <div className="rounded-2xl border-2 border-emerald-300 bg-gradient-to-br from-emerald-50 via-white to-emerald-50/50 p-5 shadow-sm">

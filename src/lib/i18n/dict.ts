@@ -83,6 +83,7 @@ const es: Dict = {
 
   // Meta alcanzada
   "¡Meta alcanzada!": "¡Meta alcanzada!",
+  "¡Meta alcanzada en": "¡Meta alcanzada en",
   "Cumplimos el": "Cumplimos el",
   "de la meta": "de la meta",
   "¡Excelente trabajo, equipo!": "¡Excelente trabajo, equipo!",
@@ -282,6 +283,7 @@ const ptBR: Dict = {
 
   // Meta alcanzada
   "¡Meta alcanzada!": "Meta alcançada!",
+  "¡Meta alcanzada en": "Meta alcançada em",
   "Cumplimos el": "Cumprimos",
   "de la meta": "da meta",
   "¡Excelente trabajo, equipo!": "Excelente trabalho, equipe!",

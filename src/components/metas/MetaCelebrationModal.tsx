@@ -159,13 +159,15 @@ export function MetaCelebrationModal({
           </div>
         </div>
 
-        <h2 className="text-2xl font-bold text-slate-900">{t("¡Meta alcanzada!")}</h2>
+        <h2 className="text-2xl font-bold text-slate-900">
+          {t("¡Meta alcanzada en")} <span className="text-[#0F5D60]">{meta.nombre}</span>!
+        </h2>
         <p className="mt-2 text-sm text-slate-600">
           {t("Cumplimos el")} <strong className="text-emerald-700 tabular-nums">{meta.pct_meta}%</strong>{" "}
           {t("de la meta")}
         </p>
         <p className="mt-1 text-xs text-slate-500">
-          <strong>{meta.nombre}</strong> · {money.format(meta.vendido)} / {money.format(meta.meta_periodo)}
+          {money.format(meta.vendido)} / {money.format(meta.meta_periodo)}
         </p>
         <p className="mt-3 text-sm text-slate-700">{t("¡Excelente trabajo, equipo!")}</p>
 
