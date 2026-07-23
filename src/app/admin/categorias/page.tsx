@@ -33,10 +33,28 @@ const formatGs = fmtActive;
 export default function AdminCategoriasPage() {
   const t = useT();
   const money = useMoney();
-  // El botón "Sembrar categorías iniciales" solo tiene sentido para
-  // sucursales en guaraníes — los valores (Gs. 6.000, 9.000, ...) son
-  // específicos de Paraguay. Para R$/USD/otras monedas se oculta.
-  const puedeSembrar = money.moneda === "PYG";
+  // El botón "Sembrar categorías iniciales" requiere DOS condiciones:
+  //   1) La sucursal usa PYG — los valores del set inicial (Gs. 6.000,
+  //      9.000, ...) son específicos de Paraguay. Para R$/USD/otras
+  //      monedas no tiene sentido.
+  //   2) El usuario es super_admin — el endpoint /api/franjas/sembrar
+  //      solo acepta ese rol. Sin este filtro, cualquier user de
+  //      Sucursal 2 veía el botón y al clickear recibía "Solo
+  //      super_admin puede sembrar franjas" (falso positivo de UI).
+  const [esSuperAdmin, setEsSuperAdmin] = useState(false);
+  useEffect(() => {
+    let cancel = false;
+    fetchWithSupabaseSession("/api/usuarios/me", { cache: "no-store" })
+      .then(r => r.json())
+      .then(j => {
+        if (cancel) return;
+        const rol = String(j?.usuario?.rol ?? "").toLowerCase();
+        setEsSuperAdmin(rol === "super_admin");
+      })
+      .catch(() => { /* si falla, botón queda oculto — safe default */ });
+    return () => { cancel = true; };
+  }, []);
+  const puedeSembrar = money.moneda === "PYG" && esSuperAdmin;
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
