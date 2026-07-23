@@ -850,32 +850,42 @@ function MultiLineChart({
               fill="none" stroke="#cbd5e1" strokeWidth={2} strokeDasharray="4 3"
             />
           )}
-          {/* Una línea por sucursal */}
-          {sucursales.map(s => (
-            <path
-              key={s.id}
-              d={s.serie.map((v, i) => `${i === 0 ? "M" : "L"} ${xOf(i)} ${yOf(v)}`).join(" ")}
-              fill="none" stroke={s.color} strokeWidth={3}
-              strokeLinejoin="round" strokeLinecap="round"
-            />
-          ))}
-          {/* Marcadores en cada punto de cada sucursal */}
+          {/* Una línea por sucursal. Las sucursales con toda la serie
+              en 0 se pintan tenues (línea al fondo) para no dominar
+              visualmente. */}
+          {sucursales.map(s => {
+            const tieneVentas = s.serie.some(v => v > 0);
+            return (
+              <path
+                key={s.id}
+                d={s.serie.map((v, i) => `${i === 0 ? "M" : "L"} ${xOf(i)} ${yOf(v)}`).join(" ")}
+                fill="none" stroke={s.color}
+                strokeWidth={tieneVentas ? 3 : 1.5}
+                strokeOpacity={tieneVentas ? 1 : 0.35}
+                strokeLinejoin="round" strokeLinecap="round"
+              />
+            );
+          })}
+          {/* Marcadores SOLO en días con ventas (>0). Antes se dibujaban
+              en todos los días, lo que dejaba una fila de puntos rojos
+              al eje para sucursales sin ventas — muy ruidoso. */}
           {sucursales.map(s =>
-            s.serie.map((v, i) => (
+            s.serie.map((v, i) => v > 0 ? (
               <circle key={`${s.id}-${i}`} cx={xOf(i)} cy={yOf(v)} r={3.5} fill={s.color}
                       stroke="#fff" strokeWidth={1.5} />
-            ))
+            ) : null)
           )}
           {/* Línea vertical de hover */}
           {hoverIdx != null && (
             <line x1={xOf(hoverIdx)} x2={xOf(hoverIdx)} y1={padT} y2={h - padB}
                   stroke="#94a3b8" strokeWidth={1} strokeDasharray="3 3" />
           )}
-          {/* Puntos grandes en hover */}
-          {hoverIdx != null && sucursales.map(s => (
+          {/* Puntos grandes en hover — solo para sucursales con venta
+              ese día, para no llenar el hover de 0s. */}
+          {hoverIdx != null && sucursales.map(s => s.serie[hoverIdx] > 0 ? (
             <circle key={`h-${s.id}`} cx={xOf(hoverIdx)} cy={yOf(s.serie[hoverIdx])} r={4}
                     fill="#fff" stroke={s.color} strokeWidth={2} />
-          ))}
+          ) : null)}
         </svg>
         {/* Tooltip flotante */}
         {hoverIdx != null && (
