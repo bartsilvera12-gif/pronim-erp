@@ -135,24 +135,104 @@ export function MetaCelebrationModal({
         className="relative z-10 w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl text-center"
         style={{ animation: reducedMotion ? undefined : "metaBurst .5s cubic-bezier(.2,.6,.4,1)" }}
       >
-        {/* Trofeo */}
-        <div className="relative mx-auto mb-4 flex h-24 w-24 items-center justify-center">
-          {/* Rayo suave detrás */}
+        {/* Trofeo — rediseño con estrellas irradiando + copa dorada
+            volumétrica (gradiente + brillo + base). */}
+        <div className="relative mx-auto mb-5 flex h-32 w-32 items-center justify-center">
+          {/* Halo dorado radial pulsante */}
           {!reducedMotion && (
             <span
               aria-hidden
               className="absolute inset-0 rounded-full"
               style={{
-                background: "radial-gradient(circle, rgba(79,174,178,.35) 0%, transparent 70%)",
-                animation: "metaBurst 2s ease-out",
+                background: "radial-gradient(circle, rgba(251,191,36,.45) 0%, rgba(251,191,36,.12) 45%, transparent 72%)",
+                animation: "metaBurst 2.5s ease-out",
               }}
             />
           )}
-          <div className="relative flex h-24 w-24 items-center justify-center rounded-full border-4 border-amber-400 bg-[#0F5D60] shadow-lg">
-            <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={1.6} className="h-12 w-12">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M8 21h8m-4-3v3m5-14V4H7v3m10 0h2a2 2 0 0 1 2 2v1a4 4 0 0 1-4 4h-.4M7 7H5a2 2 0 0 0-2 2v1a4 4 0 0 0 4 4h.4M7 7c.5 5.5 2.5 10 5 10s4.5-4.5 5-10" />
+          {/* Estrellas irradiando */}
+          {!reducedMotion && (
+            <svg
+              aria-hidden
+              viewBox="0 0 100 100"
+              className="absolute inset-0 h-full w-full"
+              style={{ animation: "metaStarSpin 8s linear infinite" }}
+            >
+              {[0, 60, 120, 180, 240, 300].map((deg, i) => (
+                <g key={i} transform={`rotate(${deg} 50 50)`}>
+                  <path
+                    d="M50 8 L51.5 13 L57 13 L52.5 16 L54 21 L50 18 L46 21 L47.5 16 L43 13 L48.5 13 Z"
+                    fill="#fbbf24"
+                    opacity={0.85}
+                  />
+                </g>
+              ))}
             </svg>
-          </div>
+          )}
+          {/* Copa */}
+          <svg viewBox="0 0 96 96" className="relative z-10 h-24 w-24 drop-shadow-lg">
+            <defs>
+              <linearGradient id="copaGold" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#fde68a" />
+                <stop offset="45%" stopColor="#f59e0b" />
+                <stop offset="100%" stopColor="#b45309" />
+              </linearGradient>
+              <linearGradient id="copaGoldRim" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stopColor="#b45309" />
+                <stop offset="50%" stopColor="#fde68a" />
+                <stop offset="100%" stopColor="#b45309" />
+              </linearGradient>
+              <radialGradient id="copaShine" cx="0.35" cy="0.25" r="0.5">
+                <stop offset="0%" stopColor="#ffffff" stopOpacity="0.7" />
+                <stop offset="60%" stopColor="#ffffff" stopOpacity="0" />
+              </radialGradient>
+            </defs>
+            {/* Asas laterales */}
+            <path
+              d="M22 26 C 10 26, 6 34, 10 44 C 12 50, 20 52, 26 50"
+              fill="none"
+              stroke="url(#copaGold)"
+              strokeWidth={5}
+              strokeLinecap="round"
+            />
+            <path
+              d="M74 26 C 86 26, 90 34, 86 44 C 84 50, 76 52, 70 50"
+              fill="none"
+              stroke="url(#copaGold)"
+              strokeWidth={5}
+              strokeLinecap="round"
+            />
+            {/* Copa (cáliz) */}
+            <path
+              d="M22 20 L74 20 L70 52 C 68 62, 58 68, 48 68 C 38 68, 28 62, 26 52 Z"
+              fill="url(#copaGold)"
+              stroke="#78350f"
+              strokeWidth={0.8}
+            />
+            {/* Borde superior */}
+            <rect x="20" y="18" width="56" height="6" rx="1" fill="url(#copaGoldRim)" stroke="#78350f" strokeWidth={0.6} />
+            {/* Brillo diagonal */}
+            <ellipse cx="38" cy="34" rx="8" ry="14" fill="url(#copaShine)" transform="rotate(-18 38 34)" />
+            {/* Estrella central en la copa */}
+            <path
+              d="M48 32 L50 38 L56 38 L51 42 L53 48 L48 44 L43 48 L45 42 L40 38 L46 38 Z"
+              fill="#fef3c7"
+              stroke="#b45309"
+              strokeWidth={0.5}
+            />
+            {/* Tallo */}
+            <rect x="44" y="68" width="8" height="8" fill="url(#copaGold)" stroke="#78350f" strokeWidth={0.6} />
+            {/* Base — pedestal en 2 niveles */}
+            <rect x="36" y="76" width="24" height="4" rx="1" fill="url(#copaGold)" stroke="#78350f" strokeWidth={0.6} />
+            <rect x="30" y="80" width="36" height="6" rx="1.5" fill="url(#copaGold)" stroke="#78350f" strokeWidth={0.6} />
+            {/* Sombra inferior de la base */}
+            <ellipse cx="48" cy="88" rx="20" ry="2" fill="#000" opacity="0.15" />
+          </svg>
+          <style>{`
+            @keyframes metaStarSpin {
+              0%   { transform: rotate(0deg); }
+              100% { transform: rotate(360deg); }
+            }
+          `}</style>
         </div>
 
         <h2 className="text-2xl font-bold text-slate-900">
