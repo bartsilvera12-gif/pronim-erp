@@ -172,7 +172,7 @@ export function playCelebrationSound() {
  * porque el listener de `pointerdown` ya habilita el audio para el
  * próximo bloop.
  */
-const NOTIF_MP3 = "/sounds/universfield-new-notification-036-485897.mp3";
+const NOTIF_MP3 = "/sounds/universfield-new-notification-051-494246.mp3";
 function playNotifMp3() {
   if (typeof window === "undefined") return;
   try {
