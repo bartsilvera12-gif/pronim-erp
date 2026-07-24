@@ -39,6 +39,8 @@ import {
   CalendarDays,
   BarChart3,
   HandCoins,
+  Landmark,
+  PlusCircle,
 } from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
@@ -167,6 +169,8 @@ const MENU_STRUCTURE_FULL: MenuItem[] = [
     ],
   },
   { key: "gastos", slug: "gastos", label: "Gastos", href: "/gastos", icon: Receipt },
+  { key: "otros_ingresos", slug: "otros_ingresos", label: "Otros ingresos", href: "/otros-ingresos", icon: PlusCircle },
+  { key: "entidades_bancarias", slug: "entidades_bancarias", label: "Entidades bancarias", href: "/configuracion/entidades-bancarias", icon: Landmark },
   { key: "pagos", slug: "pagos", label: "Pagos", href: "/pagos", icon: Banknote },
   { key: "cobranzas", slug: "cobranzas", label: "Cobranzas", href: "/cobranzas", icon: HandCoins },
   { key: "comisiones", slug: "comisiones", label: "Comisiones", href: "/comisiones", icon: Percent },
@@ -251,7 +255,7 @@ const MENU_FAMILIES: { id: string; title: string; itemKeys: string[] }[] = [
     title: "Comercial",
     itemKeys: ["atencion", "clientes"],
   },
-  { id: "finanzas", title: "Finanzas", itemKeys: ["gastos", "reportes"] },
+  { id: "finanzas", title: "Finanzas", itemKeys: ["gastos", "otros_ingresos", "reportes"] },
   { id: "operaciones", title: "Operaciones", itemKeys: ["inventario", "compras"] },
   {
     id: "omnicanal",
@@ -270,7 +274,7 @@ const MENU_FAMILIES: { id: string; title: string; itemKeys: string[] }[] = [
     title: "Marketing y Automatización",
     itemKeys: ["marketing", "marketing_ops", "sorteos"],
   },
-  { id: "administracion", title: "Administración", itemKeys: ["usuarios", "sucursales", "metas", "promociones", "configuracion"] },
+  { id: "administracion", title: "Administración", itemKeys: ["usuarios", "sucursales", "metas", "promociones", "entidades_bancarias", "configuracion"] },
 ];
 
 function modulosSyntheticFromMenu(): ModuloEmpresa[] {
