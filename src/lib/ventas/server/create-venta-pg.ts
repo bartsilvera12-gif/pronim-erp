@@ -684,6 +684,13 @@ export async function createVentaEnClientePg(
     }
 
     // ── Evento historial ─────────────────────────────────────────────
+    // SAVEPOINT: si el INSERT falla (tabla ausente, constraint), el
+    // ROLLBACK TO SAVEPOINT deja la tx sana. Sin esto, cualquier fallo
+    // acá abortaba la tx y las queries siguientes (confirmarCambioPg,
+    // ack del crédito, etc.) reventaban con "current transaction is
+    // aborted, commands ignored" — Karen lo veia como "no puedo usar
+    // los créditos de los clientes".
+    await client.query("SAVEPOINT sp_evento_venta");
     try {
       const tipoEv: "cambio" | "credito_uso" | "beneficio" =
         params.cambioId ? "cambio"
@@ -708,8 +715,12 @@ export async function createVentaEnClientePg(
           params.createdBy ?? null, params.usuarioNombre ?? null,
         ],
       );
-    } catch {
-      /* cliente_eventos puede no existir en instancias viejas */
+      await client.query("RELEASE SAVEPOINT sp_evento_venta");
+    } catch (e) {
+      await client.query("ROLLBACK TO SAVEPOINT sp_evento_venta");
+      await client.query("RELEASE SAVEPOINT sp_evento_venta");
+      console.warn("[create-venta-pg] evento historial opcional falló:",
+        e instanceof Error ? e.message : e);
     }
 
     // ── Cerrar cambio si aplica ──────────────────────────────────────
