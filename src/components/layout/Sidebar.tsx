@@ -658,8 +658,12 @@ export default function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarPr
       items.forEach((it) => assigned.add(it.key));
       return { id: fam.id, title: fam.title, items };
     });
-    const otros = mainItemsFiltered.filter((it) => !assigned.has(it.key));
-    if (otros.length > 0) fams.push({ id: "otros", title: "Otros", items: otros });
+    // Karen no quiere ver la familia "OTROS" en el sidebar. Los items
+    // que no matchean ninguna familia (ej: "Consulta") se ocultan en
+    // silencio en vez de caer en un cajón visible. Si en el futuro se
+    // agrega un ítem que debería salir, hay que asignarlo a una familia
+    // en MENU_FAMILIES arriba.
+    void assigned;
     return fams.filter((f) => f.items.length > 0);
   }, [mainItemsFiltered]);
 
