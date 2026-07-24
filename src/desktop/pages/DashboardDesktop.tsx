@@ -2455,7 +2455,7 @@ function DashVentas({
               Ventas por hora — hoy
             </h3>
           </div>
-          <p className="mt-1 pl-3 text-[11px] text-slate-500">Curva intradía acumulada</p>
+          <p className="mt-1 pl-3 text-[11px] text-slate-500">Curva intradía acumulada · Todas las sucursales</p>
           <div className="mt-5">
             {ventasPorHora.every((h) => h.value === 0) ? (
               <p className="py-8 text-center text-sm text-slate-400">Sin ventas registradas hoy.</p>
