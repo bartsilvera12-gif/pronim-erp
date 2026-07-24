@@ -998,8 +998,9 @@ export default function EditarProductoPage() {
             </select>
           </div>
 
-          {/* Stock por sucursal — admin puede editar (incluir/excluir y setear stock). */}
-          {id && <StockPorSucursalBox productoId={id} canEdit={isAdmin} />}
+          {/* Bloque "Stock por sucursal" quitado a pedido de Karen — la
+              info de cada sucursal se ve en su propia vista aislada, no
+              es útil en la ficha del producto/franja. */}
 
           {/* Visibilidad. Las opciones de catálogo web pública solo aplican
               al admin; el operativo de sucursal sólo controla el flag "Activo". */}
