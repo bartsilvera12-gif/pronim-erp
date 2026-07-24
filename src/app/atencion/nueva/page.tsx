@@ -1854,17 +1854,17 @@ export default function NuevaAtencionPage() {
               <span aria-hidden className="absolute -top-2 left-1/2 -translate-x-1/2 h-4 w-16 bg-orange-300/70 rotate-[-3deg] shadow-sm" />
               <p className="text-[13px] font-bold leading-snug text-orange-900">
                 {pendientesIngresoCount === 1
-                  ? "1 recepción pendiente de evaluar"
-                  : `${pendientesIngresoCount} recepciones pendientes de evaluar`}
+                  ? `1 ${t("recepción pendiente de evaluar")}`
+                  : `${pendientesIngresoCount} ${t("recepciones pendientes de evaluar")}`}
               </p>
               <p className="text-[12px] mt-1 leading-snug text-orange-900 opacity-90">
-                Hay bolsas esperando ser ingresadas al stock.
+                {t("Hay bolsas esperando ser ingresadas al stock.")}
                 {pendientesVencidasCount > 0 && (
-                  <> <span className="font-semibold text-rose-700">{pendientesVencidasCount} con más de 72h.</span></>
+                  <> <span className="font-semibold text-rose-700">{pendientesVencidasCount} {t("con más de 72h.")}</span></>
                 )}
               </p>
               <p className="text-[11px] mt-2 font-semibold text-orange-900 underline">
-                Ir a la bandeja →
+                {t("Ir a la bandeja")} →
               </p>
             </Link>
           )}
