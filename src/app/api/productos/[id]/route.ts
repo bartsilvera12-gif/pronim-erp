@@ -131,15 +131,34 @@ export async function PATCH(
     const empresaId = ctx.auth.empresa_id;
     const jwt = await getAccessTokenForRequest(request);
 
-    // Guard: edición de productos SOLO super_admin (aplica tanto a productos
-    // tradicionales como a franjas de precio). Ajustes de stock via ventas/
-    // compras usan sus propias transacciones y no pasan por este PATCH.
+    // Guard de edición:
+    //   - super_admin: puede editar cualquier producto.
+    //   - Usuario con sucursal_id: puede editar productos de SU sucursal
+    //     (producto.sucursal_id == auth.sucursal_id). Karen: "deberia
+    //     poder editar su inventario cada sucursal". Los productos
+    //     globales (sucursal_id NULL) siguen siendo solo super_admin.
+    //   - Sin sucursal y sin super: rechazo.
     const auth = await getAuthWithRol(request);
     if (!isSuperAdmin(auth)) {
-      return NextResponse.json(
-        errorResponse("Solo super_admin puede editar productos."),
-        { status: 403 },
+      if (!auth?.sucursal_id) {
+        return NextResponse.json(
+          errorResponse("Solo super_admin puede editar productos globales."),
+          { status: 403 },
+        );
+      }
+      // Verificar que el producto pertenezca a la sucursal del usuario.
+      const pQ = await postgrestGet<{ sucursal_id: string | null }>(
+        "productos",
+        `select=sucursal_id&id=eq.${id}&empresa_id=eq.${empresaId}&limit=1`,
+        { role: "jwt", jwt, noStore: true },
       );
+      const prodSuc = pQ.ok && pQ.rows[0]?.sucursal_id;
+      if (!prodSuc || prodSuc !== auth.sucursal_id) {
+        return NextResponse.json(
+          errorResponse("Solo podés editar productos de tu sucursal."),
+          { status: 403 },
+        );
+      }
     }
 
     let body: Record<string, unknown>;
