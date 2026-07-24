@@ -937,11 +937,6 @@ function MultiLineChart({
 function SucursalCard({ s }: {
   s: Payload["sucursales"][number];
 }) {
-  const metaColor = s.pct_meta == null ? "bg-slate-200"
-    : s.pct_meta >= 100 ? "bg-emerald-500"
-    : s.pct_meta >= 50 ? "bg-sky-500" : "bg-amber-500";
-  const deltaColor = s.var_ventas_pct == null ? "text-slate-400"
-    : s.var_ventas_pct >= 0 ? "text-emerald-700" : "text-rose-700";
   const creditoNeto = s.credito_generado - s.credito_usado;
 
   // Formateo con la moneda de LA SUCURSAL (no la del viewer). Betim/BH/
@@ -957,77 +952,109 @@ function SucursalCard({ s }: {
     const decimals = monedaSuc === "PYG" || monedaSuc === "ARS" ? 0 : 2;
     return `${sym} ${n.toLocaleString(locale, { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
   };
-  void langSuc; // reservado para eventuales usos i18n contextuales.
+  void langSuc;
+
+  // Estado: "Activa" si tiene actividad en el período (ops o cajas
+  // abiertas/cerradas), "Sin actividad" caso contrario.
+  const activa = s.operaciones > 0 || s.cajas_abiertas > 0 || s.cajas_cerradas > 0;
+  const pctMeta = s.pct_meta ?? 0;
+
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 hover:shadow-md transition">
-      <div className="flex items-start justify-between mb-4">
-        <div>
-          <h4 className="text-lg font-bold text-slate-900">{s.nombre}</h4>
-          <p className="text-[11px] text-slate-400">
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 hover:shadow-md transition shadow-sm">
+      {/* Header con icono + nombre + badge estado */}
+      <div className="flex items-start gap-3 mb-4">
+        <div className="h-10 w-10 shrink-0 rounded-xl bg-gradient-to-br from-[#0F5D60] to-[#4FAEB2] flex items-center justify-center shadow-md shadow-[#4FAEB2]/25">
+          <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2} className="h-5 w-5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 9l2-6h14l2 6M4 22V9h16v13M9 22v-6h6v6" />
+          </svg>
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h4 className="text-lg font-bold text-slate-900 truncate">{s.nombre}</h4>
+            <span className={`shrink-0 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+              activa
+                ? "bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200"
+                : "bg-slate-100 text-slate-500 ring-1 ring-slate-200"
+            }`}>
+              <span className={`h-1.5 w-1.5 rounded-full ${activa ? "bg-emerald-500" : "bg-slate-400"}`} />
+              {activa ? "Activa" : "Sin actividad"}
+            </span>
+          </div>
+          <p className="text-[11px] text-slate-400 mt-0.5">
             {s.cajas_abiertas} caja{s.cajas_abiertas !== 1 ? "s" : ""} abierta{s.cajas_abiertas !== 1 ? "s" : ""}
             {" · "}{s.cajas_cerradas} cerrada{s.cajas_cerradas !== 1 ? "s" : ""}
           </p>
         </div>
-        <span className={`text-xs font-semibold ${deltaColor} tabular-nums shrink-0`}>
-          {s.var_ventas_pct == null ? "—" : `${s.var_ventas_pct > 0 ? "▲" : "▼"} ${Math.abs(s.var_ventas_pct)}%`}
-        </span>
       </div>
 
-      {/* Bloque VENTAS */}
-      <div className="mb-3">
-        <p className="text-[10px] uppercase tracking-wide text-slate-400 font-semibold mb-1.5">Ventas</p>
-        <div className="grid grid-cols-3 gap-2">
-          <SucMini label="Total" value={fmt(s.ventas)} />
-          <SucMini label="Ops." value={fmtN(s.operaciones)} />
-          <SucMini label="Ticket" value={fmt(s.ticket_promedio)} />
-        </div>
-      </div>
+      {/* VENTAS — rosa */}
+      <SucSeccion
+        titulo="Ventas"
+        icon="ventas"
+        bg="bg-rose-50/70"
+        border="border-rose-100"
+        chipBg="bg-white/80"
+      >
+        <SucMini label="Total" value={fmt(s.ventas)} />
+        <SucMini label="Ops." value={fmtN(s.operaciones)} />
+        <SucMini label="Ticket" value={fmt(s.ticket_promedio)} />
+      </SucSeccion>
 
-      {/* Bloque VISITAS + CLIENTES */}
-      <div className="mb-3">
-        <p className="text-[10px] uppercase tracking-wide text-slate-400 font-semibold mb-1.5">Clientes</p>
-        <div className="grid grid-cols-3 gap-2">
-          <SucMini label="Visitas" value={fmtN(s.visitas)} />
-          <SucMini label="Atendidos" value={fmtN(s.clientes_atendidos)} />
-          <SucMini label="Recurrent." value={fmtN(s.recurrentes)} />
-        </div>
-        {s.conversion_pct != null && (
-          <p className="text-[10px] text-slate-500 mt-1.5">
-            Conversión visita → venta:{" "}
-            <span className="font-semibold text-slate-700 tabular-nums">{s.conversion_pct}%</span>
-          </p>
-        )}
-      </div>
-
-      {/* Bloque PRENDAS */}
-      <div className="mb-3">
-        <p className="text-[10px] uppercase tracking-wide text-slate-400 font-semibold mb-1.5">Prendas</p>
-        <div className="grid grid-cols-3 gap-2">
-          <SucMini label="Recibidas" value={fmtN(s.prendas_recibidas)} />
-          <SucMini label="Vendidas" value={fmtN(s.prendas_vendidas)} />
-          <SucMini label="Stock" value={fmtN(s.stock)} />
-        </div>
-      </div>
-
-      {/* Bloque CRÉDITO */}
-      {(s.credito_generado > 0 || s.credito_usado > 0) && (
-        <div className="mb-3">
-          <p className="text-[10px] uppercase tracking-wide text-slate-400 font-semibold mb-1.5">Crédito</p>
-          <div className="grid grid-cols-3 gap-2">
-            <SucMini label="Generado" value={fmt(s.credito_generado)} />
-            <SucMini label="Usado" value={fmt(s.credito_usado)} />
-            <SucMini
-              label="Neto"
-              value={(creditoNeto >= 0 ? "+" : "") + fmt(creditoNeto)}
-            />
-          </div>
-        </div>
+      {/* CLIENTES — lavanda */}
+      <SucSeccion
+        titulo="Clientes"
+        icon="clientes"
+        bg="bg-violet-50/70"
+        border="border-violet-100"
+        chipBg="bg-white/80"
+      >
+        <SucMini label="Visitas" value={fmtN(s.visitas)} />
+        <SucMini label="Atendidos" value={fmtN(s.clientes_atendidos)} />
+        <SucMini label="Recurrent." value={fmtN(s.recurrentes)} />
+      </SucSeccion>
+      {s.conversion_pct != null && (
+        <p className="text-[10px] text-slate-500 -mt-2 mb-3 pl-1">
+          Conversión visita → venta:{" "}
+          <span className="font-semibold text-slate-700 tabular-nums">{s.conversion_pct}%</span>
+        </p>
       )}
 
-      {/* Meta del período */}
+      {/* PRENDAS — durazno */}
+      <SucSeccion
+        titulo="Prendas"
+        icon="prendas"
+        bg="bg-orange-50/70"
+        border="border-orange-100"
+        chipBg="bg-white/80"
+      >
+        <SucMini label="Recibidas" value={fmtN(s.prendas_recibidas)} />
+        <SucMini label="Vendidas" value={fmtN(s.prendas_vendidas)} />
+        <SucMini label="Stock" value={fmtN(s.stock)} />
+      </SucSeccion>
+
+      {/* CRÉDITO — verde. Neto en verde si +, rojo si -. */}
+      {(s.credito_generado > 0 || s.credito_usado > 0) && (
+        <SucSeccion
+          titulo="Crédito"
+          icon="credito"
+          bg="bg-emerald-50/70"
+          border="border-emerald-100"
+          chipBg="bg-white/80"
+        >
+          <SucMini label="Generado" value={fmt(s.credito_generado)} />
+          <SucMini label="Usado" value={fmt(s.credito_usado)} />
+          <SucMini
+            label="Neto"
+            value={(creditoNeto >= 0 ? "+" : "") + fmt(creditoNeto)}
+            valueClass={creditoNeto >= 0 ? "text-emerald-700" : "text-rose-700"}
+          />
+        </SucSeccion>
+      )}
+
+      {/* Meta del período — barra naranja */}
       {s.meta_diaria != null && (
-        <div className="pt-3 border-t border-slate-100">
-          <div className="flex items-baseline justify-between mb-1">
+        <div className="pt-3 mt-1 border-t border-slate-100">
+          <div className="flex items-baseline justify-between mb-1.5">
             <span className="text-[11px] text-slate-500">
               Meta del período
               <span className="text-slate-400 ml-1">
@@ -1035,13 +1062,20 @@ function SucursalCard({ s }: {
               </span>
             </span>
             <span className={`text-xs font-bold tabular-nums ${
-              s.pct_meta != null && s.pct_meta >= 100 ? "text-emerald-700" : "text-slate-800"
+              pctMeta >= 100 ? "text-emerald-700" : "text-orange-700"
             }`}>
-              {s.pct_meta ?? 0}%
+              {pctMeta}%
             </span>
           </div>
-          <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
-            <div className={`h-full rounded-full ${metaColor}`} style={{ width: `${Math.min(100, s.pct_meta ?? 0)}%` }} />
+          <div className="h-2 bg-orange-100/60 rounded-full overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all ${
+                pctMeta >= 100
+                  ? "bg-gradient-to-r from-emerald-400 to-emerald-500"
+                  : "bg-gradient-to-r from-orange-400 to-orange-500"
+              }`}
+              style={{ width: `${Math.min(100, pctMeta)}%` }}
+            />
           </div>
         </div>
       )}
@@ -1049,11 +1083,58 @@ function SucursalCard({ s }: {
   );
 }
 
-function SucMini({ label, value }: { label: string; value: string }) {
+// Sección con fondo cálido + título con ícono. Chips internos van
+// sobre un fondo casi blanco para mantener legibilidad de los números.
+function SucSeccion({ titulo, icon, bg, border, chipBg, children }: {
+  titulo: string;
+  icon: "ventas" | "clientes" | "prendas" | "credito";
+  bg: string; border: string; chipBg: string;
+  children: React.ReactNode;
+}) {
+  const iconColor = icon === "ventas" ? "text-rose-500"
+    : icon === "clientes" ? "text-violet-500"
+    : icon === "prendas" ? "text-orange-500"
+    : "text-emerald-500";
+  const Icon = () => {
+    if (icon === "ventas") return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-3.5 w-3.5">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M3 3v18h18M7 15V9m5 6V5m5 10v-3" />
+      </svg>
+    );
+    if (icon === "clientes") return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-3.5 w-3.5">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a4 4 0 0 0-3-3.87M9 20H2v-2a4 4 0 0 1 3-3.87m4-4a4 4 0 1 1 0-8 4 4 0 0 1 0 8Zm7 0a4 4 0 1 0-4-4" />
+      </svg>
+    );
+    if (icon === "prendas") return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-3.5 w-3.5">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M4 6l4-3 4 2 4-2 4 3-3 4v11H7V10L4 6Z" />
+      </svg>
+    );
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-3.5 w-3.5">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M2 8h20v10H2Zm0 4h20M6 16h2" />
+      </svg>
+    );
+  };
   return (
-    <div className="rounded-lg bg-slate-50 px-2.5 py-1.5">
+    <div className={`mb-3 rounded-xl border ${border} ${bg} p-3`}>
+      <p className={`flex items-center gap-1.5 text-[10px] uppercase tracking-wide font-bold mb-2 ${iconColor}`}>
+        <Icon />
+        {titulo}
+      </p>
+      <div className="grid grid-cols-3 gap-2" data-chip-bg={chipBg}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function SucMini({ label, value, valueClass }: { label: string; value: string; valueClass?: string }) {
+  return (
+    <div className="rounded-lg bg-white/80 backdrop-blur-sm px-2.5 py-1.5 border border-white/60 shadow-sm">
       <p className="text-[10px] uppercase text-slate-500">{label}</p>
-      <p className="text-sm font-semibold text-slate-800 tabular-nums truncate">{value}</p>
+      <p className={`text-sm font-semibold tabular-nums truncate ${valueClass ?? "text-slate-800"}`}>{value}</p>
     </div>
   );
 }
