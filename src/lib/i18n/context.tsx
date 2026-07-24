@@ -29,19 +29,32 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let cancel = false;
-    fetchWithSupabaseSession("/api/usuarios/me", { cache: "no-store" })
-      .then(r => r.json())
-      .then(j => {
+    // Reintenta hasta 3 veces con espera creciente si la respuesta no
+    // trae usuario. Antes: si la sesión de Supabase no estaba lista al
+    // primer render (JWT aún no en localStorage), la request salía sin
+    // Bearer → 401 → cfg quedaba en 'es' hasta el próximo hard-refresh.
+    // Karen reportó tener que refrescar 2 veces para ver pt-BR.
+    async function loadCfg() {
+      const delays = [0, 400, 1200];
+      for (const d of delays) {
         if (cancel) return;
-        const u = j?.usuario as { lang?: string; sucursal_moneda?: string } | undefined;
-        if (!u) return;
-        const lang: Lang = (u.lang === "pt-BR" || u.lang === "en") ? u.lang as Lang : "es";
-        const moneda: Moneda = (u.sucursal_moneda === "BRL" || u.sucursal_moneda === "USD" || u.sucursal_moneda === "ARS")
-          ? u.sucursal_moneda as Moneda
-          : "PYG";
-        setCfg({ lang, moneda });
-      })
-      .catch(() => { /* ignore */ });
+        if (d > 0) await new Promise(res => setTimeout(res, d));
+        try {
+          const r = await fetchWithSupabaseSession("/api/usuarios/me", { cache: "no-store" });
+          if (r.status === 401) continue; // sesión aún no lista → reintentar
+          const j = await r.json();
+          const u = j?.usuario as { lang?: string; sucursal_moneda?: string } | undefined;
+          if (!u) continue;
+          const lang: Lang = (u.lang === "pt-BR" || u.lang === "en") ? u.lang as Lang : "es";
+          const moneda: Moneda = (u.sucursal_moneda === "BRL" || u.sucursal_moneda === "USD" || u.sucursal_moneda === "ARS")
+            ? u.sucursal_moneda as Moneda
+            : "PYG";
+          if (!cancel) setCfg({ lang, moneda });
+          return;
+        } catch { /* seguir con siguiente reintento */ }
+      }
+    }
+    void loadCfg();
     return () => { cancel = true; };
   }, []);
 

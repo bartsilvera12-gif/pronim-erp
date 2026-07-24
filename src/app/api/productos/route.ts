@@ -70,6 +70,15 @@ export async function GET(request: NextRequest) {
       order: "nombre.asc",
       limit: "1000",
     });
+    // Aislar productos por sucursal para usuarios con sucursal_id fija
+    // (BH, Betim, El Dorado, Sucursal 2). Franjas con sucursal_id NULL
+    // se consideran globales y aparecen para todos. Sin este filtro, BH
+    // veía las franjas que Sucursal 2 acababa de cargar. Admin/super_admin
+    // sin sucursal_id fija ve todo (uso admin puro).
+    const authRol = await getAuthWithRol(request);
+    if (authRol?.sucursal_id && !isSuperAdmin(authRol)) {
+      qs.set("or", `(sucursal_id.eq.${authRol.sucursal_id},sucursal_id.is.null)`);
+    }
     const r = await postgrestGet<Record<string, unknown>>("productos", qs.toString(), {
       role: "jwt",
       jwt,
