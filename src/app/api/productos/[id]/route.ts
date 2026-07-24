@@ -397,11 +397,15 @@ export async function PATCH(
         }
       }
 
-      // Multi-sucursal: cuando admin edita "Stock actual" desde el form, ese
-      // valor representa el TOTAL del producto. Lo bajamos a Principal en
-      // producto_stock_sucursal — la diferencia con lo que ya hay en otras
-      // sucursales. Si no alcanza (otras tienen más que el nuevo total),
-      // devolvemos un warning pero no rompemos el PATCH ya hecho.
+      // Multi-sucursal: cuando el user edita "Stock actual" desde el form,
+      // el destino depende de a quién pertenece el producto:
+      //   - producto.sucursal_id NO NULL → esa sucursal (franja scoped).
+      //   - producto.sucursal_id NULL (global) → Principal por default.
+      // Ademas, si es un usuario con sucursal_id fija, respetamos SU
+      // sucursal (no permitimos que edite el stock de otras). Antes
+      // siempre se escribia a Principal, por eso al editar una franja
+      // de Sucursal 2 el 100 se guardaba en Principal y en el listado
+      // seguia saliendo 0 (sumaba stock de todas las sucursales).
       let stockWarning: string | null = null;
       if (stockActualEdit !== null) {
         try {
@@ -410,36 +414,48 @@ export async function PATCH(
             const schema = assertAllowedChatDataSchema(await fetchDataSchemaForEmpresaId(empresaId));
             const tPSS = quoteSchemaTable(schema, "producto_stock_sucursal");
             const tS = quoteSchemaTable(schema, "sucursales");
-            const principalRow = await pool.query<{ id: string }>(
-              `SELECT id FROM ${tS} WHERE empresa_id=$1::uuid AND es_principal=true LIMIT 1`,
-              [empresaId],
+            const tProd = quoteSchemaTable(schema, "productos");
+            // Sucursal destino: la del producto si existe, sino la del user, sino Principal.
+            const prodRow = await pool.query<{ sucursal_id: string | null }>(
+              `SELECT sucursal_id FROM ${tProd} WHERE id=$1::uuid LIMIT 1`,
+              [id],
             );
-            const principalId = principalRow.rows[0]?.id ?? null;
-            if (principalId) {
+            let destinoSucId: string | null =
+              prodRow.rows[0]?.sucursal_id
+              ?? auth?.sucursal_id
+              ?? null;
+            if (!destinoSucId) {
+              const principalRow = await pool.query<{ id: string }>(
+                `SELECT id FROM ${tS} WHERE empresa_id=$1::uuid AND es_principal=true LIMIT 1`,
+                [empresaId],
+              );
+              destinoSucId = principalRow.rows[0]?.id ?? null;
+            }
+            if (destinoSucId) {
               const otrasRow = await pool.query<{ s: number | string }>(
                 `SELECT COALESCE(SUM(stock_actual), 0)::float8 AS s
                    FROM ${tPSS}
                   WHERE producto_id=$1::uuid AND sucursal_id <> $2::uuid`,
-                [id, principalId],
+                [id, destinoSucId],
               );
               const otrasSuma = Number(otrasRow.rows[0]?.s ?? 0);
-              const principalTarget = stockActualEdit - otrasSuma;
-              if (principalTarget < 0) {
+              const destinoTarget = stockActualEdit - otrasSuma;
+              if (destinoTarget < 0) {
                 stockWarning =
                   `El stock total ingresado (${stockActualEdit}) es menor a lo que ya está ` +
-                  `repartido en otras sucursales (${otrasSuma}). Principal quedó en 0.`;
+                  `repartido en otras sucursales (${otrasSuma}). Esta sucursal quedó en 0.`;
               }
               await pool.query(
                 `INSERT INTO ${tPSS} (producto_id, sucursal_id, stock_actual, stock_minimo, updated_at)
                    VALUES ($1::uuid, $2::uuid, $3::numeric, 0, now())
                  ON CONFLICT (producto_id, sucursal_id)
                    DO UPDATE SET stock_actual = EXCLUDED.stock_actual, updated_at = now()`,
-                [id, principalId, Math.max(0, principalTarget)],
+                [id, destinoSucId, Math.max(0, destinoTarget)],
               );
             }
           }
         } catch (err) {
-          console.error("[/api/productos/[id]] sync Principal pss fallo", {
+          console.error("[/api/productos/[id]] sync pss fallo", {
             empresaId, id,
             message: err instanceof Error ? err.message : String(err),
           });
