@@ -299,13 +299,14 @@ export default function ClientesPage() {
   const { moneda } = useUserCfg();
   const esSucursalBR = moneda === "BRL";
   const clienteColumns = useMemo(() => {
-    const cols = buildClienteColumns(mapNombreTipo);
-    // Sucursales BR (Betim, BH, El Dorado): ocultar columnas que no aplican al
-    // modelo de compra/venta de prendas — ni siquiera aparecen en el selector.
-    if (esSucursalBR) {
-      return cols.filter((c) => c.key !== "plan_activo" && c.key !== "tipo_servicio");
-    }
-    return cols;
+    // "Plan activo" y "Tipo servicio" no aplican al modelo de Akakua'a
+    // (compra/venta de prendas usadas). Se ocultan en TODAS las sucursales,
+    // no solo BR. Karen no las quiere ver en el listado ni en el selector
+    // de columnas.
+    void esSucursalBR;
+    return buildClienteColumns(mapNombreTipo).filter(
+      (c) => c.key !== "plan_activo" && c.key !== "tipo_servicio",
+    );
   }, [mapNombreTipo, esSucursalBR]);
   const visibleColumnSet = useMemo(() => new Set(visibleColumnKeys), [visibleColumnKeys]);
   const visibleColumns = useMemo(
@@ -481,21 +482,6 @@ export default function ClientesPage() {
             { value: "CRM", label: "CRM" },
             { value: "VENTA", label: "Venta" },
             { value: "MANUAL", label: "Manual" },
-          ]}
-        />
-        <FancySelect
-          value={filtroTipoServicio}
-          onChange={(v) => setFiltroTipoServicio(v)}
-          ariaLabel="Filtrar por tipo de servicio"
-          className="w-44"
-          size="sm"
-          options={[
-            { value: "", label: t("Tipo servicio") },
-            ...filasTipoCatalogo.map((t) => ({ value: t.slug, label: t.nombre })),
-            ...slugsExtraFiltro.map((slug) => ({
-              value: slug,
-              label: etiquetaVisibleTipoServicio(slug, mapNombreTipo),
-            })),
           ]}
         />
         {hayFiltros && (
