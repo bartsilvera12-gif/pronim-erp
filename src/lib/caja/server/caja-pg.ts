@@ -574,11 +574,15 @@ export async function abrirCajaPg(params: {
     );
   }
 
-  // numero_caja secuencial por empresa (best-effort; el índice único protege duplicados).
+  // numero_caja secuencial por SUCURSAL (best-effort; el indice único
+  // protege duplicados). Antes contaba por empresa, y la primera caja
+  // de Sucursal 2 salia con N° 9 porque sumaba las de Principal.
+  const sucursalIdParaNumero = params.sucursalId ?? pRow.sucursal_id;
   const maxQ = await sb
     .from("cajas")
     .select("numero_caja")
     .eq("empresa_id", params.empresaId)
+    .eq("sucursal_id", sucursalIdParaNumero)
     .order("numero_caja", { ascending: false })
     .limit(1);
   if (maxQ.error) throw new Error(maxQ.error.message);
