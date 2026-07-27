@@ -62,6 +62,12 @@ export function isModuleSlugGranted(routeSlug: string, grantedSlugs: Set<string>
   if (routeSlug === "otros_ingresos" && (grantedSlugs.has("gastos") || grantedSlugs.has("pagos"))) return true;
   // Entidades bancarias: forma parte de la configuración.
   if (routeSlug === "entidades_bancarias" && grantedSlugs.has("configuracion")) return true;
+  // Los dos flujos focus-mode de la caja (venta = solo lleva, evaluacion =
+  // solo trae) comparten permiso con el módulo original "atencion"
+  // (Cambio directo). Si el usuario tiene "atencion" (o "ventas" como
+  // paraguas comercial), ve también estos dos.
+  if ((routeSlug === "venta" || routeSlug === "evaluacion") &&
+      (grantedSlugs.has("atencion") || grantedSlugs.has("ventas"))) return true;
   return false;
 }
 

@@ -71,6 +71,14 @@ const es: Dict = {
   "Cambio directo": "Cambio directo",
   "Carga rápida": "Carga rápida",
   "Confirmar atención": "Confirmar atención",
+  "Venta": "Venta",
+  "Evaluación": "Evaluación",
+  "Confirmar venta": "Confirmar venta",
+  "Confirmar evaluación": "Confirmar evaluación",
+  "Cargá lo que el cliente lleva. El sistema calcula el resto.":
+    "Cargá lo que el cliente lleva. El sistema calcula el resto.",
+  "Registrá las prendas que el cliente entrega para acreditar.":
+    "Registrá las prendas que el cliente entrega para acreditar.",
   "Registrando…": "Registrando…",
   "Limpiar": "Limpiar",
   "Cancelar": "Cancelar",
@@ -319,6 +327,14 @@ const ptBR: Dict = {
   "Cambio directo": "Troca direta",
   "Carga rápida": "Carga rápida",
   "Confirmar atención": "Confirmar atendimento",
+  "Venta": "Venda",
+  "Evaluación": "Avaliação",
+  "Confirmar venta": "Confirmar venda",
+  "Confirmar evaluación": "Confirmar avaliação",
+  "Cargá lo que el cliente lleva. El sistema calcula el resto.":
+    "Registre o que o cliente leva. O sistema calcula o resto.",
+  "Registrá las prendas que el cliente entrega para acreditar.":
+    "Registre as peças que o cliente entrega para creditar.",
   "Registrando…": "Registrando…",
   "Limpiar": "Limpar",
   "Cancelar": "Cancelar",

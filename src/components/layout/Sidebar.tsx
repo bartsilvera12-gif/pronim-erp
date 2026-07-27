@@ -42,6 +42,8 @@ import {
   Landmark,
   PlusCircle,
   Camera,
+  ArrowLeftRight,
+  Scale,
 } from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
@@ -150,7 +152,14 @@ const MENU_STRUCTURE_FULL: MenuItem[] = [
     href: "/dashboard/monitoreo",
     icon: Activity,
   },
-  { key: "atencion", slug: "atencion", label: "Caja", href: "/atencion/nueva", icon: ShoppingCart },
+  // Karen dividió el POS en dos flujos focus-mode + el original queda como
+  // "Cambio directo" (trae+lleva atómico en la misma tx). Ver:
+  //   src/app/venta/nueva/page.tsx        (solo lleva)
+  //   src/app/evaluacion/nueva/page.tsx   (solo trae)
+  //   src/app/atencion/nueva/page.tsx     (cambio directo, sin tocar)
+  { key: "venta", slug: "venta", label: "Venta", href: "/venta/nueva", icon: ShoppingCart },
+  { key: "evaluacion", slug: "evaluacion", label: "Evaluación", href: "/evaluacion/nueva", icon: Scale },
+  { key: "atencion", slug: "atencion", label: "Cambio directo", href: "/atencion/nueva", icon: ArrowLeftRight },
   { key: "inventario", slug: "inventario", label: "Inventario", href: "/inventario", icon: Package, children: [
     { label: "Productos", href: "/inventario" },
     { label: "Movimientos", href: "/inventario/movimientos" },
@@ -259,7 +268,7 @@ const MENU_FAMILIES: { id: string; title: string; itemKeys: string[] }[] = [
   {
     id: "comercial",
     title: "Comercial",
-    itemKeys: ["atencion", "clientes"],
+    itemKeys: ["venta", "evaluacion", "atencion", "clientes"],
   },
   { id: "finanzas", title: "Finanzas", itemKeys: ["gastos", "otros_ingresos", "reportes"] },
   { id: "operaciones", title: "Operaciones", itemKeys: ["inventario", "compras"] },
