@@ -1397,6 +1397,52 @@
       ];
       /* ============================================================ */
 
+      /* ------------------------------------------------------------
+       * Hidratación desde el ERP: reemplaza TESOROS_MEDIA con los
+       * tesoros administrados desde /admin/web/tesoros si el endpoint
+       * responde con al menos un registro activo. Si falla o llega
+       * vacío, dejamos el array hardcoded como fallback — la sección
+       * siempre tiene contenido.
+       * ------------------------------------------------------------ */
+      (function hydrateTesorosFromApi(){
+        try {
+          if (typeof fetch !== 'function') return;
+          fetch('/api/publico/tesoros', { cache: 'no-store' })
+            .then(function(r){ return r.ok ? r.json() : null; })
+            .then(function(j){
+              var rows = j && j.success && j.data && Array.isArray(j.data.tesoros)
+                ? j.data.tesoros : [];
+              if (!rows.length) return; // fallback estático
+              var mapped = rows.map(function(row){
+                var tipo = row.tipo === 'video' ? 'video' : 'image';
+                var label = row.titulo || (tipo === 'video' ? 'Reel Akakua\'a' : 'Nuevos ingresos');
+                var sub = row.subtitulo || (tipo === 'video' ? 'Detrás de cámara' : 'Recién llegados');
+                return {
+                  type: tipo,
+                  src: row.url,
+                  instagramUrl: 'https://www.instagram.com/akakuaa_py/',
+                  category: tipo === 'video' ? 'Detrás de cámara' : 'Nuevos ingresos',
+                  ageGroup: 'todos',
+                  label: label,
+                  sub: sub,
+                  precio: row.precio,
+                  skuFranja: row.sku_franja
+                };
+              });
+              // Mutar in place para que las closures que capturaron TESOROS_MEDIA vean el nuevo contenido
+              TESOROS_MEDIA.length = 0;
+              for (var i = 0; i < mapped.length; i++) TESOROS_MEDIA.push(mapped[i]);
+              // Forzar re-render si el track ya estaba montado
+              var track = document.getElementById('tesorosTrack');
+              if (track) {
+                track.dataset.tsBoot = '';
+                try { if (typeof tryBoot === 'function') tryBoot(); } catch(e){}
+              }
+            })
+            .catch(function(){ /* silencioso: dejamos el fallback estático */ });
+        } catch(e) { /* noop */ }
+      })();
+
       var AGES = [
         { key: 'rn',    label: 'Recién nacidos' },
         { key: 'bebes', label: 'Bebés' },

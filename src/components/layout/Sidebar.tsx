@@ -41,6 +41,7 @@ import {
   HandCoins,
   Landmark,
   PlusCircle,
+  Camera,
 } from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
@@ -184,6 +185,7 @@ const MENU_STRUCTURE_FULL: MenuItem[] = [
   { key: "usuarios", slug: "usuarios", label: "Usuarios", href: "/usuarios", icon: UserCog },
   { key: "sucursales", slug: "sucursales", label: "Sucursales", href: "/admin/sucursales", icon: Building2 },
   { key: "metas", slug: "metas", label: "Metas", href: "/admin/metas", icon: Target },
+  { key: "web_tesoros", slug: "web_tesoros", label: "Tesoros (web)", href: "/admin/web/tesoros", icon: Camera },
   { key: "promociones", slug: "promociones", label: "Promociones", href: "/admin/promociones", icon: Percent },
   {
     key: "configuracion",
@@ -274,7 +276,7 @@ const MENU_FAMILIES: { id: string; title: string; itemKeys: string[] }[] = [
     title: "Marketing y Automatización",
     itemKeys: ["marketing", "marketing_ops", "sorteos"],
   },
-  { id: "administracion", title: "Administración", itemKeys: ["usuarios", "sucursales", "metas", "promociones", "entidades_bancarias", "configuracion"] },
+  { id: "administracion", title: "Administración", itemKeys: ["usuarios", "sucursales", "metas", "promociones", "web_tesoros", "entidades_bancarias", "configuracion"] },
 ];
 
 function modulosSyntheticFromMenu(): ModuloEmpresa[] {
