@@ -276,7 +276,12 @@ const MENU_FAMILIES: { id: string; title: string; itemKeys: string[] }[] = [
     title: "Marketing y Automatización",
     itemKeys: ["marketing", "marketing_ops", "sorteos"],
   },
-  { id: "administracion", title: "Administración", itemKeys: ["usuarios", "sucursales", "metas", "promociones", "web_tesoros", "entidades_bancarias", "configuracion"] },
+  { id: "administracion", title: "Administración", itemKeys: ["usuarios", "sucursales", "metas", "promociones", "entidades_bancarias", "configuracion"] },
+  // Familia dedicada para toda la integración con la web pública
+  // (tesoros, sucursales, catálogo, copy editable, etc.). Karen la
+  // pidió aparte de Administración para agrupar todo lo web en un
+  // solo lugar visible.
+  { id: "web", title: "Web", itemKeys: ["web_tesoros"] },
 ];
 
 function modulosSyntheticFromMenu(): ModuloEmpresa[] {
