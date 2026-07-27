@@ -376,7 +376,10 @@ export default function NuevaEvaluacionPage() {
   ];
 
   return (
-    <div className="space-y-4 max-w-7xl">
+    // xl:mr-72 reserva espacio para el rail de sticky notes fixed a la
+    // derecha (mismo criterio que /venta/nueva) — evita que la sticky
+    // de pendientes / meta cumplida encime los chips del header.
+    <div className="space-y-4 max-w-7xl xl:mr-72">
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">{t("Evaluación")}</h1>
