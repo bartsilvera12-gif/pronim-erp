@@ -62,8 +62,7 @@ export default function NuevaVentaPage() {
 
   // ── Metas / pendientes (para sticky notes + chip) ────────────────────
   const [metaDia, setMetaDia] = useState<{ meta_diaria: number; vendido_dia: number; pct: number } | null>(null);
-  const [pendientesIngresoCount, setPendientesIngresoCount] = useState(0);
-  const [pendientesVencidasCount, setPendientesVencidasCount] = useState(0);
+  // Pendientes de ingreso viven en /evaluacion/nueva — Venta no los muestra.
   const [metaAlcanzada, setMetaAlcanzada] = useState<{
     sucursal_id: string; nombre: string; pct_meta: number;
     vendido: number; meta_periodo: number;
@@ -105,7 +104,6 @@ export default function NuevaVentaPage() {
           fetchWithSupabaseSession("/api/franjas/publicas", { cache: "no-store" }),
           fetchWithSupabaseSession("/api/clientes", { cache: "no-store" }),
         ]);
-        refrescarPendientesIngreso();
         refrescarMetaDia();
         refrescarMetasAlcanzadas();
         const jf = await rf.json().catch(() => ({}));
@@ -160,21 +158,6 @@ export default function NuevaVentaPage() {
       .finally(() => { if (!cancel) setClienteSegmentoLoading(false); });
     return () => { cancel = true; };
   }, [cliente]);
-
-  async function refrescarPendientesIngreso() {
-    try {
-      const r = await fetchWithSupabaseSession("/api/recepciones/pendientes", { cache: "no-store" });
-      const j = await r.json().catch(() => ({}));
-      const arr = (j?.data?.recepciones as { fecha: string }[] | undefined) ?? [];
-      setPendientesIngresoCount(arr.length);
-      const now = Date.now();
-      const venc = arr.filter((x) => {
-        try { return (now - new Date(x.fecha).getTime()) > 72 * 3600 * 1000; }
-        catch { return false; }
-      }).length;
-      setPendientesVencidasCount(venc);
-    } catch { /* tolerar */ }
-  }
 
   async function refrescarMetaDia() {
     try {
@@ -471,7 +454,11 @@ export default function NuevaVentaPage() {
   ];
 
   return (
-    <div className="space-y-4 max-w-7xl">
+    // xl:mr-72 reserva espacio para el rail de sticky notes fixed a la
+    // derecha (256px + gap) para que meta cumplida / alertas del cliente
+    // no encimen los chips del header. Karen: "deja el espacio para que
+    // quepa bien la stikynote".
+    <div className="space-y-4 max-w-7xl xl:mr-72">
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">{t("Venta")}</h1>
@@ -492,17 +479,8 @@ export default function NuevaVentaPage() {
               🎯 Meta hoy: <strong>{metaDia.pct}%</strong>
             </Link>
           )}
-          {pendientesIngresoCount > 0 && (
-            <Link href="/atencion/pendientes-ingreso"
-              className={`rounded-lg border px-3 py-1.5 text-xs font-medium ${
-                pendientesVencidasCount > 0
-                  ? "border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100"
-                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-              }`}>
-              {pendientesVencidasCount > 0 ? "⚠ " : "📦 "}
-              {pendientesIngresoCount} {pendientesIngresoCount === 1 ? t("pendiente") : t("pendientes")} ↗
-            </Link>
-          )}
+          {/* Badge de pendientes de evaluar removido: pertenece al módulo
+              Evaluación, no a Venta. Ver /evaluacion/nueva. */}
           <Link href="/ventas" className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50">
             {t("Historial")} ↗
           </Link>
@@ -786,7 +764,7 @@ export default function NuevaVentaPage() {
         onVerResultados={() => router.push("/admin/metas")}
       />
 
-      {(pendientesIngresoCount > 0 || (cliente && alertasDisparadas.length > 0) || metasCumplidasHoy.length > 0) && (
+      {((cliente && alertasDisparadas.length > 0) || metasCumplidasHoy.length > 0) && (
         <aside aria-label="Recordatorios"
           className="hidden xl:flex fixed top-24 right-6 z-30 flex-col gap-4 w-64 max-h-[calc(100vh-8rem)] overflow-y-auto overflow-x-hidden py-2 pr-1 pointer-events-none">
           {metasCumplidasHoy.length > 0 && (
@@ -794,25 +772,7 @@ export default function NuevaVentaPage() {
               {metasCumplidasHoy.map(m => <MetaCumplidaBadge key={m.sucursal_id} nombre={m.nombre} />)}
             </div>
           )}
-          {pendientesIngresoCount > 0 && (
-            <Link href="/atencion/pendientes-ingreso"
-              className="block relative bg-orange-100 rotate-1 pointer-events-auto shadow-[0_6px_16px_-4px_rgba(0,0,0,0.25)] px-4 pt-5 pb-4 transition-transform hover:rotate-0 hover:scale-[1.02]"
-              style={{ borderRadius: "2px 2px 14px 2px" }}>
-              <span aria-hidden className="absolute -top-2 left-1/2 -translate-x-1/2 h-4 w-16 bg-orange-300/70 rotate-[-3deg] shadow-sm" />
-              <p className="text-[13px] font-bold leading-snug text-orange-900">
-                {pendientesIngresoCount === 1
-                  ? `1 ${t("recepción pendiente de evaluar")}`
-                  : `${pendientesIngresoCount} ${t("recepciones pendientes de evaluar")}`}
-              </p>
-              <p className="text-[12px] mt-1 leading-snug text-orange-900 opacity-90">
-                {t("Hay bolsas esperando ser ingresadas al stock.")}
-                {pendientesVencidasCount > 0 && (
-                  <> <span className="font-semibold text-rose-700">{pendientesVencidasCount} {t("con más de 72h.")}</span></>
-                )}
-              </p>
-              <p className="text-[11px] mt-2 font-semibold text-orange-900 underline">{t("Ir a la bandeja")} →</p>
-            </Link>
-          )}
+          {/* Sticky de recepciones pendientes removida: vive en /evaluacion/nueva. */}
           {cliente && alertasDisparadas.map((a, i) => {
             const s = STICKY_STYLES[i % STICKY_STYLES.length];
             return (
