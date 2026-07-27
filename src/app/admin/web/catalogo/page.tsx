@@ -5,6 +5,7 @@ import Link from "next/link";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { useT } from "@/lib/i18n/context";
 import { useIsSuperAdmin } from "@/lib/auth/use-is-admin";
+import WebUploadButton from "@/components/web-admin/WebUploadButton";
 import MontoInput from "@/components/ui/MontoInput";
 
 /**
@@ -475,16 +476,30 @@ function ItemModal({
           </div>
 
           <div>
-            <label className="text-xs font-medium text-slate-600">{t("Imagen URL")}</label>
-            <input
-              type="text"
-              value={draft.imagen_url}
-              onChange={(e) => setDraft({ ...draft, imagen_url: e.target.value })}
-              placeholder="/akakuaa/catalogo/vestido-01.jpg"
-              className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]/40"
-            />
+            <label className="text-xs font-medium text-slate-600">{t("Imagen")}</label>
+            <div className="mt-1 flex items-center gap-2">
+              <input
+                type="text"
+                value={draft.imagen_url}
+                onChange={(e) => setDraft({ ...draft, imagen_url: e.target.value })}
+                placeholder={t("Pegá una URL o subí un archivo →")}
+                className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]/40"
+              />
+              <WebUploadButton
+                modulo="catalogo"
+                onUploaded={(url) => setDraft({ ...draft, imagen_url: url })}
+                accept="image/*"
+                labelIdle={t("Subir imagen")}
+                labelBusy={t("Subiendo…")}
+              />
+            </div>
+            {draft.imagen_url && (
+              <div className="mt-2">
+                <Preview url={draft.imagen_url} />
+              </div>
+            )}
             <p className="mt-1 text-xs text-slate-500">
-              {t("Puede ser una URL absoluta (ej. Cloudinary) o ruta local (/akakuaa/catalogo/xxx.jpg). El upload de archivos aún no está integrado — pegá aquí la URL del asset ya subido.")}
+              {t("Subí un archivo desde tu compu o pegá una URL (Cloudinary, etc.). Max 20 MB.")}
             </p>
           </div>
 

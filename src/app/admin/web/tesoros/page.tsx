@@ -6,6 +6,7 @@ import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session"
 import { useT } from "@/lib/i18n/context";
 import { useIsSuperAdmin } from "@/lib/auth/use-is-admin";
 import MontoInput from "@/components/ui/MontoInput";
+import WebUploadButton from "@/components/web-admin/WebUploadButton";
 
 /**
  * Admin: Tesoros del sitio publico (Akakua'a).
@@ -404,16 +405,25 @@ function TesoroModal({
           </div>
 
           <div>
-            <label className="text-xs font-medium text-slate-600">URL</label>
-            <input
-              type="text"
-              value={draft.url}
-              onChange={(e) => setDraft({ ...draft, url: e.target.value })}
-              placeholder="/akakuaa/tesoros/foto-3.jpg"
-              className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]/40"
-            />
+            <label className="text-xs font-medium text-slate-600">{t("Archivo")}</label>
+            <div className="mt-1 flex items-center gap-2">
+              <input
+                type="text"
+                value={draft.url}
+                onChange={(e) => setDraft({ ...draft, url: e.target.value })}
+                placeholder={t("Pegá una URL o subí un archivo →")}
+                className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]/40"
+              />
+              <WebUploadButton
+                modulo="tesoros"
+                accept="image/*,video/mp4,video/webm"
+                onUploaded={(url, tipoDetectado) => setDraft({ ...draft, url, tipo: tipoDetectado })}
+                labelIdle={t("Subir")}
+                labelBusy={t("Subiendo…")}
+              />
+            </div>
             <p className="mt-1 text-xs text-slate-500">
-              {t("Puede ser una ruta local (ej. /akakuaa/tesoros/foto-3.jpg) o una URL absoluta (ej. Cloudinary). El upload de archivos aún no está integrado — pegá aquí la URL del asset ya subido.")}
+              {t("Subí una foto o video desde tu compu, o pegá una URL (Cloudinary, etc.). Max 20 MB. Los videos pasan a 'Video' automáticamente.")}
             </p>
           </div>
 

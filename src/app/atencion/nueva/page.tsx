@@ -41,6 +41,7 @@ type Cliente = {
   nombre: string;
   empresa?: string | null;
   ruc?: string | null;
+  telefono?: string | null;
 };
 
 type Linea = {
@@ -531,6 +532,7 @@ export default function NuevaAtencionPage() {
             || "Cliente",
           empresa: typeof r.empresa === "string" ? r.empresa : null,
           ruc: typeof r.ruc === "string" ? r.ruc : null,
+          telefono: typeof r.telefono === "string" ? r.telefono : null,
         }));
         setClientes(cs);
       } catch (e) {
@@ -633,9 +635,20 @@ export default function NuevaAtencionPage() {
   // ── Filtrados / helpers UI ────────────────────────────────────────────
   const clientesFiltrados = useMemo(() => {
     const q = clienteQuery.trim().toLowerCase();
-    const arr = clientes.filter((c) => !q
-      || c.nombre.toLowerCase().includes(q)
-      || (c.ruc ?? "").toLowerCase().includes(q));
+    // Match por teléfono: si el query es solo dígitos, comparamos contra
+    // el teléfono con los no-dígitos removidos (así "981234" matchea
+    // "0981-234-567" y "+595981234567").
+    const qDigits = q.replace(/\D/g, "");
+    const arr = clientes.filter((c) => {
+      if (!q) return true;
+      if (c.nombre.toLowerCase().includes(q)) return true;
+      if ((c.ruc ?? "").toLowerCase().includes(q)) return true;
+      if (qDigits && c.telefono) {
+        const tel = String(c.telefono).replace(/\D/g, "");
+        if (tel.includes(qDigits)) return true;
+      }
+      return false;
+    });
     return arr.slice(0, 50);
   }, [clienteQuery, clientes]);
 
