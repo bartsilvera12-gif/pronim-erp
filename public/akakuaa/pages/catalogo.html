@@ -339,41 +339,28 @@
   <script>
   (function(){
     /* =========================================================
-     * Categorías del catálogo — deben coincidir con los data-slug
-     * del perchero en /
+     * Catálogo curado — administrable desde el ERP
+     * (/admin/web/catalogo → /api/publico/catalogo-items).
+     * Las categorías y edades se generan dinámicamente a partir
+     * de los strings libres que Karen carga por producto.
      * ========================================================= */
-    var CATEGORIES = [
-      { slug:'todas',      name:'Todas',              icon:'i-all' },
-      { slug:'vestidos',   name:'Vestidos',           icon:'i-vestido' },
-      { slug:'infantil',   name:'Ropa infantil',      icon:'i-infantil' },
-      { slug:'bebes',      name:'Ropa para bebés',    icon:'i-bebes' },
-      { slug:'calzados',   name:'Calzados',           icon:'i-calzado' },
-      { slug:'accesorios', name:'Accesorios',         icon:'i-accesorios' },
-      { slug:'abrigos',    name:'Abrigos',            icon:'i-abrigos' },
-      { slug:'juguetes',   name:'Juguetes',           icon:'i-juguetes' },
-      { slug:'ajuar',      name:'Ajuar y hogar',      icon:'i-ajuar' },
-      { slug:'escolar',    name:'Escolar',            icon:'i-escolar' }
-    ];
+    var CATEGORIES = [ { slug:'todas', name:'Todas', icon:'i-all' } ];
+    var AGES       = [ { key:'todas', label:'Todas' } ];
 
-    var AGES = [
-      { key:'todas', label:'Todas' },
-      { key:'rn',    label:'Recién nacidos' },
-      { key:'bebes', label:'Bebés' },
-      { key:'ninos', label:'Niños' },
-      { key:'pre',   label:'Pre-adolescentes' },
-      { key:'ado',   label:'Adolescentes' }
-    ];
-
-    var AGE_LABEL = { rn:'RN', bebes:'Bebés', ninos:'Niños', pre:'Pre-adol.', ado:'Adol.' };
-
-    /* PRODUCTOS: se cargan desde /api/publico/catalogo (franjas de Principal). */
+    /* PRODUCTOS: cargados desde /api/publico/catalogo-items. */
     var PRODUCTS = [];
 
     /* ========================================================= */
 
     var state = { cat: 'todas', age: 'todas' };
-    var CAT_LABEL_MAP = {};
-    CATEGORIES.forEach(function(c){ CAT_LABEL_MAP[c.slug] = c.name; });
+    var CAT_LABEL_MAP = { todas: 'Todas' };
+    var loaded = false;
+
+    function slugify(s){
+      return String(s || '').toLowerCase()
+        .normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'otros';
+    }
 
     var catChips = document.getElementById('catChips');
     var ageChips = document.getElementById('ageChips');
@@ -425,11 +412,9 @@
       });
     }
 
-    // Construye la URL de la foto: Unsplash (p.img) o archivo local (p.image)
+    // URL de la foto: los items admin siempre traen imagen_url absoluta o local.
     function photoURL(p){
-      if(p.image) return p.image;
-      if(p.img)   return 'https://images.unsplash.com/' + p.img + '?w=600&h=750&fit=crop&crop=entropy&q=80';
-      return null;
+      return p.image || null;
     }
 
     function productCard(p){
@@ -439,7 +424,7 @@
       var article = document.createElement('article');
       article.className = 'prod' + (has_photo ? '' : ' prod--soon');
       article.dataset.cat = p.cat;
-      article.dataset.ages = p.ages.join(',');
+      article.dataset.age = p.age || 'todas';
 
       /* ---- Foto a sangre ---- */
       var media = document.createElement('div');
@@ -506,11 +491,13 @@
         body.appendChild(note);
       }
 
-      // Edades como texto liviano separado por punto medio
-      var ages = document.createElement('p');
-      ages.className = 'prod__ages';
-      ages.textContent = p.ages.map(function(a){ return AGE_LABEL[a] || a; }).join(' · ');
-      body.appendChild(ages);
+      // Edades como texto liviano
+      if(p.ageLabel){
+        var ages = document.createElement('p');
+        ages.className = 'prod__ages';
+        ages.textContent = p.ageLabel;
+        body.appendChild(ages);
+      }
 
       var foot = document.createElement('div');
       foot.className = 'prod__foot';
@@ -536,7 +523,7 @@
     function apply(){
       var list = PRODUCTS.filter(function(p){
         if(state.cat !== 'todas' && p.cat !== state.cat) return false;
-        if(state.age !== 'todas' && p.ages.indexOf(state.age) === -1) return false;
+        if(state.age !== 'todas' && p.age !== state.age) return false;
         return true;
       });
 
@@ -546,10 +533,16 @@
       if(list.length === 0){
         var empty = document.createElement('div');
         empty.className = 'empty-state';
-        empty.innerHTML =
-          '<h3>Nada en este filtro</h3>' +
-          '<p>Probá con otra edad o categoría. También podés escribirnos por WhatsApp y te asesoramos.</p>' +
-          '<button type="button" id="emptyReset">Limpiar filtros</button>';
+        if(!loaded || PRODUCTS.length === 0){
+          empty.innerHTML =
+            '<h3>Estamos preparando nuestro catálogo</h3>' +
+            '<p>Muy pronto vas a ver acá todas nuestras prendas y artículos. Mientras tanto, escribinos por WhatsApp y te contamos qué tenemos disponible.</p>';
+        } else {
+          empty.innerHTML =
+            '<h3>Nada en este filtro</h3>' +
+            '<p>Probá con otra edad o categoría. También podés escribirnos por WhatsApp y te asesoramos.</p>' +
+            '<button type="button" id="emptyReset">Limpiar filtros</button>';
+        }
         grid.appendChild(empty);
         var btn = document.getElementById('emptyReset');
         if(btn) btn.addEventListener('click', clearAll);
@@ -592,24 +585,67 @@
     apply();
     applyHash();
     window.addEventListener('hashchange', applyHash);
-    // ================= Wire a franjas de Principal (Supabase) =================
-    // Karen: el catálogo web muestra franjas activas de Principal. Endpoint
-    // UNAUTH, cache 60s. Sucursal 2 y BR no tienen web propia.
+    // ================= Wire al catálogo curado (Supabase) =================
+    // Fuente: /api/publico/catalogo-items (items que Karen sube desde el ERP
+    // en /admin/web/catalogo). Endpoint UNAUTH, cache 60s.
     function fmtPYG(n){
       try { return new Intl.NumberFormat("es-PY",{ style:"currency", currency:"PYG", maximumFractionDigits:0 }).format(n); }
       catch(_) { return "Gs. " + Math.round(n).toLocaleString("es-PY"); }
     }
-    fetch("/api/publico/catalogo", { credentials:"omit" })
+    fetch("/api/publico/catalogo-items", { credentials:"omit" })
       .then(function(r){ return r.ok ? r.json() : null; })
       .then(function(payload){
-        if(!payload || !payload.success || !payload.data) return;
-        var franjas = payload.data.franjas || [];
-        PRODUCTS = franjas.map(function(f){
-          return { name: f.nombre || "Franja", cat: "todas", ages: ["todas"], note: fmtPYG(Number(f.precio_venta || 0)), image: null };
+        loaded = true;
+        var items = (payload && payload.success && payload.data && payload.data.items) || [];
+        // Construir CATEGORIES y AGES dinámicamente a partir de strings libres
+        var catMap = {}; // slug -> label
+        var ageMap = {}; // slug -> label
+        PRODUCTS = items.map(function(it){
+          var catLabel = (it.categoria && String(it.categoria).trim()) || '';
+          var ageLabel = (it.edad && String(it.edad).trim()) || '';
+          var catSlug  = catLabel ? slugify(catLabel) : 'todas';
+          var ageSlug  = ageLabel ? slugify(ageLabel) : 'todas';
+          if(catLabel && !catMap[catSlug]) catMap[catSlug] = catLabel;
+          if(ageLabel && !ageMap[ageSlug]) ageMap[ageSlug] = ageLabel;
+          var note = it.precio != null && Number(it.precio) > 0
+            ? fmtPYG(Number(it.precio))
+            : (it.descripcion ? String(it.descripcion) : '');
+          return {
+            id: it.id,
+            name: it.nombre || 'Producto',
+            cat: catSlug,
+            catLabel: catLabel,
+            age: ageSlug,
+            ageLabel: ageLabel,
+            image: it.imagen_url || null,
+            note: note
+          };
         });
+
+        CATEGORIES = [ { slug:'todas', name:'Todas', icon:'i-all' } ];
+        Object.keys(catMap).sort().forEach(function(slug){
+          CATEGORIES.push({ slug: slug, name: catMap[slug], icon: 'i-all' });
+        });
+        AGES = [ { key:'todas', label:'Todas' } ];
+        Object.keys(ageMap).sort().forEach(function(slug){
+          AGES.push({ key: slug, label: ageMap[slug] });
+        });
+        CAT_LABEL_MAP = { todas: 'Todas' };
+        CATEGORIES.forEach(function(c){ CAT_LABEL_MAP[c.slug] = c.name; });
+
+        // Reset filtro si el actual ya no existe
+        if(!CATEGORIES.some(function(c){ return c.slug === state.cat; })) state.cat = 'todas';
+        if(!AGES.some(function(a){ return a.key === state.age; })) state.age = 'todas';
+
+        renderCatChips();
+        renderAgeChips();
         apply();
       })
-      .catch(function(err){ console.warn("[akakuaa/catalogo] fetch failed", err); });
+      .catch(function(err){
+        loaded = true;
+        console.warn("[akakuaa/catalogo] fetch failed", err);
+        apply();
+      });
 
   })();
   </script>
