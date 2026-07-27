@@ -1080,7 +1080,11 @@ export default function NuevaAtencionPage() {
   ];
 
   return (
-    <div className="space-y-4 max-w-7xl">
+    // Karen pidió que la caja se vea siempre como si el browser estuviera
+    // al 67% de zoom — así entra todo (sticky notes, balance, botones)
+    // sin encimarse a 100%. `zoom: 0.67` funciona en Chromium (Chrome,
+    // Edge, Neura). En Firefox cae al 100% (fallback OK).
+    <div className="space-y-4 max-w-7xl" style={{ zoom: 0.67 }}>
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">{t("Caja")}</h1>
