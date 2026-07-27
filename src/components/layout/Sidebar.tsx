@@ -186,6 +186,10 @@ const MENU_STRUCTURE_FULL: MenuItem[] = [
   { key: "sucursales", slug: "sucursales", label: "Sucursales", href: "/admin/sucursales", icon: Building2 },
   { key: "metas", slug: "metas", label: "Metas", href: "/admin/metas", icon: Target },
   { key: "web_tesoros", slug: "web_tesoros", label: "Tesoros (web)", href: "/admin/web/tesoros", icon: Camera },
+  // Catálogo de la web = franjas activas de Principal. Se administra
+  // desde /admin/categorias (misma página que Categorías de precio);
+  // este item es un shortcut visible dentro de la familia Web.
+  { key: "web_catalogo", slug: "web_catalogo", label: "Catálogo (web)", href: "/admin/categorias", icon: Tags },
   { key: "promociones", slug: "promociones", label: "Promociones", href: "/admin/promociones", icon: Percent },
   {
     key: "configuracion",
@@ -281,7 +285,7 @@ const MENU_FAMILIES: { id: string; title: string; itemKeys: string[] }[] = [
   // (tesoros, sucursales, catálogo, copy editable, etc.). Karen la
   // pidió aparte de Administración para agrupar todo lo web en un
   // solo lugar visible.
-  { id: "web", title: "Web", itemKeys: ["web_tesoros"] },
+  { id: "web", title: "Web", itemKeys: ["web_tesoros", "web_catalogo"] },
 ];
 
 function modulosSyntheticFromMenu(): ModuloEmpresa[] {
