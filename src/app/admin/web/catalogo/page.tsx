@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { useT } from "@/lib/i18n/context";
@@ -84,6 +84,35 @@ export default function AdminWebCatalogoPage() {
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);
+  // Filtro de listado por categoría — mismo criterio que la web
+  // pública (chips de categorías). Karen quiere elegir de las que
+  // ya existen y ver solo esa.
+  const [filtroCategoria, setFiltroCategoria] = useState<string>("");
+
+  // Sugerencias derivadas de los items existentes — se usan tanto
+  // en el <datalist> del form (para elegir de las que ya están) como
+  // en el selector del filtro superior. Case-sensitive: si Karen
+  // cambia mayúsculas, se registran como categorías distintas.
+  const categoriasSugeridas = useMemo(() => {
+    const set = new Set<string>();
+    for (const it of items) {
+      const c = (it.categoria ?? "").trim();
+      if (c) set.add(c);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "es"));
+  }, [items]);
+  const edadesSugeridas = useMemo(() => {
+    const set = new Set<string>();
+    for (const it of items) {
+      const e = (it.edad ?? "").trim();
+      if (e) set.add(e);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "es"));
+  }, [items]);
+  const itemsFiltrados = useMemo(() => {
+    if (!filtroCategoria) return items;
+    return items.filter((it) => (it.categoria ?? "").trim() === filtroCategoria);
+  }, [items, filtroCategoria]);
 
   async function cargar() {
     setLoading(true);
@@ -238,12 +267,49 @@ export default function AdminWebCatalogoPage() {
         </div>
       )}
 
+      {/* Filtro por categoría — replica el criterio de los chips de la
+          web pública (/catalogo). Al elegir una, la tabla se filtra a
+          esa sola. La opción "Todas" (vacía) muestra el listado completo. */}
+      {items.length > 0 && categoriasSugeridas.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="text-xs font-medium text-slate-600">
+            {t("Filtrar por categoría")}
+          </label>
+          <select
+            value={filtroCategoria}
+            onChange={(e) => setFiltroCategoria(e.target.value)}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]/40"
+          >
+            <option value="">{t("Todas")}</option>
+            {categoriasSugeridas.map((c) => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
+          {filtroCategoria && (
+            <button
+              type="button"
+              onClick={() => setFiltroCategoria("")}
+              className="text-xs text-slate-500 hover:text-slate-700 underline"
+            >
+              {t("Limpiar filtro")}
+            </button>
+          )}
+          <span className="text-xs text-slate-400 ml-auto">
+            {itemsFiltrados.length} {itemsFiltrados.length === 1 ? t("producto") : t("productos")}
+          </span>
+        </div>
+      )}
+
       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         {loading ? (
           <p className="text-sm text-slate-500">{t("Cargando…")}</p>
         ) : items.length === 0 ? (
           <p className="text-sm text-slate-500">
             {t("Todavía no hay productos en el catálogo. Creá el primero con «+ Nuevo producto».")}
+          </p>
+        ) : itemsFiltrados.length === 0 ? (
+          <p className="text-sm text-slate-500">
+            {t("No hay productos en esa categoría.")}
           </p>
         ) : (
           <div className="overflow-x-auto">
@@ -261,7 +327,7 @@ export default function AdminWebCatalogoPage() {
                 </tr>
               </thead>
               <tbody>
-                {items.map((row) => (
+                {itemsFiltrados.map((row) => (
                   <tr key={row.id} className="border-t border-slate-100">
                     <td className="py-2 pr-3">
                       <Preview url={row.imagen_url} />
@@ -427,21 +493,36 @@ function ItemModal({
               <label className="text-xs font-medium text-slate-600">{t("Categoría")}</label>
               <input
                 type="text"
+                list="cat-web-sugeridas"
                 value={draft.categoria}
                 onChange={(e) => setDraft({ ...draft, categoria: e.target.value })}
-                placeholder={t("Ej: Vestidos, Bebés, Calzados")}
+                placeholder={t("Elegí una o escribí nueva")}
                 className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]/40"
               />
+              <datalist id="cat-web-sugeridas">
+                {categoriasSugeridas.map((c) => (
+                  <option key={c} value={c} />
+                ))}
+              </datalist>
+              <p className="mt-1 text-[10px] text-slate-400">
+                {t("Las categorías se generan automáticamente a partir de los productos cargados. Escribí una nueva para crearla.")}
+              </p>
             </div>
             <div>
               <label className="text-xs font-medium text-slate-600">{t("Edad")}</label>
               <input
                 type="text"
+                list="edad-web-sugeridas"
                 value={draft.edad}
                 onChange={(e) => setDraft({ ...draft, edad: e.target.value })}
-                placeholder={t("Ej: 0-6m, Niños, Adolescentes")}
+                placeholder={t("Elegí una o escribí nueva")}
                 className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]/40"
               />
+              <datalist id="edad-web-sugeridas">
+                {edadesSugeridas.map((e) => (
+                  <option key={e} value={e} />
+                ))}
+              </datalist>
             </div>
           </div>
 
