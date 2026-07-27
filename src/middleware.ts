@@ -3,22 +3,30 @@ import { NextResponse, type NextRequest } from "next/server";
 import {
   isElevatePublicHost,
   ELEVATE_PUBLIC_PREFIX,
-  ELEVATE_PUBLIC_HEADER,
 } from "@/lib/elevate-public/hosts";
 
 /**
  * Middleware:
- *   1. Si el host del request corresponde a la web pública de Elevate
- *      (config en `ELEVATE_PUBLIC_WEB_HOSTS`), rewrite hacia el prefijo
- *      interno `/__public/...` y se evita el refresh de sesión Supabase.
- *      La URL visible en el browser no cambia.
- *   2. Si el host corresponde al ERP/admin (elevate.neura.com.py u otro),
- *      se refresca la sesión Supabase en cookies como antes.
+ *   1. Host público (config en `ELEVATE_PUBLIC_WEB_HOSTS`) → rewrite a los
+ *      HTML estáticos de la web de Akakua'a bajo `/akakuaa/pages/*.html`.
+ *      La URL en el browser NO cambia. Los assets/js/css/api se sirven
+ *      passthrough. Pages desconocidas devuelven 404.
+ *   2. Host ERP/admin → refresh de sesión Supabase (legacy).
  *
- * Las rutas `/api/*`, `/_next/*` y estáticas se sirven sin rewrite incluso
- * en hosts públicos — la API pública vive en `/api/public/elevate/*` y debe
- * seguir accesible para fetch desde el frontend público.
+ * Nota: la env var y helper legado siguen llamándose `ELEVATE_*` para no
+ * romper la config existente en Hostinger — Karen decidió no tocarlo.
  */
+
+// Mapa de páginas navegables del sitio Akakua'a → HTML estático en /public.
+const AKAKUAA_STATIC_PAGES: Record<string, string> = {
+  "/": "/akakuaa/pages/index.html",
+  "/catalogo": "/akakuaa/pages/catalogo.html",
+  "/historia": "/akakuaa/pages/historia.html",
+  "/faq": "/akakuaa/pages/faq.html",
+  "/sucursales": "/akakuaa/pages/sucursales.html",
+  "/privacidad": "/akakuaa/pages/privacidad.html",
+};
+
 export async function middleware(request: NextRequest) {
   const host = request.headers.get("host");
   const pathname = request.nextUrl.pathname;
@@ -36,29 +44,29 @@ export async function middleware(request: NextRequest) {
       return NextResponse.next();
     }
 
-    // Si ya está rewriteado (defensivo), no duplicar prefijo.
-    if (pathname.startsWith(`${ELEVATE_PUBLIC_PREFIX}/`) || pathname === ELEVATE_PUBLIC_PREFIX) {
-      return NextResponse.next();
+    // Trim trailing slash (excepto "/") para hacer el match.
+    const key = pathname.length > 1 && pathname.endsWith("/")
+      ? pathname.slice(0, -1)
+      : pathname;
+    const target = AKAKUAA_STATIC_PAGES[key];
+    if (target) {
+      const url = request.nextUrl.clone();
+      url.pathname = target;
+      return NextResponse.rewrite(url);
     }
-
-    const url = request.nextUrl.clone();
-    url.pathname = pathname === "/" ? ELEVATE_PUBLIC_PREFIX : `${ELEVATE_PUBLIC_PREFIX}${pathname}`;
-
-    const requestHeaders = new Headers(request.headers);
-    requestHeaders.set(ELEVATE_PUBLIC_HEADER, "1");
-
-    return NextResponse.rewrite(url, {
-      request: { headers: requestHeaders },
-    });
+    return new NextResponse("Not Found", { status: 404 });
   }
 
   /**
    * Host NO público (ERP/admin) — bloquear el prefijo interno `/publico/*`
-   * que no debería ser navegable directamente desde el dominio del ERP.
-   * El contenido público solo debe servirse vía hosts en
-   * `ELEVATE_PUBLIC_WEB_HOSTS`.
+   * y las páginas estáticas de Akakua'a: no deben ser navegables desde el
+   * dominio del ERP.
    */
-  if (pathname === ELEVATE_PUBLIC_PREFIX || pathname.startsWith(`${ELEVATE_PUBLIC_PREFIX}/`)) {
+  if (
+    pathname === ELEVATE_PUBLIC_PREFIX ||
+    pathname.startsWith(`${ELEVATE_PUBLIC_PREFIX}/`) ||
+    pathname.startsWith("/akakuaa/pages/")
+  ) {
     return new NextResponse("Not Found", { status: 404 });
   }
 
@@ -93,20 +101,18 @@ export async function middleware(request: NextRequest) {
 
 /**
  * Matcher: excluye TODO lo que no requiere lógica de middleware.
- * Sin esto, cada request a un asset/imagen/font/etc. ejecuta el middleware,
- * carga ssr, lee request data y marca todas las rutas como dynamic.
  *
  * Excluidos:
- *   - /api/webhooks/*       (Meta sin cookies)
- *   - /api/public/elevate/* (catálogo público, sin sesión)
+ *   - /api/webhooks/*        (Meta sin cookies)
+ *   - /api/publico/*         (catálogo público de Akakua'a, sin sesión)
  *   - /_next/static/*
  *   - /_next/image
  *   - /_next/data/*
  *   - favicon, robots, sitemap, manifest
- *   - cualquier archivo con extensión (.svg/.png/.jpg/.css/.js/.woff/etc.)
+ *   - cualquier archivo con extensión
  */
 export const config = {
   matcher: [
-    "/((?!api/webhooks|api/public/elevate|_next/static|_next/image|_next/data|favicon\\.ico|robots\\.txt|sitemap\\.xml|manifest\\.json|.*\\.[a-zA-Z0-9]+$).*)",
+    "/((?!api/webhooks|api/publico|_next/static|_next/image|_next/data|favicon\\.ico|robots\\.txt|sitemap\\.xml|manifest\\.json|.*\\.[a-zA-Z0-9]+$).*)",
   ],
 };

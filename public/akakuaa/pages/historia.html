@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nuestra historia · Akakua'a</title>
+<link rel="icon" type="image/png" href="/akakuaa/brand/akakuaa.png">
+<link rel="apple-touch-icon" href="/akakuaa/brand/akakuaa.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Nunito:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/akakuaa/css/mobile.css">
+<script defer src="/akakuaa/js/mobile.js"></script>
+<style>
+  :root{
+    --cream:#f5ede0;--cream-soft:#faf3e6;
+    --green:#2d4a3a;--green-soft:#3d5a48;
+    --rose:#c98a8a;--rose-soft:#e4b5b0;--rose-pale:#f2d9d5;
+    --sage:#c9d7bf;--sand:#e8dcc4;
+    --text:#3a3428;--text-soft:#7a6f5f;
+  }
+  *,*::before,*::after{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:'Nunito',system-ui,sans-serif;color:var(--text);background:var(--cream);
+    background-image:
+      radial-gradient(ellipse 900px 500px at 15% 0%, rgba(255,215,107,.44), transparent 62%),
+      radial-gradient(ellipse 700px 400px at 100% 15%, rgba(228,181,176,.44), transparent 62%),
+      radial-gradient(ellipse 700px 400px at 0% 55%, rgba(159,196,164,.34), transparent 62%),
+      radial-gradient(ellipse 800px 500px at 100% 55%, rgba(240,168,120,.32), transparent 62%),
+      radial-gradient(ellipse 700px 500px at 100% 80%, rgba(228,181,176,.42), transparent 62%),
+      radial-gradient(ellipse 600px 400px at 0% 100%, rgba(255,215,107,.34), transparent 62%);
+    background-attachment:fixed;
+    -webkit-font-smoothing:antialiased;text-wrap:pretty
+  }
+  a{color:var(--rose);text-decoration:none;transition:color .3s}
+  a:hover{color:var(--green)}
+  h1,h2,h3{font-family:'Fraunces',Georgia,serif;font-weight:600;margin:0;letter-spacing:-.015em;color:var(--green)}
+  p{margin:0}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+  .fade-up{animation:fadeUp .8s ease both}
+  @media (prefers-reduced-motion:reduce){.fade-up{animation:none}}
+
+  header.site{position:sticky;top:0;z-index:50;padding:14px 20px;background-color:var(--cream);border-bottom:1px solid rgba(45,74,58,.1);overflow:hidden}
+  header.site::before{content:"";position:absolute;inset:-10px;z-index:0;background-image:url('/akakuaa/brand/akakuaa-header-infantil-delgado.png');background-size:100% 100%;background-position:center;background-repeat:no-repeat;filter:blur(4px);pointer-events:none}
+  header.site > *{position:relative;z-index:2}
+  header.site .wrap{max-width:1280px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:24px}
+  header.site .brand{display:flex;align-items:center;gap:12px;text-decoration:none;color:inherit}
+  header.site .brand img{width:60px;height:60px;object-fit:contain;flex-shrink:0}
+  header.site .brand .name{font-family:'Fraunces',serif;font-weight:700;font-size:26px;line-height:1;letter-spacing:-.02em}
+  header.site .brand .name .g{color:var(--green)}
+  header.site .brand .name .r{color:var(--rose)}
+  header.site .brand .tag{font-size:10px;color:var(--rose);letter-spacing:.18em;text-transform:uppercase;margin-top:4px;font-style:italic;font-family:'Fraunces',serif}
+  header.site nav{display:flex;align-items:center;gap:4px}
+  header.site nav a{padding:8px 14px;border-radius:999px;color:var(--green);font-weight:600;font-size:14px}
+  header.site nav a.active{background:var(--rose-pale);color:var(--rose)}
+  header.site .cta{padding:12px 20px;border-radius:999px;background:var(--green);color:var(--cream);font-weight:700;font-size:14px;display:inline-flex;align-items:center;gap:8px;box-shadow:0 8px 22px -10px rgba(45,74,58,.55)}
+  header.site .cta:hover{color:var(--cream);transform:translateY(-2px)}
+  header.site .cta .dot{width:8px;height:8px;border-radius:50%;background:var(--rose-soft);box-shadow:0 0 0 3px rgba(228,181,176,.35)}
+  @media (max-width:960px){header.site nav{display:none}}
+
+  .breadcrumb{max-width:1180px;margin:0 auto;padding:24px 20px 0;font-size:13.5px;color:var(--text-soft)}
+  .breadcrumb a{color:var(--text-soft);font-weight:600}
+  .breadcrumb a:hover{color:var(--rose)}
+
+  section.hero-historia{padding:60px 20px 40px;text-align:center;max-width:800px;margin:0 auto}
+  section.hero-historia .n{font-family:'Fraunces',serif;font-size:64px;color:var(--rose);line-height:1;font-weight:500;margin-bottom:8px}
+  section.hero-historia h1{font-size:clamp(44px,5.5vw,72px);line-height:1;margin-bottom:18px}
+  section.hero-historia h1 em{font-style:italic;color:var(--rose)}
+  section.hero-historia .rule{width:80px;height:2px;background:var(--rose);margin:0 auto 22px}
+  section.hero-historia .lead{font-size:22px;color:var(--rose);font-family:'Fraunces',serif;font-style:italic;font-weight:600}
+
+  section.contenido{padding:20px 20px 100px}
+  section.contenido .grid{max-width:1180px;margin:0 auto;display:grid;grid-template-columns:1fr 1.15fr;gap:56px;align-items:start}
+  section.contenido .side{position:sticky;top:110px}
+  section.contenido .side .card{background:#fff;border-radius:28px;padding:0;box-shadow:0 24px 50px -30px rgba(45,74,58,.3);border:1px solid var(--sand);overflow:hidden;aspect-ratio:4/5}
+  section.contenido .side .card img{width:100%;height:100%;object-fit:cover;display:block}
+  section.contenido .quote{margin-top:20px;text-align:center;font-family:'Fraunces',serif;font-style:italic;color:var(--green);font-size:15px;line-height:1.5}
+  section.contenido .quote span{color:var(--rose)}
+  section.contenido .body{display:flex;flex-direction:column;gap:26px}
+  section.contenido .body>p{font-size:17px;line-height:1.65;color:var(--text)}
+  section.contenido .body .item{display:flex;gap:16px;align-items:flex-start;background:#fff;padding:22px 24px;border-radius:20px}
+  section.contenido .body .item .icon{width:44px;height:44px;flex-shrink:0;border-radius:50%;display:flex;align-items:center;justify-content:center}
+  section.contenido .body .item .icon svg{width:22px;height:22px}
+  section.contenido .body .item .head{font-family:'Fraunces',serif;font-weight:700;font-style:italic;font-size:17px;margin-bottom:4px}
+  section.contenido .body .item p{font-size:15px;line-height:1.55;color:var(--text)}
+  section.contenido .body .item.rose{border-left:4px solid var(--rose)}
+  section.contenido .body .item.rose .icon{background:var(--rose-pale);color:var(--rose)}
+  section.contenido .body .item.rose .head{color:var(--rose)}
+  section.contenido .body .item.sage{border-left:4px solid var(--sage)}
+  section.contenido .body .item.sage .icon{background:var(--sage);color:var(--green)}
+  section.contenido .body .item.sage .head{color:var(--green)}
+  section.contenido .body .item.rose-soft{border-left:4px solid var(--rose-soft)}
+  section.contenido .body .item.rose-soft .icon{background:var(--rose-soft);color:var(--green)}
+  section.contenido .body .item.rose-soft .head{color:var(--rose)}
+  section.contenido .significado{background:linear-gradient(135deg,var(--rose-pale),var(--cream-soft));border-radius:24px;padding:32px;margin-top:12px}
+  section.contenido .significado .kicker{font-family:'Fraunces',serif;font-style:italic;color:var(--rose);font-weight:600;font-size:14px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:12px}
+  section.contenido .significado p{font-size:15.5px;line-height:1.6;margin-bottom:12px;color:var(--text)}
+  section.contenido .significado p.hi{color:var(--green);font-family:'Fraunces',serif;font-weight:600;font-style:italic}
+  section.contenido .significado strong{color:var(--rose)}
+
+  section.cierre-cta{padding:30px 20px 80px}
+  section.cierre-cta .wrap{max-width:900px;margin:0 auto;background:linear-gradient(135deg,var(--green),var(--green-soft));border-radius:32px;padding:60px 40px;text-align:center;color:var(--cream)}
+  section.cierre-cta h2{color:var(--cream);font-size:clamp(30px,3.5vw,42px);line-height:1;margin-bottom:14px}
+  section.cierre-cta h2 em{color:var(--rose-soft);font-style:italic}
+  section.cierre-cta p{color:var(--rose-soft);font-family:'Fraunces',serif;font-style:italic;font-size:18px;margin-bottom:26px}
+  section.cierre-cta .buttons{display:flex;flex-wrap:wrap;gap:12px;justify-content:center}
+  section.cierre-cta .btn-primary{padding:14px 26px;border-radius:999px;background:var(--cream);color:var(--green);font-weight:700;font-size:14.5px}
+  section.cierre-cta .btn-primary:hover{color:var(--green);transform:translateY(-2px)}
+  section.cierre-cta .btn-ghost{padding:14px 26px;border-radius:999px;background:transparent;color:var(--cream);font-weight:700;font-size:14.5px;border:2px solid var(--cream)}
+  section.cierre-cta .btn-ghost:hover{color:var(--cream);background:rgba(255,255,255,.08);transform:translateY(-2px)}
+
+  footer.site{padding:60px 20px 40px;background:var(--green);color:var(--cream);margin-top:40px}
+  footer.site .wrap{max-width:1280px;margin:0 auto;display:flex;justify-content:space-between;flex-wrap:wrap;gap:24px;align-items:center}
+  footer.site .brand{display:flex;align-items:center;gap:12px}
+  footer.site .brand img{width:52px;height:52px;object-fit:contain}
+  footer.site .brand .name{font-family:'Fraunces',serif;font-weight:700;font-size:22px;color:var(--cream)}
+  footer.site .brand .tag{font-size:10px;color:var(--rose-soft);letter-spacing:.14em;text-transform:uppercase;margin-top:4px;font-style:italic;font-family:'Fraunces',serif}
+  footer.site .copy{font-size:13px;color:rgba(245,237,224,.55)}
+
+  @media (max-width:820px){
+    section.contenido .grid{grid-template-columns:1fr;gap:32px}
+    section.contenido .side{position:static}
+  }
+</style>
+</head>
+<body>
+
+  <header class="site">
+    <div class="wrap">
+      <a href="/" class="brand">
+        <img src="/akakuaa/brand/akakuaa.png" alt="Akakua'a">
+        <div>
+          <div class="name"><span class="g">akaku</span><span class="r">a'a</span></div>
+          <div class="tag">porque crecer pide cambios</div>
+        </div>
+      </a>
+      <nav>
+        <a href="/">Inicio</a>
+        <a href="/catalogo">Catálogo</a>
+        <a href="/historia" class="active">Historia</a>
+        <a href="/faq">Preguntas</a>
+        <a href="/sucursales">Sucursales</a>
+      </nav>
+      <a href="/#cta" class="cta">
+        <span class="dot"></span> Escribinos
+      </a>
+    </div>
+  </header>
+
+  <div class="breadcrumb">
+    <a href="/">Inicio</a> <span>·</span> <span style="color:var(--green);font-weight:600">Nuestra historia</span>
+  </div>
+
+  <section class="hero-historia fade-up">
+    <h1>Nuestra <em>historia</em></h1>
+    <div class="rule"></div>
+    <p class="lead">Los niños crecen muy rápido.</p>
+  </section>
+
+  <section class="contenido">
+    <div class="grid">
+      <div class="side">
+        <div class="card">
+          <img src="https://images.unsplash.com/photo-1622218286192-95f6a20083c7?w=800&q=80&auto=format&fit=crop" alt="Ropa infantil colgada en un perchero" loading="lazy">
+        </div>
+        <p class="quote">"Cada artículo tiene valor.<br><span>Cada historia tiene un nuevo comienzo.</span>"</p>
+      </div>
+
+      <div class="body">
+        <p>Akakua'a nació al observar algo que todas las familias viven. Muchas veces, prendas, juguetes y artículos que todavía están en excelente estado dejan de tener lugar en casa, mientras otra familia está justamente buscando eso que necesita.</p>
+
+        <div class="item rose">
+          <div class="icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m17.66 6.34 1.41-1.41"/><path d="M8 21h8"/><path d="M9 18h6a1 1 0 0 0 1-1v-1a5 5 0 0 0 2-4 6 6 0 1 0-12 0 5 5 0 0 0 2 4v1a1 1 0 0 0 1 1z"/></svg>
+          </div>
+          <div>
+            <div class="head">Vimos allí una oportunidad.</div>
+            <p>No solo de dar una segunda vida a esos artículos, sino de ofrecer una forma más <strong style="color:var(--green)">inteligente, accesible y consciente</strong> de consumir.</p>
+          </div>
+        </div>
+
+        <div class="item sage">
+          <div class="icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>
+          </div>
+          <div>
+            <div class="head">Más que una tienda.</div>
+            <p>Con el tiempo entendimos que Akakua'a podía convertirse en un lugar donde todas las familias se sintieran bienvenidas. Donde no importara de dónde vienen, sino el deseo compartido de <strong style="color:var(--green)">cuidar a sus hijos, consumir con inteligencia y aprovechar mejor los recursos</strong>.</p>
+          </div>
+        </div>
+
+        <div class="item rose-soft">
+          <div class="icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"/><circle cx="10" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          </div>
+          <div>
+            <div class="head">Hoy Akakua'a es una comunidad.</div>
+            <p>Un espacio donde conviven familias de todas las realidades, unidas por un mismo propósito: <strong style="color:var(--rose)">dar valor a lo que ya existe, ahorrar sin renunciar a la calidad y construir, juntos, un futuro mejor para nuestros hijos</strong>.</p>
+          </div>
+        </div>
+
+        <div class="significado">
+          <div class="kicker">El significado de Akakua'a</div>
+          <p>Akakua'a no nació con ese nombre. Por circunstancias que no habíamos planeado, tuvimos que cambiarlo. Y como todo cambio importante, vino acompañado de dudas, miedo e incertidumbre.</p>
+          <p class="hi">Aquel cambio que tanto nos costó aceptar terminó fortaleciéndonos. Nos permitió crecer, evolucionar y convertirnos en una marca mucho más auténtica.</p>
+          <p>En ese momento entendimos que nosotros mismos habíamos vivido aquello que siempre hablamos: <strong>Crecer pide cambios.</strong> Ese día nació nuestro lema.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ VISIÓN DE FUTURO (movida desde la home) ============ -->
+  <section class="vision-section">
+    <svg aria-hidden="true" class="vision-plant" viewBox="0 0 100 200"><path d="M50 200 Q30 150 40 100 T50 0" stroke="#2d4a3a" stroke-width="1.5" fill="none"/><g fill="#2d4a3a"><ellipse cx="35" cy="150" rx="10" ry="4" transform="rotate(-25 35 150)"/><ellipse cx="55" cy="120" rx="10" ry="4" transform="rotate(25 55 120)"/><ellipse cx="38" cy="85" rx="10" ry="4" transform="rotate(-25 38 85)"/></g></svg>
+    <svg aria-hidden="true" class="vision-star" viewBox="0 0 24 24"><path d="M12 1l2.9 7.4L23 9.2l-6 5.3L18.7 23 12 18.8 5.3 23 7 14.5 1 9.2l8.1-.8L12 1z"/></svg>
+
+    <div class="vision-wrap">
+      <div class="vision-head">
+        <div class="vision-badge">
+          <span class="vision-badge-dot"></span>
+          Soñamos con
+        </div>
+        <h2>Nuestra <span>visión de futuro</span></h2>
+        <div class="vision-rule"></div>
+        <p class="vision-lead">Que Akakua'a sea mucho más que una cadena de tiendas.</p>
+      </div>
+
+      <div class="vision-path" role="list">
+        <svg class="vision-path-line" viewBox="0 0 1000 60" preserveAspectRatio="none" aria-hidden="true">
+          <path d="M60 30 C 200 -10, 340 70, 500 30 S 800 -10, 940 30" stroke="#c98a8a" stroke-width="2" fill="none" stroke-dasharray="5 8" stroke-linecap="round"/>
+        </svg>
+
+        <article class="vision-step" role="listitem" style="--v-accent:#c98a8a;--v-tint:#fce8e6">
+          <div class="vision-num"><span>01</span></div>
+          <div class="vision-card">
+            <h3>Comunidad</h3>
+            <p>Que crezca junto a las familias.</p>
+          </div>
+        </article>
+
+        <article class="vision-step" role="listitem" style="--v-accent:#7a9863;--v-tint:#eef3e6">
+          <div class="vision-num"><span>02</span></div>
+          <div class="vision-card">
+            <h3>Un lugar</h3>
+            <p>Donde siempre serán bien recibidas.</p>
+          </div>
+        </article>
+
+        <article class="vision-step" role="listitem" style="--v-accent:#c9a24a;--v-tint:#fff5e0">
+          <div class="vision-num"><span>03</span></div>
+          <div class="vision-card">
+            <h3>Circular</h3>
+            <p>Artículos que sigan pasando de mano en mano.</p>
+          </div>
+        </article>
+
+        <article class="vision-step" role="listitem" style="--v-accent:#8a3a3a;--v-tint:#f6dcd9">
+          <div class="vision-num"><span>04</span></div>
+          <div class="vision-card">
+            <h3>Menos&nbsp;desperdicio</h3>
+            <p>Que desperdiciar sea cada vez menos necesario.</p>
+          </div>
+        </article>
+
+        <article class="vision-step" role="listitem" style="--v-accent:#3d5a48;--v-tint:#e0eadf">
+          <div class="vision-num"><span>05</span></div>
+          <div class="vision-card">
+            <h3>Cada etapa</h3>
+            <p>Un espacio para cada momento del crecimiento.</p>
+          </div>
+        </article>
+      </div>
+
+      <blockquote class="vision-quote">
+        <span aria-hidden="true">♥</span>
+        <p>Si logramos eso,<br>habremos cumplido nuestro propósito.</p>
+      </blockquote>
+    </div>
+
+    <style>
+      .vision-section{padding:110px 20px 130px;position:relative;overflow:hidden;background:linear-gradient(180deg,#fbf1de 0%,#f7e6da 55%,#f2d9d5 100%)}
+      .vision-plant{position:absolute;top:100px;left:-40px;width:200px;opacity:.28;z-index:0}
+      .vision-star{position:absolute;top:80px;right:8%;width:26px;fill:#ffd76b;opacity:.7;z-index:0;animation:vision-pulse 3.2s ease-in-out infinite}
+      @keyframes vision-pulse{0%,100%{transform:scale(.92);opacity:.55}50%{transform:scale(1.1);opacity:.9}}
+
+      .vision-wrap{max-width:1200px;margin:0 auto;position:relative;z-index:1}
+      .vision-head{text-align:center;max-width:720px;margin:0 auto 72px}
+      .vision-badge{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;background:#fff;border-radius:999px;font-size:11.5px;font-weight:700;color:var(--rose);letter-spacing:.22em;text-transform:uppercase;margin-bottom:22px;box-shadow:0 6px 18px -8px rgba(45,74,58,.18)}
+      .vision-badge-dot{width:6px;height:6px;border-radius:50%;background:var(--rose);animation:vision-pulse 2s ease-in-out infinite}
+      .vision-head h2{font-size:clamp(40px,5vw,64px);line-height:1;margin-bottom:18px}
+      .vision-head h2 span{font-style:italic;color:var(--rose)}
+      .vision-rule{width:60px;height:2px;background:var(--rose);margin:0 auto 20px}
+      .vision-lead{font-size:19px;color:var(--green);font-family:'Fraunces',serif;font-style:italic;font-weight:500;line-height:1.4}
+
+      .vision-path{display:grid;grid-template-columns:repeat(5,1fr);gap:24px;position:relative;padding:20px 10px 0}
+      .vision-path-line{position:absolute;top:44px;left:0;right:0;width:100%;height:60px;pointer-events:none;z-index:0}
+
+      .vision-step{position:relative;display:flex;flex-direction:column;align-items:center;text-align:center;z-index:1;animation:vision-rise .7s cubic-bezier(.34,1.56,.64,1) both}
+      .vision-step:nth-child(2){animation-delay:.08s}
+      .vision-step:nth-child(3){animation-delay:.16s}
+      .vision-step:nth-child(4){animation-delay:.24s}
+      .vision-step:nth-child(5){animation-delay:.32s}
+      .vision-step:nth-child(6){animation-delay:.4s}
+      @keyframes vision-rise{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+
+      .vision-num{width:56px;height:56px;border-radius:50%;background:#fff;color:var(--v-accent);display:flex;align-items:center;justify-content:center;font-family:'Fraunces',serif;font-weight:600;font-style:italic;font-size:20px;box-shadow:0 8px 18px -8px rgba(45,74,58,.28),0 0 0 6px var(--v-tint);margin-bottom:22px;transition:transform .4s cubic-bezier(.34,1.56,.64,1)}
+      .vision-step:hover .vision-num{transform:translateY(-4px) scale(1.06)}
+
+      .vision-card{background:#fff;border-radius:22px;padding:22px 20px 20px;box-shadow:0 18px 34px -22px rgba(45,74,58,.22),0 3px 10px -6px rgba(45,74,58,.08);border:1.5px solid var(--v-tint);width:100%;transition:transform .45s cubic-bezier(.34,1.56,.64,1),box-shadow .35s;position:relative}
+      .vision-card::before{content:"";position:absolute;top:-1.5px;left:24px;right:24px;height:3px;background:var(--v-accent);border-radius:0 0 3px 3px;opacity:.9}
+      .vision-step:hover .vision-card{transform:translateY(-6px);box-shadow:0 28px 55px -22px rgba(45,74,58,.32),0 6px 14px -6px rgba(45,74,58,.14)}
+      .vision-card h3{font-family:'Fraunces',serif;font-style:italic;font-weight:600;font-size:20px;line-height:1.15;color:var(--v-accent);margin:0 0 10px}
+      .vision-card p{font-size:14px;color:var(--text-soft);line-height:1.5;margin:0}
+
+      .vision-quote{margin:64px auto 0;max-width:640px;text-align:center;padding:36px 32px;background:#fff;border-radius:28px;border:1px solid var(--sand);box-shadow:0 18px 36px -24px rgba(45,74,58,.24);position:relative}
+      .vision-quote::before,.vision-quote::after{content:"";position:absolute;top:50%;height:1px;width:36px;background:var(--rose);opacity:.35}
+      .vision-quote::before{left:8%}
+      .vision-quote::after{right:8%}
+      .vision-quote span{color:var(--rose);font-size:22px;display:block;margin-bottom:8px}
+      .vision-quote p{font-family:'Fraunces',serif;font-style:italic;font-size:22px;line-height:1.35;font-weight:600;color:var(--green);margin:0}
+
+      @media (max-width:960px){
+        .vision-path{grid-template-columns:repeat(2,1fr);gap:32px 20px}
+        .vision-path-line{display:none}
+        .vision-step:nth-child(6){grid-column:1 / -1;max-width:calc(50% - 10px);margin:0 auto}
+      }
+      @media (max-width:520px){
+        .vision-path{grid-template-columns:1fr;gap:22px}
+        .vision-step:nth-child(6){max-width:100%}
+      }
+      @media (prefers-reduced-motion:reduce){
+        .vision-step,.vision-star,.vision-badge-dot,.vision-num,.vision-card{animation:none!important;transition:none!important;transform:none!important;opacity:1!important}
+      }
+    </style>
+  </section>
+
+  <section class="cierre-cta">
+    <div class="wrap">
+      <div style="color:var(--rose-soft);font-size:22px;margin-bottom:12px">♥</div>
+      <h2>Eso es <em>Akakua'a</em>.</h2>
+      <p>Porque crecer pide cambios.</p>
+      <div class="buttons">
+        <a href="/#recibimos" class="btn-primary">Ver qué recibimos</a>
+        <a href="/sucursales" class="btn-ghost">Conocer las sucursales</a>
+      </div>
+    </div>
+  </section>
+
+  <footer class="site">
+    <div class="wrap">
+      <div class="brand">
+        <img src="/akakuaa/brand/akakuaa.png" alt="Akakua'a">
+        <div>
+          <div class="name">akakua'a</div>
+          <div class="tag">porque crecer pide cambios</div>
+        </div>
+      </div>
+      <div class="copy">© 2026 Akakua'a · <a href="/" style="color:var(--rose-soft)">Volver al inicio</a></div>
+    </div>
+  </footer>
+
+</body>
+</html>

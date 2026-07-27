@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Catálogo · Akakua'a</title>
+<link rel="icon" type="image/png" href="/akakuaa/brand/akakuaa.png">
+<link rel="apple-touch-icon" href="/akakuaa/brand/akakuaa.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Nunito:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/akakuaa/css/mobile.css">
+<script defer src="/akakuaa/js/mobile.js"></script>
+<style>
+  :root{
+    --cream:#f5ede0;--cream-soft:#faf3e6;
+    --green:#2d4a3a;--green-soft:#3d5a48;
+    --rose:#c98a8a;--rose-soft:#e4b5b0;--rose-pale:#f2d9d5;
+    --sage:#c9d7bf;--sand:#e8dcc4;
+    --text:#3a3428;--text-soft:#7a6f5f;
+  }
+  *,*::before,*::after{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:'Nunito',system-ui,sans-serif;color:var(--text);background:var(--cream);
+    background-image:
+      radial-gradient(ellipse 900px 500px at 15% 0%, rgba(255,215,107,.44), transparent 62%),
+      radial-gradient(ellipse 700px 400px at 100% 15%, rgba(228,181,176,.44), transparent 62%),
+      radial-gradient(ellipse 700px 400px at 0% 55%, rgba(159,196,164,.34), transparent 62%),
+      radial-gradient(ellipse 800px 500px at 100% 55%, rgba(240,168,120,.32), transparent 62%),
+      radial-gradient(ellipse 700px 500px at 100% 80%, rgba(228,181,176,.42), transparent 62%),
+      radial-gradient(ellipse 600px 400px at 0% 100%, rgba(255,215,107,.34), transparent 62%);
+    background-attachment:fixed;
+    -webkit-font-smoothing:antialiased;text-wrap:pretty
+  }
+  a{color:var(--rose);text-decoration:none;transition:color .3s}
+  a:hover{color:var(--green)}
+  button{font-family:inherit;cursor:pointer;border:none;background:none;padding:0;color:inherit}
+  h1,h2,h3{font-family:'Fraunces',Georgia,serif;font-weight:600;margin:0;letter-spacing:-.015em;color:var(--green)}
+  p{margin:0}
+
+  header.site{position:sticky;top:0;z-index:50;padding:14px 20px;background-color:var(--cream);border-bottom:1px solid rgba(45,74,58,.1);overflow:hidden}
+  header.site::before{content:"";position:absolute;inset:-10px;z-index:0;background-image:url('/akakuaa/brand/akakuaa-header-infantil-delgado.png');background-size:100% 100%;background-position:center;background-repeat:no-repeat;filter:blur(4px);pointer-events:none}
+  header.site > *{position:relative;z-index:2}
+  header.site .wrap{max-width:1280px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:24px}
+  header.site .brand{display:flex;align-items:center;gap:12px;text-decoration:none;color:inherit}
+  header.site .brand img{width:60px;height:60px;object-fit:contain;flex-shrink:0}
+  header.site .brand .name{font-family:'Fraunces',serif;font-weight:700;font-size:26px;line-height:1;letter-spacing:-.02em}
+  header.site .brand .name .g{color:var(--green)}
+  header.site .brand .name .r{color:var(--rose)}
+  header.site .brand .tag{font-size:10px;color:var(--rose);letter-spacing:.18em;text-transform:uppercase;margin-top:4px;font-style:italic;font-family:'Fraunces',serif}
+  header.site nav{display:flex;align-items:center;gap:4px}
+  header.site nav a{padding:8px 14px;border-radius:999px;color:var(--green);font-weight:600;font-size:14px}
+  header.site nav a.active{background:var(--rose-pale);color:var(--rose)}
+  header.site .cta{padding:12px 20px;border-radius:999px;background:var(--green);color:var(--cream);font-weight:700;font-size:14px;display:inline-flex;align-items:center;gap:8px;box-shadow:0 8px 22px -10px rgba(45,74,58,.55);transition:transform .3s}
+  header.site .cta:hover{color:var(--cream);transform:translateY(-2px)}
+  header.site .cta .dot{width:8px;height:8px;border-radius:50%;background:var(--rose-soft);box-shadow:0 0 0 3px rgba(228,181,176,.35)}
+  @media (max-width:960px){header.site nav{display:none}}
+
+  .breadcrumb{max-width:1280px;margin:0 auto;padding:22px 24px 0;font-size:13.5px;color:var(--text-soft);position:relative;z-index:2}
+  .breadcrumb a{color:var(--text-soft);font-weight:600}
+  .breadcrumb a:hover{color:var(--rose)}
+
+  section.hero{padding:40px 24px 20px;max-width:1280px;margin:0 auto;position:relative}
+  section.hero h1{font-size:clamp(40px,5vw,64px);line-height:1;margin-bottom:14px}
+  section.hero h1 em{font-style:italic;color:var(--rose)}
+  section.hero .rule{width:60px;height:2px;background:var(--rose);margin-bottom:16px}
+  section.hero p{font-size:17px;color:var(--text-soft);line-height:1.55;max-width:620px}
+
+  section.filters{padding:24px 24px 8px;max-width:1280px;margin:0 auto;position:relative;z-index:2}
+  .filter-label{font-size:11.5px;color:var(--text-soft);font-weight:800;letter-spacing:.22em;text-transform:uppercase;margin-bottom:12px;display:flex;align-items:center;gap:10px}
+  .filter-label::after{content:"";flex:1;height:1px;background:rgba(45,74,58,.1)}
+
+  .cat-chips{display:flex;gap:10px;overflow-x:auto;padding:4px 4px 14px;margin:0 -4px;scrollbar-width:thin;scrollbar-color:rgba(45,74,58,.2) transparent}
+  .cat-chips::-webkit-scrollbar{height:6px}
+  .cat-chips::-webkit-scrollbar-thumb{background:rgba(45,74,58,.15);border-radius:999px}
+  .cat-chip{flex-shrink:0;display:inline-flex;align-items:center;gap:9px;padding:10px 16px;border-radius:999px;background:#fff;color:var(--green);font-weight:700;font-size:14px;border:1.5px solid rgba(45,74,58,.12);transition:all .25s}
+  .cat-chip svg{width:20px;height:20px;stroke-width:1.6;flex-shrink:0;color:var(--rose)}
+  .cat-chip:hover{border-color:rgba(45,74,58,.28);transform:translateY(-1px)}
+  .cat-chip.is-active{background:var(--green);color:var(--cream);border-color:var(--green);box-shadow:0 8px 20px -10px rgba(45,74,58,.5)}
+  .cat-chip.is-active svg{color:var(--rose-soft)}
+
+  .age-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+  .age-chip{padding:8px 15px;border-radius:999px;background:transparent;color:var(--green);font-weight:700;font-size:13px;border:1.5px solid rgba(45,74,58,.16);transition:all .2s}
+  .age-chip:hover{border-color:rgba(45,74,58,.32)}
+  .age-chip.is-active{background:var(--rose);color:#fff;border-color:var(--rose)}
+
+  .result-line{margin:22px 0 18px;font-size:14px;color:var(--text-soft);display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .result-line strong{color:var(--green);font-weight:800}
+  .clear-filters{color:var(--rose);font-weight:700;font-size:13px;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+  .clear-filters:hover{color:var(--green)}
+
+  section.catalog{padding:0 24px 60px;max-width:1280px;margin:0 auto;position:relative;z-index:2}
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:28px 24px}
+
+  /* ---- Tarjeta editorial: foto a sangre + ficha limpia ---- */
+  .prod{background:transparent;display:flex;flex-direction:column;position:relative;
+    transition:transform .4s cubic-bezier(.34,1.3,.64,1)}
+  .prod:hover{transform:translateY(-4px)}
+  .prod.is-hidden{display:none}
+
+  .prod__media{position:relative;aspect-ratio:3/4;overflow:hidden;border-radius:18px;
+    background:linear-gradient(170deg,#f2ece0,#e4dac6);
+    box-shadow:0 16px 32px -20px rgba(45,74,58,.4)}
+  .prod__media img{width:100%;height:100%;object-fit:cover;display:block;
+    transition:transform .8s cubic-bezier(.22,.9,.3,1);-webkit-user-drag:none;user-select:none}
+  .prod:hover .prod__media img{transform:scale(1.06)}
+
+  /* Velo + "Ver detalle" al pasar el mouse */
+  .prod__veil{position:absolute;inset:0;display:flex;align-items:flex-end;justify-content:center;
+    padding-bottom:22px;opacity:0;transition:opacity .4s;pointer-events:none;
+    background:linear-gradient(180deg,transparent 45%,rgba(45,74,58,.55))}
+  .prod:hover .prod__veil{opacity:1}
+  .prod__veil-txt{font-family:'Fraunces',serif;font-style:italic;font-weight:600;font-size:15px;color:#fff;
+    letter-spacing:.01em;transform:translateY(8px);transition:transform .4s cubic-bezier(.34,1.4,.64,1);
+    border-bottom:1.5px solid rgba(255,255,255,.6);padding-bottom:2px}
+  .prod:hover .prod__veil-txt{transform:translateY(0)}
+
+  .prod__fav{position:absolute;top:12px;right:12px;width:34px;height:34px;border-radius:50%;
+    background:rgba(255,255,255,.9);color:var(--rose);border:none;display:inline-flex;align-items:center;
+    justify-content:center;cursor:pointer;z-index:3;padding:0;backdrop-filter:blur(6px);
+    box-shadow:0 4px 12px -4px rgba(45,74,58,.3);
+    transition:transform .25s cubic-bezier(.34,1.5,.64,1),background .25s,color .25s}
+  .prod__fav svg{width:17px;height:17px;transition:fill .3s}
+  .prod__fav:hover{transform:scale(1.12)}
+  .prod__fav.is-active{background:var(--rose);color:#fff}
+  .prod__fav.is-active svg{fill:#fff}
+
+  /* Estado sin foto */
+  .prod--soon .prod__media{background:repeating-linear-gradient(45deg,#f4eee2,#f4eee2 10px,#efe7d7 10px,#efe7d7 20px);
+    box-shadow:none;border:1.5px dashed rgba(45,74,58,.16);display:flex;align-items:center;justify-content:center}
+  .prod__ph{display:flex;flex-direction:column;align-items:center;gap:10px;color:#a8977c}
+  .prod__ph svg{width:56px;height:42px}
+  .prod__ph span{font-family:'Fraunces',serif;font-style:italic;font-size:13px;font-weight:600}
+
+  /* ---- Ficha de texto ---- */
+  .prod__body{padding:16px 2px 0;display:flex;flex-direction:column;gap:5px;flex:1}
+  .prod__kicker{font-size:9.5px;font-weight:800;letter-spacing:.24em;text-transform:uppercase;color:var(--rose)}
+  .prod__title{font-family:'Fraunces',serif;font-weight:600;font-size:20px;line-height:1.15;color:var(--green);
+    margin:2px 0 0;letter-spacing:-.015em}
+  .prod__note{font-size:13px;color:var(--text-soft);line-height:1.4;margin:0}
+  .prod__ages{font-size:11.5px;color:var(--text-soft);margin:2px 0 0;opacity:.8;letter-spacing:.02em}
+
+  .prod__foot{margin-top:auto;padding-top:14px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .prod__price{font-family:'Fraunces',serif;font-style:italic;font-size:12.5px;color:var(--green);font-weight:600}
+  .prod__cta{width:38px;height:38px;border-radius:50%;background:var(--green);color:var(--cream);
+    display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;text-decoration:none;
+    transition:transform .3s cubic-bezier(.34,1.5,.64,1),background .3s}
+  .prod__cta svg{width:15px;height:15px;transition:transform .3s}
+  .prod__cta:hover{color:var(--cream);background:var(--rose);transform:scale(1.1)}
+  .prod__cta:hover svg{transform:translateX(2px)}
+  .prod--soon .prod__cta{background:transparent;color:var(--green);border:1.5px solid rgba(45,74,58,.2)}
+  .prod--soon .prod__cta:hover{color:#fff;background:var(--green);border-color:var(--green)}
+
+  @media (prefers-reduced-motion:reduce){
+    .prod,.prod__media img,.prod__veil,.prod__veil-txt,.prod__fav,.prod__cta{transition:none!important;transform:none!important}
+  }
+
+  .empty-state{grid-column:1/-1;padding:80px 20px;text-align:center;color:var(--text-soft);background:rgba(255,255,255,.6);border-radius:24px;border:1px dashed rgba(45,74,58,.2)}
+  .empty-state h3{font-size:22px;font-style:italic;margin-bottom:8px}
+  .empty-state p{font-size:14.5px;line-height:1.55;max-width:420px;margin:0 auto}
+  .empty-state button{margin-top:16px;color:var(--rose);font-weight:800;text-decoration:underline;text-underline-offset:3px;font-size:14px}
+
+  section.pricing-note{padding:24px 24px 40px;max-width:1280px;margin:0 auto}
+  section.pricing-note .wrap{background:#fff;border-radius:28px;padding:26px 30px;border:1px solid var(--sand);display:flex;gap:20px;align-items:center;flex-wrap:wrap;box-shadow:0 12px 28px -22px rgba(45,74,58,.2)}
+  section.pricing-note svg{width:44px;height:44px;flex-shrink:0;color:var(--rose)}
+  section.pricing-note .text{flex:1;min-width:260px}
+  section.pricing-note .text .title{font-family:'Fraunces',serif;font-size:20px;font-style:italic;color:var(--green);font-weight:600;margin-bottom:4px}
+  section.pricing-note .text p{font-size:14.5px;color:var(--text-soft);line-height:1.55}
+
+  section.cta{padding:20px 24px 80px;max-width:1280px;margin:0 auto}
+  section.cta .wrap{background:linear-gradient(135deg,var(--green),var(--green-soft));border-radius:32px;padding:48px 40px;text-align:center;color:var(--cream);position:relative;overflow:hidden}
+  section.cta h2{color:var(--cream);font-size:clamp(28px,3.5vw,40px);line-height:1;margin-bottom:14px}
+  section.cta h2 em{color:var(--rose-soft);font-style:italic}
+  section.cta p{color:var(--rose-soft);font-family:'Fraunces',serif;font-style:italic;font-size:17px;margin-bottom:24px}
+  section.cta .buttons{display:flex;flex-wrap:wrap;gap:12px;justify-content:center}
+  section.cta .btn-primary{padding:14px 26px;border-radius:999px;background:var(--cream);color:var(--green);font-weight:700;font-size:14.5px;transition:transform .3s}
+  section.cta .btn-primary:hover{color:var(--green);transform:translateY(-2px)}
+  section.cta .btn-ghost{padding:14px 26px;border-radius:999px;background:transparent;color:var(--cream);font-weight:700;font-size:14.5px;border:2px solid var(--cream);transition:transform .3s,background .3s}
+  section.cta .btn-ghost:hover{color:var(--cream);background:rgba(255,255,255,.08);transform:translateY(-2px)}
+
+  footer.site{padding:60px 20px 40px;background:var(--green);color:var(--cream);margin-top:20px}
+  footer.site .wrap{max-width:1280px;margin:0 auto;display:flex;justify-content:space-between;flex-wrap:wrap;gap:24px;align-items:center}
+  footer.site .brand{display:flex;align-items:center;gap:12px}
+  footer.site .brand img{width:52px;height:52px;object-fit:contain}
+  footer.site .brand .name{font-family:'Fraunces',serif;font-weight:700;font-size:22px;color:var(--cream)}
+  footer.site .brand .tag{font-size:10px;color:var(--rose-soft);letter-spacing:.14em;text-transform:uppercase;margin-top:4px;font-style:italic;font-family:'Fraunces',serif}
+  footer.site .copy{font-size:13px;color:rgba(245,237,224,.55)}
+
+  @media (max-width:1024px){.grid{grid-template-columns:repeat(3,1fr)}}
+  @media (max-width:720px){.grid{grid-template-columns:repeat(2,1fr);gap:16px}}
+  @media (max-width:420px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+  <header class="site">
+    <div class="wrap">
+      <a href="/" class="brand">
+        <img src="/akakuaa/brand/akakuaa.png" alt="Akakua'a">
+        <div>
+          <div class="name"><span class="g">akaku</span><span class="r">a'a</span></div>
+          <div class="tag">porque crecer pide cambios</div>
+        </div>
+      </a>
+      <nav>
+        <a href="/">Inicio</a>
+        <a href="/catalogo" class="active">Catálogo</a>
+        <a href="/historia">Historia</a>
+        <a href="/faq">Preguntas</a>
+        <a href="/sucursales">Sucursales</a>
+      </nav>
+      <a href="/#cta" class="cta">
+        <span class="dot"></span> Escribinos
+      </a>
+    </div>
+  </header>
+
+  <div class="breadcrumb">
+    <a href="/">Inicio</a> <span>·</span> <span style="color:var(--green);font-weight:600">Catálogo</span>
+  </div>
+
+  <section class="hero">
+    <h1>Nuestro <em>catálogo</em></h1>
+    <div class="rule"></div>
+    <p>Explorá prendas y artículos por categoría o edad. Cada pieza es única — la disponibilidad puede variar por sucursal.</p>
+  </section>
+
+  <section class="filters">
+    <div class="filter-label">Categoría</div>
+    <div class="cat-chips" id="catChips" role="tablist" aria-label="Filtrar por categoría"></div>
+
+    <div class="filter-label" style="margin-top:14px">Edad</div>
+    <div class="age-chips" id="ageChips" role="tablist" aria-label="Filtrar por edad"></div>
+
+    <div class="result-line">
+      <span>Mostrando <strong id="resultCount">0</strong> <span id="resultWord">prendas</span></span>
+      <button type="button" class="clear-filters" id="clearFilters" style="display:none">Limpiar filtros</button>
+    </div>
+  </section>
+
+  <section class="catalog">
+    <div class="grid" id="prodGrid"></div>
+  </section>
+
+  <section class="pricing-note">
+    <div class="wrap">
+      <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M22 6l-14 14a3 3 0 0 0 0 4l16 16a3 3 0 0 0 4 0l14-14a3 3 0 0 0 0-4L28 6a3 3 0 0 0-4 0z"/>
+        <circle cx="16" cy="16" r="2.5" fill="currentColor" stroke="none"/>
+      </svg>
+      <div class="text">
+        <div class="title">Precios por categoría</div>
+        <p>Cada categoría tiene un precio de venta establecido — sin sorpresas por prenda individual. La disponibilidad y stock exacto los confirmamos por WhatsApp según la sucursal más cercana.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="cta">
+    <div class="wrap">
+      <div style="color:var(--rose-soft);font-size:22px;margin-bottom:12px">♥</div>
+      <h2>¿Buscás algo <em>en particular</em>?</h2>
+      <p>Consultanos por WhatsApp y te decimos si lo tenemos disponible.</p>
+      <div class="buttons">
+        <a href="/#cta" class="btn-primary">Hablar por WhatsApp</a>
+        <a href="/sucursales" class="btn-ghost">Ver sucursales</a>
+      </div>
+    </div>
+  </section>
+
+  <footer class="site">
+    <div class="wrap">
+      <div class="brand">
+        <img src="/akakuaa/brand/akakuaa.png" alt="Akakua'a">
+        <div>
+          <div class="name">akakua'a</div>
+          <div class="tag">porque crecer pide cambios</div>
+        </div>
+      </div>
+      <div class="copy">© 2026 Akakua'a · <a href="/" style="color:var(--rose-soft)">Volver al inicio</a></div>
+    </div>
+  </footer>
+
+  <!-- SVG icons registry (inline sprite) -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <symbol id="i-all" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="3" width="7" height="7" rx="1.4"/>
+        <rect x="14" y="3" width="7" height="7" rx="1.4"/>
+        <rect x="3" y="14" width="7" height="7" rx="1.4"/>
+        <rect x="14" y="14" width="7" height="7" rx="1.4"/>
+      </symbol>
+      <symbol id="i-vestido" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 3l3 3 3-3"/>
+        <path d="M9 3l-2 4 3 2-4 12h12l-4-12 3-2-2-4"/>
+      </symbol>
+      <symbol id="i-infantil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M8 4l-5 3 2 4 3-1v11h12V10l3 1 2-4-5-3-4 2-4-2z"/>
+      </symbol>
+      <symbol id="i-bebes" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 3h6l1 3-2 2v3h2v9h-8v-9h2V8L8 6z"/>
+        <circle cx="11" cy="15" r=".8" fill="currentColor"/>
+        <circle cx="13" cy="15" r=".8" fill="currentColor"/>
+      </symbol>
+      <symbol id="i-calzado" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 15c0-3 2-5 5-5l3-3 3 4c3 0 7 1 7 5v3H3z"/>
+        <path d="M11 10l2 3"/>
+      </symbol>
+      <symbol id="i-accesorios" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 18h16l-1-4c0-4-3-7-7-7s-7 3-7 7z"/>
+        <path d="M4 18h16v2H4z"/>
+      </symbol>
+      <symbol id="i-abrigos" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M8 4l-4 3 2 5 3-1v10h10V11l3 1 2-5-4-3-4 2-4-2z"/>
+        <path d="M12 5v15"/>
+      </symbol>
+      <symbol id="i-juguetes" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="7"/>
+        <circle cx="6" cy="7" r="2"/>
+        <circle cx="18" cy="7" r="2"/>
+        <circle cx="10" cy="11" r=".8" fill="currentColor"/>
+        <circle cx="14" cy="11" r=".8" fill="currentColor"/>
+        <path d="M10 15c1 1 3 1 4 0"/>
+      </symbol>
+      <symbol id="i-ajuar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 10h16l-2 10H6z"/>
+        <path d="M4 10c0-4 4-6 8-6s8 2 8 6"/>
+        <path d="M8 14v3M12 14v3M16 14v3"/>
+      </symbol>
+      <symbol id="i-escolar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M6 8h12v13H6z"/>
+        <path d="M9 8V5a3 3 0 0 1 6 0v3"/>
+        <path d="M9 13h6"/>
+      </symbol>
+      <!-- Fallback simple image for product cards when picsum fails -->
+    </defs>
+  </svg>
+
+  <script>
+  (function(){
+    /* =========================================================
+     * Categorías del catálogo — deben coincidir con los data-slug
+     * del perchero en /
+     * ========================================================= */
+    var CATEGORIES = [
+      { slug:'todas',      name:'Todas',              icon:'i-all' },
+      { slug:'vestidos',   name:'Vestidos',           icon:'i-vestido' },
+      { slug:'infantil',   name:'Ropa infantil',      icon:'i-infantil' },
+      { slug:'bebes',      name:'Ropa para bebés',    icon:'i-bebes' },
+      { slug:'calzados',   name:'Calzados',           icon:'i-calzado' },
+      { slug:'accesorios', name:'Accesorios',         icon:'i-accesorios' },
+      { slug:'abrigos',    name:'Abrigos',            icon:'i-abrigos' },
+      { slug:'juguetes',   name:'Juguetes',           icon:'i-juguetes' },
+      { slug:'ajuar',      name:'Ajuar y hogar',      icon:'i-ajuar' },
+      { slug:'escolar',    name:'Escolar',            icon:'i-escolar' }
+    ];
+
+    var AGES = [
+      { key:'todas', label:'Todas' },
+      { key:'rn',    label:'Recién nacidos' },
+      { key:'bebes', label:'Bebés' },
+      { key:'ninos', label:'Niños' },
+      { key:'pre',   label:'Pre-adolescentes' },
+      { key:'ado',   label:'Adolescentes' }
+    ];
+
+    var AGE_LABEL = { rn:'RN', bebes:'Bebés', ninos:'Niños', pre:'Pre-adol.', ado:'Adol.' };
+
+    /* PRODUCTOS: se cargan desde /api/publico/catalogo (franjas de Principal). */
+    var PRODUCTS = [];
+
+    /* ========================================================= */
+
+    var state = { cat: 'todas', age: 'todas' };
+    var CAT_LABEL_MAP = {};
+    CATEGORIES.forEach(function(c){ CAT_LABEL_MAP[c.slug] = c.name; });
+
+    var catChips = document.getElementById('catChips');
+    var ageChips = document.getElementById('ageChips');
+    var grid     = document.getElementById('prodGrid');
+    var count    = document.getElementById('resultCount');
+    var word     = document.getElementById('resultWord');
+    var clearBtn = document.getElementById('clearFilters');
+
+    function svgUse(id){
+      return '<svg aria-hidden="true"><use href="#' + id + '"></use></svg>';
+    }
+
+    function renderCatChips(){
+      catChips.innerHTML = '';
+      CATEGORIES.forEach(function(c){
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'cat-chip' + (c.slug === state.cat ? ' is-active' : '');
+        b.setAttribute('role','tab');
+        b.setAttribute('aria-selected', c.slug === state.cat ? 'true' : 'false');
+        b.dataset.cat = c.slug;
+        b.innerHTML = svgUse(c.icon) + '<span>' + c.name + '</span>';
+        b.addEventListener('click', function(){
+          state.cat = c.slug;
+          renderCatChips();
+          apply();
+          history.replaceState(null, '', c.slug === 'todas' ? location.pathname : '#cat-' + c.slug);
+        });
+        catChips.appendChild(b);
+      });
+    }
+
+    function renderAgeChips(){
+      ageChips.innerHTML = '';
+      AGES.forEach(function(a){
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'age-chip' + (a.key === state.age ? ' is-active' : '');
+        b.setAttribute('role','tab');
+        b.setAttribute('aria-selected', a.key === state.age ? 'true' : 'false');
+        b.dataset.age = a.key;
+        b.textContent = a.label;
+        b.addEventListener('click', function(){
+          state.age = a.key;
+          renderAgeChips();
+          apply();
+        });
+        ageChips.appendChild(b);
+      });
+    }
+
+    // Construye la URL de la foto: Unsplash (p.img) o archivo local (p.image)
+    function photoURL(p){
+      if(p.image) return p.image;
+      if(p.img)   return 'https://images.unsplash.com/' + p.img + '?w=600&h=750&fit=crop&crop=entropy&q=80';
+      return null;
+    }
+
+    function productCard(p){
+      var src = photoURL(p);
+      var has_photo = !!src;
+
+      var article = document.createElement('article');
+      article.className = 'prod' + (has_photo ? '' : ' prod--soon');
+      article.dataset.cat = p.cat;
+      article.dataset.ages = p.ages.join(',');
+
+      /* ---- Foto a sangre ---- */
+      var media = document.createElement('div');
+      media.className = 'prod__media prod__media--' + p.cat;
+
+      if(has_photo){
+        var img = document.createElement('img');
+        img.src = src;
+        img.alt = p.name;
+        img.decoding = 'async';
+        img.draggable = false;
+        media.appendChild(img);
+
+        // Velo + texto que aparecen al pasar el mouse
+        var veil = document.createElement('span');
+        veil.className = 'prod__veil';
+        veil.innerHTML = '<span class="prod__veil-txt">Ver detalle</span>';
+        media.appendChild(veil);
+
+        var fav = document.createElement('button');
+        fav.type = 'button';
+        fav.className = 'prod__fav';
+        fav.setAttribute('aria-label','Guardar ' + p.name + ' en favoritos');
+        fav.setAttribute('aria-pressed','false');
+        fav.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-5.5-9-10a5 5 0 0 1 9-3 5 5 0 0 1 9 3c-2 4.5-9 10-9 10z"/></svg>';
+        fav.addEventListener('click', function(ev){
+          ev.preventDefault();
+          ev.stopPropagation();
+          var on = fav.classList.toggle('is-active');
+          fav.setAttribute('aria-pressed', on ? 'true' : 'false');
+        });
+        media.appendChild(fav);
+      } else {
+        var ph = document.createElement('div');
+        ph.className = 'prod__ph';
+        ph.innerHTML =
+          '<svg viewBox="0 0 64 48" aria-hidden="true">' +
+            '<path d="M32 6 Q26 6 26 12" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linecap="round"/>' +
+            '<circle cx="26" cy="12" r="2.2" fill="currentColor"/>' +
+            '<path d="M8 38 L32 20 L56 38" stroke="currentColor" stroke-width="2.6" fill="none" stroke-linejoin="round" stroke-linecap="round"/>' +
+          '</svg>' +
+          '<span>foto en camino</span>';
+        media.appendChild(ph);
+      }
+
+      /* ---- Info ---- */
+      var body = document.createElement('div');
+      body.className = 'prod__body';
+
+      var kicker = document.createElement('span');
+      kicker.className = 'prod__kicker';
+      kicker.textContent = CAT_LABEL_MAP[p.cat] || p.cat;
+      body.appendChild(kicker);
+
+      var title = document.createElement('h3');
+      title.className = 'prod__title';
+      title.textContent = p.name;
+      body.appendChild(title);
+
+      if(p.note && false){
+        var note = document.createElement('p');
+        note.className = 'prod__note';
+        note.textContent = p.note;
+        body.appendChild(note);
+      }
+
+      // Edades como texto liviano separado por punto medio
+      var ages = document.createElement('p');
+      ages.className = 'prod__ages';
+      ages.textContent = p.ages.map(function(a){ return AGE_LABEL[a] || a; }).join(' · ');
+      body.appendChild(ages);
+
+      var foot = document.createElement('div');
+      foot.className = 'prod__foot';
+
+      var price = document.createElement('span');
+      price.className = 'prod__price';
+      price.textContent = p.note ? p.note : (has_photo ? 'precio por categoría' : 'próximamente');
+      foot.appendChild(price);
+
+      var cta = document.createElement('a');
+      cta.className = 'prod__cta';
+      cta.href = '/#cta';
+      cta.setAttribute('aria-label','Consultar por ' + p.name);
+      cta.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>';
+      foot.appendChild(cta);
+      body.appendChild(foot);
+
+      article.appendChild(media);
+      article.appendChild(body);
+      return article;
+    }
+
+    function apply(){
+      var list = PRODUCTS.filter(function(p){
+        if(state.cat !== 'todas' && p.cat !== state.cat) return false;
+        if(state.age !== 'todas' && p.ages.indexOf(state.age) === -1) return false;
+        return true;
+      });
+
+      grid.innerHTML = '';
+      list.forEach(function(p){ grid.appendChild(productCard(p)); });
+
+      if(list.length === 0){
+        var empty = document.createElement('div');
+        empty.className = 'empty-state';
+        empty.innerHTML =
+          '<h3>Nada en este filtro</h3>' +
+          '<p>Probá con otra edad o categoría. También podés escribirnos por WhatsApp y te asesoramos.</p>' +
+          '<button type="button" id="emptyReset">Limpiar filtros</button>';
+        grid.appendChild(empty);
+        var btn = document.getElementById('emptyReset');
+        if(btn) btn.addEventListener('click', clearAll);
+      }
+
+      count.textContent = list.length;
+      word.textContent = list.length === 1 ? 'prenda' : 'prendas';
+      clearBtn.style.display = (state.cat === 'todas' && state.age === 'todas') ? 'none' : 'inline';
+    }
+
+    function clearAll(){
+      state.cat = 'todas'; state.age = 'todas';
+      renderCatChips(); renderAgeChips(); apply();
+      history.replaceState(null, '', location.pathname);
+    }
+
+    clearBtn.addEventListener('click', clearAll);
+
+    function applyHash(){
+      var h = (location.hash || '').replace(/^#/, '');
+      if(!h) return;
+      if(h.indexOf('cat-') === 0){
+        var slug = h.slice(4);
+        if(CATEGORIES.some(function(c){ return c.slug === slug; })){
+          state.cat = slug;
+          renderCatChips();
+          apply();
+          // Scroll suave a la sección del catálogo
+          setTimeout(function(){
+            var s = document.querySelector('section.catalog');
+            if(s) s.scrollIntoView({ behavior:'smooth', block:'start' });
+          }, 80);
+        }
+      }
+    }
+
+    // Init
+    renderCatChips();
+    renderAgeChips();
+    apply();
+    applyHash();
+    window.addEventListener('hashchange', applyHash);
+    // ================= Wire a franjas de Principal (Supabase) =================
+    // Karen: el catálogo web muestra franjas activas de Principal. Endpoint
+    // UNAUTH, cache 60s. Sucursal 2 y BR no tienen web propia.
+    function fmtPYG(n){
+      try { return new Intl.NumberFormat("es-PY",{ style:"currency", currency:"PYG", maximumFractionDigits:0 }).format(n); }
+      catch(_) { return "Gs. " + Math.round(n).toLocaleString("es-PY"); }
+    }
+    fetch("/api/publico/catalogo", { credentials:"omit" })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(payload){
+        if(!payload || !payload.success || !payload.data) return;
+        var franjas = payload.data.franjas || [];
+        PRODUCTS = franjas.map(function(f){
+          return { name: f.nombre || "Franja", cat: "todas", ages: ["todas"], note: fmtPYG(Number(f.precio_venta || 0)), image: null };
+        });
+        apply();
+      })
+      .catch(function(err){ console.warn("[akakuaa/catalogo] fetch failed", err); });
+
+  })();
+  </script>
+
+</body>
+</html>
