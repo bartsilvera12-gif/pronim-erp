@@ -471,7 +471,7 @@ export default function NuevaVentaPage() {
   ];
 
   return (
-    <div className="space-y-4 max-w-7xl" style={{ zoom: 0.67 }}>
+    <div className="space-y-4 max-w-7xl">
       <div className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">{t("Venta")}</h1>
