@@ -123,10 +123,36 @@ async function runProcesar(
       if (!(totalFinal > 0)) {
         throw new ValidationError("TOTAL_FINAL_INVALIDO", "trae.total_final_evaluado debe ser > 0.");
       }
+      // Reparto de pagos al cliente (opcional). Cada fila:
+      //   { metodo: 'credito'|'efectivo'|'transferencia', monto,
+      //     entidad_bancaria_id?, referencia? }
+      // El backend valida que la suma coincida con total_final_evaluado.
+      const pagosRaw = Array.isArray(raw.pagos) ? raw.pagos : [];
+      const pagos = pagosRaw
+        .map((x) => {
+          if (!x || typeof x !== "object") return null;
+          const r = x as Record<string, unknown>;
+          const metodo = String(r.metodo ?? "").toLowerCase();
+          if (metodo !== "credito" && metodo !== "efectivo" && metodo !== "transferencia") return null;
+          const monto = Number(r.monto);
+          if (!(monto > 0)) return null;
+          return {
+            metodo: metodo as "credito" | "efectivo" | "transferencia",
+            monto,
+            entidad_bancaria_id:
+              typeof r.entidad_bancaria_id === "string" && r.entidad_bancaria_id
+                ? r.entidad_bancaria_id : null,
+            referencia:
+              typeof r.referencia === "string" && r.referencia
+                ? r.referencia : null,
+          };
+        })
+        .filter((x): x is { metodo: "credito" | "efectivo" | "transferencia"; monto: number; entidad_bancaria_id: string | null; referencia: string | null } => !!x);
       return {
         items: out,
         totalFinalEvaluado: totalFinal,
         ingresarAlStock: raw.ingresar_al_stock !== false,
+        pagos: pagos.length > 0 ? pagos : undefined,
       };
     };
 

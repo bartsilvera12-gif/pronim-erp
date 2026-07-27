@@ -54,6 +54,17 @@ export default function NuevaEvaluacionPage() {
   const [ingresarAlStock, setIngresarAlStock] = useState<boolean>(false);
   const [observaciones, setObservaciones] = useState("");
 
+  // ── Reparto del pago al cliente ──────────────────────────────────────
+  // Karen: sumen todo, dividen ÷2 o ÷4 para dar el precio, y ese precio
+  // se paga en crédito + efectivo + transferencia (mezclable).
+  const [divisor, setDivisor] = useState<1 | 2 | 4 | "custom">(1);
+  const [pagoCredito, setPagoCredito] = useState<string>("");
+  const [pagoEfectivo, setPagoEfectivo] = useState<string>("");
+  const [pagoTransf, setPagoTransf] = useState<string>("");
+  const [transfEntidadId, setTransfEntidadId] = useState<string>("");
+  const [transfReferencia, setTransfReferencia] = useState<string>("");
+  const [entidades, setEntidades] = useState<{ id: string; nombre: string; tipo: string | null }[]>([]);
+
   // Carga rápida por MONTO (misma UX que caja original).
   const [cargaRapidaOpen, setCargaRapidaOpen] = useState(false);
   const [cargaRapidaCantidad, setCargaRapidaCantidad] = useState("");
@@ -73,11 +84,17 @@ export default function NuevaEvaluacionPage() {
     let cancel = false;
     (async () => {
       try {
-        const [rf, rc, rt] = await Promise.all([
+        const [rf, rc, rt, re] = await Promise.all([
           fetchWithSupabaseSession("/api/franjas/publicas", { cache: "no-store" }),
           fetchWithSupabaseSession("/api/clientes", { cache: "no-store" }),
           fetchWithSupabaseSession("/api/tipos-prenda?solo_activos=true", { cache: "no-store" }),
+          fetchWithSupabaseSession("/api/entidades-bancarias", { cache: "no-store" }),
         ]);
+        const je = await re.json().catch(() => ({}));
+        if (!cancel && je?.success) {
+          const ents = (je.data?.entidades as { id: string; nombre: string; tipo: string | null; activo?: boolean }[]) ?? [];
+          setEntidades(ents.filter((x) => x.activo !== false));
+        }
         refrescarPendientesIngreso();
         refrescarMetaDia();
         refrescarMetasAlcanzadas();
@@ -252,6 +269,9 @@ export default function NuevaEvaluacionPage() {
     setTrae([]); setTraeMontoFinal(""); setIngresarAlStock(false);
     setObservaciones(""); setError(null);
     setCliente(null); setClienteQuery(""); setClienteOpen(false);
+    setDivisor(1);
+    setPagoCredito(""); setPagoEfectivo(""); setPagoTransf("");
+    setTransfEntidadId(""); setTransfReferencia("");
   }
 
   function preConfirmar() {
@@ -268,8 +288,21 @@ export default function NuevaEvaluacionPage() {
         : "Abrí una caja antes de confirmar.");
       return;
     }
-    // La idempotency_key se genera en confirmar() cuando aún no hay una;
-    // acá directamente disparamos el submit (no hay modal previo como en Venta).
+    // Validar reparto de pagos. Si no se tocó nada, por default va todo a
+    // crédito (backend fallback). Si escribieron algo, debe cuadrar y la
+    // transferencia debe tener entidad.
+    const nCred = Number(pagoCredito) || 0;
+    const nEfec = Number(pagoEfectivo) || 0;
+    const nTran = Number(pagoTransf) || 0;
+    const suma = nCred + nEfec + nTran;
+    if (suma > 0 && Math.abs(suma - totalTrae) > 1) {
+      setError(`El reparto no cuadra: asignado ${fmtGs(suma)} de ${fmtGs(totalTrae)}.`);
+      return;
+    }
+    if (nTran > 0 && !transfEntidadId) {
+      setError("Elegí una entidad bancaria para la transferencia.");
+      return;
+    }
     void confirmar();
   }
 
@@ -287,6 +320,20 @@ export default function NuevaEvaluacionPage() {
 
     setEnviando(true);
     try {
+      // Construir array de pagos si se especificó algo. Si todos vacíos,
+      // el backend cae al default: todo a crédito.
+      const nCred = Number(pagoCredito) || 0;
+      const nEfec = Number(pagoEfectivo) || 0;
+      const nTran = Number(pagoTransf) || 0;
+      const pagos: Array<{ metodo: string; monto: number; entidad_bancaria_id?: string; referencia?: string }> = [];
+      if (nCred > 0) pagos.push({ metodo: "credito", monto: nCred });
+      if (nEfec > 0) pagos.push({ metodo: "efectivo", monto: nEfec });
+      if (nTran > 0) pagos.push({
+        metodo: "transferencia", monto: nTran,
+        entidad_bancaria_id: transfEntidadId || undefined,
+        referencia: transfReferencia || undefined,
+      });
+
       const traePayload = {
         items: trae.map((l) => ({
           producto_id: l.franja_id,
@@ -296,6 +343,7 @@ export default function NuevaEvaluacionPage() {
         })),
         total_final_evaluado: totalTrae,
         ingresar_al_stock: ingresarAlStock,
+        pagos: pagos.length > 0 ? pagos : undefined,
       };
       const r = await fetchWithSupabaseSession("/api/atencion/confirmar", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -534,15 +582,93 @@ export default function NuevaEvaluacionPage() {
         <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider">Balance</h3>
         <div className="grid grid-cols-2 gap-3 text-sm">
           <BalanceItem
-            label={ajusteEvaluacion !== 0 ? "Total trae (evaluado)" : "Total trae"}
-            value={fmtGs(totalTrae)} tone="emerald"
+            label="Subtotal (suma de franjas)"
+            value={fmtGs(totalTraeSubtotal)} tone="slate"
           />
           <BalanceItem
-            label="Se acredita al cliente"
+            label={ajusteEvaluacion !== 0 ? "Total a pagar (evaluado)" : "Total a pagar"}
             value={fmtGs(totalTrae)}
             tone={totalTrae > 0 ? "emerald" : "slate"}
           />
         </div>
+
+        {/* ── Divisor rápido: ÷1 / ÷2 / ÷4 / otro ────────────────────── */}
+        {totalTraeSubtotal > 0 && (
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Dividir el subtotal
+            </p>
+            <div className="flex flex-wrap gap-2 items-center">
+              {([1, 2, 4] as const).map((d) => (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => {
+                    setDivisor(d);
+                    const nuevo = Math.round(totalTraeSubtotal / d);
+                    setTraeMontoFinal(String(nuevo));
+                    // Reset: todo va a crédito por default
+                    setPagoCredito(String(nuevo));
+                    setPagoEfectivo(""); setPagoTransf("");
+                  }}
+                  className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
+                    divisor === d
+                      ? "bg-[#4FAEB2] text-white shadow-sm"
+                      : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-100"
+                  }`}
+                >
+                  {d === 1 ? "Total" : `÷${d}`}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => setDivisor("custom")}
+                className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
+                  divisor === "custom"
+                    ? "bg-[#4FAEB2] text-white shadow-sm"
+                    : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-100"
+                }`}
+              >
+                Otro
+              </button>
+              <div className="flex items-center gap-2 ml-auto">
+                <span className="text-xs text-slate-500">Monto final:</span>
+                <div className="w-40">
+                  <MontoInput
+                    value={traeMontoFinal}
+                    decimals={false}
+                    onChange={(n) => {
+                      setTraeMontoFinal(n > 0 ? String(n) : "");
+                      setDivisor("custom");
+                      // Al cambiar el monto final, poner todo en crédito por default
+                      setPagoCredito(n > 0 ? String(n) : "");
+                      setPagoEfectivo(""); setPagoTransf("");
+                    }}
+                    className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-semibold text-right focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Reparto del pago: crédito + efectivo + transferencia ─── */}
+        {totalTrae > 0 && (
+          <RepartoPago
+            total={totalTrae}
+            credito={pagoCredito}
+            efectivo={pagoEfectivo}
+            transf={pagoTransf}
+            transfEntidadId={transfEntidadId}
+            transfReferencia={transfReferencia}
+            entidades={entidades}
+            onCredito={setPagoCredito}
+            onEfectivo={setPagoEfectivo}
+            onTransf={setPagoTransf}
+            onTransfEntidadId={setTransfEntidadId}
+            onTransfReferencia={setTransfReferencia}
+          />
+        )}
 
         {trae.length > 0 && (
           <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 cursor-pointer select-none">
@@ -632,6 +758,161 @@ export default function NuevaEvaluacionPage() {
           )}
         </aside>
       )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// RepartoPago — sub-componente para dividir el pago al cliente en
+// crédito en productos + efectivo + transferencia bancaria.
+// La suma debe igualar `total`; si no, muestra descuadre y bloquea.
+// ═══════════════════════════════════════════════════════════════════════
+
+function RepartoPago(props: {
+  total: number;
+  credito: string; efectivo: string; transf: string;
+  transfEntidadId: string; transfReferencia: string;
+  entidades: { id: string; nombre: string; tipo: string | null }[];
+  onCredito: (s: string) => void;
+  onEfectivo: (s: string) => void;
+  onTransf: (s: string) => void;
+  onTransfEntidadId: (s: string) => void;
+  onTransfReferencia: (s: string) => void;
+}) {
+  const { total, credito, efectivo, transf, transfEntidadId, transfReferencia, entidades } = props;
+  const numCred = Number(credito) || 0;
+  const numEfec = Number(efectivo) || 0;
+  const numTran = Number(transf) || 0;
+  const suma = numCred + numEfec + numTran;
+  const diff = total - suma;
+  const cuadra = Math.abs(diff) <= 1;
+
+  const rowCls = "grid grid-cols-[auto,1fr,auto] gap-3 items-center";
+  const chipBase = "rounded-lg border px-3 py-2 text-sm font-semibold";
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+          Cómo se paga al cliente
+        </p>
+        <button
+          type="button"
+          onClick={() => {
+            props.onCredito(String(Math.round(total)));
+            props.onEfectivo(""); props.onTransf("");
+          }}
+          className="text-xs text-[#4FAEB2] hover:underline font-medium"
+        >
+          Todo a crédito
+        </button>
+      </div>
+
+      {/* Crédito en productos */}
+      <div className={rowCls}>
+        <span className={`${chipBase} border-emerald-200 bg-emerald-50 text-emerald-700 w-32 text-center`}>
+          💳 Crédito
+        </span>
+        <MontoInput
+          value={credito} decimals={false}
+          onChange={(n) => props.onCredito(n > 0 ? String(n) : "")}
+          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-right focus:outline-none focus:ring-2 focus:ring-emerald-500"
+        />
+        <button
+          type="button"
+          onClick={() => {
+            const restante = Math.max(0, total - numEfec - numTran);
+            props.onCredito(restante > 0 ? String(restante) : "");
+          }}
+          className="text-[11px] text-slate-500 hover:text-slate-700 underline whitespace-nowrap"
+          title="Poner el restante en crédito"
+        >
+          Resto acá
+        </button>
+      </div>
+
+      {/* Efectivo */}
+      <div className={rowCls}>
+        <span className={`${chipBase} border-sky-200 bg-sky-50 text-sky-700 w-32 text-center`}>
+          💵 Efectivo
+        </span>
+        <MontoInput
+          value={efectivo} decimals={false}
+          onChange={(n) => props.onEfectivo(n > 0 ? String(n) : "")}
+          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-right focus:outline-none focus:ring-2 focus:ring-sky-500"
+        />
+        <button
+          type="button"
+          onClick={() => {
+            const restante = Math.max(0, total - numCred - numTran);
+            props.onEfectivo(restante > 0 ? String(restante) : "");
+          }}
+          className="text-[11px] text-slate-500 hover:text-slate-700 underline whitespace-nowrap"
+          title="Poner el restante en efectivo"
+        >
+          Resto acá
+        </button>
+      </div>
+
+      {/* Transferencia */}
+      <div className={rowCls}>
+        <span className={`${chipBase} border-violet-200 bg-violet-50 text-violet-700 w-32 text-center`}>
+          🏦 Transf.
+        </span>
+        <MontoInput
+          value={transf} decimals={false}
+          onChange={(n) => props.onTransf(n > 0 ? String(n) : "")}
+          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-right focus:outline-none focus:ring-2 focus:ring-violet-500"
+        />
+        <button
+          type="button"
+          onClick={() => {
+            const restante = Math.max(0, total - numCred - numEfec);
+            props.onTransf(restante > 0 ? String(restante) : "");
+          }}
+          className="text-[11px] text-slate-500 hover:text-slate-700 underline whitespace-nowrap"
+          title="Poner el restante en transferencia"
+        >
+          Resto acá
+        </button>
+      </div>
+
+      {numTran > 0 && (
+        <div className="grid grid-cols-[auto,1fr] gap-3 items-center pl-4">
+          <span className="text-xs text-slate-500">Entidad:</span>
+          <select
+            value={transfEntidadId}
+            onChange={(e) => props.onTransfEntidadId(e.target.value)}
+            className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+          >
+            <option value="">— Elegir banco / billetera —</option>
+            {entidades.map((ent) => (
+              <option key={ent.id} value={ent.id}>{ent.nombre}{ent.tipo ? ` (${ent.tipo})` : ""}</option>
+            ))}
+          </select>
+          <span className="text-xs text-slate-500">Referencia:</span>
+          <input
+            type="text"
+            value={transfReferencia}
+            onChange={(e) => props.onTransfReferencia(e.target.value)}
+            placeholder="Nro de operación / comprobante"
+            className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+          />
+        </div>
+      )}
+
+      {/* Descuadre */}
+      <div className={`rounded-lg px-3 py-2 text-xs font-semibold ${
+        cuadra
+          ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+          : "bg-rose-50 text-rose-700 border border-rose-200"
+      }`}>
+        {cuadra
+          ? `✓ Cuadra: ${fmtGs(suma)} de ${fmtGs(total)}`
+          : diff > 0
+            ? `⚠ Falta asignar ${fmtGs(diff)} (asignado ${fmtGs(suma)} de ${fmtGs(total)})`
+            : `⚠ Excede en ${fmtGs(Math.abs(diff))} (asignado ${fmtGs(suma)} de ${fmtGs(total)})`}
+      </div>
     </div>
   );
 }

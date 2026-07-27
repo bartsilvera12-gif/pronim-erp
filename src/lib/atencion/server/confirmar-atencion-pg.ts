@@ -57,6 +57,16 @@ export interface ConfirmarAtencionInput {
     /** Monto final de la evaluación (puede diferir del subtotal). > 0. */
     totalFinalEvaluado: number;
     ingresarAlStock?: boolean;
+    /** Reparto del pago al cliente por la evaluación. Cada fila es un
+     *  pago de la tienda al cliente (crédito, efectivo, transferencia).
+     *  Si no viene, se asume TODO va a crédito (comportamiento legacy).
+     *  La suma debe igualar `totalFinalEvaluado`. */
+    pagos?: {
+      metodo: "credito" | "efectivo" | "transferencia";
+      monto: number;
+      entidad_bancaria_id?: string | null;
+      referencia?: string | null;
+    }[];
   } | null;
 
   // LLEVA (opcional; si viene y items > 0, se crea venta)
@@ -284,15 +294,42 @@ export async function confirmarAtencionEnClientePg(
     if (hayTrae) {
       const t = p.trae!;
       const totalFinal = Math.round(Number(t.totalFinalEvaluado) || 0);
+      // Reparto de pagos al cliente por la evaluación:
+      //   - Si el frontend mandó `pagos`, usamos ese array (con validación
+      //     de suma == totalFinal, tolerando ±1 por redondeo).
+      //   - Si no, todo va a crédito (comportamiento legacy: /atencion/nueva
+      //     con cambio directo genera 100% crédito para que se aplique en
+      //     la venta subsiguiente).
+      let pagosRecepcion: {
+        metodo: "credito" | "efectivo" | "transferencia";
+        monto: number;
+        entidad_bancaria_id?: string | null;
+        referencia?: string | null;
+      }[];
+      if (Array.isArray(t.pagos) && t.pagos.length > 0) {
+        const sum = t.pagos.reduce((s, x) => s + (Number(x.monto) || 0), 0);
+        if (Math.abs(sum - totalFinal) > 1) {
+          throw new ValidationError(
+            "PAGOS_RECEPCION_DESCUADRE",
+            `La suma de los pagos al cliente (${sum}) no coincide con el total evaluado (${totalFinal}).`,
+          );
+        }
+        pagosRecepcion = t.pagos.map((x) => ({
+          metodo: x.metodo,
+          monto: Math.round(Number(x.monto) || 0),
+          entidad_bancaria_id: x.entidad_bancaria_id ?? null,
+          referencia: x.referencia ?? null,
+        }));
+      } else {
+        pagosRecepcion = [{ metodo: "credito", monto: totalFinal }];
+      }
       const r = await crearRecepcionEnClientePg(client, {
         schema,
         empresaId: p.empresaId,
         clienteId: p.clienteId,
         sucursalId: p.sucursalId,
         items: t.items,
-        // Método = crédito 100% por el total_final. Si el cliente también
-        // lleva, ese crédito se aplica automáticamente en la venta.
-        pagos: [{ metodo: "credito", monto: totalFinal }],
+        pagos: pagosRecepcion,
         observaciones: p.observaciones,
         createdBy: p.createdBy,
         usuarioNombre: p.usuarioNombre,
