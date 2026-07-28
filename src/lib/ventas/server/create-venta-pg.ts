@@ -548,10 +548,15 @@ export async function createVentaEnClientePg(
 
     // ── Descontar stock + movimientos SALIDA ─────────────────────────
     for (const [prodId, qty] of qtyByProduct) {
+      // UPSERT: si no existía la fila (producto, sucursal) — ej. franja recién
+      // creada o sucursal nueva — la creamos con stock negativo para que la
+      // deuda de stock quede registrada y visible en Inventario.
       await client.query(
-        `UPDATE ${stockSucT}
-            SET stock_actual = stock_actual - $1, updated_at = now()
-          WHERE producto_id = $2 AND sucursal_id = $3`,
+        `INSERT INTO ${stockSucT} (producto_id, sucursal_id, stock_actual, updated_at)
+         VALUES ($2, $3, -$1, now())
+         ON CONFLICT (producto_id, sucursal_id) DO UPDATE
+           SET stock_actual = ${stockSucT}.stock_actual - $1,
+               updated_at = now()`,
         [qty, prodId, params.sucursalId],
       );
       const inf = productosInfo.get(prodId)!;

@@ -761,25 +761,34 @@ export default function InventarioPage() {
                     </td>
                     <td className="py-4 pr-4 text-center hidden md:table-cell">
                       {(() => {
-                        const list = (p.sucursales ?? []).filter((s) => s.stock_actual > 0);
+                        // Mostramos sucursales con stock > 0 y también las que
+                        // quedaron en negativo (venta sin stock) — así la
+                        // cajera ve dónde le falta reponer.
+                        const list = (p.sucursales ?? []).filter((s) => s.stock_actual !== 0);
                         if (list.length === 0) {
                           return <span className="text-xs text-slate-300">—</span>;
                         }
                         return (
                           <div className="flex flex-wrap gap-1 justify-center">
-                            {list.map((s) => (
-                              <span
-                                key={s.sucursal_id}
-                                className={`inline-flex items-center gap-1 rounded-full text-[10px] font-medium px-2 py-0.5 border ${
-                                  s.es_principal
-                                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                    : "bg-sky-50 text-sky-700 border-sky-200"
-                                }`}
-                                title={`${s.nombre}: ${s.stock_actual}`}
-                              >
-                                {s.nombre} <span className="tabular-nums opacity-70">·{s.stock_actual}</span>
-                              </span>
-                            ))}
+                            {list.map((s) => {
+                              const negativo = s.stock_actual < 0;
+                              const cls = negativo
+                                ? "bg-rose-50 text-rose-700 border-rose-200"
+                                : s.es_principal
+                                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                : "bg-sky-50 text-sky-700 border-sky-200";
+                              return (
+                                <span
+                                  key={s.sucursal_id}
+                                  className={`inline-flex items-center gap-1 rounded-full text-[10px] font-medium px-2 py-0.5 border ${cls}`}
+                                  title={negativo
+                                    ? `${s.nombre}: ${s.stock_actual} (falta reponer)`
+                                    : `${s.nombre}: ${s.stock_actual}`}
+                                >
+                                  {s.nombre} <span className="tabular-nums opacity-70">·{s.stock_actual}</span>
+                                </span>
+                              );
+                            })}
                           </div>
                         );
                       })()}
