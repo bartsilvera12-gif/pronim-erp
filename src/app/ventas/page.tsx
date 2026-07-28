@@ -156,11 +156,15 @@ export default function VentasPage() {
   const dateLocale = lang === "pt-BR" ? "pt-BR" : "es-PY";
   // Karen: solo administrador puede anular ventas. Escondemos el botón
   // para cualquier otro rol (super_admin queda incluido por isAdmin).
-  const { isAdmin: puedeAnular } = useIsAdmin();
+  const { isAdmin: puedeAnular, loaded: rolLoaded } = useIsAdmin();
   const [todas,      setTodas]      = useState<Venta[]>([]);
   const [busqueda,   setBusqueda]   = useState("");
   const [filtroTipo, setFiltroTipo] = useState<TipoVenta | "">("");
   const [filtroIva,  setFiltroIva]  = useState<TipoIvaVenta | "">("");
+  // Solo para admin: filtro por sucursal del histórico completo. Los cajeros
+  // ya reciben la lista scopeada por su sucursal desde la API.
+  const [filtroSucursal, setFiltroSucursal] = useState<string>("");
+  const [sucursales, setSucursales] = useState<{ id: string; nombre: string }[]>([]);
   const [cargandoLista, setCargandoLista] = useState(true);
   // Modal para anular una venta desde el listado. La venta a anular
   // se guarda en estado + un textarea para el motivo (admin only).
@@ -188,6 +192,24 @@ export default function VentasPage() {
       cancelled = true;
     };
   }, []);
+
+  // Sucursales (solo hace la fetch cuando confirmamos que el usuario es admin,
+  // para no gastar la request en cajeros que no necesitan el filtro).
+  useEffect(() => {
+    if (!rolLoaded || !puedeAnular) return;
+    let cancelled = false;
+    fetch("/api/sucursales", { cache: "no-store", credentials: "include" })
+      .then((r) => r.json())
+      .then((j) => {
+        if (cancelled || !j?.success) return;
+        const rows = ((j.data?.sucursales as Array<Record<string, unknown>>) ?? [])
+          .map((s) => ({ id: String(s.id), nombre: String(s.nombre ?? "Sucursal") }))
+          .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+        setSucursales(rows);
+      })
+      .catch(() => { /* silencioso */ });
+    return () => { cancelled = true; };
+  }, [rolLoaded, puedeAnular]);
 
   async function confirmarAnular() {
     const v = anularVenta;
@@ -224,9 +246,18 @@ export default function VentasPage() {
     }
   }
 
-  const metricas = calcularMetricas(todas);
+  // Cuando el admin elige una sucursal, TODAS las visualizaciones (métricas
+  // del día, contador, tabla) se limitan a esa sucursal. Cajero siempre ve
+  // sus propias ventas — el filtro ya venía scopeado desde la API.
+  const alcance = filtroSucursal
+    ? todas.filter((v) => (v.sucursal_id ?? "") === filtroSucursal)
+    : todas;
+  const metricas = calcularMetricas(alcance);
+  const sucursalNombreActiva = filtroSucursal
+    ? (sucursales.find((s) => s.id === filtroSucursal)?.nombre ?? null)
+    : null;
 
-  const filtradas = todas.filter((v) => {
+  const filtradas = alcance.filter((v) => {
     // Búsqueda global: número de control, nombre o SKU de cualquier ítem
     if (busqueda.trim() !== "") {
       const t = busqueda.toLowerCase().trim();
@@ -247,7 +278,7 @@ export default function VentasPage() {
     return true;
   });
 
-  const hayFiltros = busqueda || filtroTipo || filtroIva;
+  const hayFiltros = busqueda || filtroTipo || filtroIva || filtroSucursal;
 
   return (
     <div className="space-y-8">
@@ -355,16 +386,34 @@ export default function VentasPage() {
               { value: "10%", label: "IVA 10%" },
             ]}
           />
+          {puedeAnular && sucursales.length > 1 && (
+            <FancySelect
+              value={filtroSucursal}
+              onChange={(v) => setFiltroSucursal(v as string)}
+              ariaLabel={t("Filtrar por sucursal")}
+              className="w-52"
+              size="sm"
+              options={[
+                { value: "", label: t("Todas las sucursales") },
+                ...sucursales.map((s) => ({ value: s.id, label: s.nombre })),
+              ]}
+            />
+          )}
           {hayFiltros && (
             <button
-              onClick={() => { setBusqueda(""); setFiltroTipo(""); setFiltroIva(""); }}
+              onClick={() => { setBusqueda(""); setFiltroTipo(""); setFiltroIva(""); setFiltroSucursal(""); }}
               className="text-sm text-gray-400 hover:text-gray-600 transition-colors px-2"
             >
               {t("Limpiar filtros")}
             </button>
           )}
           <span className="ml-auto text-sm text-gray-400">
-            {filtradas.length} {t("de")} {todas.length} {t("ventas")}
+            {sucursalNombreActiva && (
+              <span className="mr-2 rounded-full bg-[#4FAEB2]/10 px-2 py-0.5 text-[11px] font-semibold text-[#3F8E91]">
+                {sucursalNombreActiva}
+              </span>
+            )}
+            {filtradas.length} {t("de")} {alcance.length} {t("ventas")}
           </span>
         </div>
 
