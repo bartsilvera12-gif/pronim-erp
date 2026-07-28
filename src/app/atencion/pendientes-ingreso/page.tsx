@@ -409,6 +409,36 @@ function PreviewIngresoModal({
                             {asignadas}/{unidades.length}
                           </span>
                         </div>
+                        {/* Aplicar mismo precio a todas las prendas de golpe.
+                            Útil cuando se ingresó un lote uniforme (ej. 15 prendas
+                            del mismo precio) — evita elegir franja fila por fila. */}
+                        <div className="px-3 py-2 bg-emerald-50/50 border-b border-emerald-100 flex items-center gap-2">
+                          <span className="text-[11px] font-semibold text-emerald-800 uppercase tracking-wide shrink-0">
+                            Aplicar a todas
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <FranjaCombobox
+                              franjas={franjas}
+                              value=""
+                              costoUnit={
+                                unidades.length > 0
+                                  ? Math.round(unidades.reduce((s, u) => s + u.costo_unit, 0) / unidades.length)
+                                  : 0
+                              }
+                              onChange={(v) => {
+                                setAsignacion((prev) => {
+                                  if (!v) {
+                                    // "usar franja original" desde el bulk = limpiar todo
+                                    return {};
+                                  }
+                                  const next = { ...prev };
+                                  for (const u of unidades) next[u.key] = v;
+                                  return next;
+                                });
+                              }}
+                            />
+                          </div>
+                        </div>
                         <ul className="divide-y divide-slate-100 max-h-[420px] overflow-y-auto">
                           {unidades.map((u, i) => {
                             const asignada = Boolean(asignacion[u.key]);
