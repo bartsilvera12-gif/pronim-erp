@@ -50,7 +50,23 @@ export async function GET(request: NextRequest) {
         sucursalNombre = s.rows[0]?.nombre ?? null;
       } catch { /* schema sin sucursales — ok */ }
 
-      // Ventas hoy + mes (misma query).
+      // Detectamos si el tenant tiene ventas.sucursal_id + ventas.estado + cliente_nombre.
+      // Algunos esquemas viejos no las tienen — degradamos sin fallar.
+      const colsQ = await client.query<{ column_name: string }>(
+        `SELECT column_name FROM information_schema.columns
+         WHERE table_schema = $1 AND table_name = 'ventas'`,
+        [schema],
+      );
+      const ventaCols = new Set(colsQ.rows.map((r) => r.column_name));
+      const filtroSucursal = ventaCols.has("sucursal_id") ? "AND sucursal_id = $2" : "";
+      const filtroEstado = ventaCols.has("estado") ? "AND (estado IS NULL OR estado <> 'anulada')" : "";
+      const selectClienteNombre = ventaCols.has("cliente_nombre") ? "cliente_nombre" : "NULL::text AS cliente_nombre";
+      const selectNumeroControl = ventaCols.has("numero_control") ? "numero_control" : "NULL::text AS numero_control";
+      const paramsBase: unknown[] = ventaCols.has("sucursal_id")
+        ? [auth.empresa_id, auth.sucursal_id]
+        : [auth.empresa_id];
+
+      // Ventas hoy + mes.
       const ventasStatsQ = await client.query<{
         total_hoy: string; count_hoy: string;
         total_mes: string; count_mes: string;
@@ -64,8 +80,8 @@ export async function GET(request: NextRequest) {
            COALESCE(SUM(CASE WHEN date_trunc('month', fecha) = date_trunc('month', CURRENT_DATE - interval '1 month') THEN total ELSE 0 END),0)::text AS total_mes_prev,
            COUNT(*) FILTER (WHERE date_trunc('month', fecha) = date_trunc('month', CURRENT_DATE - interval '1 month'))::text AS count_mes_prev
          FROM ${ventasT}
-         WHERE empresa_id = $1 AND sucursal_id = $2 AND (estado IS NULL OR estado <> 'anulada')`,
-        [auth.empresa_id, auth.sucursal_id],
+         WHERE empresa_id = $1 ${filtroSucursal} ${filtroEstado}`,
+        paramsBase,
       );
       const vs = ventasStatsQ.rows[0];
 
@@ -74,39 +90,53 @@ export async function GET(request: NextRequest) {
         id: string; fecha: string; total: string;
         numero_control: string | null; cliente_nombre: string | null;
       }>(
-        `SELECT id, fecha, total::text, numero_control, cliente_nombre
+        `SELECT id, fecha, total::text, ${selectNumeroControl}, ${selectClienteNombre}
          FROM ${ventasT}
-         WHERE empresa_id = $1 AND sucursal_id = $2 AND (estado IS NULL OR estado <> 'anulada')
+         WHERE empresa_id = $1 ${filtroSucursal} ${filtroEstado}
          ORDER BY fecha DESC LIMIT 10`,
-        [auth.empresa_id, auth.sucursal_id],
+        paramsBase,
       );
 
       // Clientes: total con al menos 1 venta en esta sucursal + últimos atendidos.
       const clientesStatsQ = await client.query<{ total_atendidos: string }>(
         `SELECT COUNT(DISTINCT cliente_id)::text AS total_atendidos
          FROM ${ventasT}
-         WHERE empresa_id = $1 AND sucursal_id = $2 AND cliente_id IS NOT NULL`,
-        [auth.empresa_id, auth.sucursal_id],
+         WHERE empresa_id = $1 ${filtroSucursal} AND cliente_id IS NOT NULL`,
+        paramsBase,
       );
+
+      // Detectamos también los campos de clientes que podamos usar.
+      const clienteColsQ = await client.query<{ column_name: string }>(
+        `SELECT column_name FROM information_schema.columns
+         WHERE table_schema = $1 AND table_name = 'clientes'`,
+        [schema],
+      );
+      const clienteCols = new Set(clienteColsQ.rows.map((r) => r.column_name));
+      const selNombre = clienteCols.has("nombre_contacto")
+        ? "MAX(c.nombre_contacto)"
+        : clienteCols.has("nombre") ? "MAX(c.nombre)" : "NULL::text";
+      const selEmpresa = clienteCols.has("empresa") ? "MAX(c.empresa)" : "NULL::text";
+      const selTelefono = clienteCols.has("telefono") ? "MAX(c.telefono)" : "NULL::text";
 
       const ultimosClientesQ = await client.query<{
         cliente_id: string; nombre: string | null; empresa: string | null;
         telefono: string | null; ultima_fecha: string; total_gastado: string;
       }>(
         `SELECT v.cliente_id,
-                MAX(c.nombre_contacto) AS nombre,
-                MAX(c.empresa) AS empresa,
-                MAX(c.telefono) AS telefono,
+                ${selNombre} AS nombre,
+                ${selEmpresa} AS empresa,
+                ${selTelefono} AS telefono,
                 MAX(v.fecha) AS ultima_fecha,
                 COALESCE(SUM(v.total),0)::text AS total_gastado
          FROM ${ventasT} v
          LEFT JOIN ${clientesT} c ON c.id = v.cliente_id AND c.empresa_id = v.empresa_id
-         WHERE v.empresa_id = $1 AND v.sucursal_id = $2 AND v.cliente_id IS NOT NULL
-           AND (v.estado IS NULL OR v.estado <> 'anulada')
+         WHERE v.empresa_id = $1 ${filtroSucursal.replace(/\$2/g, "$2").replace("sucursal_id", "v.sucursal_id")}
+           ${filtroEstado.replace("estado", "v.estado")}
+           AND v.cliente_id IS NOT NULL
          GROUP BY v.cliente_id
          ORDER BY MAX(v.fecha) DESC
          LIMIT 10`,
-        [auth.empresa_id, auth.sucursal_id],
+        paramsBase,
       );
 
       return NextResponse.json(successResponse({
@@ -143,7 +173,8 @@ export async function GET(request: NextRequest) {
       client.release();
     }
   } catch (err) {
-    console.error("[/api/dashboard/sucursal-simple]", err);
-    return NextResponse.json(errorResponse("Error inesperado."), { status: 500 });
+    const msg = err instanceof Error ? err.message : "Error inesperado.";
+    console.error("[/api/dashboard/sucursal-simple]", msg, err);
+    return NextResponse.json(errorResponse(msg), { status: 500 });
   }
 }

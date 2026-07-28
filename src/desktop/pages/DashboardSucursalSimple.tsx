@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
+import { useT, useMoney } from "@/lib/i18n/context";
 
 /**
  * Dashboard simple para usuarios de sucursal (no admin). Muestra solo los
@@ -32,20 +33,21 @@ type Data = {
   };
 };
 
-function fmtGs(n: number): string {
-  return "Gs. " + Math.round(n || 0).toLocaleString("es-PY");
-}
-function fmtFechaHora(iso: string): string {
+function fmtFechaHora(iso: string, locale: string): string {
   try {
     const d = new Date(iso);
-    return `${d.toLocaleDateString("es-PY")} ${d.toLocaleTimeString("es-PY", { hour: "2-digit", minute: "2-digit" })}`;
+    return `${d.toLocaleDateString(locale)} ${d.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })}`;
   } catch { return iso; }
 }
-function fmtFecha(iso: string): string {
-  try { return new Date(iso).toLocaleDateString("es-PY"); } catch { return iso; }
+function fmtFecha(iso: string, locale: string): string {
+  try { return new Date(iso).toLocaleDateString(locale); } catch { return iso; }
 }
 
 export default function DashboardSucursalSimple() {
+  const t = useT();
+  const money = useMoney();
+  const locale = money.moneda === "BRL" ? "pt-BR" : "es-PY";
+  const fmtGs = (n: number) => money.format(n || 0);
   const [data, setData] = useState<Data | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -73,50 +75,50 @@ export default function DashboardSucursalSimple() {
     <div className="min-h-screen bg-slate-50 p-4 sm:p-6">
       <div className="max-w-5xl mx-auto space-y-5">
         <header>
-          <h1 className="text-2xl font-bold text-slate-900">Panel de sucursal</h1>
+          <h1 className="text-2xl font-bold text-slate-900">{t("Dashboard")}</h1>
           <p className="text-sm text-slate-500 mt-0.5">
             {data?.sucursal.nombre
-              ? <>Datos de <strong>{data.sucursal.nombre}</strong>. Actualizado ahora.</>
-              : "Datos de tu sucursal."}
+              ? <>{t("Datos de")} <strong>{data.sucursal.nombre}</strong>.</>
+              : t("Datos de tu sucursal.")}
           </p>
         </header>
 
         {err && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div>}
-        {loading && !data && <p className="py-10 text-center text-sm text-slate-400 animate-pulse">Cargando…</p>}
+        {loading && !data && <p className="py-10 text-center text-sm text-slate-400 animate-pulse">{t("Cargando…")}</p>}
 
         {data && (
           <>
             <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <KpiCard label="Ventas de hoy" value={fmtGs(data.ventas.total_hoy)} sub={`${data.ventas.count_hoy} operación(es)`} tone="emerald" />
-              <KpiCard label="Ventas del mes" value={fmtGs(data.ventas.total_mes)}
+              <KpiCard label={t("Ventas de hoy")} value={fmtGs(data.ventas.total_hoy)} sub={`${data.ventas.count_hoy} ${t("operación(es)")}`} tone="emerald" />
+              <KpiCard label={t("Ventas del mes")} value={fmtGs(data.ventas.total_mes)}
                 sub={diffMesPct != null
-                  ? (diffMesPct >= 0 ? `↑ ${diffMesPct}% vs mes pasado` : `↓ ${Math.abs(diffMesPct)}% vs mes pasado`)
-                  : `${data.ventas.count_mes} operación(es)`}
+                  ? (diffMesPct >= 0 ? `↑ ${diffMesPct}% ${t("vs mes pasado")}` : `↓ ${Math.abs(diffMesPct)}% ${t("vs mes pasado")}`)
+                  : `${data.ventas.count_mes} ${t("operación(es)")}`}
                 tone="sky" />
-              <KpiCard label="Operaciones del mes" value={String(data.ventas.count_mes)} sub={`mes pasado: ${data.ventas.count_mes_prev}`} tone="slate" />
-              <KpiCard label="Clientes atendidos" value={String(data.clientes.total_atendidos)} sub="acumulado" tone="fuchsia" />
+              <KpiCard label={t("Operaciones del mes")} value={String(data.ventas.count_mes)} sub={`${t("mes pasado")}: ${data.ventas.count_mes_prev}`} tone="slate" />
+              <KpiCard label={t("Clientes atendidos")} value={String(data.clientes.total_atendidos)} sub={t("acumulado")} tone="fuchsia" />
             </section>
 
             <section className="grid grid-cols-1 lg:grid-cols-2 gap-5">
               {/* Últimas ventas */}
               <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
                 <header className="flex items-center justify-between px-4 py-3 border-b border-slate-200 bg-slate-50/50">
-                  <h2 className="text-sm font-bold text-slate-800">Últimas ventas</h2>
-                  <Link href="/ventas" className="text-xs text-[#4FAEB2] hover:underline">Ver todas →</Link>
+                  <h2 className="text-sm font-bold text-slate-800">{t("Últimas ventas")}</h2>
+                  <Link href="/ventas" className="text-xs text-[#4FAEB2] hover:underline">{t("Ver todas")} →</Link>
                 </header>
                 {data.ventas.ultimas.length === 0 ? (
-                  <p className="py-10 text-center text-sm text-slate-400">Sin ventas todavía.</p>
+                  <p className="py-10 text-center text-sm text-slate-400">{t("Sin ventas todavía.")}</p>
                 ) : (
                   <ul className="divide-y divide-slate-100">
                     {data.ventas.ultimas.map((v) => (
                       <li key={v.id} className="flex items-center gap-3 px-4 py-2.5">
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-slate-800 truncate">
-                            {v.cliente_nombre ?? "Consumidor final"}
+                            {v.cliente_nombre ?? t("Consumidor final")}
                           </p>
                           <p className="text-[11px] text-slate-500">
                             {v.numero_control && <>{v.numero_control} · </>}
-                            {fmtFechaHora(v.fecha)}
+                            {fmtFechaHora(v.fecha, locale)}
                           </p>
                         </div>
                         <span className="text-sm font-bold text-slate-900 tabular-nums shrink-0">{fmtGs(v.total)}</span>
@@ -129,11 +131,11 @@ export default function DashboardSucursalSimple() {
               {/* Clientes recientes */}
               <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
                 <header className="flex items-center justify-between px-4 py-3 border-b border-slate-200 bg-slate-50/50">
-                  <h2 className="text-sm font-bold text-slate-800">Clientes atendidos recientemente</h2>
-                  <Link href="/clientes" className="text-xs text-[#4FAEB2] hover:underline">Ver todos →</Link>
+                  <h2 className="text-sm font-bold text-slate-800">{t("Clientes atendidos recientemente")}</h2>
+                  <Link href="/clientes" className="text-xs text-[#4FAEB2] hover:underline">{t("Ver todos")} →</Link>
                 </header>
                 {data.clientes.recientes.length === 0 ? (
-                  <p className="py-10 text-center text-sm text-slate-400">Sin clientes atendidos todavía.</p>
+                  <p className="py-10 text-center text-sm text-slate-400">{t("Sin clientes atendidos todavía.")}</p>
                 ) : (
                   <ul className="divide-y divide-slate-100">
                     {data.clientes.recientes.map((c) => (
@@ -143,8 +145,8 @@ export default function DashboardSucursalSimple() {
                             {c.nombre}
                           </Link>
                           <p className="text-[11px] text-slate-500">
-                            {c.telefono && <>Tel {c.telefono} · </>}
-                            última compra {fmtFecha(c.ultima_fecha)}
+                            {c.telefono && <>{t("Tel")} {c.telefono} · </>}
+                            {t("última compra")} {fmtFecha(c.ultima_fecha, locale)}
                           </p>
                         </div>
                         <span className="text-xs font-semibold text-slate-600 tabular-nums shrink-0">{fmtGs(c.total_gastado)}</span>
@@ -156,12 +158,12 @@ export default function DashboardSucursalSimple() {
             </section>
 
             <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h2 className="text-sm font-bold text-slate-800 mb-2">Accesos rápidos</h2>
+              <h2 className="text-sm font-bold text-slate-800 mb-2">{t("Accesos rápidos")}</h2>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                <QuickLink href="/atencion/nueva" label="Nueva atención" />
-                <QuickLink href="/ventas/nueva" label="Nueva venta" />
-                <QuickLink href="/clientes" label="Clientes" />
-                <QuickLink href="/atencion/pendientes-ingreso" label="Recepciones pendientes" />
+                <QuickLink href="/atencion/nueva" label={t("Nueva atención")} />
+                <QuickLink href="/ventas/nueva" label={t("Nueva venta")} />
+                <QuickLink href="/clientes" label={t("Clientes")} />
+                <QuickLink href="/atencion/pendientes-ingreso" label={t("Recepciones pendientes")} />
               </div>
             </section>
           </>
