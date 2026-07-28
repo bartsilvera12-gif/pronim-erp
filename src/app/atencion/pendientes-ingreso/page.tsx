@@ -306,7 +306,7 @@ function PreviewIngresoModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
-      <div className="w-full max-w-4xl max-h-[90vh] overflow-hidden rounded-2xl bg-white shadow-xl flex flex-col" onClick={e => e.stopPropagation()}>
+      <div className="w-full max-w-6xl max-h-[95vh] overflow-hidden rounded-2xl bg-white shadow-xl flex flex-col" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 shrink-0">
           <div>
             <h3 className="text-base font-bold text-slate-800">Revisar antes de ingresar al stock</h3>
@@ -342,20 +342,14 @@ function PreviewIngresoModal({
                     valueClass="text-sky-800"
                   />
                   <MarginStat
-                    label="Margen bruto"
+                    label="Ganancia bruta"
                     value={"Gs. " + data.totales.margen_bruto_esperado.toLocaleString("es-PY")}
                     valueClass={data.totales.margen_bruto_esperado >= 0 ? "text-emerald-800" : "text-rose-800"}
-                    sub={data.totales.margen_pct_esperado != null ? `${data.totales.margen_pct_esperado}% margen` : "—"}
+                    sub={data.totales.costo_total > 0
+                      ? `${Math.round((data.totales.margen_bruto_esperado / data.totales.costo_total) * 1000) / 10}% markup`
+                      : "—"}
                   />
                 </div>
-                {data.recepcion.ajuste_evaluacion !== 0 && (
-                  <p className="mt-3 text-[11px] text-slate-500">
-                    Nota: la evaluación tuvo un ajuste manual de{" "}
-                    <strong className={data.recepcion.ajuste_evaluacion > 0 ? "text-emerald-700" : "text-rose-700"}>
-                      {data.recepcion.ajuste_evaluacion > 0 ? "+" : ""}Gs. {data.recepcion.ajuste_evaluacion.toLocaleString("es-PY")}
-                    </strong>.
-                  </p>
-                )}
               </div>
 
               {/* 2 paneles: IZQ prendas compradas (readonly, con su costo)
@@ -774,13 +768,15 @@ function MarginStat({ label, value, sub, valueClass }: {
 // ─────────────────────────────────────────────────────────────────────
 
 function FranjaCombobox({
-  franjas, value, costoUnit, onChange,
+  franjas, value, costoUnit, onChange, onCrearManual,
 }: {
   franjas: Franja[];
   value: string;
   costoUnit: number;
   onChange: (v: string) => void;
+  onCrearManual?: (precio: number) => Promise<string | null>;
 }) {
+  const [creando, setCreando] = useState(false);
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const rootRef = useRef<HTMLDivElement>(null);
