@@ -298,7 +298,7 @@ const MENU_FAMILIES: { id: string; title: string; itemKeys: string[] }[] = [
   // (tesoros, sucursales, catálogo, copy editable, etc.). Karen la
   // pidió aparte de Administración para agrupar todo lo web en un
   // solo lugar visible.
-  { id: "web", title: "Web", itemKeys: ["web_tesoros", "web_catalogo"] },
+  { id: "web", title: "Web", itemKeys: ["web_tesoros", "web_catalogo", "web_blog"] },
 ];
 
 function modulosSyntheticFromMenu(): ModuloEmpresa[] {
