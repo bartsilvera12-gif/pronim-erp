@@ -214,6 +214,7 @@ export default function NuevaVentaPage() {
 
   // ── Cálculos ─────────────────────────────────────────────────────────
   const totalLleva = useMemo(() => lleva.reduce((s, l) => s + l.precio_unitario * l.cantidad, 0), [lleva]);
+  const totalPrendas = useMemo(() => lleva.reduce((s, l) => s + (Number(l.cantidad) || 0), 0), [lleva]);
   const descuentoPromo = promoAplicada?.descuento ?? 0;
   const totalLlevaConDescuento = Math.max(0, totalLleva - descuentoPromo);
   const creditoMaxAplicable = Math.min(creditoDisponible, totalLlevaConDescuento);
@@ -860,6 +861,12 @@ export default function NuevaVentaPage() {
           </button>
           <button type="button" onClick={() => router.push("/ventas")}
             className="text-sm text-slate-400 hover:text-slate-700">{t("Cancelar")}</button>
+          {totalPrendas > 0 && (
+            <span className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700">
+              <span className="text-base leading-none">👕</span>
+              {t("Total prendas")}: <strong className="tabular-nums text-[#3F8E91]">{totalPrendas}</strong>
+            </span>
+          )}
         </div>
       </div>
 
