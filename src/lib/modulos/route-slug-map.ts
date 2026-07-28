@@ -68,6 +68,16 @@ export function isModuleSlugGranted(routeSlug: string, grantedSlugs: Set<string>
   // paraguas comercial), ve también estos dos.
   if ((routeSlug === "venta" || routeSlug === "evaluacion") &&
       (grantedSlugs.has("atencion") || grantedSlugs.has("ventas"))) return true;
+  // Historial /ventas: cualquier usuario que pueda operar caja (venta,
+  // evaluacion o atencion) puede ver su historial de ventas. Necesario
+  // para que las sucursales (que suelen tener solo "atencion" o
+  // "venta"+"evaluacion") vean el listado sin depender del módulo
+  // "ventas" explícito.
+  if (routeSlug === "ventas" && (
+    grantedSlugs.has("atencion") ||
+    grantedSlugs.has("venta") ||
+    grantedSlugs.has("evaluacion")
+  )) return true;
   return false;
 }
 
