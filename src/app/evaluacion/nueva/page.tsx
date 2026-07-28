@@ -747,8 +747,8 @@ export default function NuevaEvaluacionPage() {
               <span aria-hidden className="absolute -top-2 left-1/2 -translate-x-1/2 h-4 w-16 bg-orange-300/70 rotate-[-3deg] shadow-sm" />
               <p className="text-[13px] font-bold leading-snug text-orange-900">
                 {pendientesIngresoCount === 1
-                  ? `1 ${t("recepción pendiente de evaluar")}`
-                  : `${pendientesIngresoCount} ${t("recepciones pendientes de evaluar")}`}
+                  ? `1 ${t("recepción pendiente de ingresar")}`
+                  : `${pendientesIngresoCount} ${t("recepciones pendientes de ingresar")}`}
               </p>
               <p className="text-[12px] mt-1 leading-snug text-orange-900 opacity-90">
                 {t("Hay bolsas esperando ser ingresadas al stock.")}

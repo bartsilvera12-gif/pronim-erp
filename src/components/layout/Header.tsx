@@ -259,8 +259,8 @@ export default function Header({ onOpenMobileSidebar }: HeaderProps = {}) {
                       <div className="min-w-0">
                         <p className="text-xs font-semibold text-amber-900">
                           {notifPend.length === 1
-                            ? `1 ${t("recepción pendiente de evaluar")}`
-                            : `${notifPend.length} ${t("recepciones pendientes de evaluar")}`}
+                            ? `1 ${t("recepción pendiente de ingresar")}`
+                            : `${notifPend.length} ${t("recepciones pendientes de ingresar")}`}
                         </p>
                         <p className="text-[11px] text-amber-800 mt-0.5">
                           {t("Hay bolsas esperando ser ingresadas al stock.")}

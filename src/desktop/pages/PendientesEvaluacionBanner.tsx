@@ -94,8 +94,8 @@ export default function PendientesEvaluacionBanner({
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <h3 className="text-base font-bold text-amber-900">
               {total === 1
-                ? "1 recepción pendiente de evaluar"
-                : `${total} recepciones pendientes de evaluar`}
+                ? "1 recepción pendiente de ingresar"
+                : `${total} recepciones pendientes de ingresar`}
             </h3>
             {vencidas > 0 && (
               <span className="inline-flex items-center rounded-full bg-rose-100 border border-rose-300 px-2 py-0.5 text-[11px] font-bold text-rose-800">
