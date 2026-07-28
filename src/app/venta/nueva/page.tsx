@@ -318,6 +318,7 @@ export default function NuevaVentaPage() {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           cliente_id: cliente?.id ?? null,
+          cliente_segmento: clienteSegmento?.categoria ?? null,
           cupon: cuponManual,
           items: lleva.map((l) => ({ franja_id: l.franja_id, cantidad: l.cantidad, precio_unitario: l.precio_unitario })),
         }),

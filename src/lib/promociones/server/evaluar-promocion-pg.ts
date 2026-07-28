@@ -17,6 +17,10 @@ export interface EvaluarPromocionInput {
   schema: string;
   empresaId: string;
   clienteId: string | null;
+  /** Segmento del cliente (nuevo/habitual/vip/dormido) — para matchear
+   *  promociones con ámbito 'segmento'. Si no se pasa, esas promos no
+   *  aplican por esta vía. */
+  clienteSegmento?: "nuevo" | "habitual" | "vip" | "dormido" | null;
   sucursalId: string;
   /** Uno de los dos: cupón (código) o id explícito. Si vienen ambos, gana id. */
   promocionId?: string | null;
@@ -41,8 +45,9 @@ interface PromoRow {
   tipo: "descuento_pct" | "descuento_fijo" | "lleve_n_pague_m" | "cashback";
   valor: string; lleve_n: number | null; pague_m: number | null;
   cupon_codigo: string | null;
-  ambito: "general" | "franja" | "sucursal" | "cliente";
+  ambito: "general" | "franja" | "sucursal" | "cliente" | "segmento";
   franja_id: string | null; sucursal_id: string | null; cliente_id: string | null;
+  segmento_cliente: string | null;
   fecha_desde: string | null; fecha_hasta: string | null;
   minimo_compra: string;
 }
@@ -69,24 +74,24 @@ export async function evaluarPromocionEnClientePg(
   let args: unknown[];
   if (p.promocionId) {
     sql = `SELECT id,nombre,tipo,valor::text,lleve_n,pague_m,cupon_codigo,ambito,
-                  franja_id,sucursal_id,cliente_id,fecha_desde,fecha_hasta,
-                  minimo_compra::text
+                  franja_id,sucursal_id,cliente_id,segmento_cliente,
+                  fecha_desde,fecha_hasta,minimo_compra::text
            FROM ${promosT}
            WHERE empresa_id = $1 AND id = $2 AND activo = true
            LIMIT 1`;
     args = [p.empresaId, p.promocionId];
   } else if (cupon) {
     sql = `SELECT id,nombre,tipo,valor::text,lleve_n,pague_m,cupon_codigo,ambito,
-                  franja_id,sucursal_id,cliente_id,fecha_desde,fecha_hasta,
-                  minimo_compra::text
+                  franja_id,sucursal_id,cliente_id,segmento_cliente,
+                  fecha_desde,fecha_hasta,minimo_compra::text
            FROM ${promosT}
            WHERE empresa_id = $1 AND activo = true AND LOWER(cupon_codigo) = LOWER($2)`;
     args = [p.empresaId, cupon];
   } else {
     // Automáticas (sin cupón).
     sql = `SELECT id,nombre,tipo,valor::text,lleve_n,pague_m,cupon_codigo,ambito,
-                  franja_id,sucursal_id,cliente_id,fecha_desde,fecha_hasta,
-                  minimo_compra::text
+                  franja_id,sucursal_id,cliente_id,segmento_cliente,
+                  fecha_desde,fecha_hasta,minimo_compra::text
            FROM ${promosT}
            WHERE empresa_id = $1 AND activo = true AND cupon_codigo IS NULL`;
     args = [p.empresaId];
@@ -135,6 +140,9 @@ export async function evaluarPromocionEnClientePg(
     if (row.ambito === "sucursal" && row.sucursal_id && row.sucursal_id !== p.sucursalId) return false;
     if (row.ambito === "franja" && row.franja_id) {
       if (!items.some((i) => i.franja_id === row.franja_id)) return false;
+    }
+    if (row.ambito === "segmento" && row.segmento_cliente) {
+      if (!p.clienteSegmento || row.segmento_cliente !== p.clienteSegmento) return false;
     }
     return true;
   });

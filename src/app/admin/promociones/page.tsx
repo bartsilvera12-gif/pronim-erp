@@ -4,6 +4,9 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 
+type Ambito = "general" | "franja" | "sucursal" | "cliente" | "segmento";
+type SegmentoCliente = "nuevo" | "habitual" | "vip" | "dormido";
+
 type Promo = {
   id: string;
   nombre: string;
@@ -13,12 +16,30 @@ type Promo = {
   lleve_n: number | null;
   pague_m: number | null;
   cupon_codigo: string | null;
-  ambito: "general" | "franja" | "sucursal" | "cliente";
+  ambito: Ambito;
+  cliente_id: string | null;
+  segmento_cliente: SegmentoCliente | null;
   fecha_desde: string | null;
   fecha_hasta: string | null;
   minimo_compra: number | string;
   activo: boolean;
   created_at: string;
+};
+
+type ClientePicker = { id: string; nombre: string; empresa: string | null; ruc: string | null };
+
+const AMBITO_LABEL: Record<Ambito, string> = {
+  general: "General",
+  franja: "Franja",
+  sucursal: "Sucursal",
+  cliente: "Cliente específico",
+  segmento: "Tipo de cliente",
+};
+const SEGMENTO_LABEL: Record<SegmentoCliente, string> = {
+  vip: "VIP",
+  habitual: "Habitual",
+  nuevo: "Nuevo",
+  dormido: "Hace tiempo que no viene",
 };
 
 const TIPO_LABEL: Record<string, string> = {
@@ -125,7 +146,14 @@ export default function AdminPromocionesPage() {
                   </td>
                   <td className="px-4 py-3 text-xs text-slate-600">{TIPO_LABEL[p.tipo]}</td>
                   <td className="px-4 py-3 font-medium">{fmtValor(p)}</td>
-                  <td className="px-4 py-3 text-xs capitalize">{p.ambito}</td>
+                  <td className="px-4 py-3 text-xs">
+                    {AMBITO_LABEL[p.ambito] ?? p.ambito}
+                    {p.ambito === "segmento" && p.segmento_cliente && (
+                      <span className="ml-1 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">
+                        {SEGMENTO_LABEL[p.segmento_cliente]}
+                      </span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 font-mono text-xs">{p.cupon_codigo ?? <span className="text-slate-400">(auto)</span>}</td>
                   <td className="px-4 py-3 text-xs">
                     {(p.fecha_desde || p.fecha_hasta)
@@ -173,16 +201,55 @@ function NuevaPromocionModal({ onClose, onCreated }: { onClose: () => void; onCr
   const [lleveN, setLleveN] = useState("3");
   const [pagueM, setPagueM] = useState("2");
   const [cupon, setCupon] = useState("");
-  const [ambito, setAmbito] = useState<"general" | "franja" | "sucursal" | "cliente">("general");
+  const [ambito, setAmbito] = useState<Ambito>("general");
   const [fechaDesde, setFechaDesde] = useState("");
   const [fechaHasta, setFechaHasta] = useState("");
   const [minimo, setMinimo] = useState("");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  // Picker de cliente (solo relevante cuando ambito='cliente')
+  const [clientes, setClientes] = useState<ClientePicker[]>([]);
+  const [clientesLoading, setClientesLoading] = useState(false);
+  const [clienteQuery, setClienteQuery] = useState("");
+  const [clienteSel, setClienteSel] = useState<ClientePicker | null>(null);
+
+  // Segmento (solo relevante cuando ambito='segmento')
+  const [segmento, setSegmento] = useState<SegmentoCliente>("vip");
+
+  useEffect(() => {
+    if (ambito !== "cliente" || clientes.length > 0 || clientesLoading) return;
+    setClientesLoading(true);
+    fetchWithSupabaseSession("/api/clientes", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        const rows = Array.isArray(j?.data) ? (j.data as Record<string, unknown>[]) : [];
+        setClientes(rows.map((r) => ({
+          id: String(r.id),
+          nombre:
+            (typeof r.empresa === "string" && r.empresa.trim())
+            || (typeof r.nombre_contacto === "string" && r.nombre_contacto.trim())
+            || (typeof r.nombre === "string" && r.nombre.trim())
+            || "Cliente",
+          empresa: typeof r.empresa === "string" ? r.empresa : null,
+          ruc: typeof r.ruc === "string" ? r.ruc : null,
+        })));
+      })
+      .catch(() => { /* silencioso */ })
+      .finally(() => setClientesLoading(false));
+  }, [ambito, clientes.length, clientesLoading]);
+
+  const clientesFiltrados = clientes.filter((c) => {
+    const q = clienteQuery.trim().toLowerCase();
+    if (!q) return true;
+    return c.nombre.toLowerCase().includes(q) || (c.ruc ?? "").toLowerCase().includes(q);
+  }).slice(0, 30);
+
   async function submit() {
     setErr(null);
     if (!nombre.trim()) { setErr("Nombre obligatorio."); return; }
+    if (ambito === "cliente" && !clienteSel) { setErr("Elegí el cliente al que aplica la promoción."); return; }
+    if (ambito === "segmento" && !segmento) { setErr("Elegí el tipo de cliente."); return; }
     setSaving(true);
     try {
       const body: Record<string, unknown> = {
@@ -201,6 +268,8 @@ function NuevaPromocionModal({ onClose, onCreated }: { onClose: () => void; onCr
         body.lleve_n = Number(lleveN);
         body.pague_m = Number(pagueM);
       }
+      if (ambito === "cliente" && clienteSel) body.cliente_id = clienteSel.id;
+      if (ambito === "segmento") body.segmento_cliente = segmento;
       const r = await fetchWithSupabaseSession("/api/promociones", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -218,10 +287,11 @@ function NuevaPromocionModal({ onClose, onCreated }: { onClose: () => void; onCr
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <h3 className="text-base font-semibold text-slate-900 mb-3">Nueva promoción</h3>
+      <div className="flex w-full max-w-lg max-h-[90vh] flex-col rounded-2xl bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-base font-semibold text-slate-900 px-6 pt-5 pb-3 border-b border-slate-100">Nueva promoción</h3>
+        <div className="flex-1 overflow-y-auto px-6 py-4">
         {err && <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{err}</div>}
-        <div className="space-y-3">
+        <div className="space-y-3 pb-2">
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Nombre *</label>
             <input type="text" value={nombre} onChange={(e) => setNombre(e.target.value)} autoFocus placeholder="Ej: Descuento invierno"
@@ -267,15 +337,76 @@ function NuevaPromocionModal({ onClose, onCreated }: { onClose: () => void; onCr
           )}
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Ámbito</label>
-            <select value={ambito} onChange={(e) => setAmbito(e.target.value as "general"|"franja"|"sucursal"|"cliente")}
+            <select value={ambito} onChange={(e) => setAmbito(e.target.value as Ambito)}
               className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]">
               <option value="general">General (toda venta)</option>
               <option value="franja">Franja de precio específica</option>
               <option value="sucursal">Sucursal específica</option>
               <option value="cliente">Cliente específico</option>
+              <option value="segmento">Tipo de cliente (VIP / habitual / nuevo / hace tiempo)</option>
             </select>
-            <p className="text-[11px] text-slate-400 mt-1">Cuando el ámbito es específico, la restricción se puede ajustar por SQL en un update posterior (MVP).</p>
+            {ambito === "franja" || ambito === "sucursal" ? (
+              <p className="text-[11px] text-slate-400 mt-1">Cuando el ámbito es específico, la restricción se puede ajustar por SQL en un update posterior (MVP).</p>
+            ) : null}
           </div>
+
+          {ambito === "cliente" && (
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Cliente *</label>
+              {clienteSel ? (
+                <div className="flex items-center justify-between rounded-lg border border-[#4FAEB2] bg-[#4FAEB2]/5 px-3 py-2">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-slate-800 truncate">{clienteSel.nombre}</p>
+                    {clienteSel.ruc && <p className="text-[11px] text-slate-500">RUC {clienteSel.ruc}</p>}
+                  </div>
+                  <button type="button" onClick={() => { setClienteSel(null); setClienteQuery(""); }}
+                    className="rounded-md border border-slate-200 px-2 py-1 text-[11px] text-slate-500 hover:bg-white">
+                    Cambiar
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <input type="text" value={clienteQuery} onChange={(e) => setClienteQuery(e.target.value)}
+                    placeholder={clientesLoading ? "Cargando clientes…" : "Buscar por nombre o RUC…"}
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]" />
+                  {clienteQuery.trim() && clientesFiltrados.length > 0 && (
+                    <div className="mt-1 max-h-48 overflow-y-auto rounded-lg border border-slate-200 bg-white">
+                      {clientesFiltrados.map((c) => (
+                        <button key={c.id} type="button"
+                          onClick={() => { setClienteSel(c); setClienteQuery(""); }}
+                          className="flex w-full items-center justify-between border-b border-slate-100 px-3 py-2 text-left last:border-b-0 hover:bg-slate-50">
+                          <span className="text-sm text-slate-800 truncate">{c.nombre}</span>
+                          {c.ruc && <span className="text-[11px] text-slate-500 ml-2">{c.ruc}</span>}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+              <p className="text-[11px] text-slate-400 mt-1">
+                Karen: el monto/porcentaje de arriba se aplica <strong>solo</strong> a este cliente.
+              </p>
+            </div>
+          )}
+
+          {ambito === "segmento" && (
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Tipo de cliente *</label>
+              <div className="grid grid-cols-2 gap-1.5">
+                {(["vip","habitual","nuevo","dormido"] as const).map((s) => (
+                  <button key={s} type="button" onClick={() => setSegmento(s)}
+                    className={`rounded-lg border px-2 py-2 text-xs font-medium transition-colors ${
+                      segmento === s ? "border-[#4FAEB2] bg-[#4FAEB2]/10 text-[#3F8E91] ring-2 ring-[#4FAEB2]/20" : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
+                    }`}>
+                    {SEGMENTO_LABEL[s]}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[11px] text-slate-400 mt-1">
+                Se aplica a cualquier cliente que coincida con este segmento en el momento de la venta.
+              </p>
+            </div>
+          )}
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
               Código de cupón (opcional)
@@ -304,7 +435,8 @@ function NuevaPromocionModal({ onClose, onCreated }: { onClose: () => void; onCr
               className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]" />
           </div>
         </div>
-        <div className="mt-5 flex justify-end gap-2">
+        </div>
+        <div className="flex justify-end gap-2 border-t border-slate-100 px-6 py-3 bg-white rounded-b-2xl">
           <button type="button" onClick={onClose} disabled={saving} className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50">Cancelar</button>
           <button type="button" onClick={submit} disabled={saving || !nombre.trim()} className="rounded-lg bg-[#4FAEB2] hover:bg-[#3F8E91] disabled:opacity-50 text-white text-sm font-semibold px-4 py-2 shadow-sm">
             {saving ? "Creando…" : "Crear promoción"}

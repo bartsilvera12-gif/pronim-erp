@@ -773,6 +773,7 @@ export default function NuevaAtencionPage() {
     try {
       const payload = {
         cliente_id: cliente?.id ?? null,
+        cliente_segmento: clienteSegmento?.categoria ?? null,
         cupon: cuponManual,
         items: lleva.map((l) => ({
           franja_id: l.franja_id,

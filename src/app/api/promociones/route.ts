@@ -4,7 +4,9 @@ import { isAdmin } from "@/lib/middleware/auth";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
 
-const COLS = "id,empresa_id,nombre,descripcion,tipo,valor,lleve_n,pague_m,cupon_codigo,ambito,franja_id,sucursal_id,cliente_id,fecha_desde,fecha_hasta,minimo_compra,activo,created_at";
+const COLS = "id,empresa_id,nombre,descripcion,tipo,valor,lleve_n,pague_m,cupon_codigo,ambito,franja_id,sucursal_id,cliente_id,segmento_cliente,fecha_desde,fecha_hasta,minimo_compra,activo,created_at";
+
+const SEGMENTOS_VALIDOS = new Set(["nuevo", "habitual", "vip", "dormido"]);
 
 export async function GET(request: NextRequest) {
   const ctx = await getTenantSupabaseFromAuth(request);
@@ -64,8 +66,15 @@ export async function POST(request: NextRequest) {
     }
   }
   const ambito = String(body.ambito ?? "general");
-  if (!["general","franja","sucursal","cliente"].includes(ambito)) {
+  if (!["general","franja","sucursal","cliente","segmento"].includes(ambito)) {
     return NextResponse.json(errorResponse("Ámbito inválido."), { status: 400 });
+  }
+  if (ambito === "cliente" && (typeof body.cliente_id !== "string" || !body.cliente_id)) {
+    return NextResponse.json(errorResponse("Elegí un cliente para esta promoción."), { status: 400 });
+  }
+  const segmentoRaw = typeof body.segmento_cliente === "string" ? body.segmento_cliente.trim().toLowerCase() : "";
+  if (ambito === "segmento" && !SEGMENTOS_VALIDOS.has(segmentoRaw)) {
+    return NextResponse.json(errorResponse("Elegí un tipo de cliente válido (nuevo/habitual/vip/dormido)."), { status: 400 });
   }
 
   const payload = {
@@ -81,6 +90,7 @@ export async function POST(request: NextRequest) {
     franja_id: ambito === "franja" && typeof body.franja_id === "string" ? body.franja_id : null,
     sucursal_id: ambito === "sucursal" && typeof body.sucursal_id === "string" ? body.sucursal_id : null,
     cliente_id: ambito === "cliente" && typeof body.cliente_id === "string" ? body.cliente_id : null,
+    segmento_cliente: ambito === "segmento" ? segmentoRaw : null,
     fecha_desde: body.fecha_desde ? String(body.fecha_desde) : null,
     fecha_hasta: body.fecha_hasta ? String(body.fecha_hasta) : null,
     minimo_compra: Number(body.minimo_compra) || 0,

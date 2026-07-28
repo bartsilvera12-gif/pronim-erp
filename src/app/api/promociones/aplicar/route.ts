@@ -8,6 +8,9 @@ type Body = {
   cliente_id?: string | null;
   sucursal_id?: string | null;
   cupon?: string | null;
+  /** Segmento del cliente actual (nuevo/habitual/vip/dormido) — usado
+   *  para matchear promociones con ámbito 'segmento'. */
+  cliente_segmento?: "nuevo" | "habitual" | "vip" | "dormido" | null;
   items: ItemCart[];
 };
 
@@ -19,10 +22,11 @@ type PromoRow = {
   lleve_n: number | null;
   pague_m: number | null;
   cupon_codigo: string | null;
-  ambito: "general" | "franja" | "sucursal" | "cliente";
+  ambito: "general" | "franja" | "sucursal" | "cliente" | "segmento";
   franja_id: string | null;
   sucursal_id: string | null;
   cliente_id: string | null;
+  segmento_cliente: string | null;
   fecha_desde: string | null;
   fecha_hasta: string | null;
   minimo_compra: number;
@@ -59,12 +63,15 @@ export async function POST(request: NextRequest) {
   const cupon = typeof body.cupon === "string" && body.cupon.trim() ? body.cupon.trim().toUpperCase() : null;
   const clienteId = typeof body.cliente_id === "string" ? body.cliente_id : null;
   const sucursalId = typeof body.sucursal_id === "string" ? body.sucursal_id : ctx.auth.sucursal_id ?? null;
+  const clienteSegmento = typeof body.cliente_segmento === "string"
+    && ["nuevo","habitual","vip","dormido"].includes(body.cliente_segmento)
+      ? body.cliente_segmento : null;
   const hoy = new Date().toISOString().slice(0, 10);
 
   try {
     let q = ctx.supabase
       .from("promociones")
-      .select("id,nombre,tipo,valor,lleve_n,pague_m,cupon_codigo,ambito,franja_id,sucursal_id,cliente_id,fecha_desde,fecha_hasta,minimo_compra")
+      .select("id,nombre,tipo,valor,lleve_n,pague_m,cupon_codigo,ambito,franja_id,sucursal_id,cliente_id,segmento_cliente,fecha_desde,fecha_hasta,minimo_compra")
       .eq("empresa_id", ctx.auth.empresa_id)
       .eq("activo", true);
     if (cupon) q = q.ilike("cupon_codigo", cupon);
@@ -90,6 +97,9 @@ export async function POST(request: NextRequest) {
       if (p.ambito === "sucursal" && p.sucursal_id && p.sucursal_id !== sucursalId) return false;
       if (p.ambito === "franja" && p.franja_id) {
         if (!items.some((i) => i.franja_id === p.franja_id)) return false;
+      }
+      if (p.ambito === "segmento" && p.segmento_cliente) {
+        if (!clienteSegmento || p.segmento_cliente !== clienteSegmento) return false;
       }
       return true;
     });
