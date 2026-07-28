@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { useT } from "@/lib/i18n/context";
+import { useUsuarioActual } from "@/shared/hooks/useUsuarioActual";
+import { esRolAdminEmpresaOGlobal } from "@/lib/auth/rol-empresa";
 
 type Sucursal = { id: string; nombre: string; es_principal?: boolean; activo?: boolean };
 type ItemBorrador = { producto_id: string; producto_nombre: string; cantidad: string };
@@ -35,6 +37,8 @@ async function unwrap<T>(r: Response): Promise<T> {
 
 export default function TransferenciasStockPage() {
   const t = useT();
+  const { usuario, isLoading: cargandoUsuario } = useUsuarioActual();
+  const esAdmin = esRolAdminEmpresaOGlobal(usuario?.rol ?? null);
   const [sucursales, setSucursales] = useState<Sucursal[]>([]);
   const [origen, setOrigen] = useState("");
   const [destino, setDestino] = useState("");
@@ -182,6 +186,27 @@ export default function TransferenciasStockPage() {
     }
     return map;
   }, [historiaItems]);
+
+  if (!cargandoUsuario && !esAdmin) {
+    return (
+      <div className="space-y-6 max-w-xl">
+        <div className="flex items-center gap-2 text-sm text-gray-400">
+          <Link href="/inventario" className="hover:text-[#4FAEB2] transition-colors">{t("Inventario")}</Link>
+          <span>/</span>
+          <span className="text-gray-700 font-medium">{t("Transferencias entre sucursales")}</span>
+        </div>
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-6 text-sm text-amber-900">
+          <h2 className="text-base font-bold mb-1">Solo el administrador puede transferir stock</h2>
+          <p>Las transferencias entre sucursales están reservadas al administrador. Si necesitás mover mercadería, pedile al admin que lo haga desde su cuenta.</p>
+          <div className="mt-4">
+            <Link href="/inventario" className="inline-flex items-center gap-1 text-amber-800 hover:text-amber-900 font-semibold underline">
+              ← Volver a Inventario
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

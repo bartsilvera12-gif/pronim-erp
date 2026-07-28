@@ -5,7 +5,6 @@ import { getChatPostgresPool, quoteSchemaTable } from "@/lib/supabase/chat-pg-po
 import { assertAllowedChatDataSchema } from "@/lib/supabase/chat-data-schema";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
-import { SIN_SUCURSAL_MENSAJE } from "@/lib/sucursales/enforce";
 import { esRolAdminEmpresaOGlobal } from "@/lib/auth/rol-empresa";
 
 type ItemIn = { producto_id: string; producto_nombre?: string | null; cantidad: number };
@@ -104,8 +103,13 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const auth = await getAuthWithRol(request);
   if (!auth) return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
-  if (!auth.sucursal_id && !esRolAdminEmpresaOGlobal(auth.rol ?? undefined)) {
-    return NextResponse.json(errorResponse(SIN_SUCURSAL_MENSAJE), { status: 403 });
+  // Karen: solo el administrador puede transferir stock entre sucursales.
+  // Las sucursales operativas ya no pueden mover mercadería por su cuenta.
+  if (!esRolAdminEmpresaOGlobal(auth.rol ?? undefined)) {
+    return NextResponse.json(
+      errorResponse("Solo el administrador puede transferir stock entre sucursales."),
+      { status: 403 },
+    );
   }
 
   let body: {

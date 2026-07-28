@@ -72,9 +72,16 @@ export default function NuevaVentaPage() {
   // ── Ticket ────────────────────────────────────────────────────────────
   const [lleva, setLleva] = useState<Linea[]>([]);
   const [aplicarCredito, setAplicarCredito] = useState<string>("");
-  const [metodoCobro, setMetodoCobro] = useState<"efectivo" | "tarjeta" | "transferencia">("efectivo");
-  const [montoRecibido, setMontoRecibido] = useState<string>("");
-  const [referenciaCobro, setReferenciaCobro] = useState<string>("");
+  // Pago partido (split): Karen quiere poder cobrar en varias filas — ej.
+  // 500k en tarjeta A + 300k en tarjeta B + 200k en efectivo. Cada fila
+  // lleva su propio método/monto/referencia. Cuando hay sobrante en la(s)
+  // fila(s) de efectivo, se muestra como vuelto (el excedente NO se
+  // registra: sale como devolución al cliente).
+  type PagoMetodo = "efectivo" | "tarjeta" | "transferencia";
+  type PagoLinea = { metodo: PagoMetodo; monto: string; referencia: string };
+  const [pagos, setPagos] = useState<PagoLinea[]>([
+    { metodo: "efectivo", monto: "", referencia: "" },
+  ]);
   const [observaciones, setObservaciones] = useState("");
 
   // ── Promo / cupón ────────────────────────────────────────────────────
@@ -218,12 +225,25 @@ export default function NuevaVentaPage() {
   }, [aplicarCredito, creditoMaxAplicable]);
   const aCobrar = Math.max(0, totalLlevaConDescuento - creditoAplicadoNum);
   const creditoRestante = Math.max(0, creditoDisponible - creditoAplicadoNum);
-  const recibidoNum = useMemo(() => {
-    const n = Number(montoRecibido);
-    return Number.isFinite(n) ? Math.max(0, n) : 0;
-  }, [montoRecibido]);
-  const vuelto = metodoCobro === "efectivo" ? Math.max(0, recibidoNum - aCobrar) : 0;
-  const faltaCobrar = metodoCobro === "efectivo" ? Math.max(0, aCobrar - recibidoNum) : 0;
+
+  // ── Cálculos derivados del pago partido ────────────────────────────
+  const totalPagos = useMemo(
+    () => pagos.reduce((s, p) => s + (Number(p.monto) || 0), 0),
+    [pagos],
+  );
+  const totalEfectivoEntregado = useMemo(
+    () => pagos.filter((p) => p.metodo === "efectivo")
+              .reduce((s, p) => s + (Number(p.monto) || 0), 0),
+    [pagos],
+  );
+  const hayEfectivo = totalEfectivoEntregado > 0;
+  const excedente = Math.max(0, totalPagos - aCobrar);
+  // Vuelto solo tiene sentido si hay efectivo (se devuelve en efectivo).
+  const vuelto = hayEfectivo ? excedente : 0;
+  const faltaCobrar = Math.max(0, aCobrar - totalPagos);
+  // Sobra sin efectivo => tarjeta/transf sobrepasa aCobrar y no hay
+  // efectivo para dar vuelto: la cajera debe corregir los montos.
+  const sobraSinEfectivo = !hayEfectivo && excedente > 0;
 
   const clientesFiltrados = useMemo(() => {
     const q = clienteQuery.trim().toLowerCase();
@@ -283,7 +303,7 @@ export default function NuevaVentaPage() {
 
   function reset() {
     setLleva([]); setAplicarCredito(""); setObservaciones("");
-    setMontoRecibido(""); setReferenciaCobro("");
+    setPagos([{ metodo: "efectivo", monto: "", referencia: "" }]);
     setPromoAplicada(null); setCuponInput(""); setPromoError(null);
     setError(null); setCliente(null); setClienteQuery(""); setClienteOpen(false);
   }
@@ -328,8 +348,12 @@ export default function NuevaVentaPage() {
     if (!cliente) { setError("Elegí un cliente antes de confirmar."); return; }
     if (lleva.length === 0) { setError("Cargá al menos una prenda que el cliente lleva."); return; }
     if (lleva.some((l) => l.cantidad <= 0)) { setError("Revisá las líneas: la cantidad debe ser > 0."); return; }
-    if (aCobrar > 0 && metodoCobro === "efectivo" && recibidoNum < aCobrar) {
-      setError(`Falta cobrar ${fmtGs(aCobrar - recibidoNum)} en efectivo. Ingresá el monto recibido.`);
+    if (aCobrar > 0 && faltaCobrar > 0) {
+      setError(`Falta cobrar ${fmtGs(faltaCobrar)}. Repartí el monto entre efectivo/tarjeta/transferencia.`);
+      return;
+    }
+    if (sobraSinEfectivo) {
+      setError(`Sobra ${fmtGs(excedente)} y no hay efectivo para dar vuelto. Ajustá los montos de tarjeta/transferencia.`);
       return;
     }
     if (!caja.cajaSeleccionadaId && caja.cajasAbiertas.length !== 1) {
@@ -383,11 +407,26 @@ export default function NuevaVentaPage() {
 
     setEnviando(true);
     try {
-      const descuentoPromoVisual = promoAplicada?.descuento ?? 0;
-      const efectivoNeeded = Math.max(0, totalLleva - creditoAplicadoNum - descuentoPromoVisual);
-      const pago_detalle = efectivoNeeded > 0
-        ? [{ metodo_pago: metodoCobro, monto: efectivoNeeded, referencia: referenciaCobro.trim() || null }]
-        : [];
+      // Armar pago_detalle desde las líneas de pago partido.
+      //   * No efectivo: cada fila va tal cual (tarjeta A, tarjeta B, etc.)
+      //     con su monto y referencia.
+      //   * Efectivo: se consolida en UNA sola línea con el monto NETO
+      //     (lo entregado menos el vuelto). Si sobró efectivo (vuelto),
+      //     no se registra ese excedente — sale de la caja como devolución.
+      const noEfectivo = pagos
+        .filter((p) => p.metodo !== "efectivo" && (Number(p.monto) || 0) > 0)
+        .map((p) => ({
+          metodo_pago: p.metodo,
+          monto: Math.round(Number(p.monto) || 0),
+          referencia: p.referencia.trim() || null,
+        }));
+      const netoEfectivo = Math.max(0, totalEfectivoEntregado - vuelto);
+      const pago_detalle: Array<{ metodo_pago: PagoMetodo; monto: number; referencia: string | null }> = [
+        ...noEfectivo,
+        ...(netoEfectivo > 0
+          ? [{ metodo_pago: "efectivo" as PagoMetodo, monto: netoEfectivo, referencia: null }]
+          : []),
+      ];
 
       const llevaPayload = {
         items: lleva.map((l) => ({ producto_id: l.franja_id, cantidad: l.cantidad, tipo_iva: "EXENTA" as const })),
@@ -671,53 +710,132 @@ export default function NuevaVentaPage() {
             </div>
             {aCobrar > 0 && (
               <div className="space-y-2">
-                <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
-                  Cobrar {fmtGs(Math.round(aCobrar))} en
-                </label>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {(["efectivo", "tarjeta", "transferencia"] as const).map((m) => (
-                    <button key={m} type="button" onClick={() => setMetodoCobro(m)}
-                      className={`rounded-lg border px-2 py-2 text-xs font-medium transition-colors ${
-                        metodoCobro === m
-                          ? "border-[#4FAEB2] bg-[#4FAEB2]/10 text-[#3F8E91] ring-2 ring-[#4FAEB2]/20"
-                          : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
-                      }`}>
-                      {m === "efectivo" ? "💵 Efectivo" : m === "tarjeta" ? "💳 Tarjeta" : "📱 Transferencia"}
-                    </button>
-                  ))}
+                <div className="flex items-baseline justify-between">
+                  <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Cobrar {fmtGs(Math.round(aCobrar))} en
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // Autocompletar la primera línea con el saldo pendiente
+                      // (útil cuando la cajera ya cargó parciales y quiere
+                      // que el resto vaya al primer método sin escribir).
+                      const restante = Math.max(0, aCobrar - totalPagos);
+                      if (restante <= 0) return;
+                      setPagos((prev) => prev.map((p, i) =>
+                        i === 0
+                          ? { ...p, monto: String((Number(p.monto) || 0) + restante) }
+                          : p,
+                      ));
+                    }}
+                    className="text-[11px] font-semibold text-[#4FAEB2] hover:text-[#3F8E91]"
+                  >
+                    Completar exacto
+                  </button>
                 </div>
 
-                {metodoCobro === "efectivo" ? (
-                  <div>
-                    <label className="block text-[11px] uppercase font-semibold text-slate-500 mt-1 mb-1">Recibido del cliente</label>
-                    <MontoInput value={montoRecibido}
-                      onChange={(n) => setMontoRecibido(n === 0 ? "0" : String(n))}
-                      placeholder={`Ej: ${(Math.ceil(aCobrar / 10000) * 10000).toLocaleString("es-PY")}`}
-                      decimals={false}
-                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-lg font-semibold focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]" />
-                    {faltaCobrar > 0 ? (
-                      <p className="mt-2 rounded-md border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-700">
-                        Falta cobrar <strong>{fmtGs(faltaCobrar)}</strong>.
-                      </p>
-                    ) : vuelto > 0 ? (
-                      <p className="mt-2 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-sm text-emerald-800">
-                        Vuelto: <strong className="text-lg">{fmtGs(vuelto)}</strong>
-                      </p>
-                    ) : recibidoNum > 0 ? (
-                      <p className="mt-2 rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs text-slate-600">
-                        Exacto — sin vuelto.
-                      </p>
-                    ) : null}
-                  </div>
-                ) : (
-                  <div>
-                    <label className="block text-[11px] uppercase font-semibold text-slate-500 mt-1 mb-1">Referencia / N° operación (opcional)</label>
-                    <input type="text" value={referenciaCobro} onChange={(e) => setReferenciaCobro(e.target.value)}
-                      placeholder={metodoCobro === "tarjeta" ? "Últimos 4 dígitos, autorización…" : "N° de transferencia"}
-                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]" />
-                    <p className="text-[11px] text-slate-400 mt-1">Se asume el monto exacto ({fmtGs(aCobrar)}). Sin vuelto.</p>
-                  </div>
-                )}
+                <div className="space-y-2">
+                  {pagos.map((p, idx) => {
+                    const setLinea = (patch: Partial<PagoLinea>) =>
+                      setPagos((prev) => prev.map((x, i) => i === idx ? { ...x, ...patch } : x));
+                    return (
+                      <div key={idx} className="rounded-lg border border-slate-200 bg-white p-2 space-y-2">
+                        <div className="flex items-center gap-1.5">
+                          {(["efectivo", "tarjeta", "transferencia"] as const).map((m) => (
+                            <button
+                              key={m}
+                              type="button"
+                              onClick={() => setLinea({ metodo: m })}
+                              className={`flex-1 rounded-md border px-2 py-1.5 text-xs font-medium transition-colors ${
+                                p.metodo === m
+                                  ? "border-[#4FAEB2] bg-[#4FAEB2]/10 text-[#3F8E91] ring-2 ring-[#4FAEB2]/20"
+                                  : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
+                              }`}
+                            >
+                              {m === "efectivo" ? "💵 Efectivo" : m === "tarjeta" ? "💳 Tarjeta" : "📱 Transf."}
+                            </button>
+                          ))}
+                          {pagos.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => setPagos((prev) => prev.filter((_, i) => i !== idx))}
+                              className="ml-1 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs font-medium text-slate-400 hover:bg-red-50 hover:text-red-600"
+                              title="Quitar este método"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <MontoInput
+                            value={p.monto}
+                            onChange={(n) => setLinea({ monto: n === 0 ? "0" : String(n) })}
+                            placeholder={
+                              p.metodo === "efectivo"
+                                ? `Ej: ${(Math.ceil(aCobrar / 10000) * 10000).toLocaleString("es-PY")}`
+                                : `Ej: ${Math.round(aCobrar).toLocaleString("es-PY")}`
+                            }
+                            decimals={false}
+                            className="flex-1 rounded-md border border-slate-200 px-3 py-2 text-base font-semibold focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const restante = Math.max(0, aCobrar - totalPagos + (Number(p.monto) || 0));
+                              setLinea({ monto: String(restante) });
+                            }}
+                            className="rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-[11px] font-semibold text-slate-600 hover:bg-slate-100"
+                            title="Poner el saldo pendiente en esta línea"
+                          >
+                            Resto acá
+                          </button>
+                        </div>
+                        {p.metodo !== "efectivo" && (
+                          <input
+                            type="text"
+                            value={p.referencia}
+                            onChange={(e) => setLinea({ referencia: e.target.value })}
+                            placeholder={p.metodo === "tarjeta" ? "Últimos 4 dígitos, autorización…" : "N° de transferencia"}
+                            className="w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const restante = Math.max(0, aCobrar - totalPagos);
+                      setPagos((prev) => [
+                        ...prev,
+                        { metodo: "tarjeta", monto: restante > 0 ? String(restante) : "", referencia: "" },
+                      ]);
+                    }}
+                    className="w-full rounded-lg border border-dashed border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-500 hover:border-[#4FAEB2] hover:text-[#4FAEB2]"
+                  >
+                    + Agregar otro método
+                  </button>
+                </div>
+
+                {/* Resumen */}
+                {faltaCobrar > 0 ? (
+                  <p className="rounded-md border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-700">
+                    Falta cobrar <strong>{fmtGs(faltaCobrar)}</strong> (asignado {fmtGs(totalPagos)} de {fmtGs(aCobrar)}).
+                  </p>
+                ) : sobraSinEfectivo ? (
+                  <p className="rounded-md border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-700">
+                    Sobra <strong>{fmtGs(excedente)}</strong> y no hay efectivo para dar vuelto. Ajustá los montos.
+                  </p>
+                ) : vuelto > 0 ? (
+                  <p className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-sm text-emerald-800">
+                    Asignado {fmtGs(totalPagos)} · Vuelto: <strong className="text-lg">{fmtGs(vuelto)}</strong>
+                  </p>
+                ) : totalPagos > 0 ? (
+                  <p className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs text-slate-600">
+                    Exacto — sin vuelto.
+                  </p>
+                ) : null}
               </div>
             )}
           </div>

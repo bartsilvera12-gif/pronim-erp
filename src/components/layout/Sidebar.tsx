@@ -634,10 +634,25 @@ export default function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarPr
 
   // Gate por sucursal: operativos de sucursal NO Principal no ven Categorias
   // (solo Principal edita el catalogo web).
-  // usuario ya no se lee acá — filterItemChildren pasa todo tal cual.
-  // Categorías se muestra a todos — Karen quiere que las sucursales no-principales
-  // puedan administrar sus propias franjas/categorías por sucursal.
-  const filterItemChildren = (item: MenuItem): MenuItem => item;
+  // Transferencias de inventario: solo administradores (esSuperAdmin, rol admin/administrador).
+  // Karen: las sucursales no deben mover stock entre sí, solo el admin.
+  const { usuario: usuarioActual } = useUsuarioActual();
+  const rolActual = (usuarioActual?.rol ?? "").trim().toLowerCase();
+  const esAdminGeneral = esSuperAdmin
+    || rolActual === "admin"
+    || rolActual === "administrador"
+    || rolActual === "super_admin"
+    || rolActual === "super admin"
+    || rolActual === "superadmin";
+  const filterItemChildren = (item: MenuItem): MenuItem => {
+    if (item.key === "inventario" && !esAdminGeneral && item.children) {
+      return {
+        ...item,
+        children: item.children.filter((c) => c.href !== "/inventario/transferencias"),
+      };
+    }
+    return item;
+  };
 
   const isActive = (slug: string, href: string) => {
     const p = pathname ?? "";
@@ -661,7 +676,7 @@ export default function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarPr
         access(item.slug) &&
         menuItemMatchesQuery(item, menuSearchQuery)
     ).map(filterItemChildren);
-  }, [favoritos, menuSearchQuery, modulos, esSuperAdmin]);
+  }, [favoritos, menuSearchQuery, modulos, esSuperAdmin, esAdminGeneral]);
 
   const mainItemsFiltered = useMemo(() => {
     const slugs = new Set(modulos.map((m) => m.slug));
@@ -673,7 +688,7 @@ export default function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarPr
         access(item.slug) &&
         menuItemMatchesQuery(item, menuSearchQuery)
     ).map(filterItemChildren);
-  }, [favoritos, menuSearchQuery, modulos, esSuperAdmin]);
+  }, [favoritos, menuSearchQuery, modulos, esSuperAdmin, esAdminGeneral]);
 
   /** Agrupa `mainItemsFiltered` por familia (preservando acceso/búsqueda/favoritos ya aplicados). */
   const familiesToRender = useMemo(() => {
