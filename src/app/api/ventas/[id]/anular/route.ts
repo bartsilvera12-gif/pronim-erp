@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAuthWithRol, isSuperAdmin } from "@/lib/middleware/auth";
+import { getAuthWithRol, isAdmin } from "@/lib/middleware/auth";
 import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
 import { anularVentaPg } from "@/lib/ventas/server/anular-venta-pg";
 
-/** POST /api/ventas/[id]/anular — solo super_admin. */
+/** POST /api/ventas/[id]/anular — solo administrador (o super_admin). */
 export async function POST(
   request: NextRequest,
   ctxParams: { params: Promise<{ id: string }> },
@@ -14,9 +14,9 @@ export async function POST(
     const { id: ventaId } = await ctxParams.params;
     const auth = await getAuthWithRol(request);
     if (!auth) return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
-    if (!isSuperAdmin(auth)) {
+    if (!isAdmin(auth)) {
       return NextResponse.json(
-        errorResponse("Solo super_admin puede anular ventas."),
+        errorResponse("Solo el administrador puede anular ventas."),
         { status: 403 },
       );
     }

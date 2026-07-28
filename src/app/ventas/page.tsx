@@ -11,6 +11,7 @@ import PedidosPendientesCaja from "./PedidosPendientesCaja";
 import CambioModal from "./CambioModal";
 import CajaControlPanel from "@/components/caja/CajaControlPanel";
 import { esMismoDiaAsuncion } from "@/lib/fecha/asuncion";
+import { useIsAdmin } from "@/lib/auth/use-is-admin";
 import type { Venta, TipoVenta, TipoIvaVenta } from "@/lib/ventas/types";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -153,13 +154,16 @@ export default function VentasPage() {
   // Locale para toLocaleDateString y toLocaleTimeString. es-PY para
   // sucursales de Paraguay, pt-BR para Brasil.
   const dateLocale = lang === "pt-BR" ? "pt-BR" : "es-PY";
+  // Karen: solo administrador puede anular ventas. Escondemos el botón
+  // para cualquier otro rol (super_admin queda incluido por isAdmin).
+  const { isAdmin: puedeAnular } = useIsAdmin();
   const [todas,      setTodas]      = useState<Venta[]>([]);
   const [busqueda,   setBusqueda]   = useState("");
   const [filtroTipo, setFiltroTipo] = useState<TipoVenta | "">("");
   const [filtroIva,  setFiltroIva]  = useState<TipoIvaVenta | "">("");
   const [cargandoLista, setCargandoLista] = useState(true);
   // Modal para anular una venta desde el listado. La venta a anular
-  // se guarda en estado + un textarea para el motivo (super_admin only).
+  // se guarda en estado + un textarea para el motivo (admin only).
   const [anularVenta, setAnularVenta] = useState<Venta | null>(null);
   const [anularMotivo, setAnularMotivo] = useState("");
   const [anulandoBusy, setAnulandoBusy] = useState(false);
@@ -479,14 +483,16 @@ export default function VentasPage() {
                                   Nota de remisión
                                 </a>
                               )}
-                              <button
-                                type="button"
-                                onClick={() => setAnularVenta(v)}
-                                className="inline-flex items-center justify-center rounded-md border border-rose-200 bg-white px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-50 transition-colors"
-                                title="Anular esta venta (revierte stock y crédito)"
-                              >
-                                Anular
-                              </button>
+                              {puedeAnular && (
+                                <button
+                                  type="button"
+                                  onClick={() => setAnularVenta(v)}
+                                  className="inline-flex items-center justify-center rounded-md border border-rose-200 bg-white px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-50 transition-colors"
+                                  title="Anular esta venta (revierte stock y crédito)"
+                                >
+                                  Anular
+                                </button>
+                              )}
                               <button
                                 type="button"
                                 onClick={() => setCambioVenta(v)}
@@ -538,7 +544,7 @@ export default function VentasPage() {
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-lg font-bold text-slate-900 mb-1">Anular venta {anularVenta.numero_control}</h3>
             <p className="text-sm text-slate-500 mb-3">
-              Revierte el stock, cancela cobros inmediatos y devuelve el crédito aplicado al cliente. Requiere super_admin.
+              Revierte el stock, cancela cobros inmediatos y devuelve el crédito aplicado al cliente. Requiere permisos de administrador.
             </p>
             <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 mb-4 text-xs text-slate-600 space-y-0.5">
               <p><strong>Total:</strong> {formatGs(anularVenta.total)}</p>

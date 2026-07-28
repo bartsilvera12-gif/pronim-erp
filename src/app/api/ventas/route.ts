@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTenantSupabaseFromAuth } from "@/lib/supabase/tenant-api";
+import { getAuthWithRol, isAdmin } from "@/lib/middleware/auth";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
 import type { Venta, LineaVenta, TipoIvaVenta } from "@/lib/ventas/types";
@@ -87,7 +88,24 @@ export async function GET(request: NextRequest) {
     const empresaId = ctx.auth.empresa_id;
     const jwt = await getAccessTokenForRequest(request);
 
+    // Sucursal scoping: Karen quiere que cada sucursal tenga su propia
+    // caja independiente. Los cajeros solo ven las ventas de SU sucursal
+    // (auth.sucursal_id). Los administradores pueden ver todas, y pueden
+    // opcionalmente restringir con ?sucursal_id=... desde el frontend.
+    const url = new URL(request.url);
+    const querySucursalId = url.searchParams.get("sucursal_id");
+    const authRol = await getAuthWithRol(request);
+    const esAdmin = isAdmin(authRol);
+    const sucursalFiltro = esAdmin
+      ? (querySucursalId && querySucursalId.trim() ? querySucursalId.trim() : null)
+      : (ctx.auth.sucursal_id ?? null);
+
     // Cadena de fallback: sucursal+anulacion → solo anulacion → mínimo.
+    // Si sucursalFiltro es null, no aplicamos ningun filtro extra (ver todo).
+    // Cuando el usuario NO es admin y NO tiene sucursal_id (ambos null),
+    // conservamos el comportamiento historico de ver todas — hay tenants
+    // como Joyeria donde los usuarios sin sucursal fija ven la empresa
+    // entera.
     const attempts = [VENTAS_COLS_CON_SUCURSAL, VENTAS_COLS_ANULACION, VENTAS_COLS_MIN];
     let ventasRes: Awaited<ReturnType<typeof postgrestGet<VentaRow>>> | null = null;
     let lastError: unknown = null;
@@ -98,8 +116,11 @@ export async function GET(request: NextRequest) {
         order: "fecha.desc",
         limit: "500",
       });
+      if (sucursalFiltro) qs.set("sucursal_id", `eq.${sucursalFiltro}`);
       const res = await postgrestGet<VentaRow>("ventas", qs.toString(), { role: "jwt", jwt, noStore: true });
       if (res.ok) { ventasRes = res; break; }
+      // Si el fallback es al MIN (sin sucursal_id) y estabamos filtrando,
+      // no podemos filtrar => devolvemos vacio en vez de mezclar sucursales.
       lastError = res.error;
     }
     if (!ventasRes) {
