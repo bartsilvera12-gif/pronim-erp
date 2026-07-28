@@ -494,26 +494,24 @@ function PreviewIngresoModal({
                                     {" · costo Gs. "}
                                     <span className="tabular-nums">{it.costo_unit.toLocaleString("es-PY")}</span>{" c/u"}
                                   </div>
-                                  {!enUso && (
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        setSplits((prev) => ({
-                                          ...prev,
-                                          [it.id]: [{ franjaId: "", cantidad: it.cantidad }],
-                                        }))
-                                      }
-                                      className="shrink-0 text-[10px] text-emerald-700 hover:text-emerald-900 underline"
-                                    >
-                                      Elegir franja
-                                    </button>
-                                  )}
                                 </div>
 
                                 {!enUso ? (
-                                  <p className="pl-8 text-[11px] italic text-slate-400">
-                                    Se ingresa a la franja original (Gs. {it.venta_unit.toLocaleString("es-PY")})
-                                  </p>
+                                  <div className="pl-8">
+                                    <PrecioManualQuickInput
+                                      cantidad={it.cantidad}
+                                      costoUnit={it.costo_unit}
+                                      ventaOriginal={it.venta_unit}
+                                      onAsignar={async (precio) => {
+                                        const id = await crearFranjaManual(precio);
+                                        if (!id) return;
+                                        setSplits((prev) => ({
+                                          ...prev,
+                                          [it.id]: [{ franjaId: id, cantidad: it.cantidad }],
+                                        }));
+                                      }}
+                                    />
+                                  </div>
                                 ) : (
                                   <div className="pl-8 space-y-1.5">
                                     {sp.map((s, j) => {
@@ -745,6 +743,66 @@ function PreviewIngresoModal({
         </div>
 
       </div>
+    </div>
+  );
+}
+
+// Campo rápido para tipear el precio de venta a mano y asignarlo a TODAS
+// las prendas de un item sin abrir el combobox. Enter dispara la asignación
+// (crea/reutiliza la franja de ese precio). Blur también, para que se pueda
+// clickear afuera y confirmar sin usar teclado.
+function PrecioManualQuickInput({
+  cantidad, costoUnit, ventaOriginal, onAsignar,
+}: {
+  cantidad: number;
+  costoUnit: number;
+  ventaOriginal: number;
+  onAsignar: (precio: number) => void | Promise<void>;
+}) {
+  const [txt, setTxt] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const precioTipeado = (() => {
+    const digitos = txt.replace(/\D/g, "");
+    if (!digitos) return null;
+    const n = Number(digitos);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  })();
+
+  const gananciaPreview = precioTipeado != null ? (precioTipeado - costoUnit) * cantidad : null;
+
+  const asignar = async () => {
+    if (precioTipeado == null || busy) return;
+    setBusy(true);
+    try { await onAsignar(precioTipeado); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="text-[10px] text-slate-500 shrink-0">Gs.</span>
+      <input
+        type="text"
+        inputMode="numeric"
+        value={txt}
+        disabled={busy}
+        onChange={(e) => setTxt(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") { e.preventDefault(); asignar(); }
+        }}
+        onBlur={() => { if (precioTipeado != null) asignar(); }}
+        placeholder={`ej: ${ventaOriginal.toLocaleString("es-PY")}`}
+        className="flex-1 min-w-0 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs tabular-nums focus:outline-none focus:ring-2 focus:ring-emerald-400 disabled:opacity-60"
+        title="Tipeá el precio de venta y presioná Enter"
+      />
+      {gananciaPreview != null && (
+        <span className={`shrink-0 text-[10px] font-semibold tabular-nums ${
+          gananciaPreview >= 0 ? "text-emerald-700" : "text-rose-700"
+        }`}>
+          {gananciaPreview >= 0 ? "+" : ""}{gananciaPreview.toLocaleString("es-PY")}
+        </span>
+      )}
+      {busy && <span className="text-[10px] text-slate-400 shrink-0">…</span>}
     </div>
   );
 }
