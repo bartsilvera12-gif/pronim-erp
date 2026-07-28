@@ -16,9 +16,12 @@ import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session"
  * datos, filtros y lógica intactos.
  */
 
+type Moneda = "PYG" | "BRL" | "USD" | "ARS";
+
 type Suc = {
   sucursal_id: string;
   nombre: string;
+  moneda?: Moneda;
   ventas: {
     cantidad: number; total: number; prendas: number;
     ticket_promedio: number; prendas_por_venta: number | null;
@@ -30,11 +33,16 @@ type Suc = {
   };
 };
 
-function fmtGsCompact(n: number): string {
+// Formateo compacto por moneda de LA SUCURSAL (no la del viewer).
+// Betim/BH/El Dorado se ven en R$ aunque el admin PY las esté mirando.
+function fmtCompact(n: number, moneda: Moneda = "PYG"): string {
   const abs = Math.abs(n);
-  if (abs >= 1_000_000) return `Gs. ${(n / 1_000_000).toFixed(abs >= 10_000_000 ? 0 : 1)}M`;
-  if (abs >= 1_000) return `Gs. ${(n / 1_000).toFixed(0)}K`;
-  return `Gs. ${Math.round(n).toLocaleString("es-PY")}`;
+  const sym = moneda === "BRL" ? "R$" : moneda === "USD" ? "US$" : moneda === "ARS" ? "$" : "Gs.";
+  const locale = moneda === "BRL" ? "pt-BR" : "es-PY";
+  if (abs >= 1_000_000) return `${sym} ${(n / 1_000_000).toFixed(abs >= 10_000_000 ? 0 : 1)}M`;
+  if (abs >= 1_000) return `${sym} ${(n / 1_000).toFixed(0)}K`;
+  const decimals = moneda === "PYG" || moneda === "ARS" ? 0 : 2;
+  return `${sym} ${n.toLocaleString(locale, { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
 }
 function fmtN(n: number): string { return (n || 0).toLocaleString("es-PY"); }
 
@@ -73,6 +81,8 @@ export default function VentasPorSucursalPanel() {
           const v = s.ventas;
           const totalPagos = v.pagos.reduce((a, x) => a + x.total, 0);
           const activa = v.cantidad > 0 || v.total > 0;
+          const moneda: Moneda = (s.moneda ?? "PYG");
+          const fmt = (n: number) => fmtCompact(n, moneda);
           return (
             <div key={s.sucursal_id} className={`rounded-xl border border-slate-200 bg-white p-4 space-y-3 shadow-sm ${
               !activa ? "opacity-60" : ""
@@ -97,11 +107,11 @@ export default function VentasPorSucursalPanel() {
 
               {/* Rentabilidad — verde (margen destacado) */}
               <MetricBlock tone="green" titulo="Rentabilidad">
-                <Metric icon="money" label="Costo" value={fmtGsCompact(v.costo_total)} />
+                <Metric icon="money" label="Costo" value={fmt(v.costo_total)} />
                 <Metric
                   icon="check"
                   label="Margen"
-                  value={fmtGsCompact(v.margen_bruto)}
+                  value={fmt(v.margen_bruto)}
                   tone={v.margen_bruto >= 0 ? "pos" : "neg"}
                 />
                 <Metric
@@ -116,21 +126,21 @@ export default function VentasPorSucursalPanel() {
               <MetricBlock tone="rose" titulo="Ventas">
                 <Metric icon="cart" label="Ventas" value={fmtN(v.cantidad)} />
                 <Metric icon="shirt" label="Prendas" value={fmtN(v.prendas)} />
-                <Metric icon="ticket" label="Ticket prom" value={fmtGsCompact(v.ticket_promedio)} />
+                <Metric icon="ticket" label="Ticket prom" value={fmt(v.ticket_promedio)} />
                 <Metric
                   icon="delta"
                   label="Prendas/venta"
                   value={v.prendas_por_venta != null ? String(v.prendas_por_venta) : "—"}
                 />
-                <Metric icon="money" label="Total vendido" value={fmtGsCompact(v.total)} />
+                <Metric icon="money" label="Total vendido" value={fmt(v.total)} />
                 <Metric icon="tag" label="Promociones" value={fmtN(v.promociones_aplicadas)} />
               </MetricBlock>
 
               {/* Beneficios y descuentos — lavanda (solo si hay) */}
               {(v.cashback_total > 0 || v.descuento_total > 0 || v.beneficios_entregados > 0) && (
                 <MetricBlock tone="lavender" titulo="Beneficios">
-                  <Metric icon="gift" label="Cashback" value={fmtGsCompact(v.cashback_total)} tone="info" />
-                  <Metric icon="minus" label="Descuentos" value={fmtGsCompact(v.descuento_total)} tone="info" />
+                  <Metric icon="gift" label="Cashback" value={fmt(v.cashback_total)} tone="info" />
+                  <Metric icon="minus" label="Descuentos" value={fmt(v.descuento_total)} tone="info" />
                   <Metric icon="star" label="Beneficios" value={fmtN(v.beneficios_entregados)} tone="info" />
                 </MetricBlock>
               )}
@@ -177,7 +187,7 @@ export default function VentasPorSucursalPanel() {
                           </div>
                           <span className="w-8 text-right text-[10px] text-slate-500 tabular-nums">{p.ops}</span>
                           <span className="w-16 text-right text-xs font-semibold text-slate-800 tabular-nums">
-                            {fmtGsCompact(p.total)}
+                            {fmt(p.total)}
                           </span>
                         </div>
                       );

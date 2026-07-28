@@ -57,14 +57,26 @@ export async function GET(request: NextRequest) {
       const sucCond = sucScope ? "AND s.id = $2" : "";
       if (sucScope) scopeArgs.push(sucScope);
 
-      // Sucursales base.
-      const sucQ = await client.query<{ id: string; nombre: string }>(
-        `SELECT s.id::text AS id, s.nombre
+      // Sucursales base. Incluye moneda (PYG/BRL/USD/ARS) para que el
+      // frontend formatee cada card con su símbolo/locale. La columna
+      // puede no existir en schemas viejos → COALESCE + fallback.
+      const sucQ = await client.query<{ id: string; nombre: string; moneda: string }>(
+        `SELECT s.id::text AS id, s.nombre, COALESCE(s.moneda, 'PYG') AS moneda
          FROM ${sucT} s
          WHERE s.empresa_id = $1 AND COALESCE(s.activo, true) = true ${sucCond}
          ORDER BY s.nombre`,
         scopeArgs,
-      );
+      ).catch(async () => {
+        // Fallback: schema sin columna 'moneda' → devolver 'PYG' fijo.
+        const r = await client.query<{ id: string; nombre: string }>(
+          `SELECT s.id::text AS id, s.nombre
+           FROM ${sucT} s
+           WHERE s.empresa_id = $1 AND COALESCE(s.activo, true) = true ${sucCond}
+           ORDER BY s.nombre`,
+          scopeArgs,
+        );
+        return { ...r, rows: r.rows.map(x => ({ ...x, moneda: 'PYG' })) };
+      });
 
       const args: unknown[] = [auth.empresa_id, desde, hasta];
 
@@ -190,6 +202,7 @@ export async function GET(request: NextRequest) {
         return {
           sucursal_id: s.id,
           nombre: s.nombre,
+          moneda: s.moneda,
           ventas: {
             cantidad,
             total,
