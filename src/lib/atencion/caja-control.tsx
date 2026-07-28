@@ -343,22 +343,44 @@ export function CajaControlBanner({ state }: { state: CajaState }) {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setModal(null)}>
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
             {modal === "abrir" && (
-              <>
+              <div className="max-h-[85vh] overflow-y-auto pr-1">
                 <h3 className="text-base font-semibold text-slate-900">Abrir caja</h3>
                 {puntoCajaNombre && <p className="mt-0.5 text-xs text-slate-500">Punto: <strong>{puntoCajaNombre}</strong></p>}
                 {aperturaError && <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{aperturaError}</div>}
+
+                {ultimoCierreInfo && ultimoCierreInfo.monto > 0 && (
+                  <div className="mt-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Apertura estimada</p>
+                    <div className="rounded-lg border border-sky-200 bg-sky-50/60 p-3 text-sm">
+                      <div className="flex justify-between text-slate-700">
+                        <span>Último cierre</span>
+                        <span>
+                          {ultimoCierreInfo.fecha_cierre
+                            ? new Date(ultimoCierreInfo.fecha_cierre).toLocaleDateString("es-PY")
+                            : "—"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-slate-700 border-b border-sky-200 pb-2">
+                        <span>Efectivo que quedó al cerrar</span>
+                        <span>{fmtGs(ultimoCierreInfo.monto)}</span>
+                      </div>
+                      <div className="flex justify-between items-baseline pt-2">
+                        <span className="font-semibold text-sky-800">Apertura estimada</span>
+                        <span className="text-xl font-bold text-sky-900">{fmtGs(ultimoCierreInfo.monto)}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="mt-4 space-y-3">
                   <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">{t("Monto inicial")} en efectivo ({money.symbol})</label>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1">Efectivo físico contado al abrir ({money.symbol})</label>
                     <MontoInput value={aperturaMonto} onChange={(n) => setAperturaMonto(String(n))}
                       placeholder="Ej: 200.000" autoFocus decimals={false}
-                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-lg font-semibold focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]" />
+                      className="w-full rounded-lg border-2 border-[#4FAEB2] px-3 py-2 text-lg font-semibold focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]" />
                     {ultimoCierreInfo && ultimoCierreInfo.monto > 0 && (
-                      <p className="mt-1 text-[11px] text-emerald-700">
-                        Prellenado con el efectivo del último cierre
-                        {ultimoCierreInfo.fecha_cierre && (
-                          <> ({new Date(ultimoCierreInfo.fecha_cierre).toLocaleDateString("es-PY")})</>
-                        )}: <strong>{money.format(Math.round(ultimoCierreInfo.monto))}</strong>. Podés editarlo si contás distinto.
+                      <p className="mt-1 text-[11px] text-slate-500">
+                        Prellenado con el efectivo del último cierre. Podés editarlo si contás distinto.
                       </p>
                     )}
                   </div>
@@ -377,7 +399,7 @@ export function CajaControlBanner({ state }: { state: CajaState }) {
                     {abriendo ? "Abriendo…" : "Abrir caja"}
                   </button>
                 </div>
-              </>
+              </div>
             )}
 
             {modal === "cerrar" && (
