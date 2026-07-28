@@ -55,9 +55,9 @@ export default function NuevaEvaluacionPage() {
   const [observaciones, setObservaciones] = useState("");
 
   // ── Reparto del pago al cliente ──────────────────────────────────────
-  // Karen: sumen todo, dividen ÷2 o ÷4 para dar el precio, y ese precio
-  // se paga en crédito + efectivo + transferencia (mezclable).
-  const [divisor, setDivisor] = useState<1 | 2 | 4 | "custom">(1);
+  // Karen: sumen todo, dividen ÷2 / ÷2.5 / ÷3 para dar el precio, y ese
+  // precio se paga en crédito + efectivo + transferencia (mezclable).
+  const [divisor, setDivisor] = useState<1 | 2 | 2.5 | 3 | "custom">(1);
   const [pagoCredito, setPagoCredito] = useState<string>("");
   const [pagoEfectivo, setPagoEfectivo] = useState<string>("");
   const [pagoTransf, setPagoTransf] = useState<string>("");
@@ -595,14 +595,14 @@ export default function NuevaEvaluacionPage() {
           />
         </div>
 
-        {/* ── Divisor rápido: ÷1 / ÷2 / ÷4 / otro ────────────────────── */}
+        {/* ── Divisor rápido: ÷1 / ÷2 / ÷2.5 / ÷3 / otro ─────────────── */}
         {totalTraeSubtotal > 0 && (
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
               Dividir el subtotal
             </p>
             <div className="flex flex-wrap gap-2 items-center">
-              {([1, 2, 4] as const).map((d) => (
+              {([1, 2, 2.5, 3] as const).map((d) => (
                 <button
                   key={d}
                   type="button"
