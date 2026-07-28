@@ -918,7 +918,9 @@ export default function NuevaAtencionPage() {
       .map(([id, v]) => {
         const cfg = alertasConfig.beneficios.find((b) => b.id === id);
         if (!cfg) return null;
-        if (cfg.genera_credito === true) return null;
+        // Cashback y beneficios con genera_credito=true ya los procesa el server
+        // dentro de la tx (con inserción en cliente_eventos incluida).
+        if (cfg.genera_credito === true || cfg.tipo_evento === "cashback") return null;
         const monto = cfg.pide_monto ? Number(v.monto.replace(/[^\d]/g, "")) || 0 : 0;
         return { cfg, monto };
       })
@@ -1023,7 +1025,10 @@ export default function NuevaAtencionPage() {
         .filter(([, v]) => v.marcado)
         .map(([id, v]) => {
           const cfg = alertasConfig.beneficios.find((b) => b.id === id);
-          if (!cfg || cfg.genera_credito !== true) return null;
+          // Cashback siempre va al server (genera saldo de cashback separado).
+          // El resto sólo si está autorizado (genera_credito=true).
+          const enviar = cfg?.tipo_evento === "cashback" || cfg?.genera_credito === true;
+          if (!cfg || !enviar) return null;
           const monto = Number(v.monto.replace(/[^\d]/g, "")) || 0;
           if (!(monto > 0)) return null;
           return { id: cfg.id, monto };

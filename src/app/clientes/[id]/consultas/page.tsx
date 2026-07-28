@@ -25,6 +25,7 @@ function formatFecha(iso: string): string {
 
 type KPIs = {
   saldo_credito: number;
+  saldo_cashback: number;
   ultima_compra_fecha: string | null;
   dias_desde_ultima_compra: number | null;
   compras_ultimos_90d: number;
@@ -381,10 +382,16 @@ export default function ConsultasClientePage() {
       {kpis && (
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <KpiCard
-            label="Saldo a favor"
+            label="Crédito a favor"
             value={formatGs(kpis.saldo_credito)}
             hint="crédito disponible"
             highlight={kpis.saldo_credito > 0}
+          />
+          <KpiCard
+            label="Cashback disponible"
+            value={formatGs(kpis.saldo_cashback ?? 0)}
+            hint="entregado como cashback"
+            highlight={(kpis.saldo_cashback ?? 0) > 0}
           />
           <KpiCard
             label="Última compra"

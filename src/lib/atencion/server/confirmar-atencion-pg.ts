@@ -503,41 +503,55 @@ export async function confirmarAtencionEnClientePg(
             `Beneficio "${b.id}" no está configurado para la empresa. Revisá /configuracion/caja.`,
           );
         }
-        if (cfgB.genera_credito !== true) {
-          throw new ValidationError(
-            "BENEFICIO_NO_AUTORIZADO",
-            `Beneficio "${cfgB.label}" no está autorizado para generar crédito (genera_credito=false).`,
-          );
-        }
-        // monto_max OBLIGATORIO cuando genera_credito=true. Sin default silencioso:
-        // si el admin no configuró el tope, el server rechaza — así impedimos que
-        // una cajera pueda emitir crédito arbitrario cambiando el body.
-        const montoMax = Number(cfgB.monto_max);
-        if (!Number.isFinite(montoMax) || montoMax <= 0) {
-          throw new ValidationError(
-            "BENEFICIO_MONTO_MAX_FALTANTE",
-            `Beneficio "${cfgB.label}": falta configurar monto_max. Un administrador debe fijarlo en /configuracion/caja antes de poder entregarlo.`,
-          );
-        }
-        if (monto > montoMax) {
-          throw new ValidationError(
-            "BENEFICIO_MONTO_SOBRE_MAX",
-            `Beneficio "${cfgB.label}": monto (${monto}) supera el máximo permitido (${montoMax}).`,
-          );
+        // Cashback: siempre autorizado (implícitamente genera_credito=true) y
+        // sin requerir monto_max — la cajera controla el monto por operación.
+        // Otros tipos: siguen exigiendo genera_credito=true + monto_max fijo.
+        const esCashback = cfgB.tipo_evento === "cashback";
+        if (!esCashback) {
+          if (cfgB.genera_credito !== true) {
+            throw new ValidationError(
+              "BENEFICIO_NO_AUTORIZADO",
+              `Beneficio "${cfgB.label}" no está autorizado para generar crédito (genera_credito=false).`,
+            );
+          }
+          const montoMax = Number(cfgB.monto_max);
+          if (!Number.isFinite(montoMax) || montoMax <= 0) {
+            throw new ValidationError(
+              "BENEFICIO_MONTO_MAX_FALTANTE",
+              `Beneficio "${cfgB.label}": falta configurar monto_max. Un administrador debe fijarlo en /configuracion/caja antes de poder entregarlo.`,
+            );
+          }
+          if (monto > montoMax) {
+            throw new ValidationError(
+              "BENEFICIO_MONTO_SOBRE_MAX",
+              `Beneficio "${cfgB.label}": monto (${monto}) supera el máximo permitido (${montoMax}).`,
+            );
+          }
+        } else {
+          // Cashback igual respeta el tope si está configurado — no obligatorio.
+          const montoMax = Number(cfgB.monto_max);
+          if (Number.isFinite(montoMax) && montoMax > 0 && monto > montoMax) {
+            throw new ValidationError(
+              "BENEFICIO_MONTO_SOBRE_MAX",
+              `Cashback "${cfgB.label}": monto (${monto}) supera el máximo permitido (${montoMax}).`,
+            );
+          }
         }
         // label + tipo_evento vienen de la config server, NO del frontend.
         const label = cfgB.label;
         const tipoEvento = cfgB.tipo_evento;
+        // Cashback → origen='cashback' (queda separado en la ficha). Resto → 'ajuste_manual'.
+        const origenCredito = esCashback ? "cashback" : "ajuste_manual";
         await client.query(
           `INSERT INTO ${creditosT} (
              empresa_id, cliente_id, tipo, monto, origen,
              referencia_tipo, referencia_numero, observaciones,
              created_by, usuario_nombre
-           ) VALUES ($1,$2,'ENTRADA',$3,'ajuste_manual',$4,$5,$6,$7,$8)`,
+           ) VALUES ($1,$2,'ENTRADA',$3,$4,$5,$6,$7,$8,$9)`,
           [
-            p.empresaId, p.clienteId, monto,
+            p.empresaId, p.clienteId, monto, origenCredito,
             tipoEvento, cfgB.id,
-            `${label} (beneficio entregado en atención)`,
+            `${label} (${esCashback ? "cashback entregado" : "beneficio entregado"} en atención)`,
             p.createdBy, p.usuarioNombre,
           ],
         );

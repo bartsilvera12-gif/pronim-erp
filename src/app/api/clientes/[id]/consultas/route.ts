@@ -30,6 +30,7 @@ interface TimelineEvent {
 
 interface KPIs {
   saldo_credito: number;
+  saldo_cashback: number;
   ultima_compra_fecha: string | null;
   dias_desde_ultima_compra: number | null;
   compras_ultimos_90d: number;
@@ -70,19 +71,30 @@ export async function GET(
 
     const client = await pool.connect();
     try {
-      // Saldo crédito (SUM CASE).
-      const saldoQ = await client.query<{ saldo: string | null }>(
-        `SELECT COALESCE(SUM(
-           CASE WHEN tipo = 'ENTRADA' THEN monto
-                WHEN tipo = 'SALIDA' THEN -monto
-                WHEN tipo = 'AJUSTE' THEN monto
-                ELSE 0 END
-         ), 0) AS saldo
+      // Saldos: separamos cashback (ENTRADAs origen='cashback') del crédito
+      // "otro" (recepciones/ajustes/descuento_promo). SALIDAs se descuentan
+      // primero de cashback (convención UI) y el resto del otro.
+      const saldoQ = await client.query<{
+        entradas_cashback: string; entradas_otras: string;
+        salidas_total: string; ajustes_total: string;
+      }>(
+        `SELECT
+           COALESCE(SUM(CASE WHEN tipo='ENTRADA' AND origen='cashback' THEN monto ELSE 0 END),0)::text AS entradas_cashback,
+           COALESCE(SUM(CASE WHEN tipo='ENTRADA' AND origen<>'cashback' THEN monto ELSE 0 END),0)::text AS entradas_otras,
+           COALESCE(SUM(CASE WHEN tipo='SALIDA' THEN monto ELSE 0 END),0)::text AS salidas_total,
+           COALESCE(SUM(CASE WHEN tipo='AJUSTE' THEN monto ELSE 0 END),0)::text AS ajustes_total
          FROM ${creditosT}
          WHERE empresa_id = $1 AND cliente_id = $2`,
         [empresaId, clienteId],
       );
-      const saldoCredito = Number(saldoQ.rows[0]?.saldo ?? 0);
+      const entCash = Number(saldoQ.rows[0]?.entradas_cashback ?? 0);
+      const entOtras = Number(saldoQ.rows[0]?.entradas_otras ?? 0);
+      const salidas = Number(saldoQ.rows[0]?.salidas_total ?? 0);
+      const ajustes = Number(saldoQ.rows[0]?.ajustes_total ?? 0);
+      const salidasContraCash = Math.min(entCash, salidas);
+      const saldoCashback = Math.max(0, entCash - salidasContraCash);
+      const saldoCreditoOtro = Math.max(0, entOtras + ajustes - (salidas - salidasContraCash));
+      const saldoCredito = saldoCashback + saldoCreditoOtro;
 
       // Última compra + cadencia + count 90d + total histórico.
       const ventasStatsQ = await client.query<{
@@ -149,7 +161,8 @@ export async function GET(
         : null;
 
       const kpis: KPIs = {
-        saldo_credito: saldoCredito,
+        saldo_credito: saldoCreditoOtro,
+        saldo_cashback: saldoCashback,
         ultima_compra_fecha: ultimaCompra,
         dias_desde_ultima_compra: diasDesdeUlt,
         compras_ultimos_90d: compras90,

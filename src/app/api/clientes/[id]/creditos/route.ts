@@ -35,19 +35,35 @@ export async function GET(
 
     const client = await pool.connect();
     try {
-      // Saldo: SUM sobre TODOS los movimientos (fuente de verdad)
-      const saldoQ = await client.query<{ saldo: string }>(
-        `SELECT COALESCE(SUM(
-           CASE WHEN tipo = 'ENTRADA' THEN monto
-                WHEN tipo = 'SALIDA' THEN -monto
-                WHEN tipo = 'AJUSTE' THEN monto
-                ELSE 0 END
-         ), 0)::text AS saldo
+      // Saldos desagregados por origen: cashback (ENTRADAs origen='cashback')
+      // se muestra separado del "crédito a favor" normal. La consumición (SALIDA)
+      // sigue siendo unificada — se resta del total y del cashback proporcionalmente
+      // (aprox: se descuenta primero de cashback si aún hay saldo, si no del crédito).
+      const saldoQ = await client.query<{
+        entradas_cashback: string; entradas_otras: string;
+        salidas_total: string; ajustes_total: string;
+      }>(
+        `SELECT
+           COALESCE(SUM(CASE WHEN tipo='ENTRADA' AND origen='cashback' THEN monto ELSE 0 END),0)::text AS entradas_cashback,
+           COALESCE(SUM(CASE WHEN tipo='ENTRADA' AND origen<>'cashback' THEN monto ELSE 0 END),0)::text AS entradas_otras,
+           COALESCE(SUM(CASE WHEN tipo='SALIDA' THEN monto ELSE 0 END),0)::text AS salidas_total,
+           COALESCE(SUM(CASE WHEN tipo='AJUSTE' THEN monto ELSE 0 END),0)::text AS ajustes_total
          FROM ${creditosT}
          WHERE empresa_id = $1 AND cliente_id = $2`,
         [empresaId, clienteId],
       );
-      const saldo = Number(saldoQ.rows[0]?.saldo ?? 0);
+      const entCash = Number(saldoQ.rows[0]?.entradas_cashback ?? 0);
+      const entOtras = Number(saldoQ.rows[0]?.entradas_otras ?? 0);
+      const salidas = Number(saldoQ.rows[0]?.salidas_total ?? 0);
+      const ajustes = Number(saldoQ.rows[0]?.ajustes_total ?? 0);
+      // Convención UI: descontamos SALIDAs primero de cashback y el remanente
+      // baja el crédito "otro". Es una vista aproximada — el ledger unificado
+      // sigue siendo la fuente de verdad para el total.
+      const salidasContraCash = Math.min(entCash, salidas);
+      const salidasContraOtro = salidas - salidasContraCash;
+      const saldoCashback = Math.max(0, entCash - salidasContraCash);
+      const saldoCreditoOtro = Math.max(0, entOtras + ajustes - salidasContraOtro);
+      const saldo = saldoCashback + saldoCreditoOtro;
 
       // Últimos 200 movimientos para display
       const movQ = await client.query<Record<string, unknown>>(
@@ -62,7 +78,12 @@ export async function GET(
       );
 
       return NextResponse.json(
-        successResponse({ saldo, movimientos: movQ.rows }),
+        successResponse({
+          saldo,
+          saldo_cashback: saldoCashback,
+          saldo_credito: saldoCreditoOtro,
+          movimientos: movQ.rows,
+        }),
       );
     } finally {
       client.release();

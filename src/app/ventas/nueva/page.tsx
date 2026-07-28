@@ -167,6 +167,7 @@ export default function NuevaVentaPage() {
   const [metodoPago, setMetodoPago] = useState<MetodoPago>("efectivo");
   // Crédito del cliente disponible (modelo Pronim consignación).
   const [saldoCredito, setSaldoCredito] = useState<number>(0);
+  const [saldoCashback, setSaldoCashback] = useState<number>(0);
   const [creditoUsado, setCreditoUsado] = useState<string>("");
 
   // Segmento del cliente derivado de KPIs + timeline.
@@ -448,6 +449,7 @@ export default function NuevaVentaPage() {
   useEffect(() => {
     if (!clienteId) {
       setSaldoCredito(0);
+      setSaldoCashback(0);
       setCreditoUsado("");
       return;
     }
@@ -456,7 +458,10 @@ export default function NuevaVentaPage() {
       .then((r) => r.json())
       .then((j) => {
         if (cancelled || !j?.success) return;
+        // saldo total sigue siendo la fuente de verdad para el consumo;
+        // saldo_credito y saldo_cashback son el desglose UI.
         setSaldoCredito(Math.max(0, Number(j.data?.saldo ?? 0)));
+        setSaldoCashback(Math.max(0, Number(j.data?.saldo_cashback ?? 0)));
       })
       .catch(() => { /* opcional */ });
     return () => { cancelled = true; };
@@ -1279,10 +1284,22 @@ export default function NuevaVentaPage() {
                     {!!clienteId && saldoCredito > 0 && (
                       <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-2 space-y-1">
                         <div className="flex items-center justify-between text-[11px] text-emerald-800">
-                          <span className="font-semibold">Crédito disponible del cliente</span>
+                          <span className="font-semibold">Saldo a favor del cliente</span>
                           <span className="tabular-nums">{formatGs(saldoCredito)}</span>
                         </div>
-                        <div className="flex items-center gap-1">
+                        {saldoCashback > 0 && (
+                          <div className="flex items-center justify-between text-[10px] text-fuchsia-800">
+                            <span>· incluye cashback</span>
+                            <span className="tabular-nums font-semibold">{formatGs(saldoCashback)}</span>
+                          </div>
+                        )}
+                        {saldoCredito - saldoCashback > 0 && saldoCashback > 0 && (
+                          <div className="flex items-center justify-between text-[10px] text-emerald-700">
+                            <span>· crédito normal</span>
+                            <span className="tabular-nums">{formatGs(saldoCredito - saldoCashback)}</span>
+                          </div>
+                        )}
+                        <div className="flex items-center gap-1 pt-0.5">
                           <input
                             type="number"
                             min={0}
