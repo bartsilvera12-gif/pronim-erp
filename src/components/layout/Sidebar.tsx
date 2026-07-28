@@ -158,6 +158,9 @@ const MENU_STRUCTURE_FULL: MenuItem[] = [
   //   src/app/atencion/nueva/page.tsx     (cambio directo, sin tocar)
   { key: "venta", slug: "venta", label: "Venta", href: "/venta/nueva", icon: ShoppingCart },
   { key: "evaluacion", slug: "evaluacion", label: "Evaluación", href: "/evaluacion/nueva", icon: Scale },
+  // Historial = listado /ventas (todas las ventas con Anular/Cambio).
+  // Usa slug "ventas" para reutilizar el permiso comercial.
+  { key: "historial", slug: "ventas", label: "Historial", href: "/ventas", icon: History },
   { key: "inventario", slug: "inventario", label: "Inventario", href: "/inventario", icon: Package, children: [
     { label: "Productos", href: "/inventario" },
     { label: "Movimientos", href: "/inventario/movimientos" },
@@ -269,7 +272,7 @@ const MENU_FAMILIES: { id: string; title: string; itemKeys: string[] }[] = [
   {
     id: "comercial",
     title: "Comercial",
-    itemKeys: ["venta", "evaluacion", "atencion", "clientes"],
+    itemKeys: ["venta", "evaluacion", "historial", "clientes"],
   },
   { id: "finanzas", title: "Finanzas", itemKeys: ["gastos", "otros_ingresos", "reportes"] },
   { id: "operaciones", title: "Operaciones", itemKeys: ["inventario", "compras"] },
