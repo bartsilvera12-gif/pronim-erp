@@ -576,6 +576,14 @@ export default function NuevaVentaPage() {
                   </div>
                 )}
               </div>
+              {cliente.telefono && cliente.telefono.trim() && (
+                <p className="text-xs text-slate-600">
+                  <span aria-hidden>📞</span>{" "}
+                  <a href={`tel:${cliente.telefono}`} className="font-medium text-slate-700 hover:text-[#4FAEB2]">
+                    {cliente.telefono}
+                  </a>
+                </p>
+              )}
               <p className="text-xs text-slate-500">
                 {cliente.ruc ? `RUC ${cliente.ruc} · ` : ""}
                 Crédito disponible: <span className="font-semibold text-emerald-700">{fmtGs(creditoDisponible)}</span>
