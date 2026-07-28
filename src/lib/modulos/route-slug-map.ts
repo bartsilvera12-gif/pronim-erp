@@ -90,7 +90,10 @@ export function canAccessSidebarSlug(
   esSuperAdmin: boolean
 ): boolean {
   if (esSuperAdmin) return true;
-  if (slug === "dashboard") return grantedSlugs.has("dashboard");
+  // Dashboard siempre visible: admins ven el completo, usuarios con sucursal
+  // fija ven el reducido (DashboardSucursalSimple). No hay ninguna razón para
+  // esconderlo — es la home después del login.
+  if (slug === "dashboard") return true;
   return isModuleSlugGranted(slug, grantedSlugs);
 }
 
