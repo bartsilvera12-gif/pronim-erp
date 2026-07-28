@@ -254,6 +254,8 @@ export async function anularVentaPg(p: AnularVentaInput): Promise<VentaAnulada> 
     await client.query(
       `UPDATE ${ventasT}
           SET estado = 'anulada',
+              anulada_at = now(),
+              anulacion_motivo = $3,
               observaciones = COALESCE(observaciones,'') ||
                 ' [ANULADA ' || to_char(now(),'YYYY-MM-DD HH24:MI') || ']' ||
                 COALESCE(' motivo: ' || $3, '')
