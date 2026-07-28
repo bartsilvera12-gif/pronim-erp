@@ -18,9 +18,12 @@ import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session"
  * verde). Solo cambios visuales — datos, filtros y lógica intactos.
  */
 
+type Moneda = "PYG" | "BRL" | "USD" | "ARS";
+
 type Suc = {
   sucursal_id: string;
   nombre: string;
+  moneda?: Moneda;
   recepciones: {
     cantidad: number;
     subtotal_evaluado: number;
@@ -42,11 +45,16 @@ type Suc = {
   };
 };
 
-function fmtGsCompact(n: number): string {
+// Formateo compacto por moneda de LA SUCURSAL (no la del viewer).
+// Betim/BH/El Dorado se ven en R$ aunque el admin PY las esté mirando.
+function fmtCompact(n: number, moneda: Moneda = "PYG"): string {
   const abs = Math.abs(n);
-  if (abs >= 1_000_000) return `Gs. ${(n / 1_000_000).toFixed(abs >= 10_000_000 ? 0 : 1)}M`;
-  if (abs >= 1_000) return `Gs. ${(n / 1_000).toFixed(0)}K`;
-  return `Gs. ${Math.round(n).toLocaleString("es-PY")}`;
+  const sym = moneda === "BRL" ? "R$" : moneda === "USD" ? "US$" : moneda === "ARS" ? "$" : "Gs.";
+  const locale = moneda === "BRL" ? "pt-BR" : "es-PY";
+  if (abs >= 1_000_000) return `${sym} ${(n / 1_000_000).toFixed(abs >= 10_000_000 ? 0 : 1)}M`;
+  if (abs >= 1_000) return `${sym} ${(n / 1_000).toFixed(0)}K`;
+  const decimals = moneda === "PYG" || moneda === "ARS" ? 0 : 2;
+  return `${sym} ${n.toLocaleString(locale, { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
 }
 function fmtN(n: number): string { return (n || 0).toLocaleString("es-PY"); }
 
@@ -83,6 +91,8 @@ export default function InventarioPorSucursalPanels() {
       >
         {sucursales.map(s => {
           const activa = s.recepciones.cantidad > 0 || s.recepciones.prendas_recibidas > 0;
+          const moneda: Moneda = (s.moneda ?? "PYG");
+          const fmt = (n: number) => fmtCompact(n, moneda);
           return (
             <SucursalPanel key={s.sucursal_id} nombre={s.nombre} activa={activa}>
               {/* Volumen — rosa */}
@@ -93,12 +103,12 @@ export default function InventarioPorSucursalPanels() {
 
               {/* Evaluación económica — durazno */}
               <MetricBlock tone="peach" titulo="Evaluación">
-                <Metric icon="money" label="Subtotal" value={fmtGsCompact(s.recepciones.subtotal_evaluado)} />
-                <Metric icon="check" label="Total final" value={fmtGsCompact(s.recepciones.total_final)} />
-                <Metric icon="plus" label="Ajuste +" tone="pos" value={fmtGsCompact(s.recepciones.ajuste_positivo)} />
-                <Metric icon="minus" label="Ajuste −" tone="neg" value={fmtGsCompact(s.recepciones.ajuste_negativo)} />
+                <Metric icon="money" label="Subtotal" value={fmt(s.recepciones.subtotal_evaluado)} />
+                <Metric icon="check" label="Total final" value={fmt(s.recepciones.total_final)} />
+                <Metric icon="plus" label="Ajuste +" tone="pos" value={fmt(s.recepciones.ajuste_positivo)} />
+                <Metric icon="minus" label="Ajuste −" tone="neg" value={fmt(s.recepciones.ajuste_negativo)} />
                 <Metric icon="percent" label="Ratio ajuste" value={s.recepciones.ratio_ajuste_pct != null ? `${s.recepciones.ratio_ajuste_pct}%` : "—"} />
-                <Metric icon="tag" label="Eval / prenda" value={s.recepciones.eval_prom_prenda != null ? fmtGsCompact(s.recepciones.eval_prom_prenda) : "—"} />
+                <Metric icon="tag" label="Eval / prenda" value={s.recepciones.eval_prom_prenda != null ? fmt(s.recepciones.eval_prom_prenda) : "—"} />
               </MetricBlock>
 
               {/* Evaluadores — lavanda */}
@@ -110,7 +120,7 @@ export default function InventarioPorSucursalPanels() {
                         <span className="flex-1 truncate text-slate-700 font-medium">{e.usuario}</span>
                         <span className="text-slate-500 tabular-nums text-[10px]">{e.recepciones} rec.</span>
                         <span className="text-slate-800 font-semibold tabular-nums w-20 text-right">
-                          {fmtGsCompact(e.total_final)}
+                          {fmt(e.total_final)}
                         </span>
                       </li>
                     ))}

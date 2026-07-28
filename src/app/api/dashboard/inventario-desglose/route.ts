@@ -61,14 +61,25 @@ export async function GET(request: NextRequest) {
       const sucCond = sucScope ? "AND s.id = $4" : "";
       if (sucScope) args.push(sucScope);
 
-      // 1) Sucursales (base)
-      const sucQ = await client.query<{ id: string; nombre: string }>(
-        `SELECT s.id::text AS id, s.nombre
+      // 1) Sucursales (base) — incluye moneda para que el frontend
+      // formatee cada card en su símbolo (Betim/BH/El Dorado en R$).
+      // Si el schema no tiene la columna, se cae a 'PYG' como fallback.
+      const sucQ = await client.query<{ id: string; nombre: string; moneda: string }>(
+        `SELECT s.id::text AS id, s.nombre, COALESCE(s.moneda, 'PYG') AS moneda
          FROM ${sucT} s
          WHERE s.empresa_id = $1 AND COALESCE(s.activo, true) = true ${sucCond}
          ORDER BY s.nombre`,
         [auth.empresa_id, ...(sucScope ? [sucScope] : [])],
-      );
+      ).catch(async () => {
+        const r = await client.query<{ id: string; nombre: string }>(
+          `SELECT s.id::text AS id, s.nombre
+           FROM ${sucT} s
+           WHERE s.empresa_id = $1 AND COALESCE(s.activo, true) = true ${sucCond}
+           ORDER BY s.nombre`,
+          [auth.empresa_id, ...(sucScope ? [sucScope] : [])],
+        );
+        return { ...r, rows: r.rows.map(x => ({ ...x, moneda: 'PYG' })) };
+      });
 
       // 2) Recepciones agregadas por sucursal.
       const recepQ = await client.query<{
@@ -192,6 +203,7 @@ export async function GET(request: NextRequest) {
         return {
           sucursal_id: s.id,
           nombre: s.nombre,
+          moneda: s.moneda,
           recepciones: {
             cantidad: cantidadRec,
             subtotal_evaluado: subtotalEval,
