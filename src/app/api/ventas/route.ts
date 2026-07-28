@@ -68,11 +68,15 @@ function mapItems(rows: VentaItemRow[]): LineaVenta[] {
  * GET /api/ventas — listado vía PostgREST HTTPS (JWT). 2 queries
  * secuenciales (ventas + items) y join en app, igual contrato que antes.
  */
-// VENTAS_COLS_BASE = columnas siempre presentes.
-// sucursal_id + relación a sucursales son best-effort: si el schema no las
-// tiene (deploys que no son Joyería) se reintenta sin esas columnas.
-const VENTAS_COLS_BASE = "id,empresa_id,numero_control,moneda,tipo_cambio,subtotal,monto_iva,total,tipo_venta,plazo_dias,fecha,estado,anulada_at,anulacion_motivo";
-const VENTAS_COLS_CON_SUCURSAL = `${VENTAS_COLS_BASE},sucursal_id,sucursal:sucursal_id(nombre)`;
+// VENTAS_COLS_MIN = columnas garantizadas en todos los tenants (schema base
+// original). VENTAS_COLS_ANULACION agrega columnas de anulación que solo
+// existen si corrió la migración correspondiente. VENTAS_COLS_CON_SUCURSAL
+// suma la relación a sucursales (solo Joyería / deploys que la tengan).
+// La consulta intenta lo más completo primero y va degradando si PostgREST
+// falla por columna inexistente — así funciona en todos los deploys.
+const VENTAS_COLS_MIN = "id,empresa_id,numero_control,moneda,tipo_cambio,subtotal,monto_iva,total,tipo_venta,plazo_dias,fecha,estado";
+const VENTAS_COLS_ANULACION = `${VENTAS_COLS_MIN},anulada_at,anulacion_motivo`;
+const VENTAS_COLS_CON_SUCURSAL = `${VENTAS_COLS_ANULACION},sucursal_id,sucursal:sucursal_id(nombre)`;
 const VENTAS_ITEMS_COLS = "venta_id,producto_id,producto_nombre,sku,cantidad,precio_venta_original,precio_venta,tipo_iva,subtotal,monto_iva,total_linea,es_sin_cargo,motivo_sin_cargo,costo_promocional_total";
 
 export async function GET(request: NextRequest) {
@@ -82,26 +86,24 @@ export async function GET(request: NextRequest) {
     const empresaId = ctx.auth.empresa_id;
     const jwt = await getAccessTokenForRequest(request);
 
-    const ventasQ = new URLSearchParams({
-      select: VENTAS_COLS_CON_SUCURSAL,
-      empresa_id: `eq.${empresaId}`,
-      order: "fecha.desc",
-      limit: "500",
-    });
-    let ventasRes = await postgrestGet<VentaRow>("ventas", ventasQ.toString(), { role: "jwt", jwt, noStore: true });
-    if (!ventasRes.ok) {
-      // Fallback para schemas sin sucursal_id/sucursales (deploys Elevate).
-      const fallback = new URLSearchParams({
-        select: VENTAS_COLS_BASE,
+    // Cadena de fallback: sucursal+anulacion → solo anulacion → mínimo.
+    const attempts = [VENTAS_COLS_CON_SUCURSAL, VENTAS_COLS_ANULACION, VENTAS_COLS_MIN];
+    let ventasRes: Awaited<ReturnType<typeof postgrestGet<VentaRow>>> | null = null;
+    let lastError: unknown = null;
+    for (const cols of attempts) {
+      const qs = new URLSearchParams({
+        select: cols,
         empresa_id: `eq.${empresaId}`,
         order: "fecha.desc",
         limit: "500",
       });
-      ventasRes = await postgrestGet<VentaRow>("ventas", fallback.toString(), { role: "jwt", jwt, noStore: true });
-      if (!ventasRes.ok) {
-        console.error("[/api/ventas GET] ventas", ventasRes.error);
-        return NextResponse.json(errorResponse("No se pudieron cargar las ventas."), { status: 502 });
-      }
+      const res = await postgrestGet<VentaRow>("ventas", qs.toString(), { role: "jwt", jwt, noStore: true });
+      if (res.ok) { ventasRes = res; break; }
+      lastError = res.error;
+    }
+    if (!ventasRes) {
+      console.error("[/api/ventas GET] ventas", lastError);
+      return NextResponse.json(errorResponse("No se pudieron cargar las ventas."), { status: 502 });
     }
 
     const itemsQ = new URLSearchParams({
