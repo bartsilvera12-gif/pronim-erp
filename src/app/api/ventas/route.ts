@@ -8,6 +8,7 @@ import { postgrestGet, getAccessTokenForRequest } from "@/lib/supabase/postgrest
 interface VentaRow {
   id: string;
   empresa_id: string;
+  cliente_id?: string | null;
   numero_control: string;
   moneda: string;
   tipo_cambio: number | string;
@@ -74,7 +75,7 @@ function mapItems(rows: VentaItemRow[]): LineaVenta[] {
 // suma la relación a sucursales (solo Joyería / deploys que la tengan).
 // La consulta intenta lo más completo primero y va degradando si PostgREST
 // falla por columna inexistente — así funciona en todos los deploys.
-const VENTAS_COLS_MIN = "id,empresa_id,numero_control,moneda,tipo_cambio,subtotal,monto_iva,total,tipo_venta,plazo_dias,fecha,estado";
+const VENTAS_COLS_MIN = "id,empresa_id,cliente_id,numero_control,moneda,tipo_cambio,subtotal,monto_iva,total,tipo_venta,plazo_dias,fecha,estado";
 const VENTAS_COLS_ANULACION = `${VENTAS_COLS_MIN},anulada_at,anulacion_motivo`;
 const VENTAS_COLS_CON_SUCURSAL = `${VENTAS_COLS_ANULACION},sucursal_id,sucursal:sucursal_id(nombre)`;
 const VENTAS_ITEMS_COLS = "venta_id,producto_id,producto_nombre,sku,cantidad,precio_venta_original,precio_venta,tipo_iva,subtotal,monto_iva,total_linea,es_sin_cargo,motivo_sin_cargo,costo_promocional_total";
@@ -128,6 +129,7 @@ export async function GET(request: NextRequest) {
       return {
         id: r.id,
         numero_control: r.numero_control,
+        cliente_id: r.cliente_id ?? null,
         items: mapItems(lineRows),
         moneda: r.moneda === "USD" ? "USD" : "GS",
         tipo_cambio: num(r.tipo_cambio),

@@ -7,6 +7,7 @@ import { FancySelect } from "@/components/ui/FancySelect";
 import MobileFab from "@/components/ui/MobileFab";
 import { getVentas } from "@/lib/ventas/storage";
 import PedidosPendientesCaja from "./PedidosPendientesCaja";
+import CambioModal from "./CambioModal";
 import CajaControlPanel from "@/components/caja/CajaControlPanel";
 import { esMismoDiaAsuncion } from "@/lib/fecha/asuncion";
 import type { Venta, TipoVenta, TipoIvaVenta } from "@/lib/ventas/types";
@@ -156,6 +157,7 @@ export default function VentasPage() {
   const [anularMotivo, setAnularMotivo] = useState("");
   const [anulandoBusy, setAnulandoBusy] = useState(false);
   const [anularError, setAnularError] = useState<string | null>(null);
+  const [cambioVenta, setCambioVenta] = useState<Venta | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -479,13 +481,14 @@ export default function VentasPage() {
                               >
                                 Anular
                               </button>
-                              <Link
-                                href={`/atencion/nueva?desde_venta=${v.id}`}
+                              <button
+                                type="button"
+                                onClick={() => setCambioVenta(v)}
                                 className="inline-flex items-center justify-center rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-800 hover:bg-amber-100 transition-colors"
-                                title="Registrar cambio de productos (usa 'Cambio directo')"
+                                title="Registrar cambio de productos de esta venta"
                               >
                                 Cambio
-                              </Link>
+                              </button>
                             </>
                           )}
                         </div>
@@ -499,6 +502,26 @@ export default function VentasPage() {
         </EdgeScrollArea>
 
       </div>
+
+      {/* Modal: cambio de productos (devuelve items + se lleva franjas) */}
+      {cambioVenta && (
+        <CambioModal
+          venta={cambioVenta}
+          onClose={() => setCambioVenta(null)}
+          onDone={() => {
+            setCambioVenta(null);
+            // Refrescamos el listado para que se vea la nueva venta del cambio.
+            getVentas().then((data) => {
+              const ordenadas = [...data].sort((a, b) => {
+                const ta = new Date(a.fecha).getTime();
+                const tb = new Date(b.fecha).getTime();
+                return tb - ta || b.numero_control.localeCompare(a.numero_control);
+              });
+              setTodas(ordenadas);
+            });
+          }}
+        />
+      )}
 
       {/* Modal: anular venta */}
       {anularVenta && (

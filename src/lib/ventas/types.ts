@@ -27,6 +27,7 @@ export interface Venta {
   /** UUID en base de datos (antes del bloque DB-first era numérico local). */
   id:             string;
   numero_control: string;   // VTA-000001, VTA-000002, …
+  cliente_id?:    string | null;
 
   items: LineaVenta[];       // 1 o más productos
 
