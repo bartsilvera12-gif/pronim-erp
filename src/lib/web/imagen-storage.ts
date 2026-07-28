@@ -31,7 +31,7 @@ export const ALLOWED_WEB_EXT: Record<string, string> = {
 };
 export const MAX_WEB_BYTES = 20 * 1024 * 1024; // 20 MB (para permitir videos cortos de Tesoros)
 
-export type WebModulo = "catalogo" | "tesoros";
+export type WebModulo = "catalogo" | "tesoros" | "blog";
 
 /**
  * URL pública directa al objeto. Requiere que el bucket esté `public=true`

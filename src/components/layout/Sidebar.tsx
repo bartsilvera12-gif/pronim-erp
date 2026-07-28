@@ -197,6 +197,9 @@ const MENU_STRUCTURE_FULL: MenuItem[] = [
   // Módulo APARTE de /admin/categorias (Categorías de precio) y de las
   // franjas. Ver src/app/admin/web/catalogo/page.tsx.
   { key: "web_catalogo", slug: "web_catalogo", label: "Catálogo (web)", href: "/admin/web/catalogo", icon: Tags },
+  // Blog administrable — Karen crea notas que alimentan blog.html + post.html
+  // del sitio Akakua'a por fetch a /api/publico/blog-posts.
+  { key: "web_blog", slug: "web_blog", label: "Blog (web)", href: "/admin/web/blog", icon: FileText },
   { key: "promociones", slug: "promociones", label: "Promociones", href: "/admin/promociones", icon: Percent },
   {
     key: "configuracion",

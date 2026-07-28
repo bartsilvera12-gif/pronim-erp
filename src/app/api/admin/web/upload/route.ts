@@ -72,7 +72,9 @@ export async function POST(request: NextRequest) {
     }
 
     const moduloRaw = String(form.get("modulo") ?? "catalogo").trim().toLowerCase();
-    const modulo: WebModulo = moduloRaw === "tesoros" ? "tesoros" : "catalogo";
+    const modulo: WebModulo =
+      moduloRaw === "tesoros" ? "tesoros" :
+      moduloRaw === "blog"    ? "blog"    : "catalogo";
 
     const jwt = await getAccessTokenForRequest(request);
     const sb = clientWithJwt(jwt);

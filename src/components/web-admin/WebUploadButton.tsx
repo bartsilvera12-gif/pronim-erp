@@ -19,7 +19,7 @@ export default function WebUploadButton({
   labelIdle,
   labelBusy,
 }: {
-  modulo: "catalogo" | "tesoros";
+  modulo: "catalogo" | "tesoros" | "blog";
   onUploaded: (url: string, tipo: "foto" | "video") => void;
   /** MIME accept del input. "image/*" para catálogo; "image/*,video/mp4,video/webm" para tesoros. */
   accept?: string;
