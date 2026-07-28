@@ -652,13 +652,14 @@ export default function NuevaAtencionPage() {
     return arr.slice(0, 50);
   }, [clienteQuery, clientes]);
 
-  function agregarLineaEn(bucket: "trae" | "lleva", franja: Franja) {
+  function agregarLineaEn(bucket: "trae" | "lleva", franja: Franja, cantidad: number = 1) {
+    const cant = Math.max(1, Math.floor(cantidad) || 1);
     const precio = Number(franja.precio_venta) || 0;
     const nueva: Linea = {
       franja_id: franja.id,
       precio_referencia: precio,
       precio_unitario: precio, // por defecto igual al de la franja
-      cantidad: 1,
+      cantidad: cant,
       tipo_prenda_id: null,
     };
     if (bucket === "trae") {
@@ -671,7 +672,7 @@ export default function NuevaAtencionPage() {
         );
         if (idx >= 0) {
           const copy = [...prev];
-          copy[idx] = { ...copy[idx], cantidad: copy[idx].cantidad + 1 };
+          copy[idx] = { ...copy[idx], cantidad: copy[idx].cantidad + cant };
           return copy;
         }
         return [...prev, nueva];
@@ -681,7 +682,7 @@ export default function NuevaAtencionPage() {
         const idx = prev.findIndex((l) => l.franja_id === franja.id);
         if (idx >= 0) {
           const copy = [...prev];
-          copy[idx] = { ...copy[idx], cantidad: copy[idx].cantidad + 1 };
+          copy[idx] = { ...copy[idx], cantidad: copy[idx].cantidad + cant };
           return copy;
         }
         return [...prev, nueva];
@@ -1380,7 +1381,7 @@ export default function NuevaAtencionPage() {
           lineas={trae}
           total={totalTrae}
           subtotalItems={totalTraeSubtotal}
-          onAgregar={(f) => agregarLineaEn("trae", f)}
+          onAgregar={(f, cant) => agregarLineaEn("trae", f, cant)}
           onActualizar={(i, patch) => actualizarLinea("trae", i, patch)}
           onQuitar={(i) => quitarLinea("trae", i)}
           permitirEditarPrecio
@@ -1512,7 +1513,7 @@ export default function NuevaAtencionPage() {
           cargando={cargando}
           lineas={lleva}
           total={totalLleva}
-          onAgregar={(f) => agregarLineaEn("lleva", f)}
+          onAgregar={(f, cant) => agregarLineaEn("lleva", f, cant)}
           onActualizar={(i, patch) => actualizarLinea("lleva", i, patch)}
           onQuitar={(i) => quitarLinea("lleva", i)}
           permitirEditarPrecio={false}
@@ -2424,7 +2425,7 @@ function ColumnaAtencion(props: {
   cargando: boolean;
   lineas: Linea[];
   total: number;
-  onAgregar: (f: Franja) => void;
+  onAgregar: (f: Franja, cantidad?: number) => void;
   onActualizar: (idx: number, patch: Partial<Linea>) => void;
   onQuitar: (idx: number) => void;
   permitirEditarPrecio: boolean;
@@ -2439,6 +2440,10 @@ function ColumnaAtencion(props: {
   tiposPrenda?: TipoPrenda[];
 }) {
   const { titulo, descripcion, tono, franjas, cargando, lineas, total, onAgregar, onActualizar, onQuitar, permitirEditarPrecio, subtotalItems, accionesHeader, slotDebajo, tiposPrenda } = props;
+  // Multiplicador para agregar N prendas del mismo precio en un solo click
+  // (ej: "15 prendas de 50 mil"). Por defecto 1 — comportamiento sin cambio.
+  const [cantMult, setCantMult] = useState<string>("1");
+  const cantN = Math.max(1, Math.floor(Number(cantMult) || 1));
   const border = tono === "emerald" ? "border-emerald-200" : "border-sky-200";
   const bg = tono === "emerald" ? "bg-emerald-50/40" : "bg-sky-50/40";
   const btn = tono === "emerald"
@@ -2479,20 +2484,54 @@ function ColumnaAtencion(props: {
           No hay franjas de precio configuradas. Un administrador debe crearlas en <Link href="/admin/franjas" className="underline">Categorías</Link>.
         </p>
       ) : (
-        <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-          {franjas.map((f) => (
-            <button
-              key={f.id}
-              type="button"
-              onClick={() => onAgregar(f)}
-              title={f.nombre}
-              className={`rounded-lg border bg-white px-2 py-2 text-center transition-colors active:scale-95 ${btn}`}
-            >
-              {short(f.nombre) && <p className="text-[10px] text-slate-400 uppercase">{short(f.nombre)}</p>}
-              <p className="text-sm font-bold text-slate-800">{fmtGs(Number(f.precio_venta) || 0)}</p>
-            </button>
-          ))}
-        </div>
+        <>
+          <div className="mb-2 flex items-center gap-2 text-xs text-slate-600">
+            <label className="font-medium">Cantidad por click</label>
+            <input
+              type="number"
+              min={1}
+              value={cantMult}
+              onChange={(e) => setCantMult(e.target.value)}
+              onFocus={(e) => e.currentTarget.select()}
+              className="w-16 rounded-md border border-slate-200 px-2 py-1 text-right text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
+              title="Cuántas prendas se agregan al tocar una franja (ej: 15 para 15 prendas del mismo precio)"
+            />
+            {cantN > 1 && (
+              <>
+                <span className="text-slate-500">×</span>
+                <span className="font-semibold text-slate-700">
+                  Cada click agrega {cantN} prendas
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setCantMult("1")}
+                  className="ml-auto rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-500 hover:bg-slate-50"
+                >
+                  Reset
+                </button>
+              </>
+            )}
+          </div>
+          <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+            {franjas.map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => onAgregar(f, cantN)}
+                title={cantN > 1 ? `${f.nombre} · +${cantN}` : f.nombre}
+                className={`relative rounded-lg border bg-white px-2 py-2 text-center transition-colors active:scale-95 ${btn}`}
+              >
+                {cantN > 1 && (
+                  <span className="absolute -top-1 -right-1 rounded-full bg-slate-800 text-white text-[10px] font-bold px-1.5 py-0.5 leading-none">
+                    ×{cantN}
+                  </span>
+                )}
+                {short(f.nombre) && <p className="text-[10px] text-slate-400 uppercase">{short(f.nombre)}</p>}
+                <p className="text-sm font-bold text-slate-800">{fmtGs(Number(f.precio_venta) || 0)}</p>
+              </button>
+            ))}
+          </div>
+        </>
       )}
 
       {lineas.length > 0 && (
