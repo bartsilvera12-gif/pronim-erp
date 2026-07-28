@@ -245,6 +245,38 @@ function PreviewIngresoModal({
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [confirmando, setConfirmando] = useState(false);
+
+  // Crea (o reactiva) una franja con un precio manual escrito en el input
+  // del combobox. Devuelve el id para que el combobox lo seleccione.
+  async function crearFranjaManual(precio: number): Promise<string | null> {
+    if (!Number.isFinite(precio) || precio <= 0) return null;
+    // Si ya existe una franja con ese precio, reutilizarla sin pegarle al server.
+    const existente = franjas.find((f) => Number(f.precio_venta) === precio);
+    if (existente) return existente.id;
+    try {
+      const rr = await fetchWithSupabaseSession("/api/franjas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ precio_venta: precio }),
+      });
+      const j = await rr.json().catch(() => ({}));
+      if (!rr.ok || j?.success === false) {
+        setErr(j?.error ?? "No se pudo crear la franja con ese precio.");
+        return null;
+      }
+      const nueva = j?.data?.franja as { id: string; precio_venta: number; nombre: string } | undefined;
+      if (!nueva?.id) return null;
+      setFranjas((prev) => {
+        if (prev.some((f) => f.id === nueva.id)) return prev;
+        return [...prev, { id: nueva.id, nombre: nueva.nombre, precio_venta: Number(nueva.precio_venta) || precio }]
+          .sort((a, b) => (Number(a.precio_venta) || 0) - (Number(b.precio_venta) || 0));
+      });
+      return nueva.id;
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Error creando franja.");
+      return null;
+    }
+  }
   // splits[item_id] = lista de tramos { franjaId, cantidad } en los que
   // se reparte la cantidad total del item entre distintas franjas de
   // venta (ej: 5 de 99mil + 4 de 84mil). Si el item no tiene entrada o
@@ -367,7 +399,9 @@ function PreviewIngresoModal({
                 const totalCosto = data.items.reduce((s, it) => s + it.costo_total, 0);
                 const totalVenta = data.items.reduce((s, it) => s + ventaEsperadaItem(it), 0);
                 const totalMargen = totalVenta - totalCosto;
-                const totalMargenPct = totalVenta > 0 ? Math.round((totalMargen / totalVenta) * 1000) / 10 : null;
+                const totalMarkupPct = totalCosto > 0 ? Math.round((totalMargen / totalCosto) * 1000) / 10 : null;
+                const ventaPrevistaOriginal = data.totales.venta_total_esperada;
+                const deltaVsPrevisto = totalVenta - ventaPrevistaOriginal;
 
                 // Costo unitario promedio para el margen preview de "Aplicar a todas"
                 const costoUnitPromedio =
@@ -446,6 +480,7 @@ function PreviewIngresoModal({
                               value=""
                               costoUnit={costoUnitPromedio}
                               onChange={aplicarATodas}
+                              onCrearManual={crearFranjaManual}
                             />
                           </div>
                         </div>
@@ -522,6 +557,7 @@ function PreviewIngresoModal({
                                                   return { ...prev, [it.id]: list };
                                                 });
                                               }}
+                                              onCrearManual={crearFranjaManual}
                                             />
                                           </div>
                                           <div className={`text-right shrink-0 w-20 text-[11px] font-bold tabular-nums ${
@@ -594,16 +630,37 @@ function PreviewIngresoModal({
                         <MarginStat label="Costo total" value={"Gs. " + Math.round(totalCosto).toLocaleString("es-PY")} />
                         <MarginStat label="Venta esperada" value={"Gs. " + Math.round(totalVenta).toLocaleString("es-PY")} valueClass="text-sky-800" />
                         <MarginStat
-                          label="Margen bruto"
+                          label="Ganancia bruta"
                           value={"Gs. " + Math.round(totalMargen).toLocaleString("es-PY")}
                           valueClass={totalMargen >= 0 ? "text-emerald-800" : "text-rose-800"}
                           sub={totalMargen >= 0 ? "✓ Estás ganando" : "⚠ Estás perdiendo"}
                         />
                         <MarginStat
-                          label="Margen %"
-                          value={totalMargenPct != null ? `${totalMargenPct}%` : "—"}
-                          valueClass={totalMargenPct != null && totalMargenPct >= 0 ? "text-emerald-800" : "text-rose-800"}
+                          label="Markup %"
+                          value={totalMarkupPct != null ? `${totalMarkupPct}%` : "—"}
+                          valueClass={totalMarkupPct != null && totalMarkupPct >= 0 ? "text-emerald-800" : "text-rose-800"}
+                          sub="ganancia ÷ costo"
                         />
+                      </div>
+                      {/* Mensaje amistoso comparando venta final vs. venta al precio original */}
+                      <div className={`mt-3 rounded-lg px-3 py-2 text-sm font-medium ${
+                        totalMargen < 0
+                          ? "bg-rose-100 text-rose-800"
+                          : deltaVsPrevisto > 0
+                          ? "bg-emerald-100 text-emerald-800"
+                          : deltaVsPrevisto < 0
+                          ? "bg-amber-100 text-amber-800"
+                          : "bg-slate-100 text-slate-700"
+                      }`}>
+                        {totalMargen < 0 ? (
+                          <>⚠ Vas a <strong>perder Gs. {Math.round(Math.abs(totalMargen)).toLocaleString("es-PY")}</strong> con estos precios. Revisá antes de ingresar.</>
+                        ) : deltaVsPrevisto > 0 ? (
+                          <>✓ Vas a ganar <strong>Gs. {Math.round(Math.abs(deltaVsPrevisto)).toLocaleString("es-PY")} más</strong> de lo previsto originalmente.</>
+                        ) : deltaVsPrevisto < 0 ? (
+                          <>Estás ganando <strong>Gs. {Math.round(Math.abs(deltaVsPrevisto)).toLocaleString("es-PY")} menos</strong> de lo previsto originalmente. Aún así hay ganancia.</>
+                        ) : (
+                          <>Ganancia igual a la prevista originalmente.</>
+                        )}
                       </div>
                     </div>
 
