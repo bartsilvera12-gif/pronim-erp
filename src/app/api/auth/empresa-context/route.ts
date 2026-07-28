@@ -21,12 +21,14 @@ export async function GET(request: Request) {
       empresa_id: ctx.empresa_id ?? "",
       rol: ctx.usuarioRol ?? undefined,
       nombre: ctx.usuarioNombre ?? undefined,
+      sucursal_id: ctx.sucursal_id ?? null,
     };
     return NextResponse.json(
       successResponse({
         es_admin: isAdmin(auth),
         rol: ctx.usuarioRol ?? null,
         empresa_id: ctx.empresa_id ?? null,
+        sucursal_id: ctx.sucursal_id ?? null,
       })
     );
   } catch (err) {

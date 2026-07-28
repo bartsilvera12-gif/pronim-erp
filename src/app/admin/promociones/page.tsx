@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
+import MontoInput from "@/components/ui/MontoInput";
 
 type Ambito = "general" | "franja" | "sucursal" | "cliente" | "segmento";
 type SegmentoCliente = "nuevo" | "habitual" | "vip" | "dormido";
@@ -336,13 +337,26 @@ function NuevaPromocionModal({ onClose, onCreated }: { onClose: () => void; onCr
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]" />
               </div>
             </div>
+          ) : tipo === "descuento_pct" || tipo === "cashback" ? (
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
+                Porcentaje (%)
+              </label>
+              <input type="number" min={0} max={100} value={valor} onChange={(e) => setValor(e.target.value)}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]" />
+            </div>
           ) : (
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
-                {tipo === "descuento_pct" || tipo === "cashback" ? "Porcentaje (%)" : "Monto exacto (Gs.)"}
+                Monto exacto (Gs.)
               </label>
-              <input type="number" min={0} value={valor} onChange={(e) => setValor(e.target.value)}
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]" />
+              <MontoInput
+                value={valor}
+                onChange={(n) => setValor(n === 0 ? "0" : String(n))}
+                decimals={false}
+                placeholder="Ej: 100.000"
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
+              />
             </div>
           )}
           <div>
