@@ -53,4 +53,9 @@ export interface Venta {
   sucursal_id?: string | null;
   /** Nombre legible de la sucursal, resuelto en el endpoint. */
   sucursal_nombre?: string | null;
+
+  /** Estado del ciclo de vida de la venta. */
+  estado?: "pendiente" | "completada" | "anulada";
+  anulada_at?: string | null;
+  anulacion_motivo?: string | null;
 }

@@ -17,6 +17,9 @@ interface VentaRow {
   tipo_venta: string;
   plazo_dias: number | null;
   fecha: string;
+  estado?: string | null;
+  anulada_at?: string | null;
+  anulacion_motivo?: string | null;
   sucursal_id?: string | null;
   sucursal?: { nombre?: string | null } | null;
 }
@@ -68,7 +71,7 @@ function mapItems(rows: VentaItemRow[]): LineaVenta[] {
 // VENTAS_COLS_BASE = columnas siempre presentes.
 // sucursal_id + relación a sucursales son best-effort: si el schema no las
 // tiene (deploys que no son Joyería) se reintenta sin esas columnas.
-const VENTAS_COLS_BASE = "id,empresa_id,numero_control,moneda,tipo_cambio,subtotal,monto_iva,total,tipo_venta,plazo_dias,fecha";
+const VENTAS_COLS_BASE = "id,empresa_id,numero_control,moneda,tipo_cambio,subtotal,monto_iva,total,tipo_venta,plazo_dias,fecha,estado,anulada_at,anulacion_motivo";
 const VENTAS_COLS_CON_SUCURSAL = `${VENTAS_COLS_BASE},sucursal_id,sucursal:sucursal_id(nombre)`;
 const VENTAS_ITEMS_COLS = "venta_id,producto_id,producto_nombre,sku,cantidad,precio_venta_original,precio_venta,tipo_iva,subtotal,monto_iva,total_linea,es_sin_cargo,motivo_sin_cargo,costo_promocional_total";
 
@@ -132,6 +135,9 @@ export async function GET(request: NextRequest) {
         tipo_venta: r.tipo_venta === "CREDITO" ? "CREDITO" : "CONTADO",
         plazo_dias: r.plazo_dias ?? undefined,
         fecha: r.fecha,
+        estado: (r.estado ?? "completada") as "pendiente" | "completada" | "anulada",
+        anulada_at: r.anulada_at ?? null,
+        anulacion_motivo: r.anulacion_motivo ?? null,
         sucursal_id: r.sucursal_id ?? null,
         sucursal_nombre: r.sucursal?.nombre ?? null,
       };

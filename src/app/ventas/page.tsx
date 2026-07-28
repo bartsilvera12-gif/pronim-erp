@@ -151,6 +151,12 @@ export default function VentasPage() {
   const [filtroTipo, setFiltroTipo] = useState<TipoVenta | "">("");
   const [filtroIva,  setFiltroIva]  = useState<TipoIvaVenta | "">("");
   const [cargandoLista, setCargandoLista] = useState(true);
+  // Modal para anular una venta desde el listado. La venta a anular
+  // se guarda en estado + un textarea para el motivo (super_admin only).
+  const [anularVenta, setAnularVenta] = useState<Venta | null>(null);
+  const [anularMotivo, setAnularMotivo] = useState("");
+  const [anulandoBusy, setAnulandoBusy] = useState(false);
+  const [anularError, setAnularError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -170,6 +176,41 @@ export default function VentasPage() {
       cancelled = true;
     };
   }, []);
+
+  async function confirmarAnular() {
+    const v = anularVenta;
+    if (!v) return;
+    setAnularError(null);
+    if (!anularMotivo.trim()) {
+      setAnularError("Escribí un motivo para la anulación.");
+      return;
+    }
+    setAnulandoBusy(true);
+    try {
+      const r = await fetch(`/api/ventas/${v.id}/anular`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ motivo: anularMotivo.trim() }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || j?.success === false) {
+        throw new Error(j?.error ?? `No se pudo anular la venta (${r.status}).`);
+      }
+      // Marca la venta en el listado sin refetch full.
+      setTodas((prev) => prev.map((x) =>
+        x.id === v.id
+          ? { ...x, estado: "anulada", anulada_at: new Date().toISOString(), anulacion_motivo: anularMotivo.trim() }
+          : x
+      ));
+      setAnularVenta(null);
+      setAnularMotivo("");
+    } catch (e) {
+      setAnularError(e instanceof Error ? e.message : "Error inesperado al anular.");
+    } finally {
+      setAnulandoBusy(false);
+    }
+  }
 
   const metricas = calcularMetricas(todas);
 
@@ -405,26 +446,50 @@ export default function VentasPage() {
                         {formatFecha(v.fecha)}
                       </td>
                       <td className="py-4 text-center align-middle">
-                        <div className="inline-flex items-center gap-1.5">
-                          <a
-                            href={`/api/ventas/${v.id}/ticket?mode=comandas`}
-                            target="_blank"
-                            rel="noopener"
-                            className="inline-flex items-center justify-center rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-slate-300 hover:bg-slate-50 transition-colors"
-                            title="Abrir comandas + ticket cliente"
-                          >
-                            Imprimir
-                          </a>
-                          {v.genera_nota_remision && (
-                            <a
-                              href={`/api/ventas/${v.id}/ticket?tipo=remision`}
-                              target="_blank"
-                              rel="noopener"
-                              className="inline-flex items-center justify-center rounded-md border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-700 hover:bg-sky-100 transition-colors"
-                              title="Nota de remisión (documento no fiscal)"
+                        <div className="inline-flex items-center gap-1.5 flex-wrap justify-center">
+                          {v.estado === "anulada" ? (
+                            <span
+                              className="inline-flex items-center rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] font-semibold text-rose-700"
+                              title={v.anulacion_motivo ?? "Anulada"}
                             >
-                              Nota de remisión
-                            </a>
+                              ⛔ Anulada
+                            </span>
+                          ) : (
+                            <>
+                              <a
+                                href={`/api/ventas/${v.id}/ticket?mode=comandas`}
+                                target="_blank" rel="noopener"
+                                className="inline-flex items-center justify-center rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-slate-300 hover:bg-slate-50 transition-colors"
+                                title="Abrir comandas + ticket cliente"
+                              >
+                                Imprimir
+                              </a>
+                              {v.genera_nota_remision && (
+                                <a
+                                  href={`/api/ventas/${v.id}/ticket?tipo=remision`}
+                                  target="_blank" rel="noopener"
+                                  className="inline-flex items-center justify-center rounded-md border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-700 hover:bg-sky-100 transition-colors"
+                                  title="Nota de remisión (documento no fiscal)"
+                                >
+                                  Nota de remisión
+                                </a>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => setAnularVenta(v)}
+                                className="inline-flex items-center justify-center rounded-md border border-rose-200 bg-white px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-50 transition-colors"
+                                title="Anular esta venta (revierte stock y crédito)"
+                              >
+                                Anular
+                              </button>
+                              <Link
+                                href={`/atencion/nueva?desde_venta=${v.id}`}
+                                className="inline-flex items-center justify-center rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-800 hover:bg-amber-100 transition-colors"
+                                title="Registrar cambio de productos (usa 'Cambio directo')"
+                              >
+                                Cambio
+                              </Link>
+                            </>
                           )}
                         </div>
                       </td>
@@ -437,6 +502,60 @@ export default function VentasPage() {
         </EdgeScrollArea>
 
       </div>
+
+      {/* Modal: anular venta */}
+      {anularVenta && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => { if (!anulandoBusy) { setAnularVenta(null); setAnularError(null); setAnularMotivo(""); } }}
+        >
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-slate-900 mb-1">Anular venta {anularVenta.numero_control}</h3>
+            <p className="text-sm text-slate-500 mb-3">
+              Revierte el stock, cancela cobros inmediatos y devuelve el crédito aplicado al cliente. Requiere super_admin.
+            </p>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 mb-4 text-xs text-slate-600 space-y-0.5">
+              <p><strong>Total:</strong> {formatGs(anularVenta.total)}</p>
+              <p><strong>Fecha:</strong> {formatFecha(anularVenta.fecha)}</p>
+              {anularVenta.sucursal_nombre && <p><strong>Sucursal:</strong> {anularVenta.sucursal_nombre}</p>}
+            </div>
+            <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
+              Motivo *
+            </label>
+            <textarea
+              value={anularMotivo}
+              onChange={(e) => setAnularMotivo(e.target.value)}
+              disabled={anulandoBusy}
+              placeholder="Ej: cliente devolvió, error de carga, etc."
+              rows={3}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500"
+            />
+            {anularError && (
+              <p className="mt-2 rounded-lg bg-rose-50 border border-rose-200 px-3 py-2 text-sm text-rose-700">
+                {anularError}
+              </p>
+            )}
+            <div className="mt-5 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => { setAnularVenta(null); setAnularMotivo(""); setAnularError(null); }}
+                disabled={anulandoBusy}
+                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => void confirmarAnular()}
+                disabled={anulandoBusy || !anularMotivo.trim()}
+                className="rounded-lg bg-rose-600 hover:bg-rose-700 disabled:bg-rose-300 px-4 py-2 text-sm font-semibold text-white"
+              >
+                {anulandoBusy ? "Anulando…" : "Confirmar anulación"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* FAB mobile: acceso 1-tap a "+ Nueva venta" desde cualquier scroll position */}
       <MobileFab href="/atencion/nueva" label="Nueva venta" />
