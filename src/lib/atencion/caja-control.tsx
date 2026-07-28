@@ -121,6 +121,34 @@ export function CajaControlBanner({ state }: { state: CajaState }) {
   const [aperturaObs, setAperturaObs] = useState("");
   const [abriendo, setAbriendo] = useState(false);
   const [aperturaError, setAperturaError] = useState<string | null>(null);
+  // Prellenar monto de apertura con el último cierre (la plata que quedó
+  // en la caja al cerrar el día anterior). Corre al abrir el modal.
+  const [ultimoCierreInfo, setUltimoCierreInfo] = useState<{
+    monto: number; fecha_cierre: string | null;
+  } | null>(null);
+  useEffect(() => {
+    if (modal !== "abrir" || !puntoCajaId) return;
+    let cancel = false;
+    (async () => {
+      try {
+        const r = await fetchWithSupabaseSession(
+          `/api/caja/ultimo-cierre?punto_caja_id=${encodeURIComponent(puntoCajaId)}`,
+          { cache: "no-store" },
+        );
+        const j = await r.json().catch(() => ({}));
+        if (cancel || !r.ok || j?.success === false) return;
+        const monto = Number(j?.data?.monto ?? 0);
+        const fechaCierre = j?.data?.fecha_cierre ?? null;
+        setUltimoCierreInfo({ monto, fecha_cierre: fechaCierre });
+        // Sólo prefill si el input está vacío — no pisar lo que la cajera
+        // ya empezó a tipear si abre y cierra el modal.
+        if (monto > 0) {
+          setAperturaMonto((prev) => (prev === "" ? String(monto) : prev));
+        }
+      } catch { /* tolerar */ }
+    })();
+    return () => { cancel = true; };
+  }, [modal, puntoCajaId]);
 
   async function abrirCaja() {
     setAperturaError(null);
@@ -325,6 +353,14 @@ export function CajaControlBanner({ state }: { state: CajaState }) {
                     <MontoInput value={aperturaMonto} onChange={(n) => setAperturaMonto(String(n))}
                       placeholder="Ej: 200.000" autoFocus decimals={false}
                       className="w-full rounded-lg border border-slate-200 px-3 py-2 text-lg font-semibold focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]" />
+                    {ultimoCierreInfo && ultimoCierreInfo.monto > 0 && (
+                      <p className="mt-1 text-[11px] text-emerald-700">
+                        Prellenado con el efectivo del último cierre
+                        {ultimoCierreInfo.fecha_cierre && (
+                          <> ({new Date(ultimoCierreInfo.fecha_cierre).toLocaleDateString("es-PY")})</>
+                        )}: <strong>{money.format(Math.round(ultimoCierreInfo.monto))}</strong>. Podés editarlo si contás distinto.
+                      </p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Observación (opcional)</label>
