@@ -6,6 +6,7 @@ import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session"
 import { useT } from "@/lib/i18n/context";
 import { useIsSuperAdmin } from "@/lib/auth/use-is-admin";
 import WebUploadButton from "@/components/web-admin/WebUploadButton";
+import RichTextEditor from "@/components/web-admin/RichTextEditor";
 
 /**
  * Admin: Blog del sitio publico (Akakua'a).
@@ -502,16 +503,16 @@ function PostModal({
           </div>
 
           <div>
-            <label className="text-xs font-medium text-slate-600">{t("Cuerpo (HTML)")}</label>
-            <textarea
-              value={draft.cuerpo_html}
-              onChange={(e) => setDraft({ ...draft, cuerpo_html: e.target.value })}
-              rows={10}
-              placeholder={t("Podés pegar HTML directo: <p>, <h2>, <img>, <ul>, etc.")}
-              className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]/40"
-            />
+            <label className="text-xs font-medium text-slate-600">{t("Cuerpo")}</label>
+            <div className="mt-1">
+              <RichTextEditor
+                value={draft.cuerpo_html}
+                onChange={(html) => setDraft({ ...draft, cuerpo_html: html })}
+                placeholder={t("Escribí acá el contenido de la nota…")}
+              />
+            </div>
             <p className="mt-1 text-[11px] text-slate-400">
-              {t("El contenido se inyecta tal cual en post.html. Solo escribí HTML confiable.")}
+              {t("Usá los botones para dar formato: títulos, negrita, listas, imágenes y links.")}
             </p>
           </div>
 
