@@ -480,28 +480,12 @@ export async function createVentaEnClientePg(
        FOR UPDATE`,
       [params.sucursalId, [...qtyByProduct.keys()]],
     );
-    const stockByProd = new Map(
-      stockSuc.rows.map((r) => [r.producto_id, Number(r.stock_actual)]),
-    );
-    for (const [prodId, qty] of qtyByProduct) {
-      const info = productosInfo.get(prodId);
-      const disp = stockByProd.get(prodId) ?? 0;
-      if (qty > disp + TOL) {
-        // Mensaje pensado para la cajera: humano, con la franja bien
-        // visible y los números al final para que se lea "sobra"/"falta"
-        // sin releer. El SKU va entre paréntesis por si necesita buscar.
-        const franja = info?.nombre ?? prodId;
-        const sku = info?.sku ?? "?";
-        const faltan = Math.max(0, qty - disp);
-        throw new Error(
-          `Sin stock suficiente en la franja ${franja}. `
-          + `Faltan ${faltan} prenda${faltan === 1 ? "" : "s"} `
-          + `(pediste ${qty} y hay ${disp} en esta sucursal). `
-          + `Revisá el stock o quitá ${faltan} de la venta. `
-          + `[SKU ${sku}]`,
-        );
-      }
-    }
+    // Venta sin stock permitida: mantenemos el SELECT FOR UPDATE arriba
+    // para conservar el lock atómico sobre las filas, pero YA NO
+    // rechazamos por falta de stock. El UPDATE de más abajo deja
+    // stock_actual en negativo hasta que ingresen la prenda faltante.
+    // Karen quiere poder facturar sin bloquear en caja.
+    void stockSuc;
 
     // ── numero_control (RPC atómica) ──────────────────────────────────
     const nc = await client.query<{ n: string }>(
