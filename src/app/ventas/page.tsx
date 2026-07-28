@@ -6,6 +6,7 @@ import EdgeScrollArea from "@/components/ui/EdgeScrollArea";
 import { FancySelect } from "@/components/ui/FancySelect";
 import MobileFab from "@/components/ui/MobileFab";
 import { getVentas } from "@/lib/ventas/storage";
+import { useT, useMoney, useUserCfg } from "@/lib/i18n/context";
 import PedidosPendientesCaja from "./PedidosPendientesCaja";
 import CambioModal from "./CambioModal";
 import CajaControlPanel from "@/components/caja/CajaControlPanel";
@@ -146,6 +147,12 @@ function ivaResumen(v: Venta): string {
 // ── Componente principal ───────────────────────────────────────────────────────
 
 export default function VentasPage() {
+  const t = useT();
+  const money = useMoney();
+  const { lang } = useUserCfg();
+  // Locale para toLocaleDateString y toLocaleTimeString. es-PY para
+  // sucursales de Paraguay, pt-BR para Brasil.
+  const dateLocale = lang === "pt-BR" ? "pt-BR" : "es-PY";
   const [todas,      setTodas]      = useState<Venta[]>([]);
   const [busqueda,   setBusqueda]   = useState("");
   const [filtroTipo, setFiltroTipo] = useState<TipoVenta | "">("");
@@ -252,8 +259,8 @@ export default function VentasPage() {
             Zentra · Operaciones
           </p>
         </div>
-        <h1 className="mt-1 text-lg font-semibold tracking-tight text-slate-900">Caja</h1>
-        <p className="mt-0.5 text-xs text-slate-500">Cobro, facturación y cierre de pedidos</p>
+        <h1 className="mt-1 text-lg font-semibold tracking-tight text-slate-900">{t("Caja")}</h1>
+        <p className="mt-0.5 text-xs text-slate-500">{t("Cobro, facturación y cierre de pedidos")}</p>
       </div>
 
       <CajaControlPanel />
@@ -263,37 +270,36 @@ export default function VentasPage() {
       {/* ── Métricas del día ──────────────────────────────────────────────────── */}
       <div>
         <p className="text-xs text-gray-400 uppercase tracking-wide font-medium mb-3">
-          Resumen de hoy —{" "}
-          {new Date().toLocaleDateString("es-PY", {
+          {t("Resumen de hoy")} —{" "}
+          {new Date().toLocaleDateString(dateLocale, {
             weekday: "long", day: "numeric", month: "long", year: "numeric",
-            timeZone: "America/Asuncion",
           })}
         </p>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <MetricCard
-            label="Facturación de hoy"
-            value={`Gs. ${metricas.facturacion.toLocaleString("es-PY")}`}
-            sub="Total incl. IVA"
+            label={t("Facturación de hoy")}
+            value={money.format(metricas.facturacion)}
+            sub={t("Total incl. IVA")}
             accent
           />
           <MetricCard
-            label="Ventas de hoy"
+            label={t("Ventas de hoy")}
             value={String(metricas.cantidadVentas)}
-            sub={metricas.cantidadVentas === 1 ? "orden registrada" : "órdenes registradas"}
+            sub={metricas.cantidadVentas === 1 ? t("orden registrada") : t("órdenes registradas")}
           />
           <MetricCard
-            label="Ticket promedio"
+            label={t("Ticket promedio")}
             value={
               metricas.ticketPromedio > 0
-                ? `Gs. ${Math.round(metricas.ticketPromedio).toLocaleString("es-PY")}`
+                ? money.format(Math.round(metricas.ticketPromedio))
                 : "—"
             }
-            sub="Por orden de venta"
+            sub={t("Por orden de venta")}
           />
           <MetricCard
-            label="Unidades vendidas"
+            label={t("Unidades vendidas")}
             value={String(metricas.productosVendidos)}
-            sub="Unidades despachadas"
+            sub={t("Unidades despachadas")}
           />
         </div>
       </div>
@@ -302,12 +308,12 @@ export default function VentasPage() {
       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm ring-1 ring-[#4FAEB2]/15 sm:p-5 lg:p-6">
 
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-xl font-semibold">Órdenes de venta</h2>
+          <h2 className="text-xl font-semibold">{t("Órdenes de venta")}</h2>
           <Link
             href="/atencion/nueva"
             className="bg-[#4FAEB2] hover:bg-[#3F8E91] text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm"
           >
-            + Nueva venta
+            + {t("Nueva venta")}
           </Link>
         </div>
 
@@ -315,7 +321,7 @@ export default function VentasPage() {
         <div className="flex flex-wrap items-center gap-3 mb-5 pb-5 border-b border-gray-100">
           <input
             type="text"
-            placeholder="Buscar por número, producto o SKU..."
+            placeholder={t("Buscar por número, producto o SKU...")}
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
             className={`${inputFilterClass} min-w-0 flex-1 sm:min-w-64`}
@@ -323,24 +329,24 @@ export default function VentasPage() {
           <FancySelect
             value={filtroTipo}
             onChange={(v) => setFiltroTipo(v as TipoVenta | "")}
-            ariaLabel="Filtrar por tipo de venta"
+            ariaLabel={t("Filtrar por tipo de venta")}
             className="w-44"
             size="sm"
             options={[
-              { value: "", label: "Todos los tipos" },
-              { value: "CONTADO", label: "Contado" },
-              { value: "CREDITO", label: "Crédito" },
+              { value: "", label: t("Todos los tipos") },
+              { value: "CONTADO", label: t("Contado") },
+              { value: "CREDITO", label: t("Crédito") },
             ]}
           />
           <FancySelect
             value={filtroIva}
             onChange={(v) => setFiltroIva(v as TipoIvaVenta | "")}
-            ariaLabel="Filtrar por IVA"
+            ariaLabel={t("Filtrar por IVA")}
             className="w-44"
             size="sm"
             options={[
-              { value: "", label: "Todos los IVA" },
-              { value: "EXENTA", label: "Exenta" },
+              { value: "", label: t("Todos los IVA") },
+              { value: "EXENTA", label: t("Exenta") },
               { value: "5%", label: "IVA 5%" },
               { value: "10%", label: "IVA 10%" },
             ]}
@@ -350,11 +356,11 @@ export default function VentasPage() {
               onClick={() => { setBusqueda(""); setFiltroTipo(""); setFiltroIva(""); }}
               className="text-sm text-gray-400 hover:text-gray-600 transition-colors px-2"
             >
-              Limpiar filtros
+              {t("Limpiar filtros")}
             </button>
           )}
           <span className="ml-auto text-sm text-gray-400">
-            {filtradas.length} de {todas.length} ventas
+            {filtradas.length} {t("de")} {todas.length} {t("ventas")}
           </span>
         </div>
 
@@ -364,17 +370,17 @@ export default function VentasPage() {
           <table className="w-full min-w-[760px] lg:min-w-0 text-left text-sm">
             <thead>
               <tr className="bg-slate-50 text-slate-600 text-sm font-semibold">
-                <th className="py-3 pr-4 font-medium">Número</th>
-                <th className="py-3 pr-4 font-medium">Productos</th>
-                <th className="hidden py-3 pr-4 text-center font-medium lg:table-cell">Ítems</th>
-                <th className="py-3 pr-4 font-medium text-right hidden lg:table-cell">Cant. total</th>
+                <th className="py-3 pr-4 font-medium">{t("Número")}</th>
+                <th className="py-3 pr-4 font-medium">{t("Productos")}</th>
+                <th className="hidden py-3 pr-4 text-center font-medium lg:table-cell">{t("Ítems")}</th>
+                <th className="py-3 pr-4 font-medium text-right hidden lg:table-cell">{t("Cant. total")}</th>
                 <th className="py-3 pr-4 font-medium hidden lg:table-cell">IVA</th>
-                <th className="py-3 pr-4 font-medium text-right">Total</th>
-                <th className="hidden py-3 pr-4 font-medium lg:table-cell">Tipo</th>
-                <th className="hidden py-3 pr-4 font-medium lg:table-cell">Pago</th>
-                <th className="hidden py-3 pr-4 font-medium lg:table-cell">Sucursal</th>
-                <th className="py-3 pr-4 font-medium">Fecha</th>
-                <th className="py-3 font-medium text-center">Ticket</th>
+                <th className="py-3 pr-4 font-medium text-right">{t("Total")}</th>
+                <th className="hidden py-3 pr-4 font-medium lg:table-cell">{t("Tipo")}</th>
+                <th className="hidden py-3 pr-4 font-medium lg:table-cell">{t("Pago")}</th>
+                <th className="hidden py-3 pr-4 font-medium lg:table-cell">{t("Sucursal")}</th>
+                <th className="py-3 pr-4 font-medium">{t("Fecha")}</th>
+                <th className="py-3 font-medium text-center">{t("Ticket")}</th>
               </tr>
             </thead>
             <tbody>
@@ -386,7 +392,7 @@ export default function VentasPage() {
                         <circle cx="12" cy="12" r="10" stroke="currentColor" strokeOpacity="0.25" strokeWidth="3" />
                         <path d="M22 12a10 10 0 0 0-10-10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
                       </svg>
-                      Cargando ventas…
+                      {t("Cargando ventas…")}
                     </div>
                   </td>
                 </tr>
@@ -394,8 +400,8 @@ export default function VentasPage() {
                 <tr>
                   <td colSpan={11} className="py-12 text-center text-gray-400">
                     {todas.length === 0
-                      ? "No hay ventas registradas"
-                      : "Ninguna venta coincide con los filtros"}
+                      ? t("No hay ventas registradas")
+                      : t("Ninguna venta coincide con los filtros")}
                   </td>
                 </tr>
               ) : (

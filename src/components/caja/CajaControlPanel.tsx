@@ -10,6 +10,7 @@ import {
   registrarMovimiento,
 } from "@/lib/caja/storage";
 import type { Caja, CajaResumen, MedioPagoCaja, TipoMovimientoCaja } from "@/lib/caja/types";
+import { useT } from "@/lib/i18n/context";
 
 function formatGs(v: number) {
   return `Gs. ${Math.round(v).toLocaleString("es-PY")}`;
@@ -37,6 +38,7 @@ export default function CajaControlPanel({
   /** Notifica al padre si hay (o no) caja abierta, para habilitar/bloquear ventas. */
   onStateChange?: (abierta: boolean) => void;
 }) {
+  const t = useT();
   const [loading, setLoading] = useState(true);
   const [caja, setCaja] = useState<Caja | null>(null);
   const [resumen, setResumen] = useState<CajaResumen | null>(null);
@@ -123,11 +125,11 @@ export default function CajaControlPanel({
               <div className="flex items-center gap-2">
                 <span className="inline-block h-2 w-2 rounded-full bg-amber-500" />
                 <span className="text-xs font-semibold uppercase tracking-wider text-amber-700">
-                  Caja cerrada
+                  {t("CAJA CERRADA")}
                 </span>
               </div>
               <p className="mt-1 text-sm text-slate-600">
-                Para vender primero tenés que <strong>abrir caja</strong>.
+                {t("Para vender primero tenés que")} <strong>{t("abrir caja")}</strong>.
               </p>
             </div>
             <button
@@ -135,7 +137,7 @@ export default function CajaControlPanel({
               onClick={() => setModal("abrir")}
               className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-emerald-700"
             >
-              Abrir caja
+              {t("Abrir caja")}
             </button>
           </div>
         </div>
