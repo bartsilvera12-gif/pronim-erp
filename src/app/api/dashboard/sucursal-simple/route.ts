@@ -118,6 +118,10 @@ export async function GET(request: NextRequest) {
       const selEmpresa = clienteCols.has("empresa") ? "MAX(c.empresa)" : "NULL::text";
       const selTelefono = clienteCols.has("telefono") ? "MAX(c.telefono)" : "NULL::text";
 
+      // Filtros calificados con alias v. para el JOIN con clientes (donde
+      // algunas columnas se llaman igual en ambas tablas — 'estado' colisiona).
+      const filtroSucursalV = ventaCols.has("sucursal_id") ? "AND v.sucursal_id = $2" : "";
+      const filtroEstadoV = ventaCols.has("estado") ? "AND (v.estado IS NULL OR v.estado <> 'anulada')" : "";
       const ultimosClientesQ = await client.query<{
         cliente_id: string; nombre: string | null; empresa: string | null;
         telefono: string | null; ultima_fecha: string; total_gastado: string;
@@ -130,8 +134,7 @@ export async function GET(request: NextRequest) {
                 COALESCE(SUM(v.total),0)::text AS total_gastado
          FROM ${ventasT} v
          LEFT JOIN ${clientesT} c ON c.id = v.cliente_id AND c.empresa_id = v.empresa_id
-         WHERE v.empresa_id = $1 ${filtroSucursal.replace(/\$2/g, "$2").replace("sucursal_id", "v.sucursal_id")}
-           ${filtroEstado.replace("estado", "v.estado")}
+         WHERE v.empresa_id = $1 ${filtroSucursalV} ${filtroEstadoV}
            AND v.cliente_id IS NOT NULL
          GROUP BY v.cliente_id
          ORDER BY MAX(v.fecha) DESC
