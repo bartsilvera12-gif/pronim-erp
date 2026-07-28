@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
   const nombre = String(body.nombre ?? "").trim();
   const tipo = String(body.tipo ?? "");
   if (!nombre) return NextResponse.json(errorResponse("El nombre es obligatorio."), { status: 400 });
-  if (!["descuento_pct","descuento_fijo","lleve_n_pague_m","cashback"].includes(tipo)) {
+  if (!["descuento_pct","descuento_fijo","lleve_n_pague_m","cashback","cashback_fijo"].includes(tipo)) {
     return NextResponse.json(errorResponse("Tipo de promoción inválido."), { status: 400 });
   }
   const valor = Number(body.valor);

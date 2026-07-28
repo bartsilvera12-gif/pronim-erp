@@ -34,7 +34,7 @@ export interface EvaluarPromocionInput {
 export interface PromoEvaluada {
   promocionId: string;
   nombre: string;
-  tipo: "descuento_pct" | "descuento_fijo" | "lleve_n_pague_m" | "cashback";
+  tipo: "descuento_pct" | "descuento_fijo" | "lleve_n_pague_m" | "cashback" | "cashback_fijo";
   cuponCodigo: string | null;
   descuento: number;
   cashback: number;
@@ -42,7 +42,7 @@ export interface PromoEvaluada {
 
 interface PromoRow {
   id: string; nombre: string;
-  tipo: "descuento_pct" | "descuento_fijo" | "lleve_n_pague_m" | "cashback";
+  tipo: "descuento_pct" | "descuento_fijo" | "lleve_n_pague_m" | "cashback" | "cashback_fijo";
   valor: string; lleve_n: number | null; pague_m: number | null;
   cupon_codigo: string | null;
   ambito: "general" | "franja" | "sucursal" | "cliente" | "segmento";
@@ -175,6 +175,8 @@ export async function evaluarPromocionEnClientePg(
       }
     } else if (row.tipo === "cashback") {
       cash = subFranja * (valor / 100);
+    } else if (row.tipo === "cashback_fijo") {
+      cash = valor;
     }
     desc = Math.round(Math.max(0, desc));
     cash = Math.round(Math.max(0, cash));
