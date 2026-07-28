@@ -485,7 +485,10 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
         abierto={abierto.tipos}
         onToggle={() => setAbierto(p => ({ ...p, tipos: !p.tipos }))}
       >
-        <FranjasPorSucursal filas={data.tipos_prenda_por_sucursal} />
+        <FranjasPorSucursal
+          filas={data.tipos_prenda_por_sucursal}
+          sucursales={data.sucursales.map(s => ({ sucursal_id: s.sucursal_id, sucursal_nombre: s.nombre }))}
+        />
       </Accordion>
 
       {/* Secciones detalladas de totales removidas — Karen pidió ver todo
@@ -520,16 +523,27 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
  */
 function FranjasPorSucursal({
   filas,
+  sucursales: sucursalesTodas = [],
 }: {
   filas: { sucursal_id: string; sucursal_nombre: string; tipo_id: string; tipo_nombre: string; cantidad: number }[];
+  /** Todas las sucursales activas (para renderizar tambien las que no
+   *  tienen recepciones aun en el periodo, con un "sin datos" adentro). */
+  sucursales?: { sucursal_id: string; sucursal_nombre: string }[];
 }) {
-  if (filas.length === 0) {
-    return <p className="text-sm text-slate-400 py-2">Sin datos en el período.</p>;
-  }
+  // Seed del map con TODAS las sucursales activas → cada una tendrá su
+  // card aunque no haya recibido nada aún. Después vamos rellenando los
+  // items desde `filas`. Si no vinieron sucursales, cae al modo viejo
+  // (solo las que están en `filas`).
   const map = new Map<string, { nombre: string; items: { tipo_id: string; tipo_nombre: string; cantidad: number }[] }>();
+  for (const s of sucursalesTodas) {
+    map.set(s.sucursal_id, { nombre: s.sucursal_nombre, items: [] });
+  }
   for (const r of filas) {
     if (!map.has(r.sucursal_id)) map.set(r.sucursal_id, { nombre: r.sucursal_nombre, items: [] });
     map.get(r.sucursal_id)!.items.push({ tipo_id: r.tipo_id, tipo_nombre: r.tipo_nombre, cantidad: r.cantidad });
+  }
+  if (map.size === 0) {
+    return <p className="text-sm text-slate-400 py-2">Sin datos en el período.</p>;
   }
   const sucursales = Array.from(map.entries()).sort((a, b) => a[1].nombre.localeCompare(b[1].nombre));
 
@@ -547,25 +561,31 @@ function FranjasPorSucursal({
                 {fmtN(total)} prenda{total === 1 ? "" : "s"}
               </span>
             </div>
-            <ul className="space-y-1.5">
-              {items.map(i => (
-                <li key={i.tipo_id} className="flex items-center gap-2">
-                  <span className="w-24 shrink-0 text-xs text-slate-700 truncate">{i.tipo_nombre}</span>
-                  <div className="flex-1 h-2 rounded-full bg-white overflow-hidden">
-                    <div className="h-full bg-gradient-to-r from-emerald-400 to-emerald-500"
-                         style={{ width: `${(i.cantidad / maxLocal) * 100}%` }} />
-                  </div>
-                  <span className="w-8 text-right text-xs font-semibold text-slate-800 tabular-nums">
-                    {fmtN(i.cantidad)}
-                  </span>
-                </li>
-              ))}
-              {s.items.length > 8 && (
-                <li className="text-[10px] text-slate-400 italic pt-1">
-                  +{s.items.length - 8} franjas más
-                </li>
-              )}
-            </ul>
+            {items.length === 0 ? (
+              <p className="text-[11px] text-slate-400 italic py-3 text-center">
+                Sin recepciones en el período.
+              </p>
+            ) : (
+              <ul className="space-y-1.5">
+                {items.map(i => (
+                  <li key={i.tipo_id} className="flex items-center gap-2">
+                    <span className="w-24 shrink-0 text-xs text-slate-700 truncate">{i.tipo_nombre}</span>
+                    <div className="flex-1 h-2 rounded-full bg-white overflow-hidden">
+                      <div className="h-full bg-gradient-to-r from-emerald-400 to-emerald-500"
+                           style={{ width: `${(i.cantidad / maxLocal) * 100}%` }} />
+                    </div>
+                    <span className="w-8 text-right text-xs font-semibold text-slate-800 tabular-nums">
+                      {fmtN(i.cantidad)}
+                    </span>
+                  </li>
+                ))}
+                {s.items.length > 8 && (
+                  <li className="text-[10px] text-slate-400 italic pt-1">
+                    +{s.items.length - 8} franjas más
+                  </li>
+                )}
+              </ul>
+            )}
           </div>
         );
       })}
