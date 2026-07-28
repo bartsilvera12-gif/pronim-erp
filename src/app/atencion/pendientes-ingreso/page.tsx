@@ -845,6 +845,30 @@ function FranjaCombobox({
     setQ("");
   };
 
+  // Precio manual — sólo si tipearon exclusivamente dígitos (o dígitos + puntos/miles),
+  // no coincide exacto con ninguna franja existente, y el modal padre expone el creador.
+  const precioTipeado = (() => {
+    const digitos = q.replace(/\D/g, "");
+    if (!digitos) return null;
+    const t = q.trim();
+    if (!/^[\d.,]+$/.test(t)) return null;
+    const n = Number(digitos);
+    if (!Number.isFinite(n) || n <= 0) return null;
+    if (franjas.some((f) => Number(f.precio_venta) === n)) return null;
+    return n;
+  })();
+
+  const crearYSeleccionar = async (precio: number) => {
+    if (!onCrearManual || creando) return;
+    setCreando(true);
+    try {
+      const id = await onCrearManual(precio);
+      if (id) seleccionar(id);
+    } finally {
+      setCreando(false);
+    }
+  };
+
   return (
     <div ref={rootRef} className="relative">
       {/* Trigger — se ve como una tarjeta pill */}
@@ -886,9 +910,10 @@ function FranjaCombobox({
                 if (e.key === "Enter") {
                   e.preventDefault();
                   if (filtradas.length > 0) seleccionar(filtradas[0].id);
+                  else if (precioTipeado != null) crearYSeleccionar(precioTipeado);
                 }
               }}
-              placeholder="Buscar (ej: 44)…"
+              placeholder={onCrearManual ? "Buscar o tipear precio (ej: 55000)…" : "Buscar (ej: 44)…"}
               className="w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:bg-white"
             />
           </div>
@@ -904,9 +929,30 @@ function FranjaCombobox({
                 </button>
               </li>
             )}
-            {filtradas.length === 0 ? (
-              <li className="px-3 py-4 text-center text-[11px] text-slate-400">Sin franjas que coincidan.</li>
-            ) : (
+            {precioTipeado != null && onCrearManual && (
+              <li>
+                <button
+                  type="button"
+                  disabled={creando}
+                  onClick={() => crearYSeleccionar(precioTipeado)}
+                  className="w-full flex items-center justify-between gap-2 px-3 py-1.5 text-left transition bg-emerald-50 hover:bg-emerald-100 text-emerald-900 disabled:opacity-60"
+                >
+                  <span className="font-semibold text-sm tabular-nums">
+                    {creando ? "Creando…" : `+ Usar precio Gs. ${precioTipeado.toLocaleString("es-PY")}`}
+                  </span>
+                  <span className={`text-[10px] font-semibold tabular-nums ${
+                    precioTipeado - costoUnit >= 0 ? "text-emerald-700" : "text-rose-700"
+                  }`}>
+                    {precioTipeado - costoUnit >= 0 ? "+" : ""}{(precioTipeado - costoUnit).toLocaleString("es-PY")}
+                  </span>
+                </button>
+              </li>
+            )}
+            {filtradas.length === 0 && precioTipeado == null ? (
+              <li className="px-3 py-4 text-center text-[11px] text-slate-400">
+                {onCrearManual ? "Tipeá un precio (ej: 55000) para crear una franja." : "Sin franjas que coincidan."}
+              </li>
+            ) : filtradas.length === 0 ? null : (
               filtradas.map(f => {
                 const precio = Number(f.precio_venta);
                 const margenPrev = precio - costoUnit;
