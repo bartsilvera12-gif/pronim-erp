@@ -245,10 +245,12 @@ function PreviewIngresoModal({
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [confirmando, setConfirmando] = useState(false);
-  // asignacion[unidadKey] = producto_id de la franja elegida en la
-  // columna derecha para esa unidad específica. Si no se toca, queda
-  // sin asignar y no se incluye en el override — usa la original.
-  const [asignacion, setAsignacion] = useState<Record<string, string>>({});
+  // splits[item_id] = lista de tramos { franjaId, cantidad } en los que
+  // se reparte la cantidad total del item entre distintas franjas de
+  // venta (ej: 5 de 99mil + 4 de 84mil). Si el item no tiene entrada o
+  // su lista está vacía, no se envía override — se usa la franja original.
+  type Split = { franjaId: string; cantidad: number };
+  const [splits, setSplits] = useState<Record<string, Split[]>>({});
 
   useEffect(() => {
     let cancel = false;
@@ -329,72 +331,96 @@ function PreviewIngresoModal({
                   El margen se calcula en vivo cliente-side comparando el
                   costo prorrateado con el precio_venta de la franja elegida. */}
               {(() => {
-                // Aplanar items en "unidades" para poder asignar franja individual.
-                const unidades = data.items.flatMap((it) =>
-                  Array.from({ length: it.cantidad }, (_, i) => ({
-                    key: `${it.id}-${i}`,
-                    item_id: it.id,
-                    idx: i + 1,
-                    cantidad_total: it.cantidad,
-                    producto_original_id: it.producto_id,
-                    producto_original_nombre: it.producto_nombre,
-                    tipo_nombre: it.tipo_nombre,
-                    costo_unit: it.costo_unit,
-                    venta_original: it.venta_unit,
-                  }))
-                );
-                // Precio de venta actual por unidad (edición o valor original)
-                const precioVentaDe = (u: typeof unidades[number]): number => {
-                  const franjaId = asignacion[u.key];
-                  if (franjaId) {
-                    const f = franjas.find(f => f.id === franjaId);
-                    if (f) return Number(f.precio_venta);
+                // Trabajamos AGRUPADO por item: cada item de la recepción
+                // tiene cantidad>=1 y un costo_unit fijo. El usuario puede
+                // repartir esa cantidad entre varias franjas (splits). Si
+                // no se toca, se usa la franja original (venta_unit).
+                const getSplits = (id: string): Split[] => splits[id] ?? [];
+                const sumSplits = (id: string): number => getSplits(id).reduce((a, s) => a + (s.cantidad || 0), 0);
+                const totalUnidades = data.items.reduce((s, it) => s + it.cantidad, 0);
+                const unidadesAsignadas = data.items.reduce((s, it) => {
+                  const sp = getSplits(it.id);
+                  if (sp.length === 0) return s;
+                  return s + sp.filter((x) => x.franjaId).reduce((a, x) => a + (x.cantidad || 0), 0);
+                }, 0);
+
+                // Venta esperada por item — si tiene splits válidos, prorratear
+                // por franja elegida; caso contrario usar venta_unit original.
+                const ventaEsperadaItem = (it: PreviewItem): number => {
+                  const sp = getSplits(it.id);
+                  if (sp.length === 0) return it.venta_unit * it.cantidad;
+                  let total = 0;
+                  let cantOtras = 0;
+                  for (const s of sp) {
+                    const f = franjas.find((f) => f.id === s.franjaId);
+                    if (f && s.cantidad > 0) {
+                      total += Number(f.precio_venta) * s.cantidad;
+                      cantOtras += s.cantidad;
+                    }
                   }
-                  return u.venta_original;
+                  // Las unidades del item aún sin franja asignada valen al
+                  // precio original (venta_unit), así el estimado no se cae
+                  // a cero mientras se está editando.
+                  const cantSinAsignar = Math.max(0, it.cantidad - cantOtras);
+                  return total + cantSinAsignar * it.venta_unit;
                 };
-                const asignadas = unidades.filter(u => asignacion[u.key]).length;
-                // Totales en vivo
-                const totalCosto = unidades.reduce((s, u) => s + u.costo_unit, 0);
-                const totalVenta = unidades.reduce((s, u) => s + precioVentaDe(u), 0);
+                const totalCosto = data.items.reduce((s, it) => s + it.costo_total, 0);
+                const totalVenta = data.items.reduce((s, it) => s + ventaEsperadaItem(it), 0);
                 const totalMargen = totalVenta - totalCosto;
                 const totalMargenPct = totalVenta > 0 ? Math.round((totalMargen / totalVenta) * 1000) / 10 : null;
+
+                // Costo unitario promedio para el margen preview de "Aplicar a todas"
+                const costoUnitPromedio =
+                  totalUnidades > 0 ? Math.round(totalCosto / totalUnidades) : 0;
+
+                // Aplica una única franja a la totalidad de cada item
+                const aplicarATodas = (franjaId: string) => {
+                  setSplits((prev) => {
+                    if (!franjaId) return {};
+                    const next: Record<string, Split[]> = {};
+                    for (const it of data.items) {
+                      next[it.id] = [{ franjaId, cantidad: it.cantidad }];
+                    }
+                    return next;
+                  });
+                };
 
                 return (
                   <>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {/* PANEL IZQUIERDO — Lo que compraste */}
+                      {/* PANEL IZQUIERDO — Lo que compraste (agrupado por item) */}
                       <div className="rounded-xl border border-slate-200 overflow-hidden">
                         <div className="bg-slate-100 px-3 py-2 border-b border-slate-200">
                           <h5 className="text-xs font-bold uppercase text-slate-600">
                             Prendas compradas
                           </h5>
-                          <p className="text-[10px] text-slate-500">Costo prorrateado por unidad</p>
+                          <p className="text-[10px] text-slate-500">Agrupadas por item · costo unitario prorrateado</p>
                         </div>
                         <ul className="divide-y divide-slate-100 max-h-[420px] overflow-y-auto">
-                          {unidades.map((u, i) => (
-                            <li key={u.key} className="flex items-center gap-2 px-3 py-2.5">
+                          {data.items.map((it, i) => (
+                            <li key={it.id} className="flex items-center gap-2 px-3 py-2.5">
                               <span className="w-6 text-[10px] tabular-nums text-slate-400">{i + 1}</span>
                               <div className="flex-1 min-w-0">
                                 <div className="text-sm font-medium text-slate-800 truncate">
-                                  {u.producto_original_nombre}
-                                  {u.cantidad_total > 1 && (
-                                    <span className="ml-1 text-[10px] text-slate-400">({u.idx}/{u.cantidad_total})</span>
-                                  )}
+                                  <span className="inline-block rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-bold text-slate-700 mr-1.5 align-middle">
+                                    {it.cantidad}×
+                                  </span>
+                                  {it.producto_nombre}
                                 </div>
-                                <div className="text-[11px] text-slate-500">{u.tipo_nombre ?? "sin tipo"}</div>
+                                <div className="text-[11px] text-slate-500">{it.tipo_nombre ?? "sin tipo"}</div>
                               </div>
                               <div className="text-right shrink-0">
                                 <div className="text-sm font-bold text-slate-800 tabular-nums">
-                                  Gs. {u.costo_unit.toLocaleString("es-PY")}
+                                  Gs. {it.costo_unit.toLocaleString("es-PY")}
                                 </div>
-                                <div className="text-[10px] text-slate-500">costo</div>
+                                <div className="text-[10px] text-slate-500">c/u · total Gs. {it.costo_total.toLocaleString("es-PY")}</div>
                               </div>
                             </li>
                           ))}
                         </ul>
                       </div>
 
-                      {/* PANEL DERECHO — Cargar franja de venta */}
+                      {/* PANEL DERECHO — Repartir por franja de venta */}
                       <div className="rounded-xl border-2 border-emerald-200 overflow-hidden">
                         <div className="bg-emerald-50 px-3 py-2 border-b border-emerald-200 flex items-center justify-between">
                           <div>
@@ -402,16 +428,14 @@ function PreviewIngresoModal({
                               Asignar precio de venta
                             </h5>
                             <p className="text-[10px] text-emerald-700">
-                              Elegí una franja por cada prenda; el margen se calcula en vivo
+                              Podés repartir un item entre varias franjas (ej: 5 de 99mil + 4 de 84mil)
                             </p>
                           </div>
                           <span className="text-xs font-bold text-emerald-800 tabular-nums shrink-0">
-                            {asignadas}/{unidades.length}
+                            {unidadesAsignadas}/{totalUnidades}
                           </span>
                         </div>
-                        {/* Aplicar mismo precio a todas las prendas de golpe.
-                            Útil cuando se ingresó un lote uniforme (ej. 15 prendas
-                            del mismo precio) — evita elegir franja fila por fila. */}
+                        {/* Aplicar mismo precio a TODAS las prendas de golpe */}
                         <div className="px-3 py-2 bg-emerald-50/50 border-b border-emerald-100 flex items-center gap-2">
                           <span className="text-[11px] font-semibold text-emerald-800 uppercase tracking-wide shrink-0">
                             Aplicar a todas
@@ -420,54 +444,139 @@ function PreviewIngresoModal({
                             <FranjaCombobox
                               franjas={franjas}
                               value=""
-                              costoUnit={
-                                unidades.length > 0
-                                  ? Math.round(unidades.reduce((s, u) => s + u.costo_unit, 0) / unidades.length)
-                                  : 0
-                              }
-                              onChange={(v) => {
-                                setAsignacion((prev) => {
-                                  if (!v) {
-                                    // "usar franja original" desde el bulk = limpiar todo
-                                    return {};
-                                  }
-                                  const next = { ...prev };
-                                  for (const u of unidades) next[u.key] = v;
-                                  return next;
-                                });
-                              }}
+                              costoUnit={costoUnitPromedio}
+                              onChange={aplicarATodas}
                             />
                           </div>
                         </div>
                         <ul className="divide-y divide-slate-100 max-h-[420px] overflow-y-auto">
-                          {unidades.map((u, i) => {
-                            const asignada = Boolean(asignacion[u.key]);
-                            const precioVenta = precioVentaDe(u);
-                            const margen = precioVenta - u.costo_unit;
+                          {data.items.map((it, i) => {
+                            const sp = getSplits(it.id);
+                            const asignadas = sumSplits(it.id);
+                            const restan = it.cantidad - asignadas;
+                            const enUso = sp.length > 0;
+                            const ok = enUso && restan === 0 && sp.every((s) => s.franjaId);
                             return (
-                              <li key={u.key} className={`flex items-center gap-2 px-3 py-2.5 ${asignada ? "bg-emerald-50/50" : ""}`}>
-                                <span className="w-6 text-[10px] tabular-nums text-slate-400">{i + 1}</span>
-                                <div className="flex-1 min-w-0">
-                                  <FranjaCombobox
-                                    franjas={franjas}
-                                    value={asignacion[u.key] ?? ""}
-                                    costoUnit={u.costo_unit}
-                                    onChange={(v) => setAsignacion(prev => {
-                                      const next = { ...prev };
-                                      if (v) next[u.key] = v;
-                                      else delete next[u.key];
-                                      return next;
-                                    })}
-                                  />
-                                </div>
-                                <div className={`text-right shrink-0 w-24 text-xs font-bold tabular-nums ${
-                                  margen >= 0 ? "text-emerald-700" : "text-rose-700"
-                                }`}>
-                                  {margen >= 0 ? "+" : ""}Gs. {margen.toLocaleString("es-PY")}
-                                  <div className="text-[10px] font-normal opacity-70">
-                                    {precioVenta > 0 ? Math.round((margen / precioVenta) * 100) : 0}%
+                              <li key={it.id} className={`px-3 py-2.5 ${ok ? "bg-emerald-50/50" : ""}`}>
+                                <div className="flex items-center gap-2 mb-1.5">
+                                  <span className="w-6 text-[10px] tabular-nums text-slate-400">{i + 1}</span>
+                                  <div className="flex-1 min-w-0 text-[11px] text-slate-600">
+                                    <span className="font-semibold text-slate-800">{it.cantidad} prendas</span>
+                                    {" · costo Gs. "}
+                                    <span className="tabular-nums">{it.costo_unit.toLocaleString("es-PY")}</span>{" c/u"}
                                   </div>
+                                  {!enUso && (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setSplits((prev) => ({
+                                          ...prev,
+                                          [it.id]: [{ franjaId: "", cantidad: it.cantidad }],
+                                        }))
+                                      }
+                                      className="shrink-0 text-[10px] text-emerald-700 hover:text-emerald-900 underline"
+                                    >
+                                      Elegir franja
+                                    </button>
+                                  )}
                                 </div>
+
+                                {!enUso ? (
+                                  <p className="pl-8 text-[11px] italic text-slate-400">
+                                    Se ingresa a la franja original (Gs. {it.venta_unit.toLocaleString("es-PY")})
+                                  </p>
+                                ) : (
+                                  <div className="pl-8 space-y-1.5">
+                                    {sp.map((s, j) => {
+                                      const f = franjas.find((f) => f.id === s.franjaId);
+                                      const precioVenta = f ? Number(f.precio_venta) : it.venta_unit;
+                                      const margenUnit = precioVenta - it.costo_unit;
+                                      return (
+                                        <div key={j} className="flex items-center gap-1.5">
+                                          <input
+                                            type="number"
+                                            min={1}
+                                            max={it.cantidad}
+                                            value={s.cantidad === 0 ? "" : s.cantidad}
+                                            onChange={(e) => {
+                                              const n = Math.max(0, Math.floor(Number(e.target.value) || 0));
+                                              setSplits((prev) => {
+                                                const list = [...(prev[it.id] ?? [])];
+                                                list[j] = { ...list[j], cantidad: n };
+                                                return { ...prev, [it.id]: list };
+                                              });
+                                            }}
+                                            className="w-14 rounded-md border border-slate-200 px-1.5 py-1 text-right text-xs focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                                            title="Cuántas prendas van a esta franja"
+                                          />
+                                          <span className="text-[10px] text-slate-400">×</span>
+                                          <div className="flex-1 min-w-0">
+                                            <FranjaCombobox
+                                              franjas={franjas}
+                                              value={s.franjaId}
+                                              costoUnit={it.costo_unit}
+                                              onChange={(v) => {
+                                                setSplits((prev) => {
+                                                  const list = [...(prev[it.id] ?? [])];
+                                                  list[j] = { ...list[j], franjaId: v };
+                                                  return { ...prev, [it.id]: list };
+                                                });
+                                              }}
+                                            />
+                                          </div>
+                                          <div className={`text-right shrink-0 w-20 text-[11px] font-bold tabular-nums ${
+                                            margenUnit >= 0 ? "text-emerald-700" : "text-rose-700"
+                                          }`}>
+                                            {margenUnit >= 0 ? "+" : ""}{(margenUnit * s.cantidad).toLocaleString("es-PY")}
+                                          </div>
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              setSplits((prev) => {
+                                                const list = (prev[it.id] ?? []).filter((_, k) => k !== j);
+                                                const next = { ...prev };
+                                                if (list.length === 0) delete next[it.id];
+                                                else next[it.id] = list;
+                                                return next;
+                                              })
+                                            }
+                                            className="text-slate-400 hover:text-rose-600 text-sm leading-none"
+                                            title="Quitar esta franja"
+                                          >
+                                            ×
+                                          </button>
+                                        </div>
+                                      );
+                                    })}
+                                    <div className="flex items-center justify-between pt-0.5">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const restanNow = Math.max(0, it.cantidad - sumSplits(it.id));
+                                          setSplits((prev) => ({
+                                            ...prev,
+                                            [it.id]: [
+                                              ...(prev[it.id] ?? []),
+                                              { franjaId: "", cantidad: restanNow || 1 },
+                                            ],
+                                          }));
+                                        }}
+                                        className="text-[11px] text-emerald-700 hover:text-emerald-900 font-medium"
+                                      >
+                                        + agregar otra franja
+                                      </button>
+                                      <span className={`text-[10px] font-semibold tabular-nums ${
+                                        restan === 0 ? "text-emerald-700" : restan > 0 ? "text-amber-700" : "text-rose-700"
+                                      }`}>
+                                        {restan === 0
+                                          ? `✓ ${asignadas}/${it.cantidad}`
+                                          : restan > 0
+                                          ? `Falta ${restan}`
+                                          : `Sobra ${-restan}`}
+                                      </span>
+                                    </div>
+                                  </div>
+                                )}
                               </li>
                             );
                           })}
@@ -499,10 +608,10 @@ function PreviewIngresoModal({
                     </div>
 
                     <p className="mt-3 text-[11px] text-slate-500">
-                      Elegí la franja de venta prenda por prenda para asignar el precio real
-                      de cada una. Si dejás "franja original", se usa el precio con el que
-                      se cargó al recibir. Al confirmar se ingresan al stock con los precios
-                      aquí seleccionados.
+                      Podés dejar un item con su franja original o repartir su cantidad
+                      entre varias franjas (ej: 5 de 99mil + 4 de 84mil). La suma tiene
+                      que dar exacto la cantidad del item. Al confirmar se ingresan al
+                      stock con los precios aquí seleccionados.
                     </p>
 
                     {/* Footer con dos acciones */}
@@ -530,13 +639,29 @@ function PreviewIngresoModal({
                           type="button"
                           onClick={async () => {
                             if (!data) return;
+                            // Validación: cada item con splits debe sumar exacto
+                            // su cantidad y toda entrada tener franja + cantidad>0.
+                            const overrides: { item_id: string; splits: { producto_id: string; cantidad: number }[] }[] = [];
+                            for (const it of data.items) {
+                              const sp = splits[it.id] ?? [];
+                              if (sp.length === 0) continue; // sin override — usa original
+                              const suma = sp.reduce((a, s) => a + (s.cantidad || 0), 0);
+                              if (suma !== it.cantidad) {
+                                setErr(`El item "${it.producto_nombre}" tiene ${suma} asignadas y debe tener ${it.cantidad}. Ajustá las cantidades.`);
+                                return;
+                              }
+                              if (sp.some((s) => !s.franjaId || s.cantidad <= 0)) {
+                                setErr(`Elegí franja y cantidad > 0 para todas las líneas del item "${it.producto_nombre}".`);
+                                return;
+                              }
+                              overrides.push({
+                                item_id: it.id,
+                                splits: sp.map((s) => ({ producto_id: s.franjaId, cantidad: s.cantidad })),
+                              });
+                            }
                             setConfirmando(true);
                             setErr(null);
                             try {
-                              const overrides = Object.entries(asignacion).map(([key, producto_id]) => {
-                                const u = unidades.find(x => x.key === key);
-                                return u ? { item_id: u.item_id, producto_id } : null;
-                              }).filter(Boolean);
                               const rr = await fetchWithSupabaseSession(
                                 `/api/recepciones/${recepcionId}/ingresar-con-overrides`,
                                 {

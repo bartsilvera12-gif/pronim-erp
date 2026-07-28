@@ -14,17 +14,24 @@ import { API_ERRORS } from "@/lib/api/errors";
  * la cajera evaluó "más o menos" al recibir y ahora quiere asignar el
  * precio de venta real prenda por prenda.
  *
- * Body:
+ * Body (dos formas — se pueden mezclar por item):
  *   {
- *     overrides?: [{ item_id: uuid, producto_id: uuid }]
+ *     overrides?: [
+ *       // Forma 1: reasignar TODO el item a una franja (comportamiento clásico)
+ *       { item_id: uuid, producto_id: uuid },
+ *       // Forma 2: REPARTIR la cantidad del item en varias franjas
+ *       // (ej: 5 prendas van a franja 99mil, 4 a franja 84mil). Suma
+ *       // de cantidades debe igualar la cantidad del item.
+ *       { item_id: uuid, splits: [{ producto_id: uuid, cantidad: number }] }
+ *     ]
  *   }
  *
- * - Si `overrides` viene, actualiza esos items:
- *     * `producto_id` = la nueva franja (el productos.id que aporta el user)
- *     * `precio_venta_snapshot` = productos.precio_venta de esa nueva franja
- *     * `precio_compra_unitario` NO cambia (lo que se pagó al cliente sigue igual)
- *     * `producto_nombre` y `sku` se actualizan al del nuevo producto
- * - Si `overrides` está vacío / undefined, se ingresa tal cual.
+ * - Forma 1 es equivalente a `splits: [{producto_id, cantidad: <item.cantidad>}]`.
+ * - Para forma 2, la fila del item se ACTUALIZA a la primera franja del
+ *   split y su cantidad; las franjas restantes se crean como filas nuevas
+ *   clonando el resto de campos del item original.
+ * - `precio_compra_unitario` NO cambia (lo pagado al cliente sigue igual);
+ *   `subtotal` se recalcula = precio_compra_unitario * cantidad_split.
  *
  * Todo se hace en UNA sola transacción — si algo falla, rollback total
  * y la recepción sigue en estado 'pendiente_ingreso' sin daño.
@@ -45,13 +52,36 @@ export async function POST(
     if (!auth) return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
 
     const body = (await request.json().catch(() => ({}))) as {
-      overrides?: { item_id?: string; producto_id?: string }[];
+      overrides?: {
+        item_id?: string;
+        producto_id?: string;
+        splits?: { producto_id?: string; cantidad?: number }[];
+      }[];
     };
-    const overrides = Array.isArray(body.overrides)
-      ? body.overrides
-          .filter((o) => typeof o.item_id === "string" && typeof o.producto_id === "string" && o.item_id && o.producto_id)
-          .map((o) => ({ item_id: o.item_id as string, producto_id: o.producto_id as string }))
-      : [];
+    // Normalizamos a la forma agrupada por item_id → splits[]. Cualquier
+    // override sin `splits` se convierte al formato splits=[{producto_id}]
+    // con cantidad = <null>, y el server rellena la cantidad = item.cantidad
+    // más adelante (equivalente al comportamiento previo).
+    type Split = { producto_id: string; cantidad: number | null };
+    const overridesByItem = new Map<string, Split[]>();
+    if (Array.isArray(body.overrides)) {
+      for (const o of body.overrides) {
+        if (typeof o.item_id !== "string" || !o.item_id) continue;
+        const list = overridesByItem.get(o.item_id) ?? [];
+        if (Array.isArray(o.splits) && o.splits.length > 0) {
+          for (const s of o.splits) {
+            if (typeof s.producto_id !== "string" || !s.producto_id) continue;
+            const c = Number(s.cantidad);
+            if (!(Number.isFinite(c) && c > 0)) continue;
+            list.push({ producto_id: s.producto_id, cantidad: Math.floor(c) });
+          }
+        } else if (typeof o.producto_id === "string" && o.producto_id) {
+          // Forma clásica: 1 franja para todo el item.
+          list.push({ producto_id: o.producto_id, cantidad: null });
+        }
+        if (list.length > 0) overridesByItem.set(o.item_id, list);
+      }
+    }
 
     const schema = await fetchDataSchemaForEmpresaId(auth.empresa_id);
     assertAllowedChatDataSchema(schema);
@@ -92,11 +122,15 @@ export async function POST(
         return NextResponse.json(errorResponse(`No se puede ingresar en estado '${rec.estado}'.`), { status: 400 });
       }
 
-      // 1) Aplicar overrides si vinieron: reasignar producto_id + snapshot
-      //    del precio de venta al de la nueva franja.
-      if (overrides.length > 0) {
+      // 1) Aplicar overrides si vinieron: reasignar producto_id (opcionalmente
+      //    repartiendo el item en varias franjas → splits).
+      if (overridesByItem.size > 0) {
         // Validamos que todos los productos destino existan en el tenant.
-        const uniqProds = [...new Set(overrides.map((o) => o.producto_id))];
+        const uniqProds = [
+          ...new Set(
+            Array.from(overridesByItem.values()).flatMap((sp) => sp.map((s) => s.producto_id)),
+          ),
+        ];
         const prodQ = await client.query<{
           id: string; nombre: string; sku: string;
           precio_venta: string; activo: boolean; es_franja_precio: boolean;
@@ -107,44 +141,95 @@ export async function POST(
           [auth.empresa_id, uniqProds],
         );
         const prodById = new Map(prodQ.rows.map((p) => [p.id, p]));
-        for (const ov of overrides) {
-          const p = prodById.get(ov.producto_id);
-          if (!p) throw new Error(`Franja destino no encontrada: ${ov.producto_id}`);
-          if (!p.activo) throw new Error(`Franja ${p.nombre} está inactiva.`);
-          if (!p.es_franja_precio) throw new Error(`Producto ${p.nombre} no es una franja de precio válida.`);
+        for (const [, splits] of overridesByItem) {
+          for (const s of splits) {
+            const p = prodById.get(s.producto_id);
+            if (!p) throw new Error(`Franja destino no encontrada: ${s.producto_id}`);
+            if (!p.activo) throw new Error(`Franja ${p.nombre} está inactiva.`);
+            if (!p.es_franja_precio) throw new Error(`Producto ${p.nombre} no es una franja de precio válida.`);
+          }
         }
-        // Validamos también que los items pertenezcan a esta recepción.
-        const uniqItems = [...new Set(overrides.map((o) => o.item_id))];
-        const itemsQ = await client.query<{ id: string }>(
-          `SELECT id FROM ${recepItT}
-           WHERE recepcion_id = $1 AND id = ANY($2::uuid[])`,
+        // Validamos que los items pertenezcan a esta recepción y obtenemos
+        // su cantidad actual (para validar sumas de splits).
+        const uniqItems = [...overridesByItem.keys()];
+        const itemsQ = await client.query<{ id: string; cantidad: string }>(
+          `SELECT id, cantidad::text FROM ${recepItT}
+           WHERE recepcion_id = $1 AND id = ANY($2::uuid[])
+           FOR UPDATE`,
           [recepcionId, uniqItems],
         );
-        const itemIdsValidos = new Set(itemsQ.rows.map((r) => r.id));
-        for (const ov of overrides) {
-          if (!itemIdsValidos.has(ov.item_id)) {
-            throw new Error(`Item ${ov.item_id} no pertenece a esta recepción.`);
+        const itemCantById = new Map(itemsQ.rows.map((r) => [r.id, Number(r.cantidad)]));
+        for (const itemId of uniqItems) {
+          if (!itemCantById.has(itemId)) {
+            throw new Error(`Item ${itemId} no pertenece a esta recepción.`);
           }
         }
 
-        // UPDATE por override. Reasigna producto, precio_venta_snapshot,
-        // producto_nombre y sku. NO toca precio_compra_unitario ni cantidad.
-        for (const ov of overrides) {
-          const p = prodById.get(ov.producto_id)!;
+        // Aplicamos por item: primer split → UPDATE de la fila original;
+        // resto → INSERT clonando el resto de campos del item original.
+        for (const [itemId, splitsRaw] of overridesByItem) {
+          const cantOriginal = itemCantById.get(itemId)!;
+          // Rellenamos cantidad=null (forma clásica de un solo producto)
+          // con la cantidad total del item. Si hay varios splits, todos
+          // deben traer cantidad explícita.
+          const splits = splitsRaw.map((s) => ({
+            producto_id: s.producto_id,
+            cantidad: s.cantidad ?? cantOriginal,
+          }));
+          const suma = splits.reduce((a, s) => a + s.cantidad, 0);
+          if (suma !== cantOriginal) {
+            throw new Error(
+              `La suma de cantidades por franja (${suma}) no coincide con la cantidad del item (${cantOriginal}).`,
+            );
+          }
+
+          const first = splits[0];
+          const pFirst = prodById.get(first.producto_id)!;
           await client.query(
             `UPDATE ${recepItT}
                 SET producto_id = $1,
                     producto_nombre = $2,
                     sku = $3,
                     precio_venta_snapshot = $4,
+                    cantidad = $5,
+                    subtotal = COALESCE(precio_compra_unitario, 0) * $5,
                     margen_bruto_pct = CASE
                       WHEN $4::numeric > 0 AND precio_compra_unitario IS NOT NULL
                       THEN (($4::numeric - precio_compra_unitario) / $4::numeric) * 100
                       ELSE NULL
                     END
-              WHERE id = $5`,
-            [p.id, p.nombre, p.sku, Number(p.precio_venta), ov.item_id],
+              WHERE id = $6`,
+            [pFirst.id, pFirst.nombre, pFirst.sku, Number(pFirst.precio_venta), first.cantidad, itemId],
           );
+
+          // Splits adicionales → filas nuevas clonando empresa_id,
+          // recepcion_id, precio_compra_unitario, costo_historico_incompleto
+          // y tipo_prenda_id del item original.
+          for (let i = 1; i < splits.length; i++) {
+            const s = splits[i];
+            const p = prodById.get(s.producto_id)!;
+            await client.query(
+              `INSERT INTO ${recepItT} (
+                 empresa_id, recepcion_id, producto_id, producto_nombre, sku,
+                 cantidad, precio_compra_unitario, precio_venta_snapshot,
+                 subtotal, margen_bruto_pct, costo_historico_incompleto,
+                 tipo_prenda_id
+               )
+               SELECT empresa_id, recepcion_id, $1, $2, $3,
+                      $4, precio_compra_unitario, $5,
+                      COALESCE(precio_compra_unitario, 0) * $4,
+                      CASE
+                        WHEN $5::numeric > 0 AND precio_compra_unitario IS NOT NULL
+                        THEN (($5::numeric - precio_compra_unitario) / $5::numeric) * 100
+                        ELSE NULL
+                      END,
+                      costo_historico_incompleto,
+                      tipo_prenda_id
+                 FROM ${recepItT}
+                WHERE id = $6`,
+              [p.id, p.nombre, p.sku, s.cantidad, Number(p.precio_venta), itemId],
+            );
+          }
         }
       }
 
@@ -227,7 +312,7 @@ export async function POST(
         numero_control: rec.numero_control,
         estado: "ingresada",
         ingresada_at: upd.rows[0].ingresada_at,
-        overrides_aplicados: overrides.length,
+        overrides_aplicados: Array.from(overridesByItem.values()).reduce((a, s) => a + s.length, 0),
       }));
     } catch (e) {
       await client.query("ROLLBACK").catch(() => null);
