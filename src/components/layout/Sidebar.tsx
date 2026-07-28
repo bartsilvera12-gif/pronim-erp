@@ -42,7 +42,6 @@ import {
   Landmark,
   PlusCircle,
   Camera,
-  ArrowLeftRight,
   Scale,
 } from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
@@ -159,7 +158,6 @@ const MENU_STRUCTURE_FULL: MenuItem[] = [
   //   src/app/atencion/nueva/page.tsx     (cambio directo, sin tocar)
   { key: "venta", slug: "venta", label: "Venta", href: "/venta/nueva", icon: ShoppingCart },
   { key: "evaluacion", slug: "evaluacion", label: "Evaluación", href: "/evaluacion/nueva", icon: Scale },
-  { key: "atencion", slug: "atencion", label: "Cambio directo", href: "/atencion/nueva", icon: ArrowLeftRight },
   { key: "inventario", slug: "inventario", label: "Inventario", href: "/inventario", icon: Package, children: [
     { label: "Productos", href: "/inventario" },
     { label: "Movimientos", href: "/inventario/movimientos" },
