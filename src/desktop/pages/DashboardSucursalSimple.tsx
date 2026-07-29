@@ -43,24 +43,53 @@ function fmtFecha(iso: string, locale: string): string {
   try { return new Date(iso).toLocaleDateString(locale); } catch { return iso; }
 }
 
+type MetaSuc = {
+  meta_diaria: number;
+  meta_semanal: number;
+  vendido_hoy: number;
+  vendido_semana: number;
+  pct_dia: number;
+  pct_semana: number;
+  falta_hoy: number;
+  falta_semana: number;
+};
+
 export default function DashboardSucursalSimple() {
   const t = useT();
   const money = useMoney();
   const locale = money.moneda === "BRL" ? "pt-BR" : "es-PY";
   const fmtGs = (n: number) => money.format(n || 0);
   const [data, setData] = useState<Data | null>(null);
+  const [meta, setMeta] = useState<MetaSuc | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancel = false;
     setLoading(true);
-    fetchWithSupabaseSession("/api/dashboard/sucursal-simple", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((j) => {
+    Promise.all([
+      fetchWithSupabaseSession("/api/dashboard/sucursal-simple", { cache: "no-store" }).then((r) => r.json()),
+      fetchWithSupabaseSession("/api/metas", { cache: "no-store" }).then((r) => r.json()).catch(() => null),
+    ])
+      .then(([jDash, jMetas]) => {
         if (cancel) return;
-        if (!j?.success) throw new Error(j?.error ?? "Error");
-        setData(j.data as Data);
+        if (!jDash?.success) throw new Error(jDash?.error ?? "Error");
+        setData(jDash.data as Data);
+        // /api/metas devuelve un array; con auth.sucursal_id ya viene filtrado
+        // a la sucursal del usuario, así que tomamos la primera fila.
+        const first = jMetas?.data?.metas?.[0];
+        if (first && Number(first.meta_diaria) > 0) {
+          setMeta({
+            meta_diaria: Number(first.meta_diaria) || 0,
+            meta_semanal: Number(first.meta_semanal) || 0,
+            vendido_hoy: Number(first.vendido_hoy) || 0,
+            vendido_semana: Number(first.vendido_semana) || 0,
+            pct_dia: Number(first.pct_dia) || 0,
+            pct_semana: Number(first.pct_semana) || 0,
+            falta_hoy: Number(first.falta_hoy) || 0,
+            falta_semana: Number(first.falta_semana) || 0,
+          });
+        }
       })
       .catch((e) => { if (!cancel) setErr(e instanceof Error ? e.message : "Error"); })
       .finally(() => { if (!cancel) setLoading(false); });
@@ -88,6 +117,29 @@ export default function DashboardSucursalSimple() {
 
         {data && (
           <>
+            {meta && (
+              <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-4">
+                <h2 className="text-sm font-bold text-slate-800">{t("Meta de la sucursal")}</h2>
+                <MetaBar
+                  label={t("Hoy")}
+                  vendido={meta.vendido_hoy}
+                  objetivo={meta.meta_diaria}
+                  falta={meta.falta_hoy}
+                  pct={meta.pct_dia}
+                  fmt={fmtGs}
+                  t={t}
+                />
+                <MetaBar
+                  label={t("Esta semana")}
+                  vendido={meta.vendido_semana}
+                  objetivo={meta.meta_semanal}
+                  falta={meta.falta_semana}
+                  pct={meta.pct_semana}
+                  fmt={fmtGs}
+                  t={t}
+                />
+              </section>
+            )}
             <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <KpiCard label={t("Ventas de hoy")} value={fmtGs(data.ventas.total_hoy)} sub={`${data.ventas.count_hoy} ${t("operación(es)")}`} tone="emerald" />
               <KpiCard label={t("Ventas del mes")} value={fmtGs(data.ventas.total_mes)}
@@ -189,6 +241,41 @@ function KpiCard({ label, value, sub, tone }: {
       <p className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold">{label}</p>
       <p className="mt-0.5 text-lg font-bold tabular-nums text-slate-900">{value}</p>
       {sub && <p className="text-[11px] text-slate-500 mt-0.5">{sub}</p>}
+    </div>
+  );
+}
+
+function MetaBar({
+  label, vendido, objetivo, falta, pct, fmt, t,
+}: {
+  label: string; vendido: number; objetivo: number; falta: number; pct: number;
+  fmt: (n: number) => string;
+  t: (k: string) => string;
+}) {
+  const alcanzado = falta <= 0 && objetivo > 0;
+  const pctClamped = Math.min(100, Math.max(0, pct));
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</span>
+        <span className={`text-xs font-bold tabular-nums ${alcanzado ? "text-emerald-700" : "text-slate-700"}`}>
+          {pct}%
+        </span>
+      </div>
+      <div className="h-2.5 w-full rounded-full bg-slate-100 overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all ${alcanzado ? "bg-emerald-500" : "bg-[#4FAEB2]"}`}
+          style={{ width: `${pctClamped}%` }}
+        />
+      </div>
+      <div className="mt-1.5 flex items-center justify-between text-[11px] text-slate-500">
+        <span>{fmt(vendido)} <span className="text-slate-400">/ {fmt(objetivo)}</span></span>
+        {alcanzado ? (
+          <span className="font-semibold text-emerald-700">✓ {t("¡Meta alcanzada!")}</span>
+        ) : (
+          <span>{t("faltan")} <strong className="text-slate-700">{fmt(falta)}</strong></span>
+        )}
+      </div>
     </div>
   );
 }
