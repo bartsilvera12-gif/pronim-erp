@@ -49,15 +49,15 @@ export function membreteA4(origin = ""): string {
 }
 
 /**
- * Membrete compacto para ticket angosto (58/80mm): logo arriba, datos centrados.
+ * Membrete compacto para ticket angosto (58/80mm): sólo datos centrados.
+ * El logo del cliente ya no se imprime en el ticket (pedido de Karen).
  */
-export function membreteTicket(origin = ""): string {
+export function membreteTicket(_origin = ""): string {
+  void _origin;
   const e = EMPRESA_DOC;
-  const logo = origin ? `${origin}${e.logoUrl}` : e.logoUrl;
   return `
   <div style="text-align:center;padding-bottom:6px;margin-bottom:6px;border-bottom:1px dashed #000;">
-    <img src="${esc(logo)}" alt="${esc(e.nombre)}" style="max-width:260px;max-height:140px;width:auto;height:auto;object-fit:contain;display:inline-block;margin:0 auto 6px;" />
-    <div style="font-weight:700;font-size:12px;">${esc(e.nombre)}</div>
+    <div style="font-weight:700;font-size:13px;">${esc(e.nombre)}</div>
     ${e.telefono ? `<div style="font-size:10px;">Tel: ${esc(e.telefono)}</div>` : ""}
     ${e.direccion[0] ? `<div style="font-size:10px;">${esc(e.direccion[0])}</div>` : ""}
     ${e.direccion.length > 1 ? `<div style="font-size:10px;">${esc(e.direccion.slice(1).join(" · "))}</div>` : ""}
