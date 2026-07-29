@@ -77,19 +77,20 @@ export default function DashboardSucursalSimple() {
         setData(jDash.data as Data);
         // /api/metas devuelve un array; con auth.sucursal_id ya viene filtrado
         // a la sucursal del usuario, así que tomamos la primera fila.
+        // Siempre mostrar el bloque de meta — incluso si el endpoint
+        // devolvió warning (tabla metas_sucursal ausente) o la sucursal no
+        // tiene meta configurada. En esos casos mostramos un CTA al admin.
         const first = jMetas?.data?.metas?.[0];
-        if (first && Number(first.meta_diaria) > 0) {
-          setMeta({
-            meta_diaria: Number(first.meta_diaria) || 0,
-            meta_semanal: Number(first.meta_semanal) || 0,
-            vendido_hoy: Number(first.vendido_hoy) || 0,
-            vendido_semana: Number(first.vendido_semana) || 0,
-            pct_dia: Number(first.pct_dia) || 0,
-            pct_semana: Number(first.pct_semana) || 0,
-            falta_hoy: Number(first.falta_hoy) || 0,
-            falta_semana: Number(first.falta_semana) || 0,
-          });
-        }
+        setMeta({
+          meta_diaria: Number(first?.meta_diaria) || 0,
+          meta_semanal: Number(first?.meta_semanal) || 0,
+          vendido_hoy: Number(first?.vendido_hoy) || 0,
+          vendido_semana: Number(first?.vendido_semana) || 0,
+          pct_dia: Number(first?.pct_dia) || 0,
+          pct_semana: Number(first?.pct_semana) || 0,
+          falta_hoy: Number(first?.falta_hoy) || 0,
+          falta_semana: Number(first?.falta_semana) || 0,
+        });
       })
       .catch((e) => { if (!cancel) setErr(e instanceof Error ? e.message : "Error"); })
       .finally(() => { if (!cancel) setLoading(false); });
@@ -120,24 +121,32 @@ export default function DashboardSucursalSimple() {
             {meta && (
               <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-4">
                 <h2 className="text-sm font-bold text-slate-800">{t("Meta de la sucursal")}</h2>
-                <MetaBar
-                  label={t("Hoy")}
-                  vendido={meta.vendido_hoy}
-                  objetivo={meta.meta_diaria}
-                  falta={meta.falta_hoy}
-                  pct={meta.pct_dia}
-                  fmt={fmtGs}
-                  t={t}
-                />
-                <MetaBar
-                  label={t("Esta semana")}
-                  vendido={meta.vendido_semana}
-                  objetivo={meta.meta_semanal}
-                  falta={meta.falta_semana}
-                  pct={meta.pct_semana}
-                  fmt={fmtGs}
-                  t={t}
-                />
+                {meta.meta_diaria > 0 ? (
+                  <>
+                    <MetaBar
+                      label={t("Hoy")}
+                      vendido={meta.vendido_hoy}
+                      objetivo={meta.meta_diaria}
+                      falta={meta.falta_hoy}
+                      pct={meta.pct_dia}
+                      fmt={fmtGs}
+                      t={t}
+                    />
+                    <MetaBar
+                      label={t("Esta semana")}
+                      vendido={meta.vendido_semana}
+                      objetivo={meta.meta_semanal}
+                      falta={meta.falta_semana}
+                      pct={meta.pct_semana}
+                      fmt={fmtGs}
+                      t={t}
+                    />
+                  </>
+                ) : (
+                  <div className="rounded-lg border border-dashed border-amber-300 bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
+                    {t("Aún no hay una meta configurada para esta sucursal. Pedile al administrador que la fije en /admin/metas.")}
+                  </div>
+                )}
               </section>
             )}
             <section className="grid grid-cols-2 md:grid-cols-4 gap-3">

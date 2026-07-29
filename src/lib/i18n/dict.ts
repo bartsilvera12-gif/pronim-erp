@@ -349,6 +349,7 @@ const ptBR: Dict = {
   "Esta semana": "Esta semana",
   "¡Meta alcanzada!": "Meta alcançada!",
   "faltan": "faltam",
+  "Aún no hay una meta configurada para esta sucursal. Pedile al administrador que la fije en /admin/metas.": "Ainda não há uma meta configurada para esta filial. Peça ao administrador para defini-la em /admin/metas.",
   "orden registrada": "ordem registrada",
   "órdenes registradas": "ordens registradas",
   "Ticket promedio": "Ticket médio",
