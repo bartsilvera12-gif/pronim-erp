@@ -30,6 +30,11 @@ type MetaSucursal = {
     mejor_semana: { desde: string; total: number } | null;
     mejor_mes: { mes: string; total: number } | null;
   };
+  // Fase 2 tanda 7
+  meta_mensual?: number;
+  bono_meta_superada_pct?: number;
+  bono_ticket_prom_min?: number;
+  bono_ticket_prom_pct?: number;
 };
 
 // Formateo por moneda de LA SUCURSAL (no la del viewer). Sucursales de
@@ -57,7 +62,11 @@ export default function AdminMetasPage() {
   const [warn, setWarn] = useState<string | null>(null);
 
   // Edición inline por sucursal (drafts)
-  const [drafts, setDrafts] = useState<Record<string, { meta: string; comAlc: string; comNo: string; saving: boolean }>>({});
+  const [drafts, setDrafts] = useState<Record<string, {
+    meta: string; comAlc: string; comNo: string;
+    metaMes: string; bonoSup: string; bonoTkMin: string; bonoTkPct: string;
+    saving: boolean;
+  }>>({});
 
   const cargar = useCallback(async () => {
     setError(null);
@@ -74,6 +83,10 @@ export default function AdminMetasPage() {
           meta: String(m.meta_diaria),
           comAlc: String(m.comision_alcanza_pct),
           comNo: String(m.comision_no_alcanza_pct),
+          metaMes: m.meta_mensual ? String(m.meta_mensual) : "",
+          bonoSup: m.bono_meta_superada_pct ? String(m.bono_meta_superada_pct) : "",
+          bonoTkMin: m.bono_ticket_prom_min ? String(m.bono_ticket_prom_min) : "",
+          bonoTkPct: m.bono_ticket_prom_pct ? String(m.bono_ticket_prom_pct) : "",
           saving: false,
         };
       }
@@ -101,6 +114,10 @@ export default function AdminMetasPage() {
           monto_meta_diaria: Number(d.meta) || 0,
           comision_alcanza_pct: Number(d.comAlc) || 0,
           comision_no_alcanza_pct: Number(d.comNo) || 0,
+          monto_meta_mensual: d.metaMes.trim() ? Number(d.metaMes) : null,
+          bono_meta_superada_pct: Number(d.bonoSup) || 0,
+          bono_ticket_prom_min: d.bonoTkMin.trim() ? Number(d.bonoTkMin) : null,
+          bono_ticket_prom_pct: Number(d.bonoTkPct) || 0,
         }),
       });
       const j = await r.json().catch(() => ({}));
@@ -225,6 +242,48 @@ export default function AdminMetasPage() {
                         />
                       </div>
                     </div>
+
+                    {/* Bonos y meta mensual (Tanda 7) */}
+                    <p className="text-[11px] uppercase font-semibold text-slate-500 mt-4 mb-2">Meta mensual y bonos</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1" title="Si vacío se estima como diaria × 26">Meta mensual ({monedaLabel})</label>
+                        <MontoInput
+                          value={d.metaMes}
+                          decimals={false}
+                          onChange={(n) => setDrafts((p) => ({ ...p, [m.sucursal_id]: { ...p[m.sucursal_id], metaMes: n > 0 ? String(n) : "" } }))}
+                          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1" title="% extra si la sucursal SUPERA la meta semanal">Bono por superar meta (%)</label>
+                        <input
+                          type="number" min={0} max={100} step="0.1"
+                          value={d.bonoSup} placeholder="0"
+                          onChange={(e) => setDrafts((p) => ({ ...p, [m.sucursal_id]: { ...p[m.sucursal_id], bonoSup: e.target.value } }))}
+                          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1" title="Si el ticket promedio del mes supera este monto, se suma bono">Ticket prom. mín. ({monedaLabel})</label>
+                        <MontoInput
+                          value={d.bonoTkMin}
+                          decimals={false}
+                          onChange={(n) => setDrafts((p) => ({ ...p, [m.sucursal_id]: { ...p[m.sucursal_id], bonoTkMin: n > 0 ? String(n) : "" } }))}
+                          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1" title="% adicional que aplica si el ticket promedio supera el mínimo">Bono ticket alto (%)</label>
+                        <input
+                          type="number" min={0} max={100} step="0.1"
+                          value={d.bonoTkPct} placeholder="0"
+                          onChange={(e) => setDrafts((p) => ({ ...p, [m.sucursal_id]: { ...p[m.sucursal_id], bonoTkPct: e.target.value } }))}
+                          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
+                        />
+                      </div>
+                    </div>
+
                     <div className="flex justify-end mt-3">
                       <button
                         type="button"

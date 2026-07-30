@@ -56,6 +56,19 @@ type MetaSuc = {
   pct_semana: number;
   falta_hoy: number;
   falta_semana: number;
+  // Fase 2 tanda 7: proyección de cierre + ritmo del mes
+  meta_mensual?: number;
+  vendido_mes?: number;
+  pct_mes?: number;
+  falta_mes?: number;
+  proyeccion_cierre_mes?: number;
+  necesario_por_dia_mes?: number;
+  promedio_diario_actual?: number;
+  dias_restantes_mes?: number;
+  ritmo?: "encima" | "dentro" | "debajo" | "sin_meta";
+  comision_estimada?: number;
+  comision_pct_actual?: number;
+  ticket_promedio_mes?: number;
 };
 
 export default function DashboardSucursalSimple() {
@@ -94,6 +107,18 @@ export default function DashboardSucursalSimple() {
           pct_semana: Number(first?.pct_semana) || 0,
           falta_hoy: Number(first?.falta_hoy) || 0,
           falta_semana: Number(first?.falta_semana) || 0,
+          meta_mensual: Number(first?.meta_mensual) || 0,
+          vendido_mes: Number(first?.vendido_mes) || 0,
+          pct_mes: Number(first?.pct_mes) || 0,
+          falta_mes: Number(first?.falta_mes) || 0,
+          proyeccion_cierre_mes: Number(first?.proyeccion_cierre_mes) || 0,
+          necesario_por_dia_mes: Number(first?.necesario_por_dia_mes) || 0,
+          promedio_diario_actual: Number(first?.promedio_diario_actual) || 0,
+          dias_restantes_mes: Number(first?.dias_restantes_mes) || 0,
+          ritmo: (first?.ritmo as MetaSuc["ritmo"]) ?? "sin_meta",
+          comision_estimada: Number(first?.comision_estimada) || 0,
+          comision_pct_actual: Number(first?.comision_pct_actual) || 0,
+          ticket_promedio_mes: Number(first?.ticket_promedio_mes) || 0,
         });
       })
       .catch((e) => { if (!cancel) setErr(e instanceof Error ? e.message : "Error"); })
@@ -145,6 +170,21 @@ export default function DashboardSucursalSimple() {
                       fmt={fmtGs}
                       t={t}
                     />
+                    {(meta.meta_mensual ?? 0) > 0 && (
+                      <MetaBar
+                        label={t("Este mes")}
+                        vendido={meta.vendido_mes ?? 0}
+                        objetivo={meta.meta_mensual ?? 0}
+                        falta={meta.falta_mes ?? 0}
+                        pct={meta.pct_mes ?? 0}
+                        fmt={fmtGs}
+                        t={t}
+                      />
+                    )}
+                    {/* Proyección de cierre + ritmo (Tanda 7) */}
+                    {(meta.meta_mensual ?? 0) > 0 && (
+                      <ProyeccionCierre meta={meta} fmt={fmtGs} t={t} />
+                    )}
                   </>
                 ) : (
                   <div className="rounded-lg border border-dashed border-amber-300 bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
@@ -365,6 +405,64 @@ function MetaBar({
           <span>{t("faltan")} <strong className="text-slate-700">{fmt(falta)}</strong></span>
         )}
       </div>
+    </div>
+  );
+}
+
+function ProyeccionCierre({ meta, fmt, t }: {
+  meta: MetaSuc;
+  fmt: (n: number) => string;
+  t: (k: string) => string;
+}) {
+  const ritmo = meta.ritmo ?? "sin_meta";
+  const tone = ritmo === "encima" ? "emerald" : ritmo === "dentro" ? "sky" : ritmo === "debajo" ? "rose" : "slate";
+  const bg = tone === "emerald" ? "border-emerald-200 bg-emerald-50/60"
+    : tone === "sky" ? "border-sky-200 bg-sky-50/60"
+    : tone === "rose" ? "border-rose-200 bg-rose-50/60"
+    : "border-slate-200 bg-slate-50/60";
+  const label = ritmo === "encima" ? t("🚀 Por encima del ritmo")
+    : ritmo === "dentro" ? t("✓ Dentro del ritmo")
+    : ritmo === "debajo" ? t("⚠️ Por debajo del ritmo")
+    : t("Sin meta configurada");
+  const proyMayor = (meta.proyeccion_cierre_mes ?? 0) >= (meta.meta_mensual ?? 0);
+  return (
+    <div className={`rounded-lg border ${bg} p-3 space-y-2`}>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[11px] uppercase font-semibold text-slate-600">{t("Proyección de cierre")}</p>
+        <span className="text-[11px] font-semibold text-slate-700">{label}</span>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+        <div>
+          <p className="text-slate-500">{t("Ritmo actual")}</p>
+          <p className="font-bold text-slate-800 tabular-nums">{fmt(meta.promedio_diario_actual ?? 0)}/d</p>
+        </div>
+        <div>
+          <p className="text-slate-500">{t("Necesario/día")}</p>
+          <p className="font-bold text-slate-800 tabular-nums">{fmt(meta.necesario_por_dia_mes ?? 0)}</p>
+        </div>
+        <div>
+          <p className="text-slate-500">{t("Cierre proyectado")}</p>
+          <p className={`font-bold tabular-nums ${proyMayor ? "text-emerald-700" : "text-slate-800"}`}>{fmt(meta.proyeccion_cierre_mes ?? 0)}</p>
+        </div>
+        <div>
+          <p className="text-slate-500">{t("Comisión estimada")}</p>
+          <p className="font-bold text-slate-800 tabular-nums">
+            {fmt(meta.comision_estimada ?? 0)}
+            <span className="text-[10px] text-slate-500 font-normal ml-1">({(meta.comision_pct_actual ?? 0).toFixed(2)}%)</span>
+          </p>
+        </div>
+      </div>
+      {(meta.dias_restantes_mes ?? 0) > 0 && (
+        <p className="text-[11px] text-slate-500">
+          {t("Quedan")} <strong className="text-slate-700">{meta.dias_restantes_mes}</strong> {t("días este mes")}.
+          {ritmo === "debajo" && (meta.necesario_por_dia_mes ?? 0) > 0 && (
+            <> {t("Necesitás vender")} <strong className="text-rose-700">{fmt(meta.necesario_por_dia_mes ?? 0)}</strong> {t("por día para llegar")}.</>
+          )}
+          {ritmo === "encima" && (
+            <> {t("Manteniendo este ritmo cerrás en")} <strong className="text-emerald-700">{fmt(meta.proyeccion_cierre_mes ?? 0)}</strong>.</>
+          )}
+        </p>
+      )}
     </div>
   );
 }

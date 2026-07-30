@@ -44,37 +44,51 @@ export async function GET(request: NextRequest) {
       params.push(auth.sucursal_id);
       sucFilter = ` AND s.id = $2::uuid`;
     }
-    const sucRes = await pool.query<{
+    type SucMetaRow = {
       id: string; nombre: string; moneda: string;
       monto_meta_diaria: number | string | null;
       comision_alcanza_pct: number | string | null;
       comision_no_alcanza_pct: number | string | null;
-    }>(
+      monto_meta_semanal?: number | string | null;
+      monto_meta_mensual?: number | string | null;
+      bono_meta_superada_pct?: number | string | null;
+      bono_ticket_prom_min?: number | string | null;
+      bono_ticket_prom_pct?: number | string | null;
+    };
+    // Query completa (con columnas de bonos). Si el schema aún no tiene las
+    // columnas nuevas, cae al fallback → fallback → sin moneda.
+    const sucRes = await pool.query<SucMetaRow>(
       `SELECT s.id, s.nombre, COALESCE(s.moneda, 'PYG') AS moneda,
-              m.monto_meta_diaria, m.comision_alcanza_pct, m.comision_no_alcanza_pct
+              m.monto_meta_diaria, m.comision_alcanza_pct, m.comision_no_alcanza_pct,
+              m.monto_meta_semanal, m.monto_meta_mensual,
+              m.bono_meta_superada_pct, m.bono_ticket_prom_min, m.bono_ticket_prom_pct
          FROM ${tS} s
          LEFT JOIN ${tM} m ON m.sucursal_id = s.id AND m.activo = true
         WHERE s.empresa_id = $1::uuid AND s.activo = true${sucFilter}
         ORDER BY s.es_principal DESC, s.nombre ASC`,
       params,
-    ).catch(async () => {
-      // Fallback: schema sin columna 'moneda' → asumir PYG.
-      const r = await pool.query<{
-        id: string; nombre: string;
-        monto_meta_diaria: number | string | null;
-        comision_alcanza_pct: number | string | null;
-        comision_no_alcanza_pct: number | string | null;
-      }>(
-        `SELECT s.id, s.nombre,
+    ).catch(async () =>
+      pool.query<SucMetaRow>(
+        `SELECT s.id, s.nombre, COALESCE(s.moneda, 'PYG') AS moneda,
                 m.monto_meta_diaria, m.comision_alcanza_pct, m.comision_no_alcanza_pct
            FROM ${tS} s
            LEFT JOIN ${tM} m ON m.sucursal_id = s.id AND m.activo = true
           WHERE s.empresa_id = $1::uuid AND s.activo = true${sucFilter}
           ORDER BY s.es_principal DESC, s.nombre ASC`,
         params,
-      );
-      return { ...r, rows: r.rows.map(x => ({ ...x, moneda: 'PYG' })) };
-    });
+      ).catch(async () => {
+        const r = await pool.query<SucMetaRow>(
+          `SELECT s.id, s.nombre,
+                  m.monto_meta_diaria, m.comision_alcanza_pct, m.comision_no_alcanza_pct
+             FROM ${tS} s
+             LEFT JOIN ${tM} m ON m.sucursal_id = s.id AND m.activo = true
+            WHERE s.empresa_id = $1::uuid AND s.activo = true${sucFilter}
+            ORDER BY s.es_principal DESC, s.nombre ASC`,
+          params,
+        );
+        return { ...r, rows: r.rows.map(x => ({ ...x, moneda: 'PYG' })) };
+      }),
+    );
 
     // Fechas: hoy y lunes de esta semana (en zona local del server; suficiente
     // para KPIs. Para reportes finos se calcula con `AT TIME ZONE`.)
@@ -87,24 +101,42 @@ export async function GET(request: NextRequest) {
     const hoyStr = hoy.toISOString().slice(0, 10);
     const lunStr = lunes.toISOString().slice(0, 10);
 
-    // Suma por sucursal en día y semana (misma query).
+    // Inicio de mes.
+    const mesInicio = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+    const mesInicioStr = mesInicio.toISOString().slice(0, 10);
+    // Días laborables del mes en curso (aproximado — cuenta 26/mes por defecto).
+    const diasEnMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).getDate();
+    const diaDelMes = hoy.getDate();
+
+    // Suma por sucursal en día / semana / mes + tickets del mes (para ticket promedio).
     const kpisRes = await pool.query<{
-      sucursal_id: string; total_dia: number | string; total_semana: number | string;
+      sucursal_id: string;
+      total_dia: number | string;
+      total_semana: number | string;
+      total_mes: number | string;
+      tickets_mes: number | string;
     }>(
       `SELECT sucursal_id,
               COALESCE(SUM(total) FILTER (WHERE fecha::date = $2::date), 0)::float8 AS total_dia,
-              COALESCE(SUM(total) FILTER (WHERE fecha::date >= $3::date), 0)::float8 AS total_semana
+              COALESCE(SUM(total) FILTER (WHERE fecha::date >= $3::date), 0)::float8 AS total_semana,
+              COALESCE(SUM(total) FILTER (WHERE fecha::date >= $4::date), 0)::float8 AS total_mes,
+              COUNT(*) FILTER (WHERE fecha::date >= $4::date)::float8 AS tickets_mes
          FROM ${tV}
         WHERE empresa_id = $1::uuid
           AND estado <> 'anulada'
-          AND fecha::date >= $3::date
+          AND fecha::date >= $4::date
           AND sucursal_id IS NOT NULL
         GROUP BY sucursal_id`,
-      [auth.empresa_id, hoyStr, lunStr],
+      [auth.empresa_id, hoyStr, lunStr, mesInicioStr],
     );
-    const kpisBySuc = new Map<string, { dia: number; semana: number }>();
+    const kpisBySuc = new Map<string, { dia: number; semana: number; mes: number; tickets: number }>();
     for (const r of kpisRes.rows) {
-      kpisBySuc.set(r.sucursal_id, { dia: Number(r.total_dia), semana: Number(r.total_semana) });
+      kpisBySuc.set(r.sucursal_id, {
+        dia: Number(r.total_dia),
+        semana: Number(r.total_semana),
+        mes: Number(r.total_mes),
+        tickets: Number(r.tickets_mes),
+      });
     }
 
     // Récords por sucursal.
@@ -157,14 +189,41 @@ export async function GET(request: NextRequest) {
       const metaDia = Number(r.monto_meta_diaria ?? 0);
       const comAlc = Number(r.comision_alcanza_pct ?? 1);
       const comNo = Number(r.comision_no_alcanza_pct ?? 0.5);
-      const kpi = kpisBySuc.get(r.id) ?? { dia: 0, semana: 0 };
-      const metaSem = metaDia * 7; // meta semanal = 7 × meta diaria
+      const bonoSuperada = Number(r.bono_meta_superada_pct ?? 0);
+      const bonoTkMin = Number(r.bono_ticket_prom_min ?? 0);
+      const bonoTkPct = Number(r.bono_ticket_prom_pct ?? 0);
+      const kpi = kpisBySuc.get(r.id) ?? { dia: 0, semana: 0, mes: 0, tickets: 0 };
+      const metaSem = Number(r.monto_meta_semanal ?? 0) || metaDia * 7;
+      const metaMes = Number(r.monto_meta_mensual ?? 0) || metaDia * 26;
       const metaSemProrrateada = metaDia * diasTranscurridos;
       const pctDia = metaDia > 0 ? Math.round((kpi.dia / metaDia) * 100) : 0;
       const pctSem = metaSem > 0 ? Math.round((kpi.semana / metaSem) * 100) : 0;
+      const pctMes = metaMes > 0 ? Math.round((kpi.mes / metaMes) * 100) : 0;
       const alcanza = metaSem > 0 && kpi.semana >= metaSem;
-      const pctComision = alcanza ? comAlc : comNo;
+      const supera = metaSem > 0 && kpi.semana > metaSem;
+      const ticketProm = kpi.tickets > 0 ? kpi.mes / kpi.tickets : 0;
+
+      // Comisión escalonada:
+      //   - alcanza meta semanal → comAlc + bonoSuperada (si la superó)
+      //   - ticket promedio del mes >= umbral → suma bonoTkPct
+      //   - sino → comNo
+      let pctComision = alcanza ? comAlc : comNo;
+      if (supera) pctComision += bonoSuperada;
+      if (bonoTkMin > 0 && ticketProm >= bonoTkMin) pctComision += bonoTkPct;
       const comisionEstimada = (kpi.semana * pctComision) / 100;
+
+      // Proyección de cierre del mes: extrapola el ritmo actual (mes / díaActual).
+      // Ritmo: por encima/dentro/debajo comparado con el necesario para meta.
+      const promedioDiarioActual = diaDelMes > 0 ? kpi.mes / diaDelMes : 0;
+      const proyeccionCierreMes = promedioDiarioActual * diasEnMes;
+      const diasRestantes = Math.max(0, diasEnMes - diaDelMes);
+      const necesarioPorDiaMes = diasRestantes > 0 ? Math.max(0, metaMes - kpi.mes) / diasRestantes : 0;
+      let ritmo: "encima" | "dentro" | "debajo" | "sin_meta" = "sin_meta";
+      if (metaMes > 0) {
+        const necesarioAcumulado = (metaMes / diasEnMes) * diaDelMes;
+        const razon = kpi.mes / (necesarioAcumulado || 1);
+        ritmo = razon >= 1.05 ? "encima" : razon >= 0.95 ? "dentro" : "debajo";
+      }
       const rec = recBySuc.get(r.id);
       return {
         sucursal_id: r.id,
@@ -172,18 +231,33 @@ export async function GET(request: NextRequest) {
         moneda: r.moneda,
         meta_diaria: metaDia,
         meta_semanal: metaSem,
+        meta_mensual: metaMes,
         meta_semanal_prorrateada: metaSemProrrateada,
         comision_alcanza_pct: comAlc,
         comision_no_alcanza_pct: comNo,
+        bono_meta_superada_pct: bonoSuperada,
+        bono_ticket_prom_min: bonoTkMin,
+        bono_ticket_prom_pct: bonoTkPct,
         vendido_hoy: kpi.dia,
         vendido_semana: kpi.semana,
+        vendido_mes: kpi.mes,
+        tickets_mes: kpi.tickets,
+        ticket_promedio_mes: Math.round(ticketProm),
         pct_dia: pctDia,
         pct_semana: pctSem,
+        pct_mes: pctMes,
         falta_hoy: Math.max(0, metaDia - kpi.dia),
         falta_semana: Math.max(0, metaSem - kpi.semana),
+        falta_mes: Math.max(0, metaMes - kpi.mes),
         alcanza_semana: alcanza,
         comision_pct_actual: pctComision,
         comision_estimada: Math.round(comisionEstimada),
+        // Proyección de cierre y ritmo (dashboard colaboradora)
+        proyeccion_cierre_mes: Math.round(proyeccionCierreMes),
+        necesario_por_dia_mes: Math.round(necesarioPorDiaMes),
+        promedio_diario_actual: Math.round(promedioDiarioActual),
+        dias_restantes_mes: diasRestantes,
+        ritmo,
         records: {
           mejor_dia: rec?.mejor_dia_fecha ? { fecha: rec.mejor_dia_fecha, total: Number(rec.mejor_dia_total) } : null,
           mejor_semana: rec?.mejor_sem_ini ? { desde: rec.mejor_sem_ini, total: Number(rec.mejor_sem_total) } : null,
@@ -231,6 +305,11 @@ export async function PATCH(request: NextRequest) {
     monto_meta_diaria?: number | string;
     comision_alcanza_pct?: number | string;
     comision_no_alcanza_pct?: number | string;
+    monto_meta_semanal?: number | string | null;
+    monto_meta_mensual?: number | string | null;
+    bono_meta_superada_pct?: number | string;
+    bono_ticket_prom_min?: number | string | null;
+    bono_ticket_prom_pct?: number | string;
   };
   try { body = await request.json(); } catch {
     return NextResponse.json(errorResponse("JSON inválido."), { status: 400 });
@@ -271,24 +350,80 @@ export async function PATCH(request: NextRequest) {
       `SELECT id FROM ${tM} WHERE sucursal_id = $1::uuid AND activo = true LIMIT 1`,
       [sucId],
     );
-    if (existe.rows[0]) {
-      await pool.query(
-        `UPDATE ${tM} SET
-            monto_meta_diaria = $1::numeric,
-            comision_alcanza_pct = COALESCE($2::numeric, comision_alcanza_pct),
-            comision_no_alcanza_pct = COALESCE($3::numeric, comision_no_alcanza_pct),
-            updated_at = now(),
-            updated_by = $4,
-            updated_by_nombre = $5
-          WHERE id = $6::uuid`,
-        [monto, comAlc, comNo, auth.usuarioCatalogId ?? null, auth.nombre ?? auth.user?.email ?? null, existe.rows[0].id],
-      );
-    } else {
-      await pool.query(
-        `INSERT INTO ${tM} (empresa_id, sucursal_id, monto_meta_diaria, comision_alcanza_pct, comision_no_alcanza_pct, updated_by, updated_by_nombre)
-         VALUES ($1::uuid, $2::uuid, $3::numeric, COALESCE($4::numeric, 1), COALESCE($5::numeric, 0.5), $6, $7)`,
-        [auth.empresa_id, sucId, monto, comAlc, comNo, auth.usuarioCatalogId ?? null, auth.nombre ?? auth.user?.email ?? null],
-      );
+    // Bonos y metas opcionales (tanda 7). Best-effort: si el schema aún no
+    // tiene esas columnas, degradamos al UPDATE/INSERT legacy sin bonos.
+    const metaSem = body.monto_meta_semanal != null ? Number(body.monto_meta_semanal) : null;
+    const metaMes = body.monto_meta_mensual != null ? Number(body.monto_meta_mensual) : null;
+    const bonoSup = body.bono_meta_superada_pct != null ? Number(body.bono_meta_superada_pct) : null;
+    const bonoTkMin = body.bono_ticket_prom_min != null ? Number(body.bono_ticket_prom_min) : null;
+    const bonoTkPct = body.bono_ticket_prom_pct != null ? Number(body.bono_ticket_prom_pct) : null;
+
+    const tryExtendido = async (): Promise<boolean> => {
+      try {
+        if (existe.rows[0]) {
+          await pool.query(
+            `UPDATE ${tM} SET
+                monto_meta_diaria = $1::numeric,
+                comision_alcanza_pct = COALESCE($2::numeric, comision_alcanza_pct),
+                comision_no_alcanza_pct = COALESCE($3::numeric, comision_no_alcanza_pct),
+                monto_meta_semanal = $6::numeric,
+                monto_meta_mensual = $7::numeric,
+                bono_meta_superada_pct = COALESCE($8::numeric, bono_meta_superada_pct),
+                bono_ticket_prom_min = $9::numeric,
+                bono_ticket_prom_pct = COALESCE($10::numeric, bono_ticket_prom_pct),
+                updated_at = now(),
+                updated_by = $4,
+                updated_by_nombre = $5
+              WHERE id = $11::uuid`,
+            [monto, comAlc, comNo, auth.usuarioCatalogId ?? null, auth.nombre ?? auth.user?.email ?? null,
+              metaSem, metaMes, bonoSup, bonoTkMin, bonoTkPct, existe.rows[0].id],
+          );
+        } else {
+          await pool.query(
+            `INSERT INTO ${tM} (empresa_id, sucursal_id, monto_meta_diaria,
+               comision_alcanza_pct, comision_no_alcanza_pct,
+               monto_meta_semanal, monto_meta_mensual,
+               bono_meta_superada_pct, bono_ticket_prom_min, bono_ticket_prom_pct,
+               updated_by, updated_by_nombre)
+             VALUES ($1::uuid, $2::uuid, $3::numeric,
+               COALESCE($4::numeric, 1), COALESCE($5::numeric, 0.5),
+               $6::numeric, $7::numeric,
+               COALESCE($8::numeric, 0), $9::numeric, COALESCE($10::numeric, 0),
+               $11, $12)`,
+            [auth.empresa_id, sucId, monto, comAlc, comNo, metaSem, metaMes,
+              bonoSup, bonoTkMin, bonoTkPct,
+              auth.usuarioCatalogId ?? null, auth.nombre ?? auth.user?.email ?? null],
+          );
+        }
+        return true;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (/column.*(monto_meta_semanal|monto_meta_mensual|bono_)/i.test(msg)) return false;
+        throw e;
+      }
+    };
+    const ok = await tryExtendido();
+    if (!ok) {
+      // Fallback: schema sin columnas nuevas → escribimos solo lo legacy.
+      if (existe.rows[0]) {
+        await pool.query(
+          `UPDATE ${tM} SET
+              monto_meta_diaria = $1::numeric,
+              comision_alcanza_pct = COALESCE($2::numeric, comision_alcanza_pct),
+              comision_no_alcanza_pct = COALESCE($3::numeric, comision_no_alcanza_pct),
+              updated_at = now(),
+              updated_by = $4,
+              updated_by_nombre = $5
+            WHERE id = $6::uuid`,
+          [monto, comAlc, comNo, auth.usuarioCatalogId ?? null, auth.nombre ?? auth.user?.email ?? null, existe.rows[0].id],
+        );
+      } else {
+        await pool.query(
+          `INSERT INTO ${tM} (empresa_id, sucursal_id, monto_meta_diaria, comision_alcanza_pct, comision_no_alcanza_pct, updated_by, updated_by_nombre)
+           VALUES ($1::uuid, $2::uuid, $3::numeric, COALESCE($4::numeric, 1), COALESCE($5::numeric, 0.5), $6, $7)`,
+          [auth.empresa_id, sucId, monto, comAlc, comNo, auth.usuarioCatalogId ?? null, auth.nombre ?? auth.user?.email ?? null],
+        );
+      }
     }
     return NextResponse.json(successResponse({ ok: true }));
   } catch (e) {
