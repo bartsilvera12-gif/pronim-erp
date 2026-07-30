@@ -147,6 +147,20 @@ function ivaResumen(v: Venta): string {
 
 // ── Componente principal ───────────────────────────────────────────────────────
 
+function SortableTh<K extends string>({ sortKey, active, dir, onClick, className, children }: {
+  sortKey: K; active: K | null; dir: "asc" | "desc"; onClick: (k: K) => void;
+  className?: string; children: React.ReactNode;
+}) {
+  const isActive = active === sortKey;
+  const arrow = isActive ? (dir === "asc" ? "▲" : "▼") : "";
+  return (
+    <th className={`${className ?? ""} cursor-pointer select-none hover:text-[#3F8E91]`} onClick={() => onClick(sortKey)} title="Ordenar">
+      {children}
+      {arrow && <span className="ml-1 text-[10px] text-[#4FAEB2]">{arrow}</span>}
+    </th>
+  );
+}
+
 export default function VentasPage() {
   const t = useT();
   const money = useMoney();
@@ -168,6 +182,15 @@ export default function VentasPage() {
   const [filtroPago,     setFiltroPago]     = useState<"" | "efectivo" | "tarjeta" | "transferencia" | "qr" | "billetera" | "otro">("");
   const [filtroEstado,   setFiltroEstado]   = useState<"" | "completada" | "anulada">("");
   const [segmento,       setSegmento]       = useState<"" | "hoy" | "semana" | "mes" | "con_descuento" | "anuladas">("");
+  // Ordenamiento por columna (fase 2 tanda 3.b)
+  type VentaSortKey = "numero_control" | "cant_items" | "cant_total" | "total" | "tipo_venta" | "metodo_pago" | "sucursal" | "fecha";
+  const [sortKey, setSortKey] = useState<VentaSortKey | null>("fecha");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  function toggleSort(key: VentaSortKey) {
+    if (sortKey !== key) { setSortKey(key); setSortDir("desc"); return; }
+    if (sortDir === "desc") { setSortDir("asc"); return; }
+    setSortKey(null); setSortDir("desc");
+  }
   const [sucursales, setSucursales] = useState<{ id: string; nombre: string }[]>([]);
   const [cargandoLista, setCargandoLista] = useState(true);
   // Modal para anular una venta desde el listado. La venta a anular
@@ -319,6 +342,25 @@ export default function VentasPage() {
     }
     return true;
   });
+
+  const filtradasOrdenadas = (() => {
+    if (!sortKey) return filtradas;
+    const dir = sortDir === "asc" ? 1 : -1;
+    const arr = [...filtradas];
+    return arr.sort((a, b) => {
+      switch (sortKey) {
+        case "numero_control": return a.numero_control.localeCompare(b.numero_control) * dir;
+        case "cant_items":     return (a.items.length - b.items.length) * dir;
+        case "cant_total":     return (a.items.reduce((s, i) => s + i.cantidad, 0) - b.items.reduce((s, i) => s + i.cantidad, 0)) * dir;
+        case "total":          return (a.total - b.total) * dir;
+        case "tipo_venta":     return a.tipo_venta.localeCompare(b.tipo_venta) * dir;
+        case "metodo_pago":    return ((a.metodo_pago ?? "") as string).localeCompare((b.metodo_pago ?? "") as string) * dir;
+        case "sucursal":       return ((a.sucursal_nombre ?? "") as string).localeCompare((b.sucursal_nombre ?? "") as string) * dir;
+        case "fecha":          return (Date.parse(a.fecha) - Date.parse(b.fecha)) * dir;
+        default: return 0;
+      }
+    });
+  })();
 
   const hayFiltros = busqueda || filtroTipo || filtroIva || filtroSucursal;
 
@@ -535,16 +577,16 @@ export default function VentasPage() {
           <table className="w-full min-w-[760px] lg:min-w-0 text-left text-sm">
             <thead>
               <tr className="bg-slate-50 text-slate-600 text-sm font-semibold">
-                <th className="py-3 pr-4 font-medium">{t("Número")}</th>
+                <SortableTh sortKey="numero_control" active={sortKey} dir={sortDir} onClick={toggleSort} className="py-3 pr-4 font-medium">{t("Número")}</SortableTh>
                 <th className="py-3 pr-4 font-medium">{t("Productos")}</th>
-                <th className="hidden py-3 pr-4 text-center font-medium lg:table-cell">{t("Ítems")}</th>
-                <th className="py-3 pr-4 font-medium text-right hidden lg:table-cell">{t("Cant. total")}</th>
+                <SortableTh sortKey="cant_items" active={sortKey} dir={sortDir} onClick={toggleSort} className="hidden py-3 pr-4 text-center font-medium lg:table-cell">{t("Ítems")}</SortableTh>
+                <SortableTh sortKey="cant_total" active={sortKey} dir={sortDir} onClick={toggleSort} className="py-3 pr-4 font-medium text-right hidden lg:table-cell">{t("Cant. total")}</SortableTh>
                 <th className="py-3 pr-4 font-medium hidden lg:table-cell">IVA</th>
-                <th className="py-3 pr-4 font-medium text-right">{t("Total")}</th>
-                <th className="hidden py-3 pr-4 font-medium lg:table-cell">{t("Tipo")}</th>
-                <th className="hidden py-3 pr-4 font-medium lg:table-cell">{t("Pago")}</th>
-                <th className="hidden py-3 pr-4 font-medium lg:table-cell">{t("Sucursal")}</th>
-                <th className="py-3 pr-4 font-medium">{t("Fecha")}</th>
+                <SortableTh sortKey="total" active={sortKey} dir={sortDir} onClick={toggleSort} className="py-3 pr-4 font-medium text-right">{t("Total")}</SortableTh>
+                <SortableTh sortKey="tipo_venta" active={sortKey} dir={sortDir} onClick={toggleSort} className="hidden py-3 pr-4 font-medium lg:table-cell">{t("Tipo")}</SortableTh>
+                <SortableTh sortKey="metodo_pago" active={sortKey} dir={sortDir} onClick={toggleSort} className="hidden py-3 pr-4 font-medium lg:table-cell">{t("Pago")}</SortableTh>
+                <SortableTh sortKey="sucursal" active={sortKey} dir={sortDir} onClick={toggleSort} className="hidden py-3 pr-4 font-medium lg:table-cell">{t("Sucursal")}</SortableTh>
+                <SortableTh sortKey="fecha" active={sortKey} dir={sortDir} onClick={toggleSort} className="py-3 pr-4 font-medium">{t("Fecha")}</SortableTh>
                 <th className="py-3 font-medium text-center">{t("Ticket")}</th>
               </tr>
             </thead>
@@ -561,7 +603,7 @@ export default function VentasPage() {
                     </div>
                   </td>
                 </tr>
-              ) : filtradas.length === 0 ? (
+              ) : filtradasOrdenadas.length === 0 ? (
                 <tr>
                   <td colSpan={11} className="py-12 text-center text-gray-400">
                     {todas.length === 0
@@ -570,7 +612,7 @@ export default function VentasPage() {
                   </td>
                 </tr>
               ) : (
-                filtradas.map((v) => {
+                filtradasOrdenadas.map((v) => {
                   const cantTotal = v.items.reduce((s, i) => s + i.cantidad, 0);
                   return (
                     <tr key={v.id} className="border-b border-slate-200 last:border-0 hover:bg-[#4FAEB2]/[0.04] transition-colors">

@@ -74,6 +74,15 @@ export default function InventarioPage() {
   const [segmento, setSegmento] = useState<Segmento>("");
   const [precioMin, setPrecioMin] = useState<string>("");
   const [precioMax, setPrecioMax] = useState<string>("");
+  // Ordenamiento por columna (tanda 3.b)
+  type InvSortKey = "nombre" | "sku" | "costo_promedio" | "precio_venta" | "stock_actual" | "stock_minimo" | "margen" | "ultima_venta_at";
+  const [sortKey, setSortKey] = useState<InvSortKey | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  function toggleSort(key: InvSortKey) {
+    if (sortKey !== key) { setSortKey(key); setSortDir("desc"); return; }
+    if (sortDir === "desc") { setSortDir("asc"); return; }
+    setSortKey(null); setSortDir("desc");
+  }
 
   // Paginación client-side. Default 50 (chico, legible, no fríe al browser
   // con 6000 filas). El usuario puede subir a 100 o "todos" si quiere ver
@@ -342,15 +351,35 @@ export default function InventarioPage() {
     segmento, precioMin, precioMax,
   ]);
 
+  // Aplicar ordenamiento después de filtros. Comparadores tipados por columna.
+  const productosOrdenados = useMemo(() => {
+    if (!sortKey) return productos;
+    const dir = sortDir === "asc" ? 1 : -1;
+    const arr = [...productos];
+    return arr.sort((a, b) => {
+      switch (sortKey) {
+        case "nombre":          return a.nombre.localeCompare(b.nombre, "es") * dir;
+        case "sku":             return a.sku.localeCompare(b.sku, "es") * dir;
+        case "costo_promedio":  return (a.costo_promedio - b.costo_promedio) * dir;
+        case "precio_venta":    return (a.precio_venta - b.precio_venta) * dir;
+        case "stock_actual":    return (a.stock_actual - b.stock_actual) * dir;
+        case "stock_minimo":    return (a.stock_minimo - b.stock_minimo) * dir;
+        case "margen":          return (calcularMargenVenta(a.costo_promedio, a.precio_venta) - calcularMargenVenta(b.costo_promedio, b.precio_venta)) * dir;
+        case "ultima_venta_at": return ((Date.parse(a.ultima_venta_at ?? "") || 0) - (Date.parse(b.ultima_venta_at ?? "") || 0)) * dir;
+        default: return 0;
+      }
+    });
+  }, [productos, sortKey, sortDir]);
+
   // Slice paginado para renderizar sólo la página actual (la lista filtrada
   // puede tener miles de filas; renderizar todas fríe al browser).
-  const totalPaginas = pageSize === "todos" ? 1 : Math.max(1, Math.ceil(productos.length / pageSize));
+  const totalPaginas = pageSize === "todos" ? 1 : Math.max(1, Math.ceil(productosOrdenados.length / pageSize));
   const paginaSegura = Math.min(paginaActual, totalPaginas - 1);
   const productosPagina = useMemo(() => {
-    if (pageSize === "todos") return productos;
+    if (pageSize === "todos") return productosOrdenados;
     const start = paginaSegura * pageSize;
-    return productos.slice(start, start + pageSize);
-  }, [productos, paginaSegura, pageSize]);
+    return productosOrdenados.slice(start, start + pageSize);
+  }, [productosOrdenados, paginaSegura, pageSize]);
 
   // Resumen del listado visible (por pestaña). Solo productos que controlan stock
   // entran en valorizado / bajo / disponibles; el resto (Menú sin control) se cuenta
@@ -746,18 +775,20 @@ export default function InventarioPage() {
 
             <thead>
               <tr className="bg-slate-50 text-slate-600 text-sm font-semibold">
-                <th className="py-3 pr-4 font-medium">Nombre</th>
-                <th className="hidden py-3 pr-4 font-medium lg:table-cell">SKU</th>
-                <th className="py-3 pr-4 font-medium">Costo Prom.</th>
-                {tab !== "materia" && <th className="py-3 pr-4 font-medium">Precio Venta</th>}
-                <th className="py-3 pr-4 font-medium text-center">Stock actual</th>
-                <th className="py-3 pr-4 text-center font-medium hidden lg:table-cell">Stock Mín.</th>
+                <ThInv sortKey="nombre"          active={sortKey} dir={sortDir} onClick={toggleSort} className="py-3 pr-4 font-medium">Nombre</ThInv>
+                <ThInv sortKey="sku"             active={sortKey} dir={sortDir} onClick={toggleSort} className="hidden py-3 pr-4 font-medium lg:table-cell">SKU</ThInv>
+                <ThInv sortKey="costo_promedio"  active={sortKey} dir={sortDir} onClick={toggleSort} className="py-3 pr-4 font-medium">Costo Prom.</ThInv>
+                {tab !== "materia" && (
+                  <ThInv sortKey="precio_venta"  active={sortKey} dir={sortDir} onClick={toggleSort} className="py-3 pr-4 font-medium">Precio Venta</ThInv>
+                )}
+                <ThInv sortKey="stock_actual"    active={sortKey} dir={sortDir} onClick={toggleSort} className="py-3 pr-4 font-medium text-center">Stock actual</ThInv>
+                <ThInv sortKey="stock_minimo"    active={sortKey} dir={sortDir} onClick={toggleSort} className="py-3 pr-4 text-center font-medium hidden lg:table-cell">Stock Mín.</ThInv>
                 <th className="py-3 pr-4 font-medium text-center">Activo</th>
                 <th className="py-3 pr-4 font-medium text-center">Destacado</th>
                 {tab !== "materia" && (
-                  <th className="hidden py-3 pr-6 text-right font-medium lg:table-cell">
+                  <ThInv sortKey="margen" active={sortKey} dir={sortDir} onClick={toggleSort} className="hidden py-3 pr-6 text-right font-medium lg:table-cell">
                     <span title="(precio - costo) / precio × 100">Margen s/venta</span>
-                  </th>
+                  </ThInv>
                 )}
                 <th className="py-3 pl-4 font-medium text-center w-32">Acción</th>
               </tr>
@@ -962,5 +993,19 @@ export default function InventarioPage() {
       </div>
 
     </div>
+  );
+}
+
+function ThInv<K extends string>({ sortKey, active, dir, onClick, className, children }: {
+  sortKey: K; active: K | null; dir: "asc" | "desc"; onClick: (k: K) => void;
+  className?: string; children: React.ReactNode;
+}) {
+  const isActive = active === sortKey;
+  const arrow = isActive ? (dir === "asc" ? "▲" : "▼") : "";
+  return (
+    <th className={`${className ?? ""} cursor-pointer select-none hover:text-[#3F8E91]`} onClick={() => onClick(sortKey)} title="Ordenar">
+      {children}
+      {arrow && <span className="ml-1 text-[10px] text-[#4FAEB2]">{arrow}</span>}
+    </th>
   );
 }
