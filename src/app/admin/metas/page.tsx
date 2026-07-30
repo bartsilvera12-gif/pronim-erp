@@ -5,9 +5,12 @@ import Link from "next/link";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import MontoInput from "@/components/ui/MontoInput";
 
+type Moneda = "PYG" | "BRL" | "USD" | "ARS";
+
 type MetaSucursal = {
   sucursal_id: string;
   sucursal_nombre: string;
+  moneda?: Moneda;
   meta_diaria: number;
   meta_semanal: number;
   meta_semanal_prorrateada: number;
@@ -29,9 +32,15 @@ type MetaSucursal = {
   };
 };
 
-function fmtGs(n: number | null | undefined): string {
+// Formateo por moneda de LA SUCURSAL (no la del viewer). Sucursales de
+// Brasil (BRL) muestran R$ con locale pt-BR aunque el admin las mire desde PY.
+function fmtMonto(n: number | null | undefined, moneda: Moneda = "PYG"): string {
   if (n == null || !Number.isFinite(Number(n))) return "—";
-  return "Gs. " + Math.round(Number(n)).toLocaleString("es-PY");
+  const num = Number(n);
+  const sym = moneda === "BRL" ? "R$" : moneda === "USD" ? "US$" : moneda === "ARS" ? "$" : "Gs.";
+  const locale = moneda === "BRL" ? "pt-BR" : "es-PY";
+  const decimals = moneda === "PYG" || moneda === "ARS" ? 0 : 2;
+  return `${sym} ${num.toLocaleString(locale, { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
 }
 
 function fmtFecha(iso: string | null): string {
@@ -133,6 +142,9 @@ export default function AdminMetasPage() {
         <div className="space-y-4">
           {metas.map((m) => {
             const d = drafts[m.sucursal_id];
+            const moneda: Moneda = (m.moneda ?? "PYG");
+            const fmt = (n: number | null | undefined) => fmtMonto(n, moneda);
+            const monedaLabel = moneda === "BRL" ? "R$" : moneda === "USD" ? "US$" : moneda === "ARS" ? "$" : "Gs.";
             return (
               <div key={m.sucursal_id} className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
                 <div className="flex items-center justify-between gap-3">
@@ -154,6 +166,7 @@ export default function AdminMetasPage() {
                     meta={m.meta_diaria}
                     pct={m.pct_dia}
                     falta={m.falta_hoy}
+                    fmt={fmt}
                   />
                   <ProgresoCard
                     label="Esta semana (lun–dom)"
@@ -161,6 +174,7 @@ export default function AdminMetasPage() {
                     meta={m.meta_semanal}
                     pct={m.pct_semana}
                     falta={m.falta_semana}
+                    fmt={fmt}
                   />
                 </div>
 
@@ -168,7 +182,7 @@ export default function AdminMetasPage() {
                 <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 flex flex-wrap justify-between items-center gap-2 text-sm">
                   <div>
                     <p className="text-xs uppercase font-semibold text-slate-500">Comisión estimada de la semana</p>
-                    <p className="text-lg font-bold text-slate-800">{fmtGs(m.comision_estimada)}</p>
+                    <p className="text-lg font-bold text-slate-800">{fmt(m.comision_estimada)}</p>
                     <p className="text-[11px] text-slate-500 mt-0.5">
                       {m.comision_pct_actual}% sobre lo vendido — {m.alcanza_semana ? `alcanza (${m.comision_alcanza_pct}%)` : `no alcanza (${m.comision_no_alcanza_pct}%)`}
                     </p>
@@ -181,7 +195,7 @@ export default function AdminMetasPage() {
                     <p className="text-xs uppercase font-semibold text-slate-500 mb-2">Configuración</p>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div>
-                        <label className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1">Meta diaria (Gs.)</label>
+                        <label className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1">Meta diaria ({monedaLabel})</label>
                         {/* MontoInput formatea con separador de miles
                             (1.000.000). Guardamos el value como string
                             del número, y MontoInput lo renderiza formateado. */}
@@ -226,9 +240,9 @@ export default function AdminMetasPage() {
 
                 {/* Records */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
-                  <RecordCard label="🥇 Mejor día"    valor={m.records.mejor_dia?.total    ?? null} extra={fmtFecha(m.records.mejor_dia?.fecha ?? null)} />
-                  <RecordCard label="🥇 Mejor semana" valor={m.records.mejor_semana?.total ?? null} extra={m.records.mejor_semana ? `desde ${fmtFecha(m.records.mejor_semana.desde)}` : ""} />
-                  <RecordCard label="🥇 Mejor mes"    valor={m.records.mejor_mes?.total    ?? null} extra={m.records.mejor_mes?.mes ?? ""} />
+                  <RecordCard label="🥇 Mejor día"    valor={m.records.mejor_dia?.total    ?? null} extra={fmtFecha(m.records.mejor_dia?.fecha ?? null)} fmt={fmt} />
+                  <RecordCard label="🥇 Mejor semana" valor={m.records.mejor_semana?.total ?? null} extra={m.records.mejor_semana ? `desde ${fmtFecha(m.records.mejor_semana.desde)}` : ""} fmt={fmt} />
+                  <RecordCard label="🥇 Mejor mes"    valor={m.records.mejor_mes?.total    ?? null} extra={m.records.mejor_mes?.mes ?? ""} fmt={fmt} />
                 </div>
               </div>
             );
@@ -239,33 +253,39 @@ export default function AdminMetasPage() {
   );
 }
 
-function ProgresoCard({ label, total, meta, pct, falta }: { label: string; total: number; meta: number; pct: number; falta: number }) {
+function ProgresoCard({ label, total, meta, pct, falta, fmt }: {
+  label: string; total: number; meta: number; pct: number; falta: number;
+  fmt: (n: number | null | undefined) => string;
+}) {
   const ancho = Math.min(100, Math.max(0, pct));
   const color = pct >= 100 ? "bg-emerald-500" : pct >= 70 ? "bg-sky-500" : "bg-amber-500";
   return (
     <div className="rounded-lg border border-slate-200 p-3">
       <div className="flex items-baseline justify-between gap-2">
         <p className="text-xs uppercase font-semibold text-slate-500">{label}</p>
-        <p className="text-xs text-slate-500">Meta: <strong className="text-slate-700">{fmtGs(meta)}</strong></p>
+        <p className="text-xs text-slate-500">Meta: <strong className="text-slate-700">{fmt(meta)}</strong></p>
       </div>
-      <p className="mt-1 text-xl font-bold text-slate-800">{fmtGs(total)} <span className="text-sm font-medium text-slate-500">({pct}%)</span></p>
+      <p className="mt-1 text-xl font-bold text-slate-800">{fmt(total)} <span className="text-sm font-medium text-slate-500">({pct}%)</span></p>
       <div className="h-2 mt-2 bg-slate-100 rounded-full overflow-hidden">
         <div className={`h-full ${color}`} style={{ width: `${ancho}%` }} />
       </div>
       {meta > 0 && (
         <p className="text-[11px] text-slate-500 mt-1">
-          {pct >= 100 ? `¡Superó la meta por ${fmtGs(total - meta)}!` : `Faltan ${fmtGs(falta)}`}
+          {pct >= 100 ? `¡Superó la meta por ${fmt(total - meta)}!` : `Faltan ${fmt(falta)}`}
         </p>
       )}
     </div>
   );
 }
 
-function RecordCard({ label, valor, extra }: { label: string; valor: number | null; extra: string }) {
+function RecordCard({ label, valor, extra, fmt }: {
+  label: string; valor: number | null; extra: string;
+  fmt: (n: number | null | undefined) => string;
+}) {
   return (
     <div className="rounded-lg border border-amber-100 bg-amber-50/40 p-3">
       <p className="text-xs uppercase font-semibold text-amber-700">{label}</p>
-      <p className="text-base font-bold text-slate-800 mt-0.5">{valor != null ? fmtGs(valor) : "—"}</p>
+      <p className="text-base font-bold text-slate-800 mt-0.5">{valor != null ? fmt(valor) : "—"}</p>
       {extra && <p className="text-[11px] text-slate-500 mt-0.5">{extra}</p>}
     </div>
   );

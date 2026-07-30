@@ -45,18 +45,36 @@ export async function GET(request: NextRequest) {
       sucFilter = ` AND s.id = $2::uuid`;
     }
     const sucRes = await pool.query<{
-      id: string; nombre: string; monto_meta_diaria: number | string | null;
+      id: string; nombre: string; moneda: string;
+      monto_meta_diaria: number | string | null;
       comision_alcanza_pct: number | string | null;
       comision_no_alcanza_pct: number | string | null;
     }>(
-      `SELECT s.id, s.nombre,
+      `SELECT s.id, s.nombre, COALESCE(s.moneda, 'PYG') AS moneda,
               m.monto_meta_diaria, m.comision_alcanza_pct, m.comision_no_alcanza_pct
          FROM ${tS} s
          LEFT JOIN ${tM} m ON m.sucursal_id = s.id AND m.activo = true
         WHERE s.empresa_id = $1::uuid AND s.activo = true${sucFilter}
         ORDER BY s.es_principal DESC, s.nombre ASC`,
       params,
-    );
+    ).catch(async () => {
+      // Fallback: schema sin columna 'moneda' → asumir PYG.
+      const r = await pool.query<{
+        id: string; nombre: string;
+        monto_meta_diaria: number | string | null;
+        comision_alcanza_pct: number | string | null;
+        comision_no_alcanza_pct: number | string | null;
+      }>(
+        `SELECT s.id, s.nombre,
+                m.monto_meta_diaria, m.comision_alcanza_pct, m.comision_no_alcanza_pct
+           FROM ${tS} s
+           LEFT JOIN ${tM} m ON m.sucursal_id = s.id AND m.activo = true
+          WHERE s.empresa_id = $1::uuid AND s.activo = true${sucFilter}
+          ORDER BY s.es_principal DESC, s.nombre ASC`,
+        params,
+      );
+      return { ...r, rows: r.rows.map(x => ({ ...x, moneda: 'PYG' })) };
+    });
 
     // Fechas: hoy y lunes de esta semana (en zona local del server; suficiente
     // para KPIs. Para reportes finos se calcula con `AT TIME ZONE`.)
@@ -151,6 +169,7 @@ export async function GET(request: NextRequest) {
       return {
         sucursal_id: r.id,
         sucursal_nombre: r.nombre,
+        moneda: r.moneda,
         meta_diaria: metaDia,
         meta_semanal: metaSem,
         meta_semanal_prorrateada: metaSemProrrateada,
