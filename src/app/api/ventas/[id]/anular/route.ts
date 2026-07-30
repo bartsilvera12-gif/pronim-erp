@@ -4,6 +4,7 @@ import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema"
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
 import { anularVentaPg } from "@/lib/ventas/server/anular-venta-pg";
+import { logAuditoria } from "@/lib/auditoria/log";
 
 /** POST /api/ventas/[id]/anular — solo administrador (o super_admin). */
 export async function POST(
@@ -31,6 +32,21 @@ export async function POST(
       motivo,
       actorId: auth.user.id ?? null,
       actorNombre: auth.nombre ?? null,
+    });
+    // Auditoría: registro del cambio de estado. Best-effort — si la tabla
+    // no está creada (migración no corrida) el helper degrada silencioso.
+    await logAuditoria({
+      empresaId: auth.empresa_id,
+      usuarioId: auth.user.id ?? null,
+      usuarioNombre: auth.nombre ?? null,
+      sucursalId: auth.sucursal_id ?? null,
+      tipo: "venta_anulada",
+      entidad: "venta",
+      entidadId: ventaId,
+      referencia: (r as { numero_control?: string } | null)?.numero_control ?? null,
+      datoAnterior: { estado: "completada" },
+      datoNuevo:    { estado: "anulada" },
+      motivo,
     });
     return NextResponse.json(successResponse({ venta: r }));
   } catch (err) {

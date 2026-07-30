@@ -436,6 +436,39 @@ export async function confirmarAtencionEnClientePg(
         descuentoMotivo: v.descuentoMotivo ?? null,
       });
       ventaOut = { id: r.ventaId, numero_control: r.numeroControl, total: r.total };
+      // Auditoría: si la venta llevó descuento manual (línea o general),
+      // dejamos un evento para poder reportar quién descontó qué y por qué.
+      const descGeneral = Number(v.descuentoGeneral ?? 0);
+      const descLineaTotal = v.items.reduce(
+        (s, it) => s + (Math.max(0, Number(it.descuento_unitario) || 0) * Number(it.cantidad || 0)), 0,
+      );
+      if (descGeneral > 0 || descLineaTotal > 0) {
+        try {
+          const auditT = quoteSchemaTable(schema, "auditoria_eventos");
+          await client.query(
+            `INSERT INTO ${auditT} (
+               empresa_id, usuario_id, usuario_nombre, sucursal_id,
+               tipo, entidad, entidad_id, referencia,
+               dato_nuevo, motivo
+             ) VALUES ($1,$2,$3,$4,'descuento_aplicado','venta',$5,$6,$7::jsonb,$8)`,
+            [
+              p.empresaId, p.createdBy, p.usuarioNombre, p.sucursalId,
+              ventaOut.id, ventaOut.numero_control,
+              JSON.stringify({
+                descuento_general: descGeneral,
+                descuento_lineas_total: descLineaTotal,
+                total_final: r.total,
+              }),
+              v.descuentoMotivo ?? null,
+            ],
+          );
+        } catch (e) {
+          // Silencioso si la tabla no existe (migración no corrida).
+          if ((e as { code?: string } | null)?.code !== "42P01") {
+            console.error("[confirmar-atencion audit descuento]", e);
+          }
+        }
+      }
     }
 
     // ── 6) Registro de aplicación + cashback (DESPUÉS de la venta) ───
