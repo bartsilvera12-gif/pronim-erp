@@ -616,6 +616,7 @@ function KpiCard({
   variation,
   variant = "light",
   accent = "neutral",
+  href,
 }: {
   label: string;
   value: string;
@@ -626,6 +627,8 @@ function KpiCard({
   variant?: "light" | "zentra";
   /** `featured` aplica gradiente turquesa al chip y barra superior. */
   accent?: "neutral" | "featured" | "warning" | "danger";
+  /** Si se provee, la tarjeta se vuelve un link que abre esa ruta (drill-down). */
+  href?: string;
 }) {
   const chipCls =
     accent === "featured"
@@ -648,8 +651,8 @@ function KpiCard({
       ? "relative overflow-hidden rounded-2xl border border-[#4FAEB2]/55 bg-gradient-to-br from-white via-white to-[#4FAEB2]/8 p-5 shadow-[0_4px_18px_rgba(79,174,178,0.08)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_8px_28px_rgba(79,174,178,0.14)] sm:p-6"
       : "relative overflow-hidden rounded-2xl border border-[#4FAEB2]/45 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md sm:p-6";
 
-  return (
-    <motion.div whileHover={{ y: -2 }} className={cardCls}>
+  const inner = (
+    <>
       {accent === "featured" ? (
         <span
           aria-hidden="true"
@@ -687,6 +690,18 @@ function KpiCard({
       {sub ? (
         <p className="mt-1 text-[11px] text-slate-500">{sub}</p>
       ) : null}
+    </>
+  );
+  if (href) {
+    return (
+      <motion.a href={href} whileHover={{ y: -2 }} className={`${cardCls} block cursor-pointer hover:border-[#4FAEB2]`}>
+        {inner}
+      </motion.a>
+    );
+  }
+  return (
+    <motion.div whileHover={{ y: -2 }} className={cardCls}>
+      {inner}
     </motion.div>
   );
 }
@@ -955,6 +970,7 @@ function DashComercial({
           value={String(leadsNuevos)}
           color="text-slate-900"
           variation={12}
+          href="/crm"
         />
         <KpiCard
           icon={<Icon.Chat className="h-4 w-4" />}
@@ -962,6 +978,7 @@ function DashComercial({
           value={String(enNegociacion)}
           color="text-amber-600"
           accent="warning"
+          href="/crm"
         />
         <KpiCard
           icon={<Icon.CheckCircle className="h-4 w-4" />}
@@ -970,6 +987,7 @@ function DashComercial({
           color="text-[#3F8E91]"
           variation={8}
           accent="featured"
+          href="/clientes"
         />
         <KpiCard
           icon={<Icon.TrendUp className="h-4 w-4" />}
@@ -2024,12 +2042,14 @@ function DashInventario({
           value={String(totalProductos)}
           color="text-slate-900"
           variation={4}
+          href="/inventario"
         />
         <KpiCard
           icon={<Icon.Hash className="h-4 w-4" />}
           label="Stock total (unidades)"
           value={formatGs(totalUnidades)}
           color="text-slate-900"
+          href="/inventario"
         />
         <KpiCard
           icon={<Icon.Alert className="h-4 w-4" />}
@@ -2039,6 +2059,7 @@ function DashInventario({
           color={bajosStock > 0 ? "text-rose-600" : "text-emerald-600"}
           accent={bajosStock > 0 ? "danger" : "neutral"}
           variation={bajosStock > 0 ? -2 : undefined}
+          href="/inventario"
         />
         <KpiCard
           icon={<Icon.Diamond className="h-4 w-4" />}
@@ -2047,6 +2068,7 @@ function DashInventario({
           color="text-[#3F8E91]"
           accent="featured"
           variation={12}
+          href="/inventario"
         />
       </div>
 
@@ -2327,6 +2349,7 @@ function DashVentas({
           value={`Gs. ${formatGsFull(totalHoy)}`}
           sub={`${ventasHoy.length} transacciones`}
           color="text-slate-900"
+          href="/ventas"
         />
         <KpiCard
           icon={<Icon.Calendar className="h-4 w-4" />}
@@ -2335,6 +2358,7 @@ function DashVentas({
           sub={`${ventasMes.length} transacciones`}
           color="text-[#3F8E91]"
           accent="featured"
+          href="/ventas"
         />
         <KpiCard
           icon={<Icon.Ticket className="h-4 w-4" />}
@@ -2342,6 +2366,7 @@ function DashVentas({
           value={`Gs. ${formatGsFull(ticketProm)}`}
           sub={`Periodo: ${periodo}`}
           color="text-slate-900"
+          href="/ventas"
         />
         <KpiCard
           icon={<Icon.Box className="h-4 w-4" />}
@@ -2349,6 +2374,7 @@ function DashVentas({
           value={formatGs(unidades)}
           sub="En el periodo"
           color="text-slate-900"
+          href="/ventas"
         />
       </div>
 
