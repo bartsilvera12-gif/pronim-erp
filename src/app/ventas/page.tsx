@@ -616,8 +616,14 @@ export default function VentasPage() {
                   const cantTotal = v.items.reduce((s, i) => s + i.cantidad, 0);
                   return (
                     <tr key={v.id} className="border-b border-slate-200 last:border-0 hover:bg-[#4FAEB2]/[0.04] transition-colors">
-                      <td className="py-4 pr-4 font-mono text-xs text-gray-500 align-middle">
-                        {v.numero_control}
+                      <td className="py-4 pr-4 font-mono text-xs align-middle">
+                        <Link
+                          href={`/ventas/${v.id}`}
+                          className="text-[#3F8E91] hover:underline"
+                          title={t("Ver detalle")}
+                        >
+                          {v.numero_control}
+                        </Link>
                       </td>
                       <td className="py-4 pr-4 align-middle">
                         <ResumenProductos v={v} />

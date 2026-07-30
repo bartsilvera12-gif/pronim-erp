@@ -828,7 +828,13 @@ export default function InventarioPage() {
                   <tr key={p.id} className="border-b border-slate-200 last:border-0 hover:bg-[#4FAEB2]/[0.04] transition-colors">
                     <td className="py-4 pr-4 font-medium text-gray-800">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span>{p.nombre}</span>
+                        <Link
+                          href={p.es_franja_precio ? "/admin/franjas" : `/inventario/${p.id}/editar`}
+                          className="hover:text-[#3F8E91] hover:underline"
+                          title="Ver detalle / editar"
+                        >
+                          {p.nombre}
+                        </Link>
                         {(() => {
                           const v = p.es_vendible !== false;
                           const i = p.es_insumo === true;
