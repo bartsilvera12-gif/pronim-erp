@@ -14,6 +14,10 @@ import { useT, useMoney } from "@/lib/i18n/context";
 
 type Data = {
   sucursal: { id: string; nombre: string | null };
+  compras?: {
+    total_hoy: number; total_mes: number;
+    count_hoy: number; count_mes: number;
+  };
   ventas: {
     total_hoy: number; count_hoy: number;
     total_mes: number; count_mes: number;
@@ -149,15 +153,77 @@ export default function DashboardSucursalSimple() {
                 )}
               </section>
             )}
+            {/* KPIs principales: Ventas / Compras / Resultado líquido / Meta % — todos clicables */}
+            {(() => {
+              const comprasHoy = data.compras?.total_hoy ?? 0;
+              const comprasMes = data.compras?.total_mes ?? 0;
+              const liquidoHoy = data.ventas.total_hoy - comprasHoy;
+              const liquidoMes = data.ventas.total_mes - comprasMes;
+              const metaPctDia = meta?.pct_dia ?? null;
+              return (
+                <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <KpiCard
+                    href="/ventas"
+                    label={t("Ventas de hoy")}
+                    value={fmtGs(data.ventas.total_hoy)}
+                    sub={`${data.ventas.count_hoy} ${t("operación(es)")}`}
+                    tone="emerald"
+                  />
+                  <KpiCard
+                    href="/compras"
+                    label={t("Compras de hoy")}
+                    value={fmtGs(comprasHoy)}
+                    sub={`${data.compras?.count_hoy ?? 0} ${t("operación(es)")}`}
+                    tone="amber"
+                  />
+                  <KpiCard
+                    label={t("Resultado líquido hoy")}
+                    value={fmtGs(liquidoHoy)}
+                    sub={`${t("Mes")}: ${fmtGs(liquidoMes)}`}
+                    tone={liquidoHoy >= 0 ? "sky" : "rose"}
+                  />
+                  <KpiCard
+                    label={t("Meta del día")}
+                    value={metaPctDia != null && (meta?.meta_diaria ?? 0) > 0 ? `${metaPctDia}%` : "—"}
+                    sub={meta && meta.meta_diaria > 0 ? `${fmtGs(meta.vendido_hoy)} / ${fmtGs(meta.meta_diaria)}` : t("sin meta")}
+                    tone="fuchsia"
+                  />
+                </section>
+              );
+            })()}
+
+            {/* KPIs secundarios: mes / operaciones / clientes atendidos */}
             <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <KpiCard label={t("Ventas de hoy")} value={fmtGs(data.ventas.total_hoy)} sub={`${data.ventas.count_hoy} ${t("operación(es)")}`} tone="emerald" />
-              <KpiCard label={t("Ventas del mes")} value={fmtGs(data.ventas.total_mes)}
+              <KpiCard
+                href="/ventas"
+                label={t("Ventas del mes")}
+                value={fmtGs(data.ventas.total_mes)}
                 sub={diffMesPct != null
                   ? (diffMesPct >= 0 ? `↑ ${diffMesPct}% ${t("vs mes pasado")}` : `↓ ${Math.abs(diffMesPct)}% ${t("vs mes pasado")}`)
                   : `${data.ventas.count_mes} ${t("operación(es)")}`}
-                tone="sky" />
-              <KpiCard label={t("Operaciones del mes")} value={String(data.ventas.count_mes)} sub={`${t("mes pasado")}: ${data.ventas.count_mes_prev}`} tone="slate" />
-              <KpiCard label={t("Clientes atendidos")} value={String(data.clientes.total_atendidos)} sub={t("acumulado")} tone="fuchsia" />
+                tone="sky"
+              />
+              <KpiCard
+                href="/compras"
+                label={t("Compras del mes")}
+                value={fmtGs(data.compras?.total_mes ?? 0)}
+                sub={`${data.compras?.count_mes ?? 0} ${t("operación(es)")}`}
+                tone="slate"
+              />
+              <KpiCard
+                href="/ventas"
+                label={t("Operaciones del mes")}
+                value={String(data.ventas.count_mes)}
+                sub={`${t("mes pasado")}: ${data.ventas.count_mes_prev}`}
+                tone="slate"
+              />
+              <KpiCard
+                href="/clientes"
+                label={t("Clientes atendidos")}
+                value={String(data.clientes.total_atendidos)}
+                sub={t("acumulado")}
+                tone="fuchsia"
+              />
             </section>
 
             <section className="grid grid-cols-1 lg:grid-cols-2 gap-5">
@@ -234,24 +300,38 @@ export default function DashboardSucursalSimple() {
   );
 }
 
-function KpiCard({ label, value, sub, tone }: {
+function KpiCard({ label, value, sub, tone, href }: {
   label: string; value: string; sub?: string;
-  tone?: "emerald" | "sky" | "slate" | "fuchsia";
+  tone?: "emerald" | "sky" | "slate" | "fuchsia" | "amber" | "rose";
+  href?: string;
 }) {
   const toneClasses: Record<string, string> = {
     emerald: "border-emerald-200 bg-emerald-50/60",
     sky: "border-sky-200 bg-sky-50/60",
     slate: "border-slate-200 bg-white",
     fuchsia: "border-fuchsia-200 bg-fuchsia-50/60",
+    amber: "border-amber-200 bg-amber-50/60",
+    rose: "border-rose-200 bg-rose-50/60",
   };
   const cls = toneClasses[tone ?? "slate"];
-  return (
-    <div className={`rounded-xl border p-3 shadow-sm ${cls}`}>
+  const body = (
+    <>
       <p className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold">{label}</p>
       <p className="mt-0.5 text-lg font-bold tabular-nums text-slate-900">{value}</p>
       {sub && <p className="text-[11px] text-slate-500 mt-0.5">{sub}</p>}
-    </div>
+    </>
   );
+  if (href) {
+    return (
+      <Link
+        href={href}
+        className={`rounded-xl border p-3 shadow-sm ${cls} block transition hover:shadow-md hover:-translate-y-0.5 hover:border-[#4FAEB2]`}
+      >
+        {body}
+      </Link>
+    );
+  }
+  return <div className={`rounded-xl border p-3 shadow-sm ${cls}`}>{body}</div>;
 }
 
 function MetaBar({

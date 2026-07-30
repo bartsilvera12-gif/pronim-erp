@@ -37,6 +37,7 @@ export async function GET(request: NextRequest) {
     const ventasT = quoteSchemaTable(schema, "ventas");
     const clientesT = quoteSchemaTable(schema, "clientes");
     const sucursalesT = quoteSchemaTable(schema, "sucursales");
+    const comprasT = quoteSchemaTable(schema, "compras");
 
     const client = await pool.connect();
     try {
@@ -142,10 +143,52 @@ export async function GET(request: NextRequest) {
         paramsBase,
       );
 
+      // Compras del día / mes — best effort. Si el schema no tiene columna
+      // sucursal_id en compras, no filtramos; devolvemos totales de empresa.
+      let comprasHoy = 0, comprasMes = 0, countComprasHoy = 0, countComprasMes = 0;
+      try {
+        const cCols = await client.query<{ column_name: string }>(
+          `SELECT column_name FROM information_schema.columns
+           WHERE table_schema = $1 AND table_name = 'compras'`,
+          [schema],
+        );
+        const compraColSet = new Set(cCols.rows.map((r) => r.column_name));
+        const compraTieneSucursal = compraColSet.has("sucursal_id");
+        const filtroSucC = compraTieneSucursal ? "AND sucursal_id = $2" : "";
+        const paramsC: unknown[] = compraTieneSucursal
+          ? [auth.empresa_id, auth.sucursal_id]
+          : [auth.empresa_id];
+        const filtroEstadoC = compraColSet.has("estado") ? "AND (estado IS NULL OR estado <> 'anulada')" : "";
+        const compraStatsQ = await client.query<{
+          total_hoy: string; count_hoy: string;
+          total_mes: string; count_mes: string;
+        }>(
+          `SELECT
+             COALESCE(SUM(CASE WHEN fecha::date = CURRENT_DATE THEN total ELSE 0 END),0)::text AS total_hoy,
+             COUNT(*) FILTER (WHERE fecha::date = CURRENT_DATE)::text AS count_hoy,
+             COALESCE(SUM(CASE WHEN date_trunc('month', fecha) = date_trunc('month', CURRENT_DATE) THEN total ELSE 0 END),0)::text AS total_mes,
+             COUNT(*) FILTER (WHERE date_trunc('month', fecha) = date_trunc('month', CURRENT_DATE))::text AS count_mes
+           FROM ${comprasT}
+           WHERE empresa_id = $1 ${filtroSucC} ${filtroEstadoC}`,
+          paramsC,
+        );
+        const cs = compraStatsQ.rows[0];
+        comprasHoy = Number(cs?.total_hoy ?? 0);
+        comprasMes = Number(cs?.total_mes ?? 0);
+        countComprasHoy = Number(cs?.count_hoy ?? 0);
+        countComprasMes = Number(cs?.count_mes ?? 0);
+      } catch { /* sin tabla compras — degradamos a 0 */ }
+
       return NextResponse.json(successResponse({
         sucursal: {
           id: auth.sucursal_id,
           nombre: sucursalNombre,
+        },
+        compras: {
+          total_hoy: comprasHoy,
+          total_mes: comprasMes,
+          count_hoy: countComprasHoy,
+          count_mes: countComprasMes,
         },
         ventas: {
           total_hoy: Number(vs?.total_hoy ?? 0),
