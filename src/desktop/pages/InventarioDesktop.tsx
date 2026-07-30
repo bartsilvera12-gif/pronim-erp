@@ -69,6 +69,11 @@ export default function InventarioPage() {
   type FiltroStock = "todos" | "sin_stock" | "bajo" | "con_stock";
   const [filtroStock,       setFiltroStock]       = useState<FiltroStock>("todos");
   const [filtroDistribuidor, setFiltroDistribuidor] = useState<string>("");
+  // Fase 2 (tanda 2): segmentos rápidos por comportamiento/rotación
+  type Segmento = "" | "recien" | "no_vendido_30" | "no_vendido_90" | "nunca_vendido" | "alto_markup" | "bajo_markup";
+  const [segmento, setSegmento] = useState<Segmento>("");
+  const [precioMin, setPrecioMin] = useState<string>("");
+  const [precioMax, setPrecioMax] = useState<string>("");
 
   // Paginación client-side. Default 50 (chico, legible, no fríe al browser
   // con 6000 filas). El usuario puede subir a 100 o "todos" si quiere ver
@@ -243,6 +248,39 @@ export default function InventarioPage() {
       if (d !== filtroDistribuidor.trim().toUpperCase()) return false;
     }
 
+    // Rango de precio (aplica a precio_venta).
+    const pMin = Number(precioMin);
+    const pMax = Number(precioMax);
+    if (precioMin.trim() !== "" && Number.isFinite(pMin) && p.precio_venta < pMin) return false;
+    if (precioMax.trim() !== "" && Number.isFinite(pMax) && p.precio_venta > pMax) return false;
+
+    // Segmentos rápidos (Tanda 2)
+    if (segmento) {
+      const dsCreado = p.created_at ? Math.floor((Date.now() - Date.parse(p.created_at)) / 86_400_000) : null;
+      const dsVenta = p.ultima_venta_at ? Math.floor((Date.now() - Date.parse(p.ultima_venta_at)) / 86_400_000) : null;
+      const margen = p.precio_venta > 0 ? ((p.precio_venta - p.costo_promedio) / p.precio_venta) * 100 : 0;
+      switch (segmento) {
+        case "recien":
+          if (dsCreado == null || dsCreado > 30) return false;
+          break;
+        case "no_vendido_30":
+          if (dsVenta != null && dsVenta < 30) return false;
+          break;
+        case "no_vendido_90":
+          if (dsVenta != null && dsVenta < 90) return false;
+          break;
+        case "nunca_vendido":
+          if ((p.veces_vendido ?? 0) > 0) return false;
+          break;
+        case "alto_markup":
+          if (margen < 40) return false;
+          break;
+        case "bajo_markup":
+          if (margen >= 20 || p.precio_venta === 0) return false;
+          break;
+      }
+    }
+
     // Tipo gastronómico (vendible/insumo/mixto)
     if (filtroTipo !== "todos") {
       const v = p.es_vendible !== false; // default true si null/undef
@@ -281,6 +319,9 @@ export default function InventarioPage() {
     filtroDistribuidor,
     filtroTipo,
     tab,
+    segmento,
+    precioMin,
+    precioMax,
   ]);
 
   // Lista única de distribuidores cargados en algún producto (para el dropdown).
@@ -298,6 +339,7 @@ export default function InventarioPage() {
     filtroPorNombre, filtroPorSku, filtroPorCosto, filtroPorPrecio,
     filtroValuacion, filtroUbicacion, soloStockBajo, filtroStock,
     filtroDistribuidor, filtroTipo, tab, pageSize,
+    segmento, precioMin, precioMax,
   ]);
 
   // Slice paginado para renderizar sólo la página actual (la lista filtrada
@@ -452,15 +494,66 @@ export default function InventarioPage() {
                 <option key={d} value={d}>{d}</option>
               ))}
             </select>
-            {(filtroStock !== "todos" || filtroDistribuidor) && (
+            {/* Rango de precio (min–max) */}
+            <input
+              type="number"
+              min={0}
+              placeholder="Precio mín."
+              value={precioMin}
+              onChange={(e) => setPrecioMin(e.target.value)}
+              className="w-28 rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm outline-none focus:ring-2 focus:ring-[#4FAEB2]/30"
+              title="Precio de venta mínimo"
+            />
+            <input
+              type="number"
+              min={0}
+              placeholder="Precio máx."
+              value={precioMax}
+              onChange={(e) => setPrecioMax(e.target.value)}
+              className="w-28 rounded-lg border border-slate-200 bg-white px-2 py-2 text-sm outline-none focus:ring-2 focus:ring-[#4FAEB2]/30"
+              title="Precio de venta máximo"
+            />
+            {(filtroStock !== "todos" || filtroDistribuidor || precioMin || precioMax || segmento) && (
               <button
                 type="button"
-                onClick={() => { setFiltroStock("todos"); setFiltroDistribuidor(""); }}
+                onClick={() => { setFiltroStock("todos"); setFiltroDistribuidor(""); setPrecioMin(""); setPrecioMax(""); setSegmento(""); }}
                 className="text-xs text-slate-500 hover:text-slate-800 underline"
               >
                 Limpiar filtros
               </button>
             )}
+          </div>
+
+          {/* Segmentos rápidos por rotación / recencia / markup */}
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {([
+              ["", "Todos", todos.length],
+              ["recien", "Recién ingresados (30d)", todos.filter((p) => p.created_at && (Date.now() - Date.parse(p.created_at)) / 86_400_000 <= 30).length],
+              ["no_vendido_30", "No vendidos +30d", todos.filter((p) => !p.ultima_venta_at || (Date.now() - Date.parse(p.ultima_venta_at)) / 86_400_000 >= 30).length],
+              ["no_vendido_90", "No vendidos +90d", todos.filter((p) => !p.ultima_venta_at || (Date.now() - Date.parse(p.ultima_venta_at)) / 86_400_000 >= 90).length],
+              ["nunca_vendido", "Nunca vendidos", todos.filter((p) => (p.veces_vendido ?? 0) === 0).length],
+              ["alto_markup", "Alto markup (≥40%)", todos.filter((p) => p.precio_venta > 0 && ((p.precio_venta - p.costo_promedio) / p.precio_venta) * 100 >= 40).length],
+              ["bajo_markup", "Bajo markup (<20%)", todos.filter((p) => p.precio_venta > 0 && ((p.precio_venta - p.costo_promedio) / p.precio_venta) * 100 < 20).length],
+            ] as const).map(([key, label, count]) => {
+              const active = segmento === key;
+              return (
+                <button
+                  key={key || "todos"}
+                  type="button"
+                  onClick={() => setSegmento(key as Segmento)}
+                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium border transition-colors ${
+                    active
+                      ? "bg-[#4FAEB2] border-[#4FAEB2] text-white"
+                      : "bg-white border-slate-200 text-slate-600 hover:border-[#4FAEB2] hover:text-[#3F8E91]"
+                  }`}
+                >
+                  {label}
+                  <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${active ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"}`}>
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
 

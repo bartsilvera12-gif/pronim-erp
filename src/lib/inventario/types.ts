@@ -113,6 +113,12 @@ export interface Producto {
     es_principal: boolean;
     stock_actual: number;
   }>;
+
+  /** Enriquecimientos fase 2 (agregación server-side sobre ventas_items).
+   *  Habilitan filtros "No vendidos +Xd" / "Nunca vendido" en /inventario. */
+  ultima_venta_at?: string | null;
+  veces_vendido?: number;
+  created_at?: string | null;
 }
 
 /** Fase Presentaciones: cada presentación por ml de un producto. */

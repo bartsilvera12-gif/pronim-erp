@@ -164,6 +164,52 @@ export async function GET(request: NextRequest) {
         }
       } catch { /* schema sin sucursales: dejar agregado */ }
     }
+    // Fase 2 (tanda 2): enriquecemos con ultima_venta_at por producto para
+    // habilitar filtros "No vendidos hace X días" en /inventario. Una sola
+    // consulta agregada sobre ventas_items. Si falla o el schema no la tiene,
+    // degradamos silencioso — el listado igual responde.
+    try {
+      if (productos.length > 0) {
+        const schema = assertAllowedChatDataSchema(await fetchDataSchemaForEmpresaId(empresaId));
+        const pool = getChatPostgresPool();
+        if (pool) {
+          const ids = productos.map((p) => String((p as { id?: string }).id ?? "")).filter(Boolean);
+          if (ids.length > 0) {
+            const itemsT = quoteSchemaTable(schema, "ventas_items");
+            const ventasT = quoteSchemaTable(schema, "ventas");
+            const clientPg = await pool.connect();
+            try {
+              const q = await clientPg.query<{ producto_id: string; ultima: string | null; cant: string }>(
+                `SELECT vi.producto_id::text,
+                        MAX(v.fecha)      AS ultima,
+                        COUNT(*)::text    AS cant
+                   FROM ${itemsT} vi
+                   JOIN ${ventasT} v ON v.id = vi.venta_id
+                  WHERE v.empresa_id = $1
+                    AND vi.producto_id = ANY($2::uuid[])
+                  GROUP BY vi.producto_id`,
+                [empresaId, ids],
+              );
+              const map = new Map(q.rows.map((r) => [r.producto_id, r]));
+              productos = productos.map((p) => {
+                const id = String((p as { id?: string }).id ?? "");
+                const r = id ? map.get(id) : undefined;
+                return {
+                  ...p,
+                  ultima_venta_at: r?.ultima ?? null,
+                  veces_vendido: r ? Number(r.cant) : 0,
+                };
+              });
+            } finally {
+              clientPg.release();
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.error("[/api/productos GET] enrich ultima venta:", e instanceof Error ? e.message : e);
+    }
+
     return NextResponse.json(successResponse({ productos }));
   } catch (err) {
     console.error("[/api/productos GET] uncaught", err instanceof Error ? err.message : err);
