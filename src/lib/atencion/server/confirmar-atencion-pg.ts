@@ -459,19 +459,46 @@ export async function confirmarAtencionEnClientePg(
           ],
         );
         if (promoEvaluada.cashback > 0) {
-          await client.query(
-            `INSERT INTO ${creditosT} (
-               empresa_id, cliente_id, tipo, monto, origen,
-               referencia_id, referencia_tipo, referencia_numero,
-               observaciones, created_by, usuario_nombre
-             ) VALUES ($1,$2,'ENTRADA',$3,'cashback',$4,'venta',$5,$6,$7,$8)`,
-            [
-              p.empresaId, p.clienteId, promoEvaluada.cashback,
-              ventaOut.id, ventaOut.numero_control,
-              `Cashback aplicado por promoción "${promoEvaluada.nombre}"`,
-              p.createdBy, p.usuarioNombre,
-            ],
+          // Fase 2 tanda 4: si el schema ya tiene las columnas separadoras
+          // de cartera (categoria/promocion_id), las poblamos. Sino
+          // degradamos al insert legacy.
+          const carteraCols = await client.query<{ column_name: string }>(
+            `SELECT column_name FROM information_schema.columns
+              WHERE table_schema = $1 AND table_name = 'cliente_creditos_movimientos'`,
+            [schema],
           );
+          const carteraSet = new Set(carteraCols.rows.map((r) => r.column_name));
+          if (carteraSet.has("categoria") && carteraSet.has("promocion_id")) {
+            await client.query(
+              `INSERT INTO ${creditosT} (
+                 empresa_id, cliente_id, tipo, monto, origen, categoria,
+                 promocion_id,
+                 referencia_id, referencia_tipo, referencia_numero,
+                 observaciones, created_by, usuario_nombre
+               ) VALUES ($1,$2,'ENTRADA',$3,'cashback','cashback',$4,$5,'venta',$6,$7,$8,$9)`,
+              [
+                p.empresaId, p.clienteId, promoEvaluada.cashback,
+                promoEvaluada.promocionId,
+                ventaOut.id, ventaOut.numero_control,
+                `Cashback aplicado por promoción "${promoEvaluada.nombre}"`,
+                p.createdBy, p.usuarioNombre,
+              ],
+            );
+          } else {
+            await client.query(
+              `INSERT INTO ${creditosT} (
+                 empresa_id, cliente_id, tipo, monto, origen,
+                 referencia_id, referencia_tipo, referencia_numero,
+                 observaciones, created_by, usuario_nombre
+               ) VALUES ($1,$2,'ENTRADA',$3,'cashback',$4,'venta',$5,$6,$7,$8)`,
+              [
+                p.empresaId, p.clienteId, promoEvaluada.cashback,
+                ventaOut.id, ventaOut.numero_control,
+                `Cashback aplicado por promoción "${promoEvaluada.nombre}"`,
+                p.createdBy, p.usuarioNombre,
+              ],
+            );
+          }
         }
       }
     }

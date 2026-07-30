@@ -126,6 +126,8 @@ export interface Cliente {
   total_comprado?:     number;
   cantidad_compras?:   number;
   credito_disponible?: number;
+  cashback_disponible?: number;
+  consignacion_disponible?: number;
 }
 
 /** Perfil fiscal extendido; la clave nunca se expone, solo el hecho de que exista. */

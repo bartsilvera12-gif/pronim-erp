@@ -28,6 +28,7 @@ import {
 import { getFacturas, getSuscripciones } from "@/lib/facturacion/storage";
 import { getMarketingTasks, createMarketingTask, updateTaskStatus } from "@/lib/marketing/storage";
 import { getUsuariosActivosEmpresa, type UsuarioEmpresa } from "@/lib/usuarios/empresa";
+import { useMoney } from "@/lib/i18n/context";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { SifenEstadoBadge } from "@/components/sifen/SifenEstadoBadge";
 import { useFacturaSifenEstados } from "@/hooks/useFacturaSifenEstados";
@@ -1520,6 +1521,9 @@ export default function ClienteDetailPage() {
           {activeTab === "informacion" && (
             <form onSubmit={handleGuardar} className="space-y-8 max-w-2xl">
 
+              {/* Cartera del cliente — 3 saldos separados (Pronim/Akakua'a). */}
+              {SIMPLE_CLIENTE && <CarteraPanel clienteId={String(id)} />}
+
               {/* Trazabilidad de baja operativa */}
               {cliente.baja_operativa_at && (
                 <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-2">
@@ -2655,5 +2659,140 @@ export default function ClienteDetailPage() {
       )}
 
     </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Cartera del cliente (fase 2 tanda 4) — 3 saldos separados
+// ─────────────────────────────────────────────────────────────────────────
+
+type MovimientoCartera = {
+  id: string;
+  tipo: "ENTRADA" | "SALIDA" | "AJUSTE";
+  monto: number | string;
+  origen: string;
+  categoria?: string | null;
+  vencimiento_at?: string | null;
+  referencia_numero?: string | null;
+  observaciones?: string | null;
+  fecha: string;
+};
+
+function CarteraPanel({ clienteId }: { clienteId: string }) {
+  const money = useMoney();
+  const fmt = (n: number) => money.format(n || 0);
+  const [data, setData] = useState<{
+    saldo_credito: number; saldo_cashback: number; saldo_consignacion: number;
+    movimientos: MovimientoCartera[];
+  } | null>(null);
+  const [cargando, setCargando] = useState(true);
+  const [ver, setVer] = useState<"credito" | "cashback" | "consignacion">("credito");
+
+  useEffect(() => {
+    let cancel = false;
+    setCargando(true);
+    fetch(`/api/clientes/${clienteId}/creditos`, { credentials: "include", cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        if (cancel || !j?.success) return;
+        setData({
+          saldo_credito: Number(j.data?.saldo_credito ?? 0),
+          saldo_cashback: Number(j.data?.saldo_cashback ?? 0),
+          saldo_consignacion: Number(j.data?.saldo_consignacion ?? 0),
+          movimientos: (j.data?.movimientos ?? []) as MovimientoCartera[],
+        });
+      })
+      .catch(() => { /* silencioso */ })
+      .finally(() => { if (!cancel) setCargando(false); });
+    return () => { cancel = true; };
+  }, [clienteId]);
+
+  const filtrados = useMemo(() => {
+    if (!data) return [] as MovimientoCartera[];
+    return data.movimientos.filter((m) => {
+      const cat = (m.categoria ?? "credito").toLowerCase();
+      if (ver === "credito") return cat === "credito";
+      if (ver === "cashback") return cat === "cashback";
+      return cat === "consignacion";
+    });
+  }, [data, ver]);
+
+  const localeDate = money.moneda === "BRL" ? "pt-BR" : "es-PY";
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">Cartera del cliente</h2>
+        {cargando && <span className="text-[11px] text-slate-400 animate-pulse">Cargando…</span>}
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+        <SaldoCard label="Crédito a favor" hint="Evaluaciones / devoluciones / ajustes"
+          value={fmt(data?.saldo_credito ?? 0)} tone="emerald"
+          active={ver === "credito"} onClick={() => setVer("credito")} />
+        <SaldoCard label="Cashback" hint="Promociones y campañas"
+          value={fmt(data?.saldo_cashback ?? 0)} tone="fuchsia"
+          active={ver === "cashback"} onClick={() => setVer("cashback")} />
+        <SaldoCard label="Saldo de consignación" hint="Retirable o usable en compra"
+          value={fmt(data?.saldo_consignacion ?? 0)} tone="sky"
+          active={ver === "consignacion"} onClick={() => setVer("consignacion")} />
+      </div>
+
+      <div className="mt-4 rounded-xl border border-slate-100 overflow-hidden">
+        <header className="bg-slate-50 px-3 py-2 border-b border-slate-100">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-600">
+            Movimientos — {ver === "credito" ? "Crédito" : ver === "cashback" ? "Cashback" : "Consignación"}
+          </p>
+        </header>
+        {filtrados.length === 0 ? (
+          <p className="py-6 text-center text-xs text-slate-400">Sin movimientos.</p>
+        ) : (
+          <ul className="divide-y divide-slate-100 max-h-64 overflow-y-auto">
+            {filtrados.slice(0, 50).map((m) => (
+              <li key={m.id} className="flex items-center justify-between px-3 py-2 text-xs">
+                <div className="min-w-0">
+                  <p className="text-slate-800">
+                    <span className={`font-semibold ${m.tipo === "ENTRADA" ? "text-emerald-700" : m.tipo === "SALIDA" ? "text-rose-700" : "text-slate-700"}`}>
+                      {m.tipo}
+                    </span>
+                    {" · "}{m.origen}
+                    {m.referencia_numero && <span className="ml-1 text-slate-400 font-mono">{m.referencia_numero}</span>}
+                  </p>
+                  {m.observaciones && <p className="text-slate-500 truncate">{m.observaciones}</p>}
+                  {m.vencimiento_at && (
+                    <p className="text-[10px] text-amber-700">Vence: {new Date(m.vencimiento_at).toLocaleDateString(localeDate)}</p>
+                  )}
+                </div>
+                <div className="text-right shrink-0 ml-3">
+                  <p className={`font-bold tabular-nums ${m.tipo === "SALIDA" ? "text-rose-700" : "text-emerald-700"}`}>
+                    {m.tipo === "SALIDA" ? "−" : "+"}{fmt(Number(m.monto))}
+                  </p>
+                  <p className="text-[10px] text-slate-400">{new Date(m.fecha).toLocaleDateString(localeDate)}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function SaldoCard({ label, hint, value, tone, active, onClick }: {
+  label: string; hint: string; value: string;
+  tone: "emerald" | "fuchsia" | "sky"; active: boolean; onClick: () => void;
+}) {
+  const bg = tone === "emerald" ? "border-emerald-200 bg-emerald-50/60"
+    : tone === "fuchsia" ? "border-fuchsia-200 bg-fuchsia-50/60"
+    : "border-sky-200 bg-sky-50/60";
+  const ring = active ? "ring-2 ring-[#4FAEB2] ring-offset-1" : "";
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`text-left rounded-xl border p-3 shadow-sm transition ${bg} ${ring} hover:-translate-y-0.5`}
+    >
+      <p className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold">{label}</p>
+      <p className="mt-0.5 text-lg font-bold tabular-nums text-slate-900">{value}</p>
+      <p className="text-[10px] text-slate-500 mt-0.5">{hint}</p>
+    </button>
   );
 }

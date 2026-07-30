@@ -64,16 +64,46 @@ async function attachActividadCliente(
     ).catch(() => ({ rows: [] as Array<{ cliente_id: string; total_comprado: string; cantidad_compras: string; ultima_venta_at: string | null }> }));
     const ventasMap = new Map(ventasAgg.rows.map((r) => [r.cliente_id, r]));
 
-    // Agregación créditos por cliente (ENTRADA+AJUSTE − SALIDA)
-    const credAgg = await client.query<{ cliente_id: string; credito: string }>(
-      `SELECT cliente_id::text,
-              COALESCE(SUM(CASE WHEN tipo IN ('ENTRADA','AJUSTE') THEN monto ELSE -monto END),0)::text AS credito
-         FROM ${creditosT}
-        WHERE empresa_id = $1 AND cliente_id = ANY($2::uuid[])
-        GROUP BY cliente_id`,
-      [empresaId, clienteIds],
-    ).catch(() => ({ rows: [] as Array<{ cliente_id: string; credito: string }> }));
-    const credMap = new Map(credAgg.rows.map((r) => [r.cliente_id, r.credito]));
+    // Agregación créditos por cliente. Si el schema ya tiene la columna
+    // `categoria` (migración fase 2 tanda 4), separamos los saldos por
+    // categoría — crédito / cashback / consignación. Si no, degradamos al
+    // saldo único (compatibilidad hacia atrás).
+    const carteraCols = await client.query<{ column_name: string }>(
+      `SELECT column_name FROM information_schema.columns
+        WHERE table_schema = $1 AND table_name = 'cliente_creditos_movimientos'`,
+      [schema],
+    ).catch(() => ({ rows: [] as Array<{ column_name: string }> }));
+    const tieneCartera = new Set(carteraCols.rows.map((r) => r.column_name)).has("categoria");
+
+    const credMap = new Map<string, number>();
+    const cashMap = new Map<string, number>();
+    const consMap = new Map<string, number>();
+    if (tieneCartera) {
+      const credAgg = await client.query<{ cliente_id: string; categoria: string; saldo: string }>(
+        `SELECT cliente_id::text, categoria,
+                COALESCE(SUM(CASE WHEN tipo IN ('ENTRADA','AJUSTE') THEN monto ELSE -monto END),0)::text AS saldo
+           FROM ${creditosT}
+          WHERE empresa_id = $1 AND cliente_id = ANY($2::uuid[])
+          GROUP BY cliente_id, categoria`,
+        [empresaId, clienteIds],
+      ).catch(() => ({ rows: [] as Array<{ cliente_id: string; categoria: string; saldo: string }> }));
+      for (const r of credAgg.rows) {
+        const n = Number(r.saldo);
+        if (r.categoria === "cashback") cashMap.set(r.cliente_id, n);
+        else if (r.categoria === "consignacion") consMap.set(r.cliente_id, n);
+        else credMap.set(r.cliente_id, n);
+      }
+    } else {
+      const credAgg = await client.query<{ cliente_id: string; credito: string }>(
+        `SELECT cliente_id::text,
+                COALESCE(SUM(CASE WHEN tipo IN ('ENTRADA','AJUSTE') THEN monto ELSE -monto END),0)::text AS credito
+           FROM ${creditosT}
+          WHERE empresa_id = $1 AND cliente_id = ANY($2::uuid[])
+          GROUP BY cliente_id`,
+        [empresaId, clienteIds],
+      ).catch(() => ({ rows: [] as Array<{ cliente_id: string; credito: string }> }));
+      for (const r of credAgg.rows) credMap.set(r.cliente_id, Number(r.credito));
+    }
 
     for (const r of rows) {
       const id = typeof r.id === "string" ? r.id : "";
@@ -81,7 +111,9 @@ async function attachActividadCliente(
       r.total_comprado = v ? Number(v.total_comprado) : 0;
       r.cantidad_compras = v ? Number(v.cantidad_compras) : 0;
       r.ultima_venta_at = v?.ultima_venta_at ?? null;
-      r.credito_disponible = Number(credMap.get(id) ?? 0);
+      r.credito_disponible  = credMap.get(id) ?? 0;
+      r.cashback_disponible = cashMap.get(id) ?? 0;
+      r.consignacion_disponible = consMap.get(id) ?? 0;
     }
   } finally {
     client.release();

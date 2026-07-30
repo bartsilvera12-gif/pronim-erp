@@ -35,41 +35,71 @@ export async function GET(
 
     const client = await pool.connect();
     try {
-      // Saldos desagregados por origen: cashback (ENTRADAs origen='cashback')
-      // se muestra separado del "crédito a favor" normal. La consumición (SALIDA)
-      // sigue siendo unificada — se resta del total y del cashback proporcionalmente
-      // (aprox: se descuenta primero de cashback si aún hay saldo, si no del crédito).
-      const saldoQ = await client.query<{
-        entradas_cashback: string; entradas_otras: string;
-        salidas_total: string; ajustes_total: string;
-      }>(
-        `SELECT
-           COALESCE(SUM(CASE WHEN tipo='ENTRADA' AND origen='cashback' THEN monto ELSE 0 END),0)::text AS entradas_cashback,
-           COALESCE(SUM(CASE WHEN tipo='ENTRADA' AND origen<>'cashback' THEN monto ELSE 0 END),0)::text AS entradas_otras,
-           COALESCE(SUM(CASE WHEN tipo='SALIDA' THEN monto ELSE 0 END),0)::text AS salidas_total,
-           COALESCE(SUM(CASE WHEN tipo='AJUSTE' THEN monto ELSE 0 END),0)::text AS ajustes_total
-         FROM ${creditosT}
-         WHERE empresa_id = $1 AND cliente_id = $2`,
-        [empresaId, clienteId],
+      // Detección: si el schema tiene ya la columna `categoria` (migración
+      // fase 2 tanda 4), usamos ese campo — más limpio que inferir por origen.
+      const colsQ = await client.query<{ column_name: string }>(
+        `SELECT column_name FROM information_schema.columns
+          WHERE table_schema = $1 AND table_name = 'cliente_creditos_movimientos'`,
+        [schema],
       );
-      const entCash = Number(saldoQ.rows[0]?.entradas_cashback ?? 0);
-      const entOtras = Number(saldoQ.rows[0]?.entradas_otras ?? 0);
-      const salidas = Number(saldoQ.rows[0]?.salidas_total ?? 0);
-      const ajustes = Number(saldoQ.rows[0]?.ajustes_total ?? 0);
-      // Convención UI: descontamos SALIDAs primero de cashback y el remanente
-      // baja el crédito "otro". Es una vista aproximada — el ledger unificado
-      // sigue siendo la fuente de verdad para el total.
-      const salidasContraCash = Math.min(entCash, salidas);
-      const salidasContraOtro = salidas - salidasContraCash;
-      const saldoCashback = Math.max(0, entCash - salidasContraCash);
-      const saldoCreditoOtro = Math.max(0, entOtras + ajustes - salidasContraOtro);
-      const saldo = saldoCashback + saldoCreditoOtro;
+      const cols = new Set(colsQ.rows.map((r) => r.column_name));
+      const tieneCategoria = cols.has("categoria");
+      const tieneVencimiento = cols.has("vencimiento_at");
+      const tienePromoId = cols.has("promocion_id");
 
-      // Últimos 200 movimientos para display
+      let saldoCredito = 0, saldoCashback = 0, saldoConsignacion = 0;
+      if (tieneCategoria) {
+        const saldoQ = await client.query<{ categoria: string; saldo: string }>(
+          `SELECT categoria,
+                  COALESCE(SUM(CASE WHEN tipo IN ('ENTRADA','AJUSTE') THEN monto ELSE -monto END),0)::text AS saldo
+             FROM ${creditosT}
+            WHERE empresa_id = $1 AND cliente_id = $2
+            GROUP BY categoria`,
+          [empresaId, clienteId],
+        );
+        for (const r of saldoQ.rows) {
+          const n = Math.max(0, Number(r.saldo));
+          if (r.categoria === "cashback") saldoCashback = n;
+          else if (r.categoria === "consignacion") saldoConsignacion = n;
+          else saldoCredito = n;
+        }
+      } else {
+        // Legacy: inferimos por origen (cashback vs resto). No hay consignación.
+        const saldoQ = await client.query<{
+          entradas_cashback: string; entradas_otras: string;
+          salidas_total: string; ajustes_total: string;
+        }>(
+          `SELECT
+             COALESCE(SUM(CASE WHEN tipo='ENTRADA' AND origen='cashback' THEN monto ELSE 0 END),0)::text AS entradas_cashback,
+             COALESCE(SUM(CASE WHEN tipo='ENTRADA' AND origen<>'cashback' THEN monto ELSE 0 END),0)::text AS entradas_otras,
+             COALESCE(SUM(CASE WHEN tipo='SALIDA' THEN monto ELSE 0 END),0)::text AS salidas_total,
+             COALESCE(SUM(CASE WHEN tipo='AJUSTE' THEN monto ELSE 0 END),0)::text AS ajustes_total
+           FROM ${creditosT}
+           WHERE empresa_id = $1 AND cliente_id = $2`,
+          [empresaId, clienteId],
+        );
+        const entCash = Number(saldoQ.rows[0]?.entradas_cashback ?? 0);
+        const entOtras = Number(saldoQ.rows[0]?.entradas_otras ?? 0);
+        const salidas = Number(saldoQ.rows[0]?.salidas_total ?? 0);
+        const ajustes = Number(saldoQ.rows[0]?.ajustes_total ?? 0);
+        const salidasContraCash = Math.min(entCash, salidas);
+        const salidasContraOtro = salidas - salidasContraCash;
+        saldoCashback = Math.max(0, entCash - salidasContraCash);
+        saldoCredito = Math.max(0, entOtras + ajustes - salidasContraOtro);
+      }
+      const saldo = saldoCredito + saldoCashback + saldoConsignacion;
+
+      // Últimos 200 movimientos para display — categoria/vencimiento/promocion_id
+      // solo cuando existen en el schema (evita SELECT con columna inexistente).
+      const extraSel = [
+        tieneCategoria ? "categoria" : "'credito'::text AS categoria",
+        tieneVencimiento ? "vencimiento_at" : "NULL::timestamptz AS vencimiento_at",
+        tienePromoId ? "promocion_id" : "NULL::uuid AS promocion_id",
+      ].join(", ");
       const movQ = await client.query<Record<string, unknown>>(
-        `SELECT id, cliente_id, tipo, monto, origen, referencia_id,
-                referencia_tipo, referencia_numero, observaciones, fecha,
-                created_by, usuario_nombre
+        `SELECT id, cliente_id, tipo, monto, origen, ${extraSel},
+                referencia_id, referencia_tipo, referencia_numero,
+                observaciones, fecha, created_by, usuario_nombre
          FROM ${creditosT}
          WHERE empresa_id = $1 AND cliente_id = $2
          ORDER BY fecha DESC, created_at DESC
@@ -80,8 +110,9 @@ export async function GET(
       return NextResponse.json(
         successResponse({
           saldo,
+          saldo_credito: saldoCredito,
           saldo_cashback: saldoCashback,
-          saldo_credito: saldoCreditoOtro,
+          saldo_consignacion: saldoConsignacion,
           movimientos: movQ.rows,
         }),
       );
