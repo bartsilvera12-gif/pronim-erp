@@ -53,6 +53,9 @@ type Linea = {
    *  de la línea pasa a ser (franja + tipo_prenda_id): la misma franja
    *  puede repetirse con distintos tipos. */
   tipo_prenda_id?: string | null;
+  /** Descuento manual por unidad (LLEVA). Se resta al `precio_unitario`
+   *  al calcular subtotal y se persiste como `venta_items.descuento_unitario`. */
+  descuento_unitario?: number;
 };
 
 type TipoPrenda = { id: string; nombre: string; orden: number; activo: boolean };
@@ -157,6 +160,10 @@ export default function NuevaAtencionPage() {
   const [aplicarCredito, setAplicarCredito] = useState<string>("");
   const [metodoCobro, setMetodoCobro] = useState<"efectivo" | "tarjeta" | "transferencia">("efectivo");
   const [montoRecibido, setMontoRecibido] = useState<string>("");
+  // Descuento general aplicado al total al cerrar (redondeo, negociación,
+  // producto con defecto, promoción, cortesía, intercambio, otro).
+  const [descuentoGeneral, setDescuentoGeneral] = useState<string>("");
+  const [descuentoMotivo, setDescuentoMotivo] = useState<"redondeo"|"negociacion"|"defecto"|"promocion"|"cortesia"|"intercambio"|"otro">("redondeo");
   const [referenciaCobro, setReferenciaCobro] = useState<string>("");
   const [observaciones, setObservaciones] = useState("");
   // Default true: la mercadería que trae el cliente entra al stock ahora
@@ -595,7 +602,13 @@ export default function NuevaAtencionPage() {
   }, [traeMontoFinal]);
   const totalTrae = totalTraeManual != null ? totalTraeManual : totalTraeSubtotal;
   const ajusteEvaluacion = totalTrae - totalTraeSubtotal;
-  const totalLleva = useMemo(() => lleva.reduce((s, l) => s + l.precio_unitario * l.cantidad, 0), [lleva]);
+  const totalLleva = useMemo(
+    () => lleva.reduce((s, l) => {
+      const desc = Math.max(0, Math.min(Number(l.descuento_unitario) || 0, l.precio_unitario));
+      return s + (l.precio_unitario - desc) * l.cantidad;
+    }, 0),
+    [lleva],
+  );
 
   // Modelo explícito:
   //  1) Todo lo que TRAE hoy genera crédito nuevo por totalTrae.
@@ -605,7 +618,11 @@ export default function NuevaAtencionPage() {
   //  4) La diferencia se cobra en efectivo/tarjeta/transferencia.
   //  5) Lo que no se aplique queda como crédito remanente para el futuro.
   const descuentoPromo = promoAplicada?.descuento ?? 0;
-  const totalLlevaConDescuento = Math.max(0, totalLleva - descuentoPromo);
+  const descuentoGeneralNum = useMemo(() => {
+    const n = Number(descuentoGeneral);
+    return Number.isFinite(n) && n > 0 ? Math.min(n, Math.max(0, totalLleva - descuentoPromo)) : 0;
+  }, [descuentoGeneral, totalLleva, descuentoPromo]);
+  const totalLlevaConDescuento = Math.max(0, totalLleva - descuentoPromo - descuentoGeneralNum);
 
   const creditoTotalDisponible = creditoDisponible + totalTrae;
   const creditoMaxAplicable = Math.min(creditoTotalDisponible, totalLlevaConDescuento);
@@ -986,9 +1003,9 @@ export default function NuevaAtencionPage() {
             // lo sumáramos también acá, la venta consumiría el doble.
             const creditoUsadoEnPayload = creditoAplicadoNum;
             // Para calcular el efectivo que falta cobrar, sí consideramos
-            // el descuento (visual): total − credito_previo − descuento_promo.
+            // el descuento (visual): total − credito_previo − descuento_promo − descuento_general.
             const descuentoPromoVisual = promoAplicada?.descuento ?? 0;
-            const efectivoNeeded = Math.max(0, total - creditoAplicadoNum - descuentoPromoVisual);
+            const efectivoNeeded = Math.max(0, total - creditoAplicadoNum - descuentoPromoVisual - descuentoGeneralNum);
             const pago_detalle = efectivoNeeded > 0
               ? [{
                   metodo_pago: metodoCobro,
@@ -1001,11 +1018,14 @@ export default function NuevaAtencionPage() {
                 producto_id: l.franja_id,
                 cantidad: l.cantidad,
                 tipo_iva: "EXENTA" as const,
+                descuento_unitario: Math.max(0, Number(l.descuento_unitario) || 0),
               })),
               credito_usado: creditoUsadoEnPayload,
               pago_detalle,
               moneda: "GS" as const,
               tipo_cambio: 1,
+              descuento_general: descuentoGeneralNum,
+              descuento_motivo: descuentoGeneralNum > 0 ? descuentoMotivo : null,
             };
           })()
         : null;
@@ -1523,6 +1543,7 @@ export default function NuevaAtencionPage() {
           onActualizar={(i, patch) => actualizarLinea("lleva", i, patch)}
           onQuitar={(i) => quitarLinea("lleva", i)}
           permitirEditarPrecio={false}
+          permitirDescuento
         />
       </div>
 
@@ -1660,6 +1681,44 @@ export default function NuevaAtencionPage() {
                 {" "}Queda a favor: <strong className="text-emerald-700">{fmtGs(creditoRestante)}</strong>.
               </p>
             </div>
+            {/* Descuento general sobre el total (redondeo, negociación, defecto, etc.) */}
+            {totalLleva > 0 && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50/40 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-[11px] uppercase font-semibold text-amber-800">Descuento general</p>
+                  {descuentoGeneralNum > 0 && (
+                    <span className="text-xs font-bold text-amber-800">−{fmtGs(descuentoGeneralNum)}</span>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <MontoInput
+                    value={Number(descuentoGeneral) || 0}
+                    onChange={(n) => setDescuentoGeneral(n > 0 ? String(n) : "")}
+                    placeholder="0"
+                    decimals={false}
+                    className="w-full rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300"
+                  />
+                  <select
+                    value={descuentoMotivo}
+                    onChange={(e) => setDescuentoMotivo(e.target.value as typeof descuentoMotivo)}
+                    className="w-full rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300"
+                    disabled={descuentoGeneralNum <= 0}
+                    aria-label="Motivo del descuento"
+                  >
+                    <option value="redondeo">Redondeo</option>
+                    <option value="negociacion">Negociación</option>
+                    <option value="defecto">Producto con defecto</option>
+                    <option value="promocion">Promoción</option>
+                    <option value="cortesia">Cortesía</option>
+                    <option value="intercambio">Intercambio (BR)</option>
+                    <option value="otro">Otro</option>
+                  </select>
+                </div>
+                <p className="text-[11px] text-amber-700">
+                  Se resta del total antes de cobrar. Se registra el motivo para reportes.
+                </p>
+              </div>
+            )}
             {aCobrar > 0 && (
               <div className="space-y-2">
                 <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
@@ -2435,6 +2494,9 @@ function ColumnaAtencion(props: {
   onActualizar: (idx: number, patch: Partial<Linea>) => void;
   onQuitar: (idx: number) => void;
   permitirEditarPrecio: boolean;
+  /** Muestra columna "Desc." por línea (LLEVA). El descuento se resta del
+   *  precio unitario y se persiste en `venta_items.descuento_unitario`. */
+  permitirDescuento?: boolean;
   /** Subtotal de los items antes de un override manual. Solo se usa para mostrar. */
   subtotalItems?: number;
   /** Acciones extra en el header (ej. botón "Cambio directo"). */
@@ -2445,7 +2507,7 @@ function ColumnaAtencion(props: {
    *  discreto por línea. La identidad de la línea es (franja + tipo). */
   tiposPrenda?: TipoPrenda[];
 }) {
-  const { titulo, descripcion, tono, franjas, cargando, lineas, total, onAgregar, onActualizar, onQuitar, permitirEditarPrecio, subtotalItems, accionesHeader, slotDebajo, tiposPrenda } = props;
+  const { titulo, descripcion, tono, franjas, cargando, lineas, total, onAgregar, onActualizar, onQuitar, permitirEditarPrecio, permitirDescuento, subtotalItems, accionesHeader, slotDebajo, tiposPrenda } = props;
   // Multiplicador para agregar N prendas del mismo precio en un solo click
   // (ej: "15 prendas de 50 mil"). Por defecto 1 — comportamiento sin cambio.
   const [cantMult, setCantMult] = useState<string>("1");
@@ -2548,6 +2610,9 @@ function ColumnaAtencion(props: {
                 <th className="text-left text-[11px] font-semibold text-slate-500 px-3 py-2 uppercase tracking-wide">Categoría</th>
                 <th className="text-right text-[11px] font-semibold text-slate-500 px-3 py-2 uppercase tracking-wide w-20">Cant.</th>
                 <th className="text-right text-[11px] font-semibold text-slate-500 px-3 py-2 uppercase tracking-wide w-32">Precio unit.</th>
+                {permitirDescuento && (
+                  <th className="text-right text-[11px] font-semibold text-slate-500 px-3 py-2 uppercase tracking-wide w-24" title="Descuento por unidad (ej: intercambio Brasil, defecto, negociación)">Desc.</th>
+                )}
                 <th className="text-right text-[11px] font-semibold text-slate-500 px-3 py-2 uppercase tracking-wide w-28">Subtotal</th>
                 <th className="w-8"></th>
               </tr>
@@ -2605,7 +2670,32 @@ function ColumnaAtencion(props: {
                       <span className="text-slate-700">{fmtGs(l.precio_unitario)}</span>
                     )}
                   </td>
-                  <td className="px-3 py-2 text-right font-medium text-slate-800">{fmtGs(l.precio_unitario * l.cantidad)}</td>
+                  {permitirDescuento && (
+                    <td className="px-3 py-2 text-right">
+                      <MontoInput
+                        value={Number(l.descuento_unitario) || 0}
+                        onChange={(n) => onActualizar(idx, { descuento_unitario: Math.max(0, Math.min(n, l.precio_unitario)) })}
+                        decimals={false}
+                        className="w-20 rounded-md border border-slate-200 px-2 py-1 text-right text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
+                      />
+                    </td>
+                  )}
+                  <td className="px-3 py-2 text-right font-medium text-slate-800">
+                    {(() => {
+                      const desc = Math.max(0, Math.min(Number(l.descuento_unitario) || 0, l.precio_unitario));
+                      const sub = (l.precio_unitario - desc) * l.cantidad;
+                      return (
+                        <>
+                          {fmtGs(sub)}
+                          {desc > 0 && (
+                            <p className="text-[10px] text-emerald-700 mt-0.5">
+                              −{fmtGs(desc * l.cantidad)}
+                            </p>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </td>
                   <td className="px-2 py-2 text-right">
                     <button
                       type="button"

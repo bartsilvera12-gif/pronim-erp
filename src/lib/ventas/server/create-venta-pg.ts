@@ -50,6 +50,8 @@ export interface CreateVentaItemInput {
   tipo_iva?: "EXENTA" | "5%" | "10%";
   /** Snapshot del carrito (informativo, se usa solo para validar coincidencia). */
   precio_venta_sugerido?: number;
+  /** Descuento manual por unidad (Gs./R$). Se resta del precio de la DB. */
+  descuento_unitario?: number;
 }
 
 export type MetodoPagoVenta =
@@ -98,6 +100,10 @@ export interface CreateVentaPgParams {
   usuarioNombre?: string | null;
   /** Vincula a operación de cambio. */
   cambioId?: string | null;
+  /** Descuento general aplicado al total (Gs./R$), post-línea. */
+  descuentoGeneral?: number | null;
+  /** Motivo del descuento general (redondeo/negociacion/defecto/…). */
+  descuentoMotivo?: string | null;
 }
 
 export interface CreateVentaResult {
@@ -313,6 +319,7 @@ export async function createVentaEnClientePg(
       cantidad: number;
       precio_venta_original: number;
       precio_venta: number;
+      descuento_unitario: number;
       tipo_iva: "EXENTA" | "5%" | "10%";
       subtotal: number;
       monto_iva: number;
@@ -337,7 +344,13 @@ export async function createVentaEnClientePg(
       const tipoIva: "EXENTA" | "5%" | "10%" = info.es_franja_precio
         ? "EXENTA"
         : (it.tipo_iva === "5%" || it.tipo_iva === "10%") ? it.tipo_iva : "EXENTA";
-      const precioVenta = esSinCargo ? 0 : info.precio_venta;
+      const precioVentaBruto = esSinCargo ? 0 : info.precio_venta;
+      // Descuento manual por unidad (columna "Descuento" en la tabla de venta).
+      // Nunca puede dejar el precio negativo ni aplicarse a líneas sin cargo.
+      const descuentoUnitario = esSinCargo
+        ? 0
+        : Math.max(0, Math.min(Number(it.descuento_unitario) || 0, precioVentaBruto));
+      const precioVenta = Math.max(0, precioVentaBruto - descuentoUnitario);
       const subtotal = cantidad * precioVenta;
       const montoIva = esSinCargo ? 0 : computeIva(tipoIva, subtotal);
       const totalLinea = subtotal; // el IVA es informativo en el modelo Pronim
@@ -346,8 +359,11 @@ export async function createVentaEnClientePg(
         producto_nombre: info.nombre,
         sku: info.sku,
         cantidad,
-        precio_venta_original: precioVenta,
+        // precio_venta_original guarda SIEMPRE el precio de la DB (bruto),
+        // para poder reportar cuánto se descontó por línea.
+        precio_venta_original: precioVentaBruto,
         precio_venta: precioVenta,
+        descuento_unitario: descuentoUnitario,
         tipo_iva: tipoIva,
         subtotal,
         monto_iva: montoIva,
@@ -358,9 +374,22 @@ export async function createVentaEnClientePg(
       });
     }
 
-    const subtotal = itemsResueltos.reduce((s, i) => s + i.subtotal, 0);
+    const subtotalPreDesc = itemsResueltos.reduce((s, i) => s + i.subtotal, 0);
     const montoIva = itemsResueltos.reduce((s, i) => s + i.monto_iva, 0);
-    const total = itemsResueltos.reduce((s, i) => s + i.total_linea, 0);
+    const totalPreDesc = itemsResueltos.reduce((s, i) => s + i.total_linea, 0);
+
+    // Descuento general aplicado al total (redondeo, negociación, etc.). No
+    // puede superar el total ni ser negativo. El motivo se guarda como texto
+    // libre pero el frontend lo entrega desde una lista cerrada.
+    const descuentoGeneralRaw = Math.max(0, Number(params.descuentoGeneral) || 0);
+    const descuentoGeneral = Math.min(descuentoGeneralRaw, totalPreDesc);
+    const descuentoMotivo = descuentoGeneral > 0
+      ? (typeof params.descuentoMotivo === "string" && params.descuentoMotivo.trim()
+          ? params.descuentoMotivo.trim().slice(0, 60)
+          : "otro")
+      : null;
+    const subtotal = Math.max(0, subtotalPreDesc - descuentoGeneral);
+    const total = Math.max(0, totalPreDesc - descuentoGeneral);
 
     // ── Ecuación única ────────────────────────────────────────────────
     const totalPagosInmediatos = pagosInmediatos.reduce(
@@ -499,51 +528,93 @@ export async function createVentaEnClientePg(
     // (informativo; la fuente de verdad son ventas_pagos_detalle).
     const metodoPagoLegacy = totalEfectivo > 0 ? "efectivo"
       : (pagosInmediatos[0]?.metodo_pago ?? "efectivo");
-    const insVenta = await client.query<{ id: string; fecha: string }>(
-      `INSERT INTO ${ventasT} (
-         empresa_id, cliente_id, numero_control, moneda, tipo_cambio,
-         subtotal, monto_iva, total, estado, tipo_venta, plazo_dias, fecha,
-         observaciones, caja_id, metodo_pago, sucursal_id, cambio_id
-       ) VALUES ($1,$2,$3,$4,$5, $6,$7,$8,'completada',$9,$10,now(),
-                 $11,$12,$13,$14,$15)
-       RETURNING id, fecha`,
-      [
-        params.empresaId,
-        params.clienteId,
-        numeroControl,
-        params.moneda,
-        params.tipoCambio,
-        subtotal,
-        montoIva,
-        total,
-        params.tipoVenta,
-        params.plazoDias,
-        params.observaciones,
-        cajaIdActual,
-        metodoPagoLegacy,
-        params.sucursalId,
-        params.cambioId ?? null,
-      ],
+    // Detectamos si el schema ya tiene las columnas nuevas de descuento
+    // (migración `pronimerp_ventas_descuentos`). Si no están, degradamos
+    // silenciosamente — el descuento igual se aplicó al total, sólo que no
+    // guardamos el desglose para reportes.
+    const ventasColsQ = await client.query<{ column_name: string }>(
+      `SELECT column_name FROM information_schema.columns
+       WHERE table_schema = $1 AND table_name = 'ventas'`,
+      [params.schema],
     );
+    const ventasColSet = new Set(ventasColsQ.rows.map((r) => r.column_name));
+    const ventasTieneDescuento = ventasColSet.has("descuento_general") && ventasColSet.has("descuento_motivo");
+
+    const insVenta = ventasTieneDescuento
+      ? await client.query<{ id: string; fecha: string }>(
+          `INSERT INTO ${ventasT} (
+             empresa_id, cliente_id, numero_control, moneda, tipo_cambio,
+             subtotal, monto_iva, total, estado, tipo_venta, plazo_dias, fecha,
+             observaciones, caja_id, metodo_pago, sucursal_id, cambio_id,
+             descuento_general, descuento_motivo
+           ) VALUES ($1,$2,$3,$4,$5, $6,$7,$8,'completada',$9,$10,now(),
+                     $11,$12,$13,$14,$15, $16,$17)
+           RETURNING id, fecha`,
+          [
+            params.empresaId, params.clienteId, numeroControl, params.moneda, params.tipoCambio,
+            subtotal, montoIva, total, params.tipoVenta, params.plazoDias, params.observaciones,
+            cajaIdActual, metodoPagoLegacy, params.sucursalId, params.cambioId ?? null,
+            descuentoGeneral, descuentoMotivo,
+          ],
+        )
+      : await client.query<{ id: string; fecha: string }>(
+          `INSERT INTO ${ventasT} (
+             empresa_id, cliente_id, numero_control, moneda, tipo_cambio,
+             subtotal, monto_iva, total, estado, tipo_venta, plazo_dias, fecha,
+             observaciones, caja_id, metodo_pago, sucursal_id, cambio_id
+           ) VALUES ($1,$2,$3,$4,$5, $6,$7,$8,'completada',$9,$10,now(),
+                     $11,$12,$13,$14,$15)
+           RETURNING id, fecha`,
+          [
+            params.empresaId, params.clienteId, numeroControl, params.moneda, params.tipoCambio,
+            subtotal, montoIva, total, params.tipoVenta, params.plazoDias, params.observaciones,
+            cajaIdActual, metodoPagoLegacy, params.sucursalId, params.cambioId ?? null,
+          ],
+        );
     const ventaId = insVenta.rows[0].id;
     const fechaIso = insVenta.rows[0].fecha;
 
     // ── Items ────────────────────────────────────────────────────────
+    const itemsColsQ = await client.query<{ column_name: string }>(
+      `SELECT column_name FROM information_schema.columns
+       WHERE table_schema = $1 AND table_name = 'venta_items'`,
+      [params.schema],
+    );
+    const itemsColSet = new Set(itemsColsQ.rows.map((r) => r.column_name));
+    const itemsTieneDescuento = itemsColSet.has("descuento_unitario");
+
     for (const it of itemsResueltos) {
-      await client.query(
-        `INSERT INTO ${itemsT} (
-           empresa_id, venta_id, producto_id, producto_nombre, sku,
-           cantidad, precio_venta_original, precio_venta, tipo_iva,
-           subtotal, monto_iva, total_linea, es_sin_cargo, motivo_sin_cargo,
-           costo_unitario_snapshot
-         ) VALUES ($1,$2,$3,$4,$5, $6,$7,$8,$9, $10,$11,$12,$13,$14, $15)`,
-        [
-          params.empresaId, ventaId, it.producto_id, it.producto_nombre, it.sku,
-          it.cantidad, it.precio_venta_original, it.precio_venta, it.tipo_iva,
-          it.subtotal, it.monto_iva, it.total_linea, it.es_sin_cargo, it.motivo_sin_cargo,
-          it.costo_unitario_snapshot,
-        ],
-      );
+      if (itemsTieneDescuento) {
+        await client.query(
+          `INSERT INTO ${itemsT} (
+             empresa_id, venta_id, producto_id, producto_nombre, sku,
+             cantidad, precio_venta_original, precio_venta, tipo_iva,
+             subtotal, monto_iva, total_linea, es_sin_cargo, motivo_sin_cargo,
+             costo_unitario_snapshot, descuento_unitario
+           ) VALUES ($1,$2,$3,$4,$5, $6,$7,$8,$9, $10,$11,$12,$13,$14, $15,$16)`,
+          [
+            params.empresaId, ventaId, it.producto_id, it.producto_nombre, it.sku,
+            it.cantidad, it.precio_venta_original, it.precio_venta, it.tipo_iva,
+            it.subtotal, it.monto_iva, it.total_linea, it.es_sin_cargo, it.motivo_sin_cargo,
+            it.costo_unitario_snapshot, it.descuento_unitario,
+          ],
+        );
+      } else {
+        await client.query(
+          `INSERT INTO ${itemsT} (
+             empresa_id, venta_id, producto_id, producto_nombre, sku,
+             cantidad, precio_venta_original, precio_venta, tipo_iva,
+             subtotal, monto_iva, total_linea, es_sin_cargo, motivo_sin_cargo,
+             costo_unitario_snapshot
+           ) VALUES ($1,$2,$3,$4,$5, $6,$7,$8,$9, $10,$11,$12,$13,$14, $15)`,
+          [
+            params.empresaId, ventaId, it.producto_id, it.producto_nombre, it.sku,
+            it.cantidad, it.precio_venta_original, it.precio_venta, it.tipo_iva,
+            it.subtotal, it.monto_iva, it.total_linea, it.es_sin_cargo, it.motivo_sin_cargo,
+            it.costo_unitario_snapshot,
+          ],
+        );
+      }
     }
 
     // ── Descontar stock + movimientos SALIDA ─────────────────────────

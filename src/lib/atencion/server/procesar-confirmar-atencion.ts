@@ -168,6 +168,7 @@ async function runProcesar(
           const cantidad = Number(r.cantidad);
           if (!producto_id || !(cantidad > 0)) return null;
           const tipoIva = r.tipo_iva;
+          const descuentoUnit = Math.max(0, Number(r.descuento_unitario) || 0);
           return {
             producto_id,
             cantidad,
@@ -175,9 +176,10 @@ async function runProcesar(
               tipoIva === "EXENTA" || tipoIva === "5%" || tipoIva === "10%"
                 ? (tipoIva as "EXENTA" | "5%" | "10%")
                 : "EXENTA",
+            descuento_unitario: descuentoUnit,
           };
         })
-        .filter((x): x is { producto_id: string; cantidad: number; tipo_iva: "EXENTA" | "5%" | "10%" } => !!x);
+        .filter((x): x is { producto_id: string; cantidad: number; tipo_iva: "EXENTA" | "5%" | "10%"; descuento_unitario: number } => !!x);
       if (out.length === 0) return null;
       const pagosRaw = Array.isArray(raw.pago_detalle) ? raw.pago_detalle : [];
       const pagos = pagosRaw
@@ -200,12 +202,20 @@ async function runProcesar(
           };
         })
         .filter((x): x is NonNullable<typeof x> => !!x);
+      const descuentoGeneral = Math.max(0, Number(raw.descuento_general ?? 0) || 0);
+      const descuentoMotivoRaw = typeof raw.descuento_motivo === "string" ? raw.descuento_motivo.trim() : "";
+      const motivosOk = new Set(["redondeo","negociacion","defecto","promocion","cortesia","intercambio","otro"]);
+      const descuentoMotivo = descuentoGeneral > 0
+        ? (motivosOk.has(descuentoMotivoRaw) ? descuentoMotivoRaw : "otro")
+        : null;
       return {
         items: out,
         creditoUsado: Math.max(0, Number(raw.credito_usado ?? 0) || 0),
         pagosInmediatos: pagos,
         moneda: raw.moneda === "USD" ? "USD" : "GS",
         tipoCambio: Number(raw.tipo_cambio) || 1,
+        descuentoGeneral,
+        descuentoMotivo,
       };
     };
 

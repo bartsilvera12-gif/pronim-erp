@@ -76,6 +76,11 @@ export interface ConfirmarAtencionInput {
     pagosInmediatos: PagoDetalleVentaInput[];
     moneda?: "GS" | "USD";
     tipoCambio?: number;
+    /** Descuento general (Gs./R$) aplicado al total de la venta. */
+    descuentoGeneral?: number | null;
+    /** Motivo del descuento general: redondeo, negociacion, defecto,
+     *  promocion, cortesia, intercambio, otro. */
+    descuentoMotivo?: string | null;
   } | null;
 
   // Promoción (opcional). El server RE-CALCULA descuento/cashback contra
@@ -427,6 +432,8 @@ export async function confirmarAtencionEnClientePg(
         createdBy: p.createdBy,
         usuarioNombre: p.usuarioNombre,
         cambioId,
+        descuentoGeneral: v.descuentoGeneral ?? 0,
+        descuentoMotivo: v.descuentoMotivo ?? null,
       });
       ventaOut = { id: r.ventaId, numero_control: r.numeroControl, total: r.total };
     }
