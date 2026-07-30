@@ -164,6 +164,10 @@ export default function VentasPage() {
   // Solo para admin: filtro por sucursal del histórico completo. Los cajeros
   // ya reciben la lista scopeada por su sucursal desde la API.
   const [filtroSucursal, setFiltroSucursal] = useState<string>("");
+  // Fase 2 tanda 3: filtros combinables adicionales
+  const [filtroPago,     setFiltroPago]     = useState<"" | "efectivo" | "tarjeta" | "transferencia" | "qr" | "billetera" | "otro">("");
+  const [filtroEstado,   setFiltroEstado]   = useState<"" | "completada" | "anulada">("");
+  const [segmento,       setSegmento]       = useState<"" | "hoy" | "semana" | "mes" | "con_descuento" | "anuladas">("");
   const [sucursales, setSucursales] = useState<{ id: string; nombre: string }[]>([]);
   const [cargandoLista, setCargandoLista] = useState(true);
   // Modal para anular una venta desde el listado. La venta a anular
@@ -275,6 +279,44 @@ export default function VentasPage() {
     // IVA: coincide si al menos un ítem tiene ese tipo
     if (filtroIva !== "" && !v.items.some((i) => i.tipo_iva === filtroIva))
       return false;
+    // Forma de pago
+    if (filtroPago !== "" && v.metodo_pago !== filtroPago) return false;
+    // Estado (completada / anulada) — si no se filtra, mostramos todo salvo
+    // que el segmento "anuladas" lo pida explícitamente
+    if (filtroEstado !== "" && (v.estado ?? "completada") !== filtroEstado) return false;
+    // Segmento rápido
+    if (segmento) {
+      const f = Date.parse(v.fecha);
+      const dias = Number.isFinite(f) ? (Date.now() - f) / 86_400_000 : Infinity;
+      const startOfDay = (d = new Date()) => { const x = new Date(d); x.setHours(0,0,0,0); return x.getTime(); };
+      const startWeek = (() => {
+        const x = new Date();
+        const dow = (x.getDay() + 6) % 7; // lunes=0
+        x.setHours(0,0,0,0);
+        x.setDate(x.getDate() - dow);
+        return x.getTime();
+      })();
+      const startMonth = new Date();
+      startMonth.setDate(1); startMonth.setHours(0,0,0,0);
+      switch (segmento) {
+        case "hoy":
+          if (!Number.isFinite(f) || f < startOfDay()) return false;
+          break;
+        case "semana":
+          if (!Number.isFinite(f) || f < startWeek) return false;
+          break;
+        case "mes":
+          if (!Number.isFinite(f) || f < startMonth.getTime()) return false;
+          break;
+        case "con_descuento":
+          if (!(Number(v.descuento_general ?? 0) > 0)) return false;
+          break;
+        case "anuladas":
+          if ((v.estado ?? "completada") !== "anulada") return false;
+          break;
+      }
+      void dias;
+    }
     return true;
   });
 
@@ -399,9 +441,37 @@ export default function VentasPage() {
               ]}
             />
           )}
-          {hayFiltros && (
+          <FancySelect
+            value={filtroPago}
+            onChange={(v) => setFiltroPago(v as typeof filtroPago)}
+            ariaLabel={t("Filtrar por forma de pago")}
+            className="w-44"
+            size="sm"
+            options={[
+              { value: "", label: t("Todas formas de pago") },
+              { value: "efectivo", label: t("Efectivo") },
+              { value: "tarjeta", label: t("Tarjeta") },
+              { value: "transferencia", label: t("Transferencia") },
+              { value: "qr", label: "QR" },
+              { value: "billetera", label: t("Billetera") },
+              { value: "otro", label: t("Otro") },
+            ]}
+          />
+          <FancySelect
+            value={filtroEstado}
+            onChange={(v) => setFiltroEstado(v as typeof filtroEstado)}
+            ariaLabel={t("Filtrar por estado")}
+            className="w-40"
+            size="sm"
+            options={[
+              { value: "", label: t("Todas") },
+              { value: "completada", label: t("Completadas") },
+              { value: "anulada", label: t("Anuladas") },
+            ]}
+          />
+          {(hayFiltros || filtroPago || filtroEstado || segmento) && (
             <button
-              onClick={() => { setBusqueda(""); setFiltroTipo(""); setFiltroIva(""); setFiltroSucursal(""); }}
+              onClick={() => { setBusqueda(""); setFiltroTipo(""); setFiltroIva(""); setFiltroSucursal(""); setFiltroPago(""); setFiltroEstado(""); setSegmento(""); }}
               className="text-sm text-gray-400 hover:text-gray-600 transition-colors px-2"
             >
               {t("Limpiar filtros")}
@@ -415,6 +485,48 @@ export default function VentasPage() {
             )}
             {filtradas.length} {t("de")} {alcance.length} {t("ventas")}
           </span>
+        </div>
+
+        {/* Segmentos rápidos por período / estado */}
+        <div className="flex flex-wrap gap-1.5 -mt-2">
+          {(() => {
+            const now = Date.now();
+            const startOfDay = (() => { const x = new Date(); x.setHours(0,0,0,0); return x.getTime(); })();
+            const startWeek = (() => {
+              const x = new Date(); const dow = (x.getDay() + 6) % 7;
+              x.setHours(0,0,0,0); x.setDate(x.getDate() - dow); return x.getTime();
+            })();
+            const startMonth = (() => { const x = new Date(); x.setDate(1); x.setHours(0,0,0,0); return x.getTime(); })();
+            const items: Array<[typeof segmento, string, number]> = [
+              ["", t("Todas"), alcance.length],
+              ["hoy", t("Hoy"), alcance.filter((v) => Date.parse(v.fecha) >= startOfDay).length],
+              ["semana", t("Esta semana"), alcance.filter((v) => Date.parse(v.fecha) >= startWeek).length],
+              ["mes", t("Este mes"), alcance.filter((v) => Date.parse(v.fecha) >= startMonth).length],
+              ["con_descuento", t("Con descuento"), alcance.filter((v) => Number(v.descuento_general ?? 0) > 0).length],
+              ["anuladas", t("Anuladas"), alcance.filter((v) => (v.estado ?? "completada") === "anulada").length],
+            ];
+            void now;
+            return items.map(([key, label, count]) => {
+              const active = segmento === key;
+              return (
+                <button
+                  key={key || "todos"}
+                  type="button"
+                  onClick={() => setSegmento(key)}
+                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium border transition-colors ${
+                    active
+                      ? "bg-[#4FAEB2] border-[#4FAEB2] text-white"
+                      : "bg-white border-slate-200 text-slate-600 hover:border-[#4FAEB2] hover:text-[#3F8E91]"
+                  }`}
+                >
+                  {label}
+                  <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${active ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"}`}>
+                    {count}
+                  </span>
+                </button>
+              );
+            });
+          })()}
         </div>
 
         {/* Tabla — min-w fuerza scroll horizontal en mobile; columnas secundarias

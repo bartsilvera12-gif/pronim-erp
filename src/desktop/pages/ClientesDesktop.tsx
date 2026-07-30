@@ -350,6 +350,16 @@ export default function ClientesPage() {
   // Segmento rápido: nuevos (últimos 30d), dormidos (>90d sin volver), VIP,
   // con crédito, nunca compraron, esta semana.
   const [segmento, setSegmento] = useState<"" | "nuevos" | "dormidos" | "vip" | "con_credito" | "nunca" | "semana" | "sin_volver_60">("");
+  // Fase 2 tanda 3: ordenamiento por columna. Click en header alterna
+  // asc/desc; segundo click sobre la misma columna invierte, tercero limpia.
+  type SortKey = ClienteColumnKey;
+  const [sortKey, setSortKey] = useState<SortKey | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  function toggleSort(key: SortKey) {
+    if (sortKey !== key) { setSortKey(key); setSortDir("desc"); return; }
+    if (sortDir === "desc") { setSortDir("asc"); return; }
+    setSortKey(null); setSortDir("desc");
+  }
   const [columnasOpen, setColumnasOpen] = useState(false);
   const [columnasInicializadas, setColumnasInicializadas] = useState(false);
   const [visibleColumnKeys, setVisibleColumnKeys] = useState<ClienteColumnKey[]>(DEFAULT_VISIBLE_COLUMN_KEYS);
@@ -497,6 +507,32 @@ export default function ClientesPage() {
   });
 
   const hayFiltros = busqueda || filtroEstado || filtroOrigen || filtroTipo || filtroTipoServicio || segmento;
+
+  // Aplicar sort si hay columna elegida. Usamos comparadores tipados por
+  // columna — así ordenar por "total_comprado" es numérico y no lexicográfico.
+  const filtradosOrdenados = useMemo(() => {
+    if (!sortKey) return filtrados;
+    const dir = sortDir === "asc" ? 1 : -1;
+    const arr = [...filtrados];
+    const cmp = (a: Cliente, b: Cliente): number => {
+      switch (sortKey) {
+        case "empresa_nombre": return clienteNombre(a).localeCompare(clienteNombre(b), "es") * dir;
+        case "codigo":         return (a.codigo_cliente ?? "").localeCompare(b.codigo_cliente ?? "", "es") * dir;
+        case "contacto":       return ((a.nombre_contacto ?? a.ciudad ?? "") as string).localeCompare((b.nombre_contacto ?? b.ciudad ?? "") as string, "es") * dir;
+        case "telefono":       return ((a.telefono ?? "") as string).localeCompare((b.telefono ?? "") as string) * dir;
+        case "email":          return ((a.email ?? "") as string).localeCompare((b.email ?? "") as string) * dir;
+        case "estado":         return (a.estado ?? "").localeCompare(b.estado ?? "") * dir;
+        case "origen":         return (a.origen ?? "").localeCompare(b.origen ?? "") * dir;
+        case "desde":          return (Date.parse(a.created_at) - Date.parse(b.created_at)) * dir;
+        case "ultima_compra":  return ((Date.parse(a.ultima_venta_at ?? "") || 0) - (Date.parse(b.ultima_venta_at ?? "") || 0)) * dir;
+        case "total_comprado": return ((a.total_comprado ?? 0) - (b.total_comprado ?? 0)) * dir;
+        case "cantidad_compras": return ((a.cantidad_compras ?? 0) - (b.cantidad_compras ?? 0)) * dir;
+        case "credito_disponible": return ((a.credito_disponible ?? 0) - (b.credito_disponible ?? 0)) * dir;
+        default: return 0;
+      }
+    };
+    return arr.sort(cmp);
+  }, [filtrados, sortKey, sortDir]);
 
   function toggleColumn(key: ClienteColumnKey) {
     const col = clienteColumns.find((c) => c.key === key);
@@ -656,7 +692,7 @@ export default function ClientesPage() {
       {/* Contador */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <p className="text-sm text-gray-500">
-          <span className="font-semibold text-gray-800">{filtrados.length}</span> de{" "}
+          <span className="font-semibold text-gray-800">{filtradosOrdenados.length}</span> de{" "}
           <span className="font-semibold text-gray-800">{clientes.length}</span> clientes
         </p>
         <div className="flex items-center gap-3">
@@ -733,7 +769,7 @@ export default function ClientesPage() {
               Cargando clientes…
             </div>
           </div>
-        ) : filtrados.length === 0 ? (
+        ) : filtradosOrdenados.length === 0 ? (
           <div className="py-16 text-center text-gray-400">
             <p className="text-4xl mb-3">👥</p>
             <p className="font-medium text-gray-600">
@@ -750,15 +786,25 @@ export default function ClientesPage() {
             <table className="w-full min-w-full">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50">
-                  {visibleColumns.map((col) => (
-                    <th key={col.key} className={col.headerClassName}>
-                      {col.label}
-                    </th>
-                  ))}
+                  {visibleColumns.map((col) => {
+                    const active = sortKey === col.key;
+                    const arrow = active ? (sortDir === "asc" ? "▲" : "▼") : "";
+                    return (
+                      <th
+                        key={col.key}
+                        className={`${col.headerClassName} cursor-pointer select-none hover:text-[#3F8E91]`}
+                        onClick={() => toggleSort(col.key)}
+                        title="Ordenar"
+                      >
+                        {col.label}
+                        {arrow && <span className="ml-1 text-[10px] text-[#4FAEB2]">{arrow}</span>}
+                      </th>
+                    );
+                  })}
                 </tr>
               </thead>
               <tbody>
-                {filtrados.map((c) => (
+                {filtradosOrdenados.map((c) => (
                   <tr
                     key={c.id}
                     className="border-b border-slate-200 hover:bg-[#4FAEB2]/[0.04] transition-colors cursor-pointer group"

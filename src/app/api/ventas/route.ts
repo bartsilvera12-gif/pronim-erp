@@ -22,6 +22,9 @@ interface VentaRow {
   estado?: string | null;
   anulada_at?: string | null;
   anulacion_motivo?: string | null;
+  metodo_pago?: string | null;
+  descuento_general?: number | string | null;
+  descuento_motivo?: string | null;
   sucursal_id?: string | null;
   sucursal?: { nombre?: string | null } | null;
 }
@@ -76,9 +79,10 @@ function mapItems(rows: VentaItemRow[]): LineaVenta[] {
 // suma la relación a sucursales (solo Joyería / deploys que la tengan).
 // La consulta intenta lo más completo primero y va degradando si PostgREST
 // falla por columna inexistente — así funciona en todos los deploys.
-const VENTAS_COLS_MIN = "id,empresa_id,cliente_id,numero_control,moneda,tipo_cambio,subtotal,monto_iva,total,tipo_venta,plazo_dias,fecha,estado";
+const VENTAS_COLS_MIN = "id,empresa_id,cliente_id,numero_control,moneda,tipo_cambio,subtotal,monto_iva,total,tipo_venta,plazo_dias,fecha,estado,metodo_pago";
 const VENTAS_COLS_ANULACION = `${VENTAS_COLS_MIN},anulada_at,anulacion_motivo`;
-const VENTAS_COLS_CON_SUCURSAL = `${VENTAS_COLS_ANULACION},sucursal_id,sucursal:sucursal_id(nombre)`;
+const VENTAS_COLS_CON_DESCUENTO = `${VENTAS_COLS_ANULACION},descuento_general,descuento_motivo`;
+const VENTAS_COLS_CON_SUCURSAL = `${VENTAS_COLS_CON_DESCUENTO},sucursal_id,sucursal:sucursal_id(nombre)`;
 const VENTAS_ITEMS_COLS = "venta_id,producto_id,producto_nombre,sku,cantidad,precio_venta_original,precio_venta,tipo_iva,subtotal,monto_iva,total_linea,es_sin_cargo,motivo_sin_cargo,costo_promocional_total";
 
 export async function GET(request: NextRequest) {
@@ -106,7 +110,7 @@ export async function GET(request: NextRequest) {
     // conservamos el comportamiento historico de ver todas — hay tenants
     // como Joyeria donde los usuarios sin sucursal fija ven la empresa
     // entera.
-    const attempts = [VENTAS_COLS_CON_SUCURSAL, VENTAS_COLS_ANULACION, VENTAS_COLS_MIN];
+    const attempts = [VENTAS_COLS_CON_SUCURSAL, VENTAS_COLS_CON_DESCUENTO, VENTAS_COLS_ANULACION, VENTAS_COLS_MIN];
     let ventasRes: Awaited<ReturnType<typeof postgrestGet<VentaRow>>> | null = null;
     let lastError: unknown = null;
     for (const cols of attempts) {
@@ -163,6 +167,9 @@ export async function GET(request: NextRequest) {
         estado: (r.estado ?? "completada") as "pendiente" | "completada" | "anulada",
         anulada_at: r.anulada_at ?? null,
         anulacion_motivo: r.anulacion_motivo ?? null,
+        metodo_pago: (r.metodo_pago ?? undefined) as import("@/lib/ventas/types").MetodoPago | undefined,
+        descuento_general: r.descuento_general != null ? num(r.descuento_general) : null,
+        descuento_motivo: r.descuento_motivo ?? null,
         sucursal_id: r.sucursal_id ?? null,
         sucursal_nombre: r.sucursal?.nombre ?? null,
       };

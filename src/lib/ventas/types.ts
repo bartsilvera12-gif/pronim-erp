@@ -59,4 +59,8 @@ export interface Venta {
   estado?: "pendiente" | "completada" | "anulada";
   anulada_at?: string | null;
   anulacion_motivo?: string | null;
+
+  /** Descuento general aplicado al cierre. Migración fase 2. */
+  descuento_general?: number | null;
+  descuento_motivo?: string | null;
 }
