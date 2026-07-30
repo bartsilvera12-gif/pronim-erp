@@ -577,7 +577,7 @@ export async function createVentaEnClientePg(
     // ── Items ────────────────────────────────────────────────────────
     const itemsColsQ = await client.query<{ column_name: string }>(
       `SELECT column_name FROM information_schema.columns
-       WHERE table_schema = $1 AND table_name = 'venta_items'`,
+       WHERE table_schema = $1 AND table_name = 'ventas_items'`,
       [params.schema],
     );
     const itemsColSet = new Set(itemsColsQ.rows.map((r) => r.column_name));
