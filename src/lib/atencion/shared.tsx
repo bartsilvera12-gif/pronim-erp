@@ -38,6 +38,8 @@ export type Linea = {
   precio_unitario: number;
   cantidad: number;
   tipo_prenda_id?: string | null;
+  /** Descuento manual por unidad (Gs./R$). Aplicado a LLEVA en /venta/nueva. */
+  descuento_unitario?: number;
 };
 
 export type TipoPrenda = { id: string; nombre: string; orden: number; activo: boolean };
@@ -68,6 +70,8 @@ export function ColumnaAtencion(props: {
   onActualizar: (idx: number, patch: Partial<Linea>) => void;
   onQuitar: (idx: number) => void;
   permitirEditarPrecio: boolean;
+  /** Muestra columna Desc. por línea (LLEVA). */
+  permitirDescuento?: boolean;
   subtotalItems?: number;
   accionesHeader?: React.ReactNode;
   slotDebajo?: React.ReactNode;
@@ -75,7 +79,7 @@ export function ColumnaAtencion(props: {
 }) {
   const {
     titulo, descripcion, tono, franjas, cargando, lineas, total,
-    onAgregar, onActualizar, onQuitar, permitirEditarPrecio,
+    onAgregar, onActualizar, onQuitar, permitirEditarPrecio, permitirDescuento,
     subtotalItems, accionesHeader, slotDebajo, tiposPrenda,
   } = props;
   const border = tono === "emerald" ? "border-emerald-200" : "border-sky-200";
@@ -140,6 +144,9 @@ export function ColumnaAtencion(props: {
                 <th className="text-left text-[11px] font-semibold text-slate-500 px-3 py-2 uppercase tracking-wide">Categoría</th>
                 <th className="text-right text-[11px] font-semibold text-slate-500 px-3 py-2 uppercase tracking-wide w-20">Cant.</th>
                 <th className="text-right text-[11px] font-semibold text-slate-500 px-3 py-2 uppercase tracking-wide w-32">Precio unit.</th>
+                {permitirDescuento && (
+                  <th className="text-right text-[11px] font-semibold text-slate-500 px-3 py-2 uppercase tracking-wide w-24" title="Descuento por unidad">Desc.</th>
+                )}
                 <th className="text-right text-[11px] font-semibold text-slate-500 px-3 py-2 uppercase tracking-wide w-28">Subtotal</th>
                 <th className="w-8"></th>
               </tr>
@@ -191,7 +198,30 @@ export function ColumnaAtencion(props: {
                       <span className="text-slate-700">{fmtGs(l.precio_unitario)}</span>
                     )}
                   </td>
-                  <td className="px-3 py-2 text-right font-medium text-slate-800">{fmtGs(l.precio_unitario * l.cantidad)}</td>
+                  {permitirDescuento && (
+                    <td className="px-3 py-2 text-right">
+                      <MontoInput
+                        value={Number(l.descuento_unitario) || 0}
+                        onChange={(n) => onActualizar(idx, { descuento_unitario: Math.max(0, Math.min(n, l.precio_unitario)) })}
+                        decimals={false}
+                        className="w-20 rounded-md border border-slate-200 px-2 py-1 text-right text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
+                      />
+                    </td>
+                  )}
+                  <td className="px-3 py-2 text-right font-medium text-slate-800">
+                    {(() => {
+                      const desc = Math.max(0, Math.min(Number(l.descuento_unitario) || 0, l.precio_unitario));
+                      const sub = (l.precio_unitario - desc) * l.cantidad;
+                      return (
+                        <>
+                          {fmtGs(sub)}
+                          {desc > 0 && (
+                            <p className="text-[10px] text-emerald-700 mt-0.5">−{fmtGs(desc * l.cantidad)}</p>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </td>
                   <td className="px-2 py-2 text-right">
                     <button
                       type="button"

@@ -83,6 +83,10 @@ export default function NuevaVentaPage() {
     { metodo: "efectivo", monto: "", referencia: "" },
   ]);
   const [observaciones, setObservaciones] = useState("");
+  // Descuento general con motivo (fase 2 tanda 5). Se resta al total antes
+  // de cobrar; se persiste en ventas.descuento_general/descuento_motivo.
+  const [descuentoGeneral, setDescuentoGeneral] = useState<string>("");
+  const [descuentoMotivo, setDescuentoMotivo] = useState<"redondeo"|"negociacion"|"defecto"|"promocion"|"cortesia"|"intercambio"|"otro">("redondeo");
 
   // ── Promo / cupón ────────────────────────────────────────────────────
   const [cuponInput, setCuponInput] = useState("");
@@ -213,10 +217,20 @@ export default function NuevaVentaPage() {
   }
 
   // ── Cálculos ─────────────────────────────────────────────────────────
-  const totalLleva = useMemo(() => lleva.reduce((s, l) => s + l.precio_unitario * l.cantidad, 0), [lleva]);
+  const totalLleva = useMemo(
+    () => lleva.reduce((s, l) => {
+      const d = Math.max(0, Math.min(Number(l.descuento_unitario) || 0, l.precio_unitario));
+      return s + (l.precio_unitario - d) * l.cantidad;
+    }, 0),
+    [lleva],
+  );
   const totalPrendas = useMemo(() => lleva.reduce((s, l) => s + (Number(l.cantidad) || 0), 0), [lleva]);
   const descuentoPromo = promoAplicada?.descuento ?? 0;
-  const totalLlevaConDescuento = Math.max(0, totalLleva - descuentoPromo);
+  const descuentoGeneralNum = useMemo(() => {
+    const n = Number(descuentoGeneral);
+    return Number.isFinite(n) && n > 0 ? Math.min(n, Math.max(0, totalLleva - descuentoPromo)) : 0;
+  }, [descuentoGeneral, totalLleva, descuentoPromo]);
+  const totalLlevaConDescuento = Math.max(0, totalLleva - descuentoPromo - descuentoGeneralNum);
   const creditoMaxAplicable = Math.min(creditoDisponible, totalLlevaConDescuento);
   const creditoAplicadoNum = useMemo(() => {
     if (aplicarCredito.trim() === "") return creditoMaxAplicable;
@@ -431,10 +445,17 @@ export default function NuevaVentaPage() {
       ];
 
       const llevaPayload = {
-        items: lleva.map((l) => ({ producto_id: l.franja_id, cantidad: l.cantidad, tipo_iva: "EXENTA" as const })),
+        items: lleva.map((l) => ({
+          producto_id: l.franja_id,
+          cantidad: l.cantidad,
+          tipo_iva: "EXENTA" as const,
+          descuento_unitario: Math.max(0, Number(l.descuento_unitario) || 0),
+        })),
         credito_usado: creditoAplicadoNum,
         pago_detalle,
         moneda: "GS" as const, tipo_cambio: 1,
+        descuento_general: descuentoGeneralNum,
+        descuento_motivo: descuentoGeneralNum > 0 ? descuentoMotivo : null,
       };
 
       const promoPayload = promoAplicada
@@ -641,6 +662,7 @@ export default function NuevaVentaPage() {
         onActualizar={actualizarLinea}
         onQuitar={quitarLinea}
         permitirEditarPrecio={false}
+        permitirDescuento
       />
 
       {/* Balance + cobro */}
@@ -718,6 +740,44 @@ export default function NuevaVentaPage() {
                 {" "}Queda a favor: <strong className="text-emerald-700">{fmtGs(creditoRestante)}</strong>.
               </p>
             </div>
+            {/* Descuento general sobre el total (redondeo/negociación/defecto/…) */}
+            {totalLleva > 0 && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50/40 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-[11px] uppercase font-semibold text-amber-800">Descuento general</p>
+                  {descuentoGeneralNum > 0 && (
+                    <span className="text-xs font-bold text-amber-800">−{fmtGs(descuentoGeneralNum)}</span>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <MontoInput
+                    value={Number(descuentoGeneral) || 0}
+                    onChange={(n) => setDescuentoGeneral(n > 0 ? String(n) : "")}
+                    placeholder="0"
+                    decimals={false}
+                    className="w-full rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300"
+                  />
+                  <select
+                    value={descuentoMotivo}
+                    onChange={(e) => setDescuentoMotivo(e.target.value as typeof descuentoMotivo)}
+                    className="w-full rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300"
+                    disabled={descuentoGeneralNum <= 0}
+                    aria-label="Motivo del descuento"
+                  >
+                    <option value="redondeo">Redondeo</option>
+                    <option value="negociacion">Negociación</option>
+                    <option value="defecto">Producto con defecto</option>
+                    <option value="promocion">Promoción</option>
+                    <option value="cortesia">Cortesía</option>
+                    <option value="intercambio">Intercambio (BR)</option>
+                    <option value="otro">Otro</option>
+                  </select>
+                </div>
+                <p className="text-[11px] text-amber-700">
+                  Se resta del total antes de cobrar. Se registra el motivo para reportes.
+                </p>
+              </div>
+            )}
             {aCobrar > 0 && (
               <div className="space-y-2">
                 <div className="flex items-baseline justify-between">
