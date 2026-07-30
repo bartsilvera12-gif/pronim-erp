@@ -7,6 +7,86 @@ import { createServiceRoleClient } from "@/lib/supabase/service-admin";
 import { getClientesSupabaseFromAuthWithRol } from "@/lib/clientes/clientes-service-client";
 import { fetchPerfilTributarioActivosMap } from "@/lib/clientes/tributario-server";
 import { ensureSemillasCatalogoTipos, tipoServicioSlugValido } from "@/lib/clientes/tipo-servicio-catalogo";
+import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema";
+import { getChatPostgresPool, quoteSchemaTable } from "@/lib/supabase/chat-pg-pool";
+import { assertAllowedChatDataSchema } from "@/lib/supabase/chat-data-schema";
+
+/**
+ * Enriquecimiento fase 2 (tanda 2): agrega por cliente
+ *   - ultima_venta_at, total_comprado, cantidad_compras
+ *   - credito_disponible (ledger: ENTRADA+AJUSTE − SALIDA)
+ * Habilita filtros VIP/dormido/con crédito/última compra en /clientes.
+ * Si el schema no tiene alguna tabla (ventas/creditos) o falta una columna,
+ * degradamos silenciosamente — el listado NUNCA falla por esto.
+ */
+async function attachActividadCliente(
+  rows: Record<string, unknown>[],
+  empresaId: string,
+): Promise<void> {
+  if (rows.length === 0) return;
+  const clienteIds = rows
+    .map((r) => (typeof r.id === "string" ? r.id : ""))
+    .filter(Boolean);
+  if (clienteIds.length === 0) return;
+
+  let schema: string;
+  try {
+    schema = assertAllowedChatDataSchema(await fetchDataSchemaForEmpresaId(empresaId));
+  } catch { return; }
+  const pool = getChatPostgresPool();
+  if (!pool) return;
+
+  const ventasT = quoteSchemaTable(schema, "ventas");
+  const creditosT = quoteSchemaTable(schema, "creditos");
+  const client = await pool.connect();
+  try {
+    // Chequeo mínimo de columnas ventas
+    const vColsQ = await client.query<{ column_name: string }>(
+      `SELECT column_name FROM information_schema.columns
+       WHERE table_schema = $1 AND table_name = 'ventas'`,
+      [schema],
+    );
+    const vCols = new Set(vColsQ.rows.map((r) => r.column_name));
+    const filtroEstado = vCols.has("estado") ? "AND (estado IS NULL OR estado <> 'anulada')" : "";
+
+    // Agregación ventas por cliente
+    const ventasAgg = await client.query<{
+      cliente_id: string; total_comprado: string; cantidad_compras: string; ultima_venta_at: string | null;
+    }>(
+      `SELECT cliente_id::text,
+              COALESCE(SUM(total),0)::text AS total_comprado,
+              COUNT(*)::text              AS cantidad_compras,
+              MAX(fecha)                  AS ultima_venta_at
+         FROM ${ventasT}
+        WHERE empresa_id = $1 AND cliente_id = ANY($2::uuid[]) ${filtroEstado}
+        GROUP BY cliente_id`,
+      [empresaId, clienteIds],
+    ).catch(() => ({ rows: [] as Array<{ cliente_id: string; total_comprado: string; cantidad_compras: string; ultima_venta_at: string | null }> }));
+    const ventasMap = new Map(ventasAgg.rows.map((r) => [r.cliente_id, r]));
+
+    // Agregación créditos por cliente (ENTRADA+AJUSTE − SALIDA)
+    const credAgg = await client.query<{ cliente_id: string; credito: string }>(
+      `SELECT cliente_id::text,
+              COALESCE(SUM(CASE WHEN tipo IN ('ENTRADA','AJUSTE') THEN monto ELSE -monto END),0)::text AS credito
+         FROM ${creditosT}
+        WHERE empresa_id = $1 AND cliente_id = ANY($2::uuid[])
+        GROUP BY cliente_id`,
+      [empresaId, clienteIds],
+    ).catch(() => ({ rows: [] as Array<{ cliente_id: string; credito: string }> }));
+    const credMap = new Map(credAgg.rows.map((r) => [r.cliente_id, r.credito]));
+
+    for (const r of rows) {
+      const id = typeof r.id === "string" ? r.id : "";
+      const v = ventasMap.get(id);
+      r.total_comprado = v ? Number(v.total_comprado) : 0;
+      r.cantidad_compras = v ? Number(v.cantidad_compras) : 0;
+      r.ultima_venta_at = v?.ultima_venta_at ?? null;
+      r.credito_disponible = Number(credMap.get(id) ?? 0);
+    }
+  } finally {
+    client.release();
+  }
+}
 
 /** Une `plan_activo` (nombre) a cada fila de cliente según suscripción activa más reciente. */
 function attachPlanesActivos(
@@ -171,6 +251,12 @@ export async function GET(request: NextRequest) {
       } catch (e) {
         console.error("[api/clientes] enrich vendedores:", e instanceof Error ? e.message : e);
       }
+    }
+
+    try {
+      await attachActividadCliente(rows, auth.empresa_id);
+    } catch (e) {
+      console.error("[api/clientes] enrich actividad:", e instanceof Error ? e.message : e);
     }
 
     return NextResponse.json(successResponse(rows));

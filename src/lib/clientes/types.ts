@@ -119,6 +119,13 @@ export interface Cliente {
 
   /** Detalle de obligaciones y metadatos fiscales (sin clave en claro). */
   perfil_tributario?:  PerfilTributarioCliente | null;
+
+  /** Enriquecimientos fase 2 (agregación server-side desde ventas/creditos).
+   *  Habilitan filtros VIP/dormido/con crédito y las columnas de actividad. */
+  ultima_venta_at?:    string | null;
+  total_comprado?:     number;
+  cantidad_compras?:   number;
+  credito_disponible?: number;
 }
 
 /** Perfil fiscal extendido; la clave nunca se expone, solo el hecho de que exista. */

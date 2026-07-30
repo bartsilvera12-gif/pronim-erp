@@ -10,7 +10,7 @@ import { getClientes, clienteNombre } from "@/lib/clientes/storage";
 import type { Cliente } from "@/lib/clientes/types";
 import { etiquetaVisibleTipoServicio, type ClienteTipoServicioRow } from "@/lib/clientes/tipo-servicio-catalogo";
 import { filasTiposDesdeSistemaEstatico, fetchTiposFormCliente } from "@/lib/clientes/fetch-tipos-servicio-form";
-import { useUserCfg } from "@/lib/i18n/context";
+import { useUserCfg, useMoney } from "@/lib/i18n/context";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -66,7 +66,11 @@ type ClienteColumnKey =
   | "creado_por"
   | "ruc_documento"
   | "email"
-  | "vendedor_responsable";
+  | "vendedor_responsable"
+  | "ultima_compra"
+  | "total_comprado"
+  | "cantidad_compras"
+  | "credito_disponible";
 
 type ClienteColumnDef = {
   key: ClienteColumnKey;
@@ -83,11 +87,10 @@ const DEFAULT_VISIBLE_COLUMN_KEYS: ClienteColumnKey[] = [
   "empresa_nombre",
   "contacto",
   "telefono",
-  "plan_activo",
+  "ultima_compra",
+  "total_comprado",
   "origen",
-  "tipo_servicio",
   "estado",
-  "desde",
 ];
 
 function normalizeVisibleColumnKeys(raw: unknown, columns: ClienteColumnDef[]): ClienteColumnKey[] {
@@ -129,7 +132,14 @@ function VendedorResponsableCell({ cliente }: { cliente: Cliente }) {
   return <span className="text-slate-400">Sin asignar</span>;
 }
 
-function buildClienteColumns(mapNombreTipo: Record<string, string>): ClienteColumnDef[] {
+function diasDesde(iso: string | null | undefined): number | null {
+  if (!iso) return null;
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return null;
+  return Math.floor((Date.now() - t) / 86_400_000);
+}
+
+function buildClienteColumns(mapNombreTipo: Record<string, string>, fmtMoney: (n: number) => string): ClienteColumnDef[] {
   const th = "text-left text-xs font-semibold text-slate-600 px-5 py-3 whitespace-nowrap";
   const td = "px-5 py-3.5";
   return [
@@ -275,6 +285,53 @@ function buildClienteColumns(mapNombreTipo: Record<string, string>): ClienteColu
       className: `${td} text-xs text-gray-500 whitespace-nowrap`,
       render: (c) => <VendedorResponsableCell cliente={c} />,
     },
+    {
+      key: "ultima_compra",
+      label: "Última compra",
+      visibleDefault: true,
+      headerClassName: th,
+      className: `${td} text-xs whitespace-nowrap`,
+      render: (c) => {
+        const d = diasDesde(c.ultima_venta_at ?? null);
+        if (d == null) return <span className="text-slate-400">Nunca</span>;
+        const tone = d <= 30 ? "text-emerald-700" : d <= 90 ? "text-slate-700" : "text-rose-600";
+        const label = d === 0 ? "Hoy" : d === 1 ? "Ayer" : `hace ${d}d`;
+        return (
+          <div className={tone}>
+            <p className="font-medium">{label}</p>
+            <p className="text-[10px] text-slate-400">{formatFecha(c.ultima_venta_at ?? "")}</p>
+          </div>
+        );
+      },
+    },
+    {
+      key: "total_comprado",
+      label: "Total comprado",
+      visibleDefault: true,
+      headerClassName: `${th} text-right`,
+      className: `${td} text-right text-sm font-semibold text-slate-800 tabular-nums whitespace-nowrap`,
+      render: (c) => c.total_comprado != null ? fmtMoney(c.total_comprado) : <span className="text-slate-400">—</span>,
+    },
+    {
+      key: "cantidad_compras",
+      label: "Compras",
+      visibleDefault: false,
+      headerClassName: `${th} text-right`,
+      className: `${td} text-right text-sm text-slate-700 tabular-nums whitespace-nowrap`,
+      render: (c) => c.cantidad_compras ?? 0,
+    },
+    {
+      key: "credito_disponible",
+      label: "Crédito disponible",
+      visibleDefault: false,
+      headerClassName: `${th} text-right`,
+      className: `${td} text-right text-sm tabular-nums whitespace-nowrap`,
+      render: (c) => {
+        const v = Number(c.credito_disponible ?? 0);
+        if (v <= 0) return <span className="text-slate-400">—</span>;
+        return <span className="font-semibold text-emerald-700">{fmtMoney(v)}</span>;
+      },
+    },
   ];
 }
 
@@ -290,6 +347,9 @@ export default function ClientesPage() {
   const [filtroOrigen, setFiltroOrigen] = useState<"" | "CRM" | "VENTA" | "MANUAL">("");
   const [filtroTipo,   setFiltroTipo]   = useState<"" | "empresa" | "persona">("");
   const [filtroTipoServicio, setFiltroTipoServicio] = useState<"" | string>("");
+  // Segmento rápido: nuevos (últimos 30d), dormidos (>90d sin volver), VIP,
+  // con crédito, nunca compraron, esta semana.
+  const [segmento, setSegmento] = useState<"" | "nuevos" | "dormidos" | "vip" | "con_credito" | "nunca" | "semana" | "sin_volver_60">("");
   const [columnasOpen, setColumnasOpen] = useState(false);
   const [columnasInicializadas, setColumnasInicializadas] = useState(false);
   const [visibleColumnKeys, setVisibleColumnKeys] = useState<ClienteColumnKey[]>(DEFAULT_VISIBLE_COLUMN_KEYS);
@@ -300,15 +360,20 @@ export default function ClientesPage() {
     return m;
   }, [filasTipoCatalogo]);
   const { moneda } = useUserCfg();
+  const money = useMoney();
+  const fmtMoney = (n: number) => money.format(n || 0);
   const esSucursalBR = moneda === "BRL";
   const clienteColumns = useMemo(() => {
-    const cols = buildClienteColumns(mapNombreTipo);
+    const cols = buildClienteColumns(mapNombreTipo, fmtMoney);
     // Sucursales BR (Betim, BH, El Dorado): ocultar columnas que no aplican al
     // modelo de compra/venta de prendas — ni siquiera aparecen en el selector.
     if (esSucursalBR) {
       return cols.filter((c) => c.key !== "plan_activo" && c.key !== "tipo_servicio");
     }
     return cols;
+    // fmtMoney depende de money.format que a su vez depende de moneda; con
+    // esSucursalBR ya cubrimos el cambio de identidad. No hace falta más deps.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapNombreTipo, esSucursalBR]);
   const visibleColumnSet = useMemo(() => new Set(visibleColumnKeys), [visibleColumnKeys]);
   const visibleColumns = useMemo(
@@ -367,6 +432,18 @@ export default function ClientesPage() {
     }
   }, [searchParams]);
 
+  // Umbral VIP relativo: top 15% del total comprado. Se recalcula cuando
+  // cambia el universo de clientes cargado.
+  const vipUmbralTotal = useMemo(() => {
+    const totales = clientes
+      .map((c) => Number(c.total_comprado ?? 0))
+      .filter((n) => n > 0)
+      .sort((a, b) => b - a);
+    if (totales.length === 0) return Infinity;
+    const idx = Math.max(0, Math.floor(totales.length * 0.15) - 1);
+    return totales[idx] ?? totales[0];
+  }, [clientes]);
+
   const filtrados = clientes.filter((c) => {
     const nombre = clienteNombre(c).toLowerCase();
     const q      = busqueda.toLowerCase();
@@ -384,10 +461,42 @@ export default function ClientesPage() {
     if (filtroOrigen       && c.origen              !== filtroOrigen) return false;
     if (filtroTipo         && c.tipo_cliente        !== filtroTipo) return false;
     if (filtroTipoServicio && c.tipo_servicio_cliente !== filtroTipoServicio) return false;
+    if (segmento) {
+      const d = diasDesde(c.ultima_venta_at ?? null);
+      const compras = c.cantidad_compras ?? 0;
+      const total = c.total_comprado ?? 0;
+      const cred = c.credito_disponible ?? 0;
+      const diasDesdeAlta = diasDesde(c.created_at);
+      switch (segmento) {
+        case "nuevos":
+          if ((diasDesdeAlta ?? 9999) > 30) return false;
+          break;
+        case "dormidos":
+          if (d == null || d < 90) return false;
+          break;
+        case "sin_volver_60":
+          if (d == null || d < 60) return false;
+          break;
+        case "vip":
+          // VIP: 5+ compras O ticket promedio alto (top 15% del listado —
+          // aproximamos con umbral fijo relativo al total, computado abajo).
+          if (compras < 5 && total < vipUmbralTotal) return false;
+          break;
+        case "con_credito":
+          if (cred <= 0) return false;
+          break;
+        case "nunca":
+          if (compras > 0) return false;
+          break;
+        case "semana":
+          if (d == null || d > 7) return false;
+          break;
+      }
+    }
     return true;
   });
 
-  const hayFiltros = busqueda || filtroEstado || filtroOrigen || filtroTipo || filtroTipoServicio;
+  const hayFiltros = busqueda || filtroEstado || filtroOrigen || filtroTipo || filtroTipoServicio || segmento;
 
   function toggleColumn(key: ClienteColumnKey) {
     const col = clienteColumns.find((c) => c.key === key);
@@ -503,12 +612,45 @@ export default function ClientesPage() {
         />
         {hayFiltros && (
           <button
-            onClick={() => { setBusqueda(""); setFiltroEstado(""); setFiltroOrigen(""); setFiltroTipo(""); setFiltroTipoServicio(""); }}
+            onClick={() => { setBusqueda(""); setFiltroEstado(""); setFiltroOrigen(""); setFiltroTipo(""); setFiltroTipoServicio(""); setSegmento(""); }}
             className="text-xs text-gray-500 hover:text-gray-900 border border-gray-300 rounded-lg px-3 py-2 hover:bg-gray-50 transition-colors"
           >
             Limpiar
           </button>
         )}
+      </div>
+
+      {/* Segmentos rápidos */}
+      <div className="flex flex-wrap gap-1.5">
+        {([
+          ["", "Todos", clientes.length],
+          ["nuevos", "Nuevos (30d)", clientes.filter((c) => (diasDesde(c.created_at) ?? 9999) <= 30).length],
+          ["semana", "Compró esta semana", clientes.filter((c) => { const d = diasDesde(c.ultima_venta_at ?? null); return d != null && d <= 7; }).length],
+          ["vip", "VIP", clientes.filter((c) => (c.cantidad_compras ?? 0) >= 5 || (c.total_comprado ?? 0) >= vipUmbralTotal).length],
+          ["con_credito", "Con crédito", clientes.filter((c) => (c.credito_disponible ?? 0) > 0).length],
+          ["sin_volver_60", "Sin volver +60d", clientes.filter((c) => { const d = diasDesde(c.ultima_venta_at ?? null); return d != null && d >= 60; }).length],
+          ["dormidos", "Dormidos +90d", clientes.filter((c) => { const d = diasDesde(c.ultima_venta_at ?? null); return d != null && d >= 90; }).length],
+          ["nunca", "Nunca compraron", clientes.filter((c) => (c.cantidad_compras ?? 0) === 0).length],
+        ] as const).map(([key, label, count]) => {
+          const active = segmento === key;
+          return (
+            <button
+              key={key || "todos"}
+              type="button"
+              onClick={() => setSegmento(key as typeof segmento)}
+              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium border transition-colors ${
+                active
+                  ? "bg-[#4FAEB2] border-[#4FAEB2] text-white"
+                  : "bg-white border-slate-200 text-slate-600 hover:border-[#4FAEB2] hover:text-[#3F8E91]"
+              }`}
+            >
+              {label}
+              <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${active ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"}`}>
+                {count}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       {/* Contador */}
