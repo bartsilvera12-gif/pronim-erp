@@ -204,9 +204,12 @@ async function runProcesar(
         .filter((x): x is NonNullable<typeof x> => !!x);
       const descuentoGeneral = Math.max(0, Number(raw.descuento_general ?? 0) || 0);
       const descuentoMotivoRaw = typeof raw.descuento_motivo === "string" ? raw.descuento_motivo.trim() : "";
-      const motivosOk = new Set(["redondeo","negociacion","defecto","promocion","cortesia","intercambio","otro"]);
+      // Ahora los motivos son configurables por empresa (motivos_descuento).
+      // Aceptamos cualquier slug válido [a-z0-9_-]; el backfill de defaults
+      // + el catálogo dinámico se validan a nivel UI. Fallback a 'otro'.
+      const motivoValido = /^[a-z0-9_-]{1,40}$/.test(descuentoMotivoRaw);
       const descuentoMotivo = descuentoGeneral > 0
-        ? (motivosOk.has(descuentoMotivoRaw) ? descuentoMotivoRaw : "otro")
+        ? (motivoValido ? descuentoMotivoRaw : "otro")
         : null;
       return {
         items: out,

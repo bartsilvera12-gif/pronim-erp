@@ -163,7 +163,30 @@ export default function NuevaAtencionPage() {
   // Descuento general aplicado al total al cerrar (redondeo, negociación,
   // producto con defecto, promoción, cortesía, intercambio, otro).
   const [descuentoGeneral, setDescuentoGeneral] = useState<string>("");
-  const [descuentoMotivo, setDescuentoMotivo] = useState<"redondeo"|"negociacion"|"defecto"|"promocion"|"cortesia"|"intercambio"|"otro">("redondeo");
+  const [descuentoMotivo, setDescuentoMotivo] = useState<string>("redondeo");
+  // Catálogo dinámico de motivos (configurable en /admin/motivos-descuento).
+  // Si el endpoint falla, cae a la lista default hard-coded.
+  const [motivosDesc, setMotivosDesc] = useState<Array<{ codigo: string; label: string }>>([
+    { codigo: "redondeo", label: "Redondeo" },
+    { codigo: "negociacion", label: "Negociación" },
+    { codigo: "defecto", label: "Producto con defecto" },
+    { codigo: "promocion", label: "Promoción" },
+    { codigo: "cortesia", label: "Cortesía" },
+    { codigo: "intercambio", label: "Intercambio (BR)" },
+    { codigo: "otro", label: "Otro" },
+  ]);
+  useEffect(() => {
+    let cancel = false;
+    fetch("/api/motivos-descuento", { credentials: "include", cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        if (cancel || !j?.success) return;
+        const list = (j.data?.motivos ?? []) as Array<{ codigo: string; label: string }>;
+        if (list.length > 0) setMotivosDesc(list);
+      })
+      .catch(() => { /* silencioso: mantiene defaults */ });
+    return () => { cancel = true; };
+  }, []);
   const [referenciaCobro, setReferenciaCobro] = useState<string>("");
   const [observaciones, setObservaciones] = useState("");
   // Default true: la mercadería que trae el cliente entra al stock ahora
@@ -1700,18 +1723,14 @@ export default function NuevaAtencionPage() {
                   />
                   <select
                     value={descuentoMotivo}
-                    onChange={(e) => setDescuentoMotivo(e.target.value as typeof descuentoMotivo)}
+                    onChange={(e) => setDescuentoMotivo(e.target.value)}
                     className="w-full rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300"
                     disabled={descuentoGeneralNum <= 0}
                     aria-label="Motivo del descuento"
                   >
-                    <option value="redondeo">Redondeo</option>
-                    <option value="negociacion">Negociación</option>
-                    <option value="defecto">Producto con defecto</option>
-                    <option value="promocion">Promoción</option>
-                    <option value="cortesia">Cortesía</option>
-                    <option value="intercambio">Intercambio (BR)</option>
-                    <option value="otro">Otro</option>
+                    {motivosDesc.map((m) => (
+                      <option key={m.codigo} value={m.codigo}>{m.label}</option>
+                    ))}
                   </select>
                 </div>
                 <p className="text-[11px] text-amber-700">
