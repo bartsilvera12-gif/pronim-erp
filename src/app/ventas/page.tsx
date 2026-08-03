@@ -180,6 +180,24 @@ export default function VentasPage() {
   const [filtroSucursal, setFiltroSucursal] = useState<string>("");
   // Fase 2 tanda 3: filtros combinables adicionales
   const [filtroPago,     setFiltroPago]     = useState<"" | "efectivo" | "tarjeta" | "transferencia" | "qr" | "billetera" | "otro">("");
+  // Formas de pago configurables (fase 2 tanda 12). Fallback a defaults.
+  const [formasPago, setFormasPago] = useState<Array<{ codigo: string; label: string }>>([
+    { codigo: "efectivo", label: "Efectivo" }, { codigo: "tarjeta", label: "Tarjeta" },
+    { codigo: "transferencia", label: "Transferencia" }, { codigo: "qr", label: "QR" },
+    { codigo: "billetera", label: "Billetera" }, { codigo: "otro", label: "Otro" },
+  ]);
+  useEffect(() => {
+    let cancel = false;
+    fetch("/api/formas-pago", { credentials: "include", cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        if (cancel || !j?.success) return;
+        const list = (j.data?.formas ?? []) as Array<{ codigo: string; label: string }>;
+        if (list.length > 0) setFormasPago(list);
+      })
+      .catch(() => { /* silencioso */ });
+    return () => { cancel = true; };
+  }, []);
   const [filtroEstado,   setFiltroEstado]   = useState<"" | "completada" | "anulada">("");
   const [segmento,       setSegmento]       = useState<"" | "hoy" | "semana" | "mes" | "con_descuento" | "anuladas">("");
   // Ordenamiento por columna (fase 2 tanda 3.b)
@@ -491,12 +509,7 @@ export default function VentasPage() {
             size="sm"
             options={[
               { value: "", label: t("Todas formas de pago") },
-              { value: "efectivo", label: t("Efectivo") },
-              { value: "tarjeta", label: t("Tarjeta") },
-              { value: "transferencia", label: t("Transferencia") },
-              { value: "qr", label: "QR" },
-              { value: "billetera", label: t("Billetera") },
-              { value: "otro", label: t("Otro") },
+              ...formasPago.map((f) => ({ value: f.codigo, label: t(f.label) })),
             ]}
           />
           <FancySelect
