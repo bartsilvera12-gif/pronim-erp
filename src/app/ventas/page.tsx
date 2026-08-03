@@ -1,6 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import {
+  useSegmentosGuardados, SegmentosGuardadosBar,
+  useColumnasPersistidas, ColumnasDropdown, type ColumnaDef,
+} from "@/components/tabla/segmentos-guardados";
 import { useEffect, useState } from "react";
 import EdgeScrollArea from "@/components/ui/EdgeScrollArea";
 import { FancySelect } from "@/components/ui/FancySelect";
@@ -209,6 +213,33 @@ export default function VentasPage() {
     if (sortDir === "desc") { setSortDir("asc"); return; }
     setSortKey(null); setSortDir("desc");
   }
+
+  // Fase 2 tanda 15: columnas configurables + segmentos guardados
+  type VentaColKey = "numero_control" | "productos" | "items_count" | "cant_total" | "iva" | "total" | "tipo" | "pago" | "sucursal" | "fecha" | "acciones";
+  const VENTAS_COLUMNAS_ALL: ColumnaDef<VentaColKey>[] = [
+    { key: "numero_control", label: "Número", required: true },
+    { key: "productos", label: "Productos" },
+    { key: "items_count", label: "Ítems" },
+    { key: "cant_total", label: "Cant. total" },
+    { key: "iva", label: "IVA" },
+    { key: "total", label: "Total", required: true },
+    { key: "tipo", label: "Tipo" },
+    { key: "pago", label: "Pago" },
+    { key: "sucursal", label: "Sucursal" },
+    { key: "fecha", label: "Fecha" },
+    { key: "acciones", label: "Acciones (Imprimir / Anular)", required: true },
+  ];
+  const VENTAS_COL_DEFAULTS: VentaColKey[] = ["numero_control", "productos", "items_count", "cant_total", "iva", "total", "tipo", "pago", "sucursal", "fecha", "acciones"];
+  const { visibles: colVis, toggle: colToggle, mover: colMover, reset: colReset } =
+    useColumnasPersistidas<VentaColKey>("neura.erp.ventas.columnas.v1", VENTAS_COLUMNAS_ALL, VENTAS_COL_DEFAULTS);
+  const [colsOpen, setColsOpen] = useState(false);
+
+  type VentaSegData = {
+    busqueda: string; filtroTipo: string; filtroIva: string; filtroSucursal: string;
+    filtroPago: string; filtroEstado: string; segmento: string;
+  };
+  const { segmentos: segsGuardados, guardar: guardarSeg, borrar: borrarSeg } =
+    useSegmentosGuardados<VentaSegData>("neura.erp.ventas.segmentos.v1");
   const [sucursales, setSucursales] = useState<{ id: string; nombre: string }[]>([]);
   const [cargandoLista, setCargandoLista] = useState(true);
   // Modal para anular una venta desde el listado. La venta a anular
@@ -532,15 +563,43 @@ export default function VentasPage() {
               {t("Limpiar filtros")}
             </button>
           )}
-          <span className="ml-auto text-sm text-gray-400">
+          <span className="ml-auto text-sm text-gray-400 flex items-center gap-2">
             {sucursalNombreActiva && (
-              <span className="mr-2 rounded-full bg-[#4FAEB2]/10 px-2 py-0.5 text-[11px] font-semibold text-[#3F8E91]">
+              <span className="rounded-full bg-[#4FAEB2]/10 px-2 py-0.5 text-[11px] font-semibold text-[#3F8E91]">
                 {sucursalNombreActiva}
               </span>
             )}
-            {filtradas.length} {t("de")} {alcance.length} {t("ventas")}
+            <span>{filtradas.length} {t("de")} {alcance.length} {t("ventas")}</span>
+            <ColumnasDropdown<VentaColKey>
+              abierto={colsOpen}
+              onToggle={() => setColsOpen((v) => !v)}
+              todas={VENTAS_COLUMNAS_ALL}
+              visibles={colVis}
+              onToggleColumna={colToggle}
+              onMover={colMover}
+              onReset={colReset}
+            />
           </span>
         </div>
+
+        {/* Segmentos guardados */}
+        <SegmentosGuardadosBar<VentaSegData>
+          segmentos={segsGuardados}
+          puedeGuardar={Boolean(busqueda || filtroTipo || filtroIva || filtroSucursal || filtroPago || filtroEstado || segmento)}
+          onGuardar={() => guardarSeg({
+            busqueda, filtroTipo, filtroIva, filtroSucursal, filtroPago, filtroEstado, segmento,
+          })}
+          onAplicar={(s) => {
+            setBusqueda(s.data.busqueda ?? "");
+            setFiltroTipo((s.data.filtroTipo as TipoVenta | "") ?? "");
+            setFiltroIva((s.data.filtroIva as TipoIvaVenta | "") ?? "");
+            setFiltroSucursal(s.data.filtroSucursal ?? "");
+            setFiltroPago((s.data.filtroPago as typeof filtroPago) ?? "");
+            setFiltroEstado((s.data.filtroEstado as typeof filtroEstado) ?? "");
+            setSegmento((s.data.segmento as typeof segmento) ?? "");
+          }}
+          onBorrar={borrarSeg}
+        />
 
         {/* Segmentos rápidos por período / estado */}
         <div className="flex flex-wrap gap-1.5 -mt-2">
@@ -590,23 +649,28 @@ export default function VentasPage() {
           <table className="w-full min-w-[760px] lg:min-w-0 text-left text-sm">
             <thead>
               <tr className="bg-slate-50 text-slate-600 text-sm font-semibold">
-                <SortableTh sortKey="numero_control" active={sortKey} dir={sortDir} onClick={toggleSort} className="py-3 pr-4 font-medium">{t("Número")}</SortableTh>
-                <th className="py-3 pr-4 font-medium">{t("Productos")}</th>
-                <SortableTh sortKey="cant_items" active={sortKey} dir={sortDir} onClick={toggleSort} className="hidden py-3 pr-4 text-center font-medium lg:table-cell">{t("Ítems")}</SortableTh>
-                <SortableTh sortKey="cant_total" active={sortKey} dir={sortDir} onClick={toggleSort} className="py-3 pr-4 font-medium text-right hidden lg:table-cell">{t("Cant. total")}</SortableTh>
-                <th className="py-3 pr-4 font-medium hidden lg:table-cell">IVA</th>
-                <SortableTh sortKey="total" active={sortKey} dir={sortDir} onClick={toggleSort} className="py-3 pr-4 font-medium text-right">{t("Total")}</SortableTh>
-                <SortableTh sortKey="tipo_venta" active={sortKey} dir={sortDir} onClick={toggleSort} className="hidden py-3 pr-4 font-medium lg:table-cell">{t("Tipo")}</SortableTh>
-                <SortableTh sortKey="metodo_pago" active={sortKey} dir={sortDir} onClick={toggleSort} className="hidden py-3 pr-4 font-medium lg:table-cell">{t("Pago")}</SortableTh>
-                <SortableTh sortKey="sucursal" active={sortKey} dir={sortDir} onClick={toggleSort} className="hidden py-3 pr-4 font-medium lg:table-cell">{t("Sucursal")}</SortableTh>
-                <SortableTh sortKey="fecha" active={sortKey} dir={sortDir} onClick={toggleSort} className="py-3 pr-4 font-medium">{t("Fecha")}</SortableTh>
-                <th className="py-3 font-medium text-center">{t("Ticket")}</th>
+                {colVis.map((k) => {
+                  switch (k) {
+                    case "numero_control": return <SortableTh key={k} sortKey="numero_control" active={sortKey} dir={sortDir} onClick={toggleSort} className="py-3 pr-4 font-medium">{t("Número")}</SortableTh>;
+                    case "productos": return <th key={k} className="py-3 pr-4 font-medium">{t("Productos")}</th>;
+                    case "items_count": return <SortableTh key={k} sortKey="cant_items" active={sortKey} dir={sortDir} onClick={toggleSort} className="hidden py-3 pr-4 text-center font-medium lg:table-cell">{t("Ítems")}</SortableTh>;
+                    case "cant_total": return <SortableTh key={k} sortKey="cant_total" active={sortKey} dir={sortDir} onClick={toggleSort} className="py-3 pr-4 font-medium text-right hidden lg:table-cell">{t("Cant. total")}</SortableTh>;
+                    case "iva": return <th key={k} className="py-3 pr-4 font-medium hidden lg:table-cell">IVA</th>;
+                    case "total": return <SortableTh key={k} sortKey="total" active={sortKey} dir={sortDir} onClick={toggleSort} className="py-3 pr-4 font-medium text-right">{t("Total")}</SortableTh>;
+                    case "tipo": return <SortableTh key={k} sortKey="tipo_venta" active={sortKey} dir={sortDir} onClick={toggleSort} className="hidden py-3 pr-4 font-medium lg:table-cell">{t("Tipo")}</SortableTh>;
+                    case "pago": return <SortableTh key={k} sortKey="metodo_pago" active={sortKey} dir={sortDir} onClick={toggleSort} className="hidden py-3 pr-4 font-medium lg:table-cell">{t("Pago")}</SortableTh>;
+                    case "sucursal": return <SortableTh key={k} sortKey="sucursal" active={sortKey} dir={sortDir} onClick={toggleSort} className="hidden py-3 pr-4 font-medium lg:table-cell">{t("Sucursal")}</SortableTh>;
+                    case "fecha": return <SortableTh key={k} sortKey="fecha" active={sortKey} dir={sortDir} onClick={toggleSort} className="py-3 pr-4 font-medium">{t("Fecha")}</SortableTh>;
+                    case "acciones": return <th key={k} className="py-3 font-medium text-center">{t("Ticket")}</th>;
+                    default: return null;
+                  }
+                })}
               </tr>
             </thead>
             <tbody>
               {cargandoLista ? (
                 <tr>
-                  <td colSpan={11} className="py-12 text-center text-sm text-slate-400">
+                  <td colSpan={colVis.length} className="py-12 text-center text-sm text-slate-400">
                     <div className="inline-flex items-center gap-2">
                       <svg className="h-4 w-4 animate-spin text-[#4FAEB2]" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
                         <circle cx="12" cy="12" r="10" stroke="currentColor" strokeOpacity="0.25" strokeWidth="3" />
@@ -618,7 +682,7 @@ export default function VentasPage() {
                 </tr>
               ) : filtradasOrdenadas.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="py-12 text-center text-gray-400">
+                  <td colSpan={colVis.length} className="py-12 text-center text-gray-400">
                     {todas.length === 0
                       ? t("No hay ventas registradas")
                       : t("Ninguna venta coincide con los filtros")}
@@ -629,54 +693,42 @@ export default function VentasPage() {
                   const cantTotal = v.items.reduce((s, i) => s + i.cantidad, 0);
                   return (
                     <tr key={v.id} className="border-b border-slate-200 last:border-0 hover:bg-[#4FAEB2]/[0.04] transition-colors">
-                      <td className="py-4 pr-4 font-mono text-xs align-middle">
-                        <Link
-                          href={`/ventas/${v.id}`}
-                          className="text-[#3F8E91] hover:underline"
-                          title={t("Ver detalle")}
-                        >
-                          {v.numero_control}
-                        </Link>
-                      </td>
-                      <td className="py-4 pr-4 align-middle">
-                        <ResumenProductos v={v} />
-                      </td>
-                      <td className="hidden py-4 pr-4 text-center align-middle lg:table-cell">
-                        <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 text-xs font-semibold text-gray-600">
-                          {v.items.length}
-                        </span>
-                      </td>
-                      <td className="py-4 pr-4 text-right tabular-nums text-gray-700 align-middle hidden lg:table-cell">
-                        {cantTotal}
-                      </td>
-                      <td className="py-4 pr-4 align-middle hidden lg:table-cell">
-                        <span className="px-2 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700">
-                          {ivaResumen(v)}
-                        </span>
-                      </td>
-                      <td className="py-4 pr-4 text-right tabular-nums font-semibold text-gray-800 align-middle">
-                        {formatGs(v.total)}
-                      </td>
-                      <td className="hidden py-4 pr-4 align-middle lg:table-cell">
-                        <span className={`px-2 py-1 rounded-full text-xs font-semibold ${tipoVentaBadge[v.tipo_venta]}`}>
-                          {v.tipo_venta === "CONTADO"
-                            ? "Contado"
-                            : `Crédito ${v.plazo_dias ?? ""}d`}
-                        </span>
-                      </td>
-                      <td className="hidden py-4 pr-4 align-middle text-xs text-gray-600 lg:table-cell">
-                        {v.metodo_pago === "tarjeta" ? "Tarjeta"
-                          : v.metodo_pago === "transferencia" ? "Transfer."
-                          : v.metodo_pago === "efectivo" ? "Efectivo"
-                          : "—"}
-                      </td>
-                      <td className="hidden py-4 pr-4 align-middle text-xs text-gray-600 lg:table-cell">
-                        {v.sucursal_nombre ?? "—"}
-                      </td>
-                      <td className="py-4 pr-4 text-gray-500 text-xs tabular-nums align-middle">
-                        {formatFecha(v.fecha)}
-                      </td>
-                      <td className="py-4 text-center align-middle">
+                      {colVis.map((k) => {
+                        switch (k) {
+                          case "numero_control": return (
+                            <td key={k} className="py-4 pr-4 font-mono text-xs align-middle">
+                              <Link href={`/ventas/${v.id}`} className="text-[#3F8E91] hover:underline" title={t("Ver detalle")}>{v.numero_control}</Link>
+                            </td>
+                          );
+                          case "productos": return <td key={k} className="py-4 pr-4 align-middle"><ResumenProductos v={v} /></td>;
+                          case "items_count": return (
+                            <td key={k} className="hidden py-4 pr-4 text-center align-middle lg:table-cell">
+                              <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 text-xs font-semibold text-gray-600">{v.items.length}</span>
+                            </td>
+                          );
+                          case "cant_total": return <td key={k} className="py-4 pr-4 text-right tabular-nums text-gray-700 align-middle hidden lg:table-cell">{cantTotal}</td>;
+                          case "iva": return (
+                            <td key={k} className="py-4 pr-4 align-middle hidden lg:table-cell">
+                              <span className="px-2 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700">{ivaResumen(v)}</span>
+                            </td>
+                          );
+                          case "total": return <td key={k} className="py-4 pr-4 text-right tabular-nums font-semibold text-gray-800 align-middle">{formatGs(v.total)}</td>;
+                          case "tipo": return (
+                            <td key={k} className="hidden py-4 pr-4 align-middle lg:table-cell">
+                              <span className={`px-2 py-1 rounded-full text-xs font-semibold ${tipoVentaBadge[v.tipo_venta]}`}>
+                                {v.tipo_venta === "CONTADO" ? "Contado" : `Crédito ${v.plazo_dias ?? ""}d`}
+                              </span>
+                            </td>
+                          );
+                          case "pago": return (
+                            <td key={k} className="hidden py-4 pr-4 align-middle text-xs text-gray-600 lg:table-cell">
+                              {v.metodo_pago === "tarjeta" ? "Tarjeta" : v.metodo_pago === "transferencia" ? "Transfer." : v.metodo_pago === "efectivo" ? "Efectivo" : "—"}
+                            </td>
+                          );
+                          case "sucursal": return <td key={k} className="hidden py-4 pr-4 align-middle text-xs text-gray-600 lg:table-cell">{v.sucursal_nombre ?? "—"}</td>;
+                          case "fecha": return <td key={k} className="py-4 pr-4 text-gray-500 text-xs tabular-nums align-middle">{formatFecha(v.fecha)}</td>;
+                          case "acciones": return (
+                            <td key={k} className="py-4 text-center align-middle">
                         <div className="inline-flex items-center gap-1.5 flex-wrap justify-center">
                           {v.estado === "anulada" ? (
                             <span
@@ -727,6 +779,10 @@ export default function VentasPage() {
                           )}
                         </div>
                       </td>
+                          );
+                          default: return null;
+                        }
+                      })}
                     </tr>
                   );
                 })

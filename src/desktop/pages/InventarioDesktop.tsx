@@ -3,6 +3,10 @@ import { confirm,alert } from "@/components/ui/dialog";
 
 import { useEffect, useMemo, useState, useCallback } from "react";
 import Link from "next/link";
+import {
+  useSegmentosGuardados, SegmentosGuardadosBar,
+  useColumnasPersistidas, ColumnasDropdown, type ColumnaDef,
+} from "@/components/tabla/segmentos-guardados";
 import { Eye, EyeOff, Star, Trash2 } from "lucide-react";
 import { getProductos } from "@/lib/inventario/storage";
 import type { Producto, MetodoValuacion } from "@/lib/inventario/types";
@@ -83,6 +87,34 @@ export default function InventarioPage() {
     if (sortDir === "desc") { setSortDir("asc"); return; }
     setSortKey(null); setSortDir("desc");
   }
+
+  // Fase 2 tanda 15: columnas configurables + segmentos guardados
+  type InvColKey = "nombre" | "sku" | "costo" | "precio" | "stock_actual" | "stock_minimo" | "activo" | "destacado" | "margen" | "accion";
+  const INV_COLUMNAS_ALL: ColumnaDef<InvColKey>[] = [
+    { key: "nombre", label: "Nombre", required: true },
+    { key: "sku", label: "SKU" },
+    { key: "costo", label: "Costo Prom." },
+    { key: "precio", label: "Precio Venta" },
+    { key: "stock_actual", label: "Stock actual" },
+    { key: "stock_minimo", label: "Stock mínimo" },
+    { key: "activo", label: "Activo" },
+    { key: "destacado", label: "Destacado" },
+    { key: "margen", label: "Margen s/venta" },
+    { key: "accion", label: "Acción", required: true },
+  ];
+  const INV_COL_DEFAULTS: InvColKey[] = ["nombre", "sku", "costo", "precio", "stock_actual", "stock_minimo", "activo", "destacado", "margen", "accion"];
+  const { visibles: colVis, toggle: colToggle, mover: colMover, reset: colReset } =
+    useColumnasPersistidas<InvColKey>("neura.erp.inventario.columnas.v1", INV_COLUMNAS_ALL, INV_COL_DEFAULTS);
+  const [colsOpen, setColsOpen] = useState(false);
+
+  type InvSegData = {
+    filtroPorNombre: string; filtroPorSku: string; filtroPorCosto: string; filtroPorPrecio: string;
+    filtroValuacion: string; filtroUbicacion: string; filtroTipo: string;
+    filtroStock: string; filtroDistribuidor: string; segmento: string;
+    precioMin: string; precioMax: string; tab: string;
+  };
+  const { segmentos: segsGuardados, guardar: guardarSeg, borrar: borrarSeg } =
+    useSegmentosGuardados<InvSegData>("neura.erp.inventario.segmentos.v1");
 
   // Paginación client-side. Default 50 (chico, legible, no fríe al browser
   // con 6000 filas). El usuario puede subir a 100 o "todos" si quiere ver
@@ -553,6 +585,46 @@ export default function InventarioPage() {
             )}
           </div>
 
+          {/* Segmentos guardados por el usuario + botón Columnas */}
+          <div className="mt-3 flex items-center gap-2 flex-wrap">
+            <SegmentosGuardadosBar<InvSegData>
+              segmentos={segsGuardados}
+              puedeGuardar={Boolean(filtroPorNombre || filtroPorSku || filtroPorCosto || filtroPorPrecio || filtroValuacion || filtroUbicacion || filtroTipo !== "todos" || filtroStock !== "todos" || filtroDistribuidor || segmento || precioMin || precioMax || tab !== "reventa")}
+              onGuardar={() => guardarSeg({
+                filtroPorNombre, filtroPorSku, filtroPorCosto, filtroPorPrecio,
+                filtroValuacion, filtroUbicacion, filtroTipo,
+                filtroStock, filtroDistribuidor, segmento, precioMin, precioMax, tab,
+              })}
+              onAplicar={(s) => {
+                setFiltroPorNombre(s.data.filtroPorNombre ?? "");
+                setFiltroPorSku(s.data.filtroPorSku ?? "");
+                setFiltroPorCosto(s.data.filtroPorCosto ?? "");
+                setFiltroPorPrecio(s.data.filtroPorPrecio ?? "");
+                setFiltroValuacion((s.data.filtroValuacion as MetodoValuacion | "") ?? "");
+                setFiltroUbicacion(s.data.filtroUbicacion ?? "");
+                setFiltroTipo((s.data.filtroTipo as typeof filtroTipo) ?? "todos");
+                setFiltroStock((s.data.filtroStock as FiltroStock) ?? "todos");
+                setFiltroDistribuidor(s.data.filtroDistribuidor ?? "");
+                setSegmento((s.data.segmento as Segmento) ?? "");
+                setPrecioMin(s.data.precioMin ?? "");
+                setPrecioMax(s.data.precioMax ?? "");
+                setTab((s.data.tab as typeof tab) ?? "reventa");
+              }}
+              onBorrar={borrarSeg}
+            />
+            <div className="ml-auto">
+              <ColumnasDropdown<InvColKey>
+                abierto={colsOpen}
+                onToggle={() => setColsOpen((v) => !v)}
+                todas={INV_COLUMNAS_ALL}
+                visibles={colVis}
+                onToggleColumna={colToggle}
+                onMover={colMover}
+                onReset={colReset}
+              />
+            </div>
+          </div>
+
           {/* Segmentos rápidos por rotación / recencia / markup */}
           <div className="mt-3 flex flex-wrap gap-1.5">
             {([
@@ -775,29 +847,32 @@ export default function InventarioPage() {
 
             <thead>
               <tr className="bg-slate-50 text-slate-600 text-sm font-semibold">
-                <ThInv sortKey="nombre"          active={sortKey} dir={sortDir} onClick={toggleSort} className="py-3 pr-4 font-medium">Nombre</ThInv>
-                <ThInv sortKey="sku"             active={sortKey} dir={sortDir} onClick={toggleSort} className="hidden py-3 pr-4 font-medium lg:table-cell">SKU</ThInv>
-                <ThInv sortKey="costo_promedio"  active={sortKey} dir={sortDir} onClick={toggleSort} className="py-3 pr-4 font-medium">Costo Prom.</ThInv>
-                {tab !== "materia" && (
-                  <ThInv sortKey="precio_venta"  active={sortKey} dir={sortDir} onClick={toggleSort} className="py-3 pr-4 font-medium">Precio Venta</ThInv>
-                )}
-                <ThInv sortKey="stock_actual"    active={sortKey} dir={sortDir} onClick={toggleSort} className="py-3 pr-4 font-medium text-center">Stock actual</ThInv>
-                <ThInv sortKey="stock_minimo"    active={sortKey} dir={sortDir} onClick={toggleSort} className="py-3 pr-4 text-center font-medium hidden lg:table-cell">Stock Mín.</ThInv>
-                <th className="py-3 pr-4 font-medium text-center">Activo</th>
-                <th className="py-3 pr-4 font-medium text-center">Destacado</th>
-                {tab !== "materia" && (
-                  <ThInv sortKey="margen" active={sortKey} dir={sortDir} onClick={toggleSort} className="hidden py-3 pr-6 text-right font-medium lg:table-cell">
-                    <span title="(precio - costo) / precio × 100">Margen s/venta</span>
-                  </ThInv>
-                )}
-                <th className="py-3 pl-4 font-medium text-center w-32">Acción</th>
+                {colVis.map((k) => {
+                  switch (k) {
+                    case "nombre":       return <ThInv key={k} sortKey="nombre"         active={sortKey} dir={sortDir} onClick={toggleSort} className="py-3 pr-4 font-medium">Nombre</ThInv>;
+                    case "sku":          return <ThInv key={k} sortKey="sku"            active={sortKey} dir={sortDir} onClick={toggleSort} className="hidden py-3 pr-4 font-medium lg:table-cell">SKU</ThInv>;
+                    case "costo":        return <ThInv key={k} sortKey="costo_promedio" active={sortKey} dir={sortDir} onClick={toggleSort} className="py-3 pr-4 font-medium">Costo Prom.</ThInv>;
+                    case "precio":       return tab !== "materia" ? <ThInv key={k} sortKey="precio_venta" active={sortKey} dir={sortDir} onClick={toggleSort} className="py-3 pr-4 font-medium">Precio Venta</ThInv> : null;
+                    case "stock_actual": return <ThInv key={k} sortKey="stock_actual"   active={sortKey} dir={sortDir} onClick={toggleSort} className="py-3 pr-4 font-medium text-center">Stock actual</ThInv>;
+                    case "stock_minimo": return <ThInv key={k} sortKey="stock_minimo"   active={sortKey} dir={sortDir} onClick={toggleSort} className="py-3 pr-4 text-center font-medium hidden lg:table-cell">Stock Mín.</ThInv>;
+                    case "activo":       return <th key={k} className="py-3 pr-4 font-medium text-center">Activo</th>;
+                    case "destacado":    return <th key={k} className="py-3 pr-4 font-medium text-center">Destacado</th>;
+                    case "margen":       return tab !== "materia" ? (
+                      <ThInv key={k} sortKey="margen" active={sortKey} dir={sortDir} onClick={toggleSort} className="hidden py-3 pr-6 text-right font-medium lg:table-cell">
+                        <span title="(precio - costo) / precio × 100">Margen s/venta</span>
+                      </ThInv>
+                    ) : null;
+                    case "accion":       return <th key={k} className="py-3 pl-4 font-medium text-center w-32">Acción</th>;
+                    default: return null;
+                  }
+                })}
               </tr>
             </thead>
 
             <tbody>
               {cargandoLista && (
                 <tr>
-                  <td colSpan={10} className="py-16 text-center text-sm text-slate-400">
+                  <td colSpan={colVis.length} className="py-16 text-center text-sm text-slate-400">
                     <div className="inline-flex items-center gap-2">
                       <svg className="h-4 w-4 animate-spin text-[#4FAEB2]" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
                         <circle cx="12" cy="12" r="10" stroke="currentColor" strokeOpacity="0.25" strokeWidth="3" />
@@ -810,7 +885,7 @@ export default function InventarioPage() {
               )}
               {!cargandoLista && productosPagina.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="py-16 text-center text-sm text-slate-400">
+                  <td colSpan={colVis.length} className="py-16 text-center text-sm text-slate-400">
                     {todos.length === 0
                       ? "Todavía no cargaste productos. Probá con \"+ Nuevo producto\" o \"Importar Excel\"."
                       : "No hay productos que coincidan con los filtros aplicados."}
@@ -824,108 +899,96 @@ export default function InventarioPage() {
                 // (Materia prima) sí tienen stock real aunque controla_stock=false.
                 const sinControl =
                   p.controla_stock === false && p.es_insumo !== true && p.modo_receta !== "produccion_previa";
+                const mutando = mutandoIds.has(p.id);
+                const visibleWeb = p.visible_web === true;
+                const destacado = p.destacado_web === true;
+                const pillBase = "inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium border transition-colors disabled:opacity-40 disabled:cursor-not-allowed";
+                const onCls = "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100";
+                const offCls = "border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100";
+                const destOnCls = "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100";
                 return (
                   <tr key={p.id} className="border-b border-slate-200 last:border-0 hover:bg-[#4FAEB2]/[0.04] transition-colors">
-                    <td className="py-4 pr-4 font-medium text-gray-800">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <Link
-                          href={p.es_franja_precio ? "/admin/franjas" : `/inventario/${p.id}/editar`}
-                          className="hover:text-[#3F8E91] hover:underline"
-                          title="Ver detalle / editar"
-                        >
-                          {p.nombre}
-                        </Link>
-                        {(() => {
-                          const v = p.es_vendible !== false;
-                          const i = p.es_insumo === true;
-                          // Mixto/Insumo se siguen mostrando; Vendible queda oculto (redundante: ya hay tab).
-                          if (v && i) return <span className="inline-flex items-center rounded-full bg-purple-100 text-purple-700 text-[10px] font-medium px-2 py-0.5">Mixto</span>;
-                          if (i) return <span className="inline-flex items-center rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-medium px-2 py-0.5">Insumo</span>;
-                          return null;
-                        })()}
-                      </div>
-                    </td>
-                    <td className="hidden py-4 pr-4 font-mono text-gray-500 lg:table-cell">{p.sku}</td>
-                    <td className="py-4 pr-4 text-gray-700">{formatGs(p.costo_promedio)}</td>
-                    {tab !== "materia" && <td className="py-4 pr-4 text-gray-700">{formatGs(p.precio_venta)}</td>}
-                    <td className="py-4 pr-4 text-center">
-                      {sinControl ? (
-                        <span className="text-xs text-gray-400">— sin control</span>
-                      ) : (
-                        <span className={`font-semibold tabular-nums ${stockBajo ? "text-red-600" : "text-gray-800"}`}>
-                          {formatStock(p.stock_actual)}{" "}
-                          <span className={`text-xs font-normal ${stockBajo ? "text-red-400" : "text-gray-400"}`}>{p.unidad_medida}</span>
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-4 pr-4 text-center text-gray-500 hidden lg:table-cell">
-                      {sinControl ? "—" : <span className="tabular-nums">{formatStock(p.stock_minimo)}</span>}
-                    </td>
-                    {(() => {
-                      const mutando = mutandoIds.has(p.id);
-                      const visibleWeb = p.visible_web === true;
-                      const destacado = p.destacado_web === true;
-                      const pillBase =
-                        "inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium border transition-colors disabled:opacity-40 disabled:cursor-not-allowed";
-                      const onCls = "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100";
-                      const offCls = "border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100";
-                      const destOnCls = "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100";
-                      return (
-                        <>
-                          <td className="py-4 pr-4 text-center">
-                            <button
-                              type="button"
-                              disabled={mutando}
-                              onClick={() => toggleFlag(p, "visible_web")}
+                    {colVis.map((k) => {
+                      switch (k) {
+                        case "nombre": return (
+                          <td key={k} className="py-4 pr-4 font-medium text-gray-800">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Link href={p.es_franja_precio ? "/admin/franjas" : `/inventario/${p.id}/editar`}
+                                className="hover:text-[#3F8E91] hover:underline" title="Ver detalle / editar">{p.nombre}</Link>
+                              {(() => {
+                                const v = p.es_vendible !== false;
+                                const i = p.es_insumo === true;
+                                if (v && i) return <span className="inline-flex items-center rounded-full bg-purple-100 text-purple-700 text-[10px] font-medium px-2 py-0.5">Mixto</span>;
+                                if (i) return <span className="inline-flex items-center rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-medium px-2 py-0.5">Insumo</span>;
+                                return null;
+                              })()}
+                            </div>
+                          </td>
+                        );
+                        case "sku":    return <td key={k} className="hidden py-4 pr-4 font-mono text-gray-500 lg:table-cell">{p.sku}</td>;
+                        case "costo":  return <td key={k} className="py-4 pr-4 text-gray-700">{formatGs(p.costo_promedio)}</td>;
+                        case "precio": return tab !== "materia" ? <td key={k} className="py-4 pr-4 text-gray-700">{formatGs(p.precio_venta)}</td> : null;
+                        case "stock_actual": return (
+                          <td key={k} className="py-4 pr-4 text-center">
+                            {sinControl ? (<span className="text-xs text-gray-400">— sin control</span>) : (
+                              <span className={`font-semibold tabular-nums ${stockBajo ? "text-red-600" : "text-gray-800"}`}>
+                                {formatStock(p.stock_actual)}{" "}
+                                <span className={`text-xs font-normal ${stockBajo ? "text-red-400" : "text-gray-400"}`}>{p.unidad_medida}</span>
+                              </span>
+                            )}
+                          </td>
+                        );
+                        case "stock_minimo": return (
+                          <td key={k} className="py-4 pr-4 text-center text-gray-500 hidden lg:table-cell">
+                            {sinControl ? "—" : <span className="tabular-nums">{formatStock(p.stock_minimo)}</span>}
+                          </td>
+                        );
+                        case "activo": return (
+                          <td key={k} className="py-4 pr-4 text-center">
+                            <button type="button" disabled={mutando} onClick={() => toggleFlag(p, "visible_web")}
                               title={visibleWeb ? "Publicado en la web — click para ocultar" : "Oculto de la web — click para publicar"}
                               className={`${pillBase} ${visibleWeb ? onCls : offCls} ${mutando ? "opacity-60" : ""}`}
-                              aria-pressed={visibleWeb}
-                            >
+                              aria-pressed={visibleWeb}>
                               {visibleWeb ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
                               {visibleWeb ? "Sí" : "No"}
                             </button>
                           </td>
-                          <td className="py-4 pr-4 text-center">
-                            <button
-                              type="button"
-                              disabled={mutando}
-                              onClick={() => toggleFlag(p, "destacado_web")}
+                        );
+                        case "destacado": return (
+                          <td key={k} className="py-4 pr-4 text-center">
+                            <button type="button" disabled={mutando} onClick={() => toggleFlag(p, "destacado_web")}
                               title={destacado ? "Destacado en home — click para quitar" : "Click para marcar como destacado"}
                               className={`${pillBase} ${destacado ? destOnCls : offCls} ${mutando ? "opacity-60" : ""}`}
-                              aria-pressed={destacado}
-                            >
+                              aria-pressed={destacado}>
                               <Star className={`h-3.5 w-3.5 ${destacado ? "fill-amber-400" : ""}`} />
                               {destacado ? "Sí" : "No"}
                             </button>
                           </td>
-                        </>
-                      );
-                    })()}
-                    {tab !== "materia" && (
-                      <td className={`hidden py-4 pr-6 text-right font-semibold tabular-nums lg:table-cell ${margenColor(margen)}`}>
-                        {margen.toFixed(2)}%
-                      </td>
-                    )}
-                    <td className="py-4 pl-4 text-center">
-                      <div className="inline-flex items-center justify-center gap-2">
-                        <Link
-                          href={p.es_franja_precio ? "/admin/franjas" : `/inventario/${p.id}/editar`}
-                          className="inline-flex items-center justify-center h-9 rounded-md border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 hover:border-slate-300 hover:bg-slate-50 transition-colors"
-                        >
-                          Editar
-                        </Link>
-                        <button
-                          type="button"
-                          disabled={mutandoIds.has(p.id)}
-                          onClick={() => borrarProducto(p)}
-                          title="Borrar producto"
-                          className="inline-flex items-center justify-center h-9 w-9 rounded-md border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                          aria-label="Borrar producto"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </td>
+                        );
+                        case "margen": return tab !== "materia" ? (
+                          <td key={k} className={`hidden py-4 pr-6 text-right font-semibold tabular-nums lg:table-cell ${margenColor(margen)}`}>
+                            {margen.toFixed(2)}%
+                          </td>
+                        ) : null;
+                        case "accion": return (
+                          <td key={k} className="py-4 pl-4 text-center">
+                            <div className="inline-flex items-center justify-center gap-2">
+                              <Link href={p.es_franja_precio ? "/admin/franjas" : `/inventario/${p.id}/editar`}
+                                className="inline-flex items-center justify-center h-9 rounded-md border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 hover:border-slate-300 hover:bg-slate-50 transition-colors">
+                                Editar
+                              </Link>
+                              <button type="button" disabled={mutando} onClick={() => borrarProducto(p)}
+                                title="Borrar producto"
+                                className="inline-flex items-center justify-center h-9 w-9 rounded-md border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                                aria-label="Borrar producto">
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </td>
+                        );
+                        default: return null;
+                      }
+                    })}
                   </tr>
                 );
               })}
