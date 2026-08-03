@@ -350,6 +350,24 @@ export default function ClientesPage() {
   // Segmento rápido: nuevos (últimos 30d), dormidos (>90d sin volver), VIP,
   // con crédito, nunca compraron, esta semana.
   const [segmento, setSegmento] = useState<"" | "nuevos" | "dormidos" | "vip" | "con_credito" | "nunca" | "semana" | "sin_volver_60">("");
+  // Umbrales configurables (fase 2 tanda 11). Se cargan de /api/categorias-clientes
+  // con defaults hardcoded para render inicial + fallback silencioso.
+  const [umbrales, setUmbrales] = useState({
+    dias_nuevo: 30, dias_semana: 7, dias_sin_volver: 60, dias_dormido: 90,
+    vip_min_compras: 5, vip_top_pct: 15,
+  });
+  useEffect(() => {
+    let cancel = false;
+    fetch("/api/categorias-clientes", { credentials: "include", cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        if (cancel || !j?.success) return;
+        const c = j.data?.config;
+        if (c) setUmbrales((prev) => ({ ...prev, ...c }));
+      })
+      .catch(() => { /* silencioso */ });
+    return () => { cancel = true; };
+  }, []);
   // Fase 2 tanda 3: ordenamiento por columna. Click en header alterna
   // asc/desc; segundo click sobre la misma columna invierte, tercero limpia.
   type SortKey = ClienteColumnKey;
@@ -450,9 +468,10 @@ export default function ClientesPage() {
       .filter((n) => n > 0)
       .sort((a, b) => b - a);
     if (totales.length === 0) return Infinity;
-    const idx = Math.max(0, Math.floor(totales.length * 0.15) - 1);
+    const pct = Math.max(1, Math.min(100, umbrales.vip_top_pct)) / 100;
+    const idx = Math.max(0, Math.floor(totales.length * pct) - 1);
     return totales[idx] ?? totales[0];
-  }, [clientes]);
+  }, [clientes, umbrales.vip_top_pct]);
 
   const filtrados = clientes.filter((c) => {
     const nombre = clienteNombre(c).toLowerCase();
@@ -479,18 +498,16 @@ export default function ClientesPage() {
       const diasDesdeAlta = diasDesde(c.created_at);
       switch (segmento) {
         case "nuevos":
-          if ((diasDesdeAlta ?? 9999) > 30) return false;
+          if ((diasDesdeAlta ?? 9999) > umbrales.dias_nuevo) return false;
           break;
         case "dormidos":
-          if (d == null || d < 90) return false;
+          if (d == null || d < umbrales.dias_dormido) return false;
           break;
         case "sin_volver_60":
-          if (d == null || d < 60) return false;
+          if (d == null || d < umbrales.dias_sin_volver) return false;
           break;
         case "vip":
-          // VIP: 5+ compras O ticket promedio alto (top 15% del listado —
-          // aproximamos con umbral fijo relativo al total, computado abajo).
-          if (compras < 5 && total < vipUmbralTotal) return false;
+          if (compras < umbrales.vip_min_compras && total < vipUmbralTotal) return false;
           break;
         case "con_credito":
           if (cred <= 0) return false;
@@ -499,7 +516,7 @@ export default function ClientesPage() {
           if (compras > 0) return false;
           break;
         case "semana":
-          if (d == null || d > 7) return false;
+          if (d == null || d > umbrales.dias_semana) return false;
           break;
       }
     }
@@ -660,12 +677,12 @@ export default function ClientesPage() {
       <div className="flex flex-wrap gap-1.5">
         {([
           ["", "Todos", clientes.length],
-          ["nuevos", "Nuevos (30d)", clientes.filter((c) => (diasDesde(c.created_at) ?? 9999) <= 30).length],
-          ["semana", "Compró esta semana", clientes.filter((c) => { const d = diasDesde(c.ultima_venta_at ?? null); return d != null && d <= 7; }).length],
-          ["vip", "VIP", clientes.filter((c) => (c.cantidad_compras ?? 0) >= 5 || (c.total_comprado ?? 0) >= vipUmbralTotal).length],
+          ["nuevos", `Nuevos (${umbrales.dias_nuevo}d)`, clientes.filter((c) => (diasDesde(c.created_at) ?? 9999) <= umbrales.dias_nuevo).length],
+          ["semana", `Compró últimos ${umbrales.dias_semana}d`, clientes.filter((c) => { const d = diasDesde(c.ultima_venta_at ?? null); return d != null && d <= umbrales.dias_semana; }).length],
+          ["vip", "VIP", clientes.filter((c) => (c.cantidad_compras ?? 0) >= umbrales.vip_min_compras || (c.total_comprado ?? 0) >= vipUmbralTotal).length],
           ["con_credito", "Con crédito", clientes.filter((c) => (c.credito_disponible ?? 0) > 0).length],
-          ["sin_volver_60", "Sin volver +60d", clientes.filter((c) => { const d = diasDesde(c.ultima_venta_at ?? null); return d != null && d >= 60; }).length],
-          ["dormidos", "Dormidos +90d", clientes.filter((c) => { const d = diasDesde(c.ultima_venta_at ?? null); return d != null && d >= 90; }).length],
+          ["sin_volver_60", `Sin volver +${umbrales.dias_sin_volver}d`, clientes.filter((c) => { const d = diasDesde(c.ultima_venta_at ?? null); return d != null && d >= umbrales.dias_sin_volver; }).length],
+          ["dormidos", `Dormidos +${umbrales.dias_dormido}d`, clientes.filter((c) => { const d = diasDesde(c.ultima_venta_at ?? null); return d != null && d >= umbrales.dias_dormido; }).length],
           ["nunca", "Nunca compraron", clientes.filter((c) => (c.cantidad_compras ?? 0) === 0).length],
         ] as const).map(([key, label, count]) => {
           const active = segmento === key;

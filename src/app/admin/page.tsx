@@ -21,6 +21,7 @@ const SECCIONES: SeccionAdmin[] = [
   { href: "/admin/categorias",         emoji: "📂", titulo: "Categorías",             descripcion: "Categorías generales del catálogo.",                                   tono: "slate" },
   { href: "/admin/promociones",        emoji: "🎁", titulo: "Promociones y campañas", descripcion: "Descuentos automáticos, cupones, cashback.",                            tono: "fuchsia" },
   { href: "/admin/motivos-descuento",  emoji: "💰", titulo: "Motivos de descuento",   descripcion: "Lista editable que aparece al cerrar una venta con descuento.",         tono: "amber" },
+  { href: "/admin/categorias-clientes", emoji: "🧑‍🤝‍🧑", titulo: "Categorías de clientes", descripcion: "Umbrales VIP / dormido / sin volver / nuevo — configurables.",       tono: "fuchsia" },
   { href: "/admin/conciliacion",       emoji: "🏦", titulo: "Conciliación bancaria",  descripcion: "Estado de cada pago (pendiente / confirmada / conciliada).",           tono: "sky" },
   { href: "/admin/auditoria",          emoji: "📋", titulo: "Auditoría",              descripcion: "Log de cambios sensibles con antes/después/motivo.",                    tono: "slate" },
   { href: "/admin/empresas",           emoji: "🏢", titulo: "Empresas",               descripcion: "Datos generales de la empresa (super admin).",                          tono: "slate" },
