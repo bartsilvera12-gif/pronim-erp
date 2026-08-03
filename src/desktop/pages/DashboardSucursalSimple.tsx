@@ -22,6 +22,13 @@ type Data = {
     total_hoy: number; count_hoy: number;
     total_mes: number; count_mes: number;
     total_mes_prev: number; count_mes_prev: number;
+    // Comparativas temporales (tanda 16)
+    total_ayer?: number;
+    total_mismo_dia_sem_pasada?: number;
+    total_mes_prev_hasta_hoy?: number;
+    total_ultimos_7?: number;
+    ticket_prom_mes?: number;
+    ticket_prom_mes_prev?: number;
     ultimas: {
       id: string; fecha: string; total: number;
       numero_control: string | null; cliente_nombre: string | null;
@@ -266,6 +273,9 @@ export default function DashboardSucursalSimple() {
               />
             </section>
 
+            {/* Panel de comparativas + interpretación (Tanda 16) */}
+            <ComparativasPanel data={data} fmt={fmtGs} t={t} />
+
             <section className="grid grid-cols-1 lg:grid-cols-2 gap-5">
               {/* Últimas ventas */}
               <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
@@ -463,6 +473,108 @@ function ProyeccionCierre({ meta, fmt, t }: {
           )}
         </p>
       )}
+    </div>
+  );
+}
+
+function ComparativasPanel({ data, fmt, t }: {
+  data: Data;
+  fmt: (n: number) => string;
+  t: (k: string) => string;
+}) {
+  const v = data.ventas;
+  const totalAyer = v.total_ayer ?? 0;
+  const totalMismoDia = v.total_mismo_dia_sem_pasada ?? 0;
+  const totalMesPrevHastaHoy = v.total_mes_prev_hasta_hoy ?? 0;
+  const ticketMes = v.ticket_prom_mes ?? 0;
+  const ticketMesPrev = v.ticket_prom_mes_prev ?? 0;
+
+  const pct = (actual: number, base: number): number | null => {
+    if (base <= 0) return null;
+    return Math.round(((actual - base) / base) * 1000) / 10;
+  };
+
+  const pctAyer = pct(v.total_hoy, totalAyer);
+  const pctSemPasada = pct(v.total_hoy, totalMismoDia);
+  const pctMes = pct(v.total_mes, totalMesPrevHastaHoy);
+  const pctTicket = pct(ticketMes, ticketMesPrev);
+
+  // Mensajes automáticos de interpretación
+  const mensajes: Array<{ tono: "up" | "down" | "flat"; texto: string }> = [];
+  if (pctAyer != null) {
+    if (pctAyer >= 5) mensajes.push({ tono: "up", texto: `${t("Vendiste")} ${pctAyer}% ${t("más que ayer")}.` });
+    else if (pctAyer <= -5) mensajes.push({ tono: "down", texto: `${t("Vendiste")} ${Math.abs(pctAyer)}% ${t("menos que ayer")}.` });
+  }
+  if (pctMes != null) {
+    if (pctMes >= 10) mensajes.push({ tono: "up", texto: `${t("El mes va")} ${pctMes}% ${t("mejor que el mes pasado")}.` });
+    else if (pctMes <= -10) mensajes.push({ tono: "down", texto: `${t("El mes va")} ${Math.abs(pctMes)}% ${t("por debajo del mes pasado")}.` });
+  }
+  if (pctTicket != null && Math.abs(pctTicket) >= 5) {
+    const tono: "up" | "down" = pctTicket > 0 ? "up" : "down";
+    mensajes.push({
+      tono,
+      texto: `${t("Ticket promedio")} ${pctTicket > 0 ? t("subió") : t("bajó")} ${Math.abs(pctTicket)}% ${t("vs mes pasado")}.`,
+    });
+  }
+  if (v.total_hoy === 0 && v.count_hoy === 0) {
+    mensajes.push({ tono: "flat", texto: t("Todavía no hay ventas registradas hoy.") });
+  }
+
+  return (
+    <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-3">
+      <h2 className="text-sm font-bold text-slate-800">{t("Cómo vamos")}</h2>
+
+      {/* 4 comparativas */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <ComparCard label={t("Hoy vs ayer")}
+          actual={fmt(v.total_hoy)} base={`${t("Ayer")}: ${fmt(totalAyer)}`} pct={pctAyer} />
+        <ComparCard label={t("Hoy vs mismo día semana pasada")}
+          actual={fmt(v.total_hoy)} base={`${t("Hace 7d")}: ${fmt(totalMismoDia)}`} pct={pctSemPasada} />
+        <ComparCard label={t("Mes actual vs mes anterior (mismo rango)")}
+          actual={fmt(v.total_mes)} base={`${t("Mes prev.")}: ${fmt(totalMesPrevHastaHoy)}`} pct={pctMes} />
+        <ComparCard label={t("Ticket promedio del mes")}
+          actual={fmt(ticketMes)} base={`${t("Mes prev.")}: ${fmt(ticketMesPrev)}`} pct={pctTicket} />
+      </div>
+
+      {/* Interpretación */}
+      {mensajes.length > 0 && (
+        <ul className="space-y-1 border-t border-slate-100 pt-3">
+          {mensajes.map((m, idx) => (
+            <li key={idx} className={`text-xs flex items-start gap-1.5 ${
+              m.tono === "up" ? "text-emerald-700"
+              : m.tono === "down" ? "text-rose-700"
+              : "text-slate-500"
+            }`}>
+              <span aria-hidden>{m.tono === "up" ? "↑" : m.tono === "down" ? "↓" : "•"}</span>
+              <span>{m.texto}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function ComparCard({ label, actual, base, pct }: {
+  label: string; actual: string; base: string; pct: number | null;
+}) {
+  const tono = pct == null ? "slate" : pct >= 0 ? "emerald" : "rose";
+  const bg = tono === "emerald" ? "border-emerald-200 bg-emerald-50/40"
+    : tono === "rose" ? "border-rose-200 bg-rose-50/40"
+    : "border-slate-200 bg-white";
+  const arrow = pct == null ? "—" : pct >= 0 ? "↑" : "↓";
+  return (
+    <div className={`rounded-lg border p-3 ${bg}`}>
+      <p className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold">{label}</p>
+      <div className="flex items-baseline justify-between gap-1 mt-1">
+        <p className="text-base font-bold tabular-nums text-slate-900">{actual}</p>
+        {pct != null && (
+          <span className={`text-xs font-bold ${tono === "emerald" ? "text-emerald-700" : tono === "rose" ? "text-rose-700" : "text-slate-500"}`}>
+            {arrow} {Math.abs(pct)}%
+          </span>
+        )}
+      </div>
+      <p className="text-[10px] text-slate-500 mt-0.5">{base}</p>
     </div>
   );
 }

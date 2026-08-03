@@ -28,6 +28,7 @@ const SECCIONES: SeccionAdmin[] = [
   { href: "/admin/conciliacion",       emoji: "🏦", titulo: "Conciliación bancaria",  descripcion: "Estado de cada pago (pendiente / confirmada / conciliada).",           tono: "sky" },
   { href: "/admin/auditoria",          emoji: "📋", titulo: "Auditoría",              descripcion: "Log de cambios sensibles con antes/después/motivo.",                    tono: "slate" },
   { href: "/admin/reportes/descuentos", emoji: "📊", titulo: "Reporte de descuentos", descripcion: "Cuánto se descontó por motivo, sucursal y período. Drill a ventas.",   tono: "rose" },
+  { href: "/admin/reportes/compras",   emoji: "🛒", titulo: "Compras y evaluaciones", descripcion: "Valor pagado, prendas, markup, pendientes de ingreso al stock.",       tono: "sky" },
   { href: "/admin/empresas",           emoji: "🏢", titulo: "Empresas",               descripcion: "Datos generales de la empresa (super admin).",                          tono: "slate" },
   { href: "/usuarios",                 emoji: "👥", titulo: "Usuarios y permisos",    descripcion: "Alta, cargo, sucursal, permisos por módulo.",                           tono: "rose" },
 ];

@@ -67,19 +67,39 @@ export async function GET(request: NextRequest) {
         ? [auth.empresa_id, auth.sucursal_id]
         : [auth.empresa_id];
 
-      // Ventas hoy + mes.
+      // Ventas hoy + mes + comparativas temporales (fase 2 tanda 16).
+      // - hoy vs ayer
+      // - hoy vs mismo día de la semana pasada
+      // - mes actual vs mes anterior (mismo rango de días transcurridos)
+      // - media diaria últimos 7 días vs media diaria mismo día
       const ventasStatsQ = await client.query<{
         total_hoy: string; count_hoy: string;
+        total_ayer: string;
+        total_mismo_dia_sem_pasada: string;
         total_mes: string; count_mes: string;
         total_mes_prev: string; count_mes_prev: string;
+        total_mes_prev_hasta_hoy: string;
+        total_ultimos_7: string;
+        ticket_prom_mes: string; ticket_prom_mes_prev: string;
       }>(
         `SELECT
            COALESCE(SUM(CASE WHEN fecha::date = CURRENT_DATE THEN total ELSE 0 END),0)::text AS total_hoy,
            COUNT(*) FILTER (WHERE fecha::date = CURRENT_DATE)::text AS count_hoy,
+           COALESCE(SUM(CASE WHEN fecha::date = CURRENT_DATE - interval '1 day' THEN total ELSE 0 END),0)::text AS total_ayer,
+           COALESCE(SUM(CASE WHEN fecha::date = CURRENT_DATE - interval '7 days' THEN total ELSE 0 END),0)::text AS total_mismo_dia_sem_pasada,
            COALESCE(SUM(CASE WHEN date_trunc('month', fecha) = date_trunc('month', CURRENT_DATE) THEN total ELSE 0 END),0)::text AS total_mes,
            COUNT(*) FILTER (WHERE date_trunc('month', fecha) = date_trunc('month', CURRENT_DATE))::text AS count_mes,
            COALESCE(SUM(CASE WHEN date_trunc('month', fecha) = date_trunc('month', CURRENT_DATE - interval '1 month') THEN total ELSE 0 END),0)::text AS total_mes_prev,
-           COUNT(*) FILTER (WHERE date_trunc('month', fecha) = date_trunc('month', CURRENT_DATE - interval '1 month'))::text AS count_mes_prev
+           COUNT(*) FILTER (WHERE date_trunc('month', fecha) = date_trunc('month', CURRENT_DATE - interval '1 month'))::text AS count_mes_prev,
+           -- mes anterior hasta el mismo día del mes (rango justo comparable)
+           COALESCE(SUM(CASE
+             WHEN date_trunc('month', fecha) = date_trunc('month', CURRENT_DATE - interval '1 month')
+              AND fecha::date <= (CURRENT_DATE - interval '1 month')::date
+             THEN total ELSE 0 END),0)::text AS total_mes_prev_hasta_hoy,
+           COALESCE(SUM(CASE WHEN fecha::date >= CURRENT_DATE - interval '7 days'
+                              AND fecha::date <  CURRENT_DATE THEN total ELSE 0 END),0)::text AS total_ultimos_7,
+           COALESCE(AVG(CASE WHEN date_trunc('month', fecha) = date_trunc('month', CURRENT_DATE) THEN total END),0)::text AS ticket_prom_mes,
+           COALESCE(AVG(CASE WHEN date_trunc('month', fecha) = date_trunc('month', CURRENT_DATE - interval '1 month') THEN total END),0)::text AS ticket_prom_mes_prev
          FROM ${ventasT}
          WHERE empresa_id = $1 ${filtroSucursal} ${filtroEstado}`,
         paramsBase,
@@ -197,6 +217,13 @@ export async function GET(request: NextRequest) {
           count_mes: Number(vs?.count_mes ?? 0),
           total_mes_prev: Number(vs?.total_mes_prev ?? 0),
           count_mes_prev: Number(vs?.count_mes_prev ?? 0),
+          // Comparativas temporales (fase 2 tanda 16)
+          total_ayer: Number(vs?.total_ayer ?? 0),
+          total_mismo_dia_sem_pasada: Number(vs?.total_mismo_dia_sem_pasada ?? 0),
+          total_mes_prev_hasta_hoy: Number(vs?.total_mes_prev_hasta_hoy ?? 0),
+          total_ultimos_7: Number(vs?.total_ultimos_7 ?? 0),
+          ticket_prom_mes: Number(vs?.ticket_prom_mes ?? 0),
+          ticket_prom_mes_prev: Number(vs?.ticket_prom_mes_prev ?? 0),
           ultimas: ultimasQ.rows.map((r) => ({
             id: r.id, fecha: r.fecha,
             total: Number(r.total),
