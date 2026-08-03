@@ -368,6 +368,48 @@ export default function ClientesPage() {
       .catch(() => { /* silencioso */ });
     return () => { cancel = true; };
   }, []);
+  // Fase 2 tanda 14: segmentos guardados (localStorage). Un segmento es un
+  // snapshot de los filtros actuales con nombre. Aparece como chip extra.
+  type SegmentoGuardado = {
+    id: string; nombre: string;
+    busqueda: string; filtroEstado: string; filtroOrigen: string;
+    filtroTipo: string; filtroTipoServicio: string;
+    segmentoQuickKey: string;
+  };
+  const SEG_STORAGE = "neura.erp.clientes.segmentos.v1";
+  const [segmentosGuardados, setSegmentosGuardados] = useState<SegmentoGuardado[]>([]);
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(SEG_STORAGE);
+      if (raw) setSegmentosGuardados(JSON.parse(raw) as SegmentoGuardado[]);
+    } catch { /* ignore */ }
+  }, []);
+  function persistSegmentos(next: SegmentoGuardado[]) {
+    setSegmentosGuardados(next);
+    try { window.localStorage.setItem(SEG_STORAGE, JSON.stringify(next)); } catch { /* ignore */ }
+  }
+  function guardarSegmentoActual() {
+    const nombre = window.prompt("Nombre para este segmento (ej: VIP con crédito):", "");
+    if (!nombre || !nombre.trim()) return;
+    const item: SegmentoGuardado = {
+      id: `seg-${Date.now()}`, nombre: nombre.trim().slice(0, 40),
+      busqueda, filtroEstado, filtroOrigen, filtroTipo, filtroTipoServicio,
+      segmentoQuickKey: segmento,
+    };
+    persistSegmentos([...segmentosGuardados, item]);
+  }
+  function aplicarSegmento(s: SegmentoGuardado) {
+    setBusqueda(s.busqueda ?? "");
+    setFiltroEstado((s.filtroEstado as "" | "activo" | "inactivo") ?? "");
+    setFiltroOrigen((s.filtroOrigen as "" | "CRM" | "VENTA" | "MANUAL") ?? "");
+    setFiltroTipo((s.filtroTipo as "" | "empresa" | "persona") ?? "");
+    setFiltroTipoServicio(s.filtroTipoServicio ?? "");
+    setSegmento((s.segmentoQuickKey as typeof segmento) ?? "");
+  }
+  function borrarSegmento(id: string) {
+    persistSegmentos(segmentosGuardados.filter((s) => s.id !== id));
+  }
+
   // Fase 2 tanda 3: ordenamiento por columna. Click en header alterna
   // asc/desc; segundo click sobre la misma columna invierte, tercero limpia.
   type SortKey = ClienteColumnKey;
@@ -564,6 +606,19 @@ export default function ClientesPage() {
     setVisibleColumnKeys([...DEFAULT_VISIBLE_COLUMN_KEYS]);
   }
 
+  // Fase 2 tanda 14: reordenar columnas (↑ / ↓). Solo mueve entre visibles.
+  function moverColumna(key: ClienteColumnKey, direccion: "arriba" | "abajo") {
+    setVisibleColumnKeys((prev) => {
+      const idx = prev.indexOf(key);
+      if (idx === -1) return prev;
+      const nueva = [...prev];
+      const target = direccion === "arriba" ? idx - 1 : idx + 1;
+      if (target < 0 || target >= nueva.length) return prev;
+      [nueva[idx], nueva[target]] = [nueva[target], nueva[idx]];
+      return nueva;
+    });
+  }
+
   return (
     <div className="space-y-6">
 
@@ -673,6 +728,29 @@ export default function ClientesPage() {
         )}
       </div>
 
+      {/* Segmentos guardados por el usuario (localStorage) */}
+      {(segmentosGuardados.length > 0 || hayFiltros) && (
+        <div className="flex flex-wrap gap-1.5 items-center">
+          {segmentosGuardados.map((s) => (
+            <div key={s.id} className="inline-flex items-center rounded-full border border-[#4FAEB2]/40 bg-[#4FAEB2]/5 pl-2 pr-1 py-0.5 text-xs">
+              <button type="button" onClick={() => aplicarSegmento(s)}
+                className="text-[#3F8E91] hover:text-[#2A6668] font-semibold mr-1" title="Aplicar este segmento">
+                ★ {s.nombre}
+              </button>
+              <button type="button" onClick={() => borrarSegmento(s.id)}
+                className="text-slate-400 hover:text-rose-600 px-1" title="Borrar segmento">✕</button>
+            </div>
+          ))}
+          {hayFiltros && (
+            <button type="button" onClick={guardarSegmentoActual}
+              className="inline-flex items-center gap-1 rounded-full border border-dashed border-slate-300 bg-white px-3 py-0.5 text-xs text-slate-500 hover:border-[#4FAEB2] hover:text-[#3F8E91]"
+              title="Guardar los filtros actuales como segmento reutilizable">
+              ＋ Guardar filtro actual
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Segmentos rápidos */}
       <div className="flex flex-wrap gap-1.5">
         {([
@@ -730,46 +808,64 @@ export default function ClientesPage() {
                 {visibleColumns.length}/{clienteColumns.length}
               </span>
             </button>
-            {columnasOpen && (
-              <div className="absolute right-0 z-20 mt-2 w-80 rounded-xl border border-slate-200 bg-white shadow-lg">
-                <div className="p-4 border-b border-slate-100">
-                  <p className="text-sm font-semibold text-slate-800">Columnas</p>
-                  <p className="text-xs text-slate-500 mt-1">Personalizá qué información querés ver en esta tabla.</p>
+            {columnasOpen && (() => {
+              const visKeys = visibleColumnKeys.filter((k) => clienteColumns.find((c) => c.key === k));
+              const ocultas = clienteColumns.filter((c) => !visibleColumnSet.has(c.key));
+              const colByKey = new Map(clienteColumns.map((c) => [c.key, c]));
+              return (
+                <div className="absolute right-0 z-20 mt-2 w-96 rounded-xl border border-slate-200 bg-white shadow-lg">
+                  <div className="p-4 border-b border-slate-100">
+                    <p className="text-sm font-semibold text-slate-800">Personalizar columnas</p>
+                    <p className="text-xs text-slate-500 mt-1">Reordená con las flechas · Quitá con la X · Agregá tildando abajo.</p>
+                  </div>
+
+                  {/* Visibles (con reorden) */}
+                  <div className="p-2 max-h-64 overflow-y-auto border-b border-slate-100">
+                    <p className="px-2 py-1 text-[10px] uppercase font-semibold tracking-wide text-slate-400">Visibles ({visKeys.length})</p>
+                    {visKeys.map((k, idx) => {
+                      const col = colByKey.get(k);
+                      if (!col) return null;
+                      return (
+                        <div key={k} className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 hover:bg-slate-50">
+                          <span className="flex-1 text-sm text-slate-700">{col.label}</span>
+                          <button type="button" disabled={idx === 0}
+                            onClick={() => moverColumna(k, "arriba")}
+                            className="p-1 text-slate-400 hover:text-[#3F8E91] disabled:opacity-30 disabled:cursor-not-allowed"
+                            title="Subir">▲</button>
+                          <button type="button" disabled={idx === visKeys.length - 1}
+                            onClick={() => moverColumna(k, "abajo")}
+                            className="p-1 text-slate-400 hover:text-[#3F8E91] disabled:opacity-30 disabled:cursor-not-allowed"
+                            title="Bajar">▼</button>
+                          <button type="button" disabled={col.required}
+                            onClick={() => toggleColumn(k)}
+                            className="p-1 text-slate-400 hover:text-red-600 disabled:opacity-30 disabled:cursor-not-allowed"
+                            title={col.required ? "Requerida" : "Ocultar"}>✕</button>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Ocultas (para agregar) */}
+                  {ocultas.length > 0 && (
+                    <div className="p-2 max-h-40 overflow-y-auto border-b border-slate-100">
+                      <p className="px-2 py-1 text-[10px] uppercase font-semibold tracking-wide text-slate-400">Ocultas ({ocultas.length})</p>
+                      {ocultas.map((col) => (
+                        <button key={col.key} type="button" onClick={() => toggleColumn(col.key)}
+                          className="w-full text-left flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-900">
+                          <span className="text-slate-400 text-xs">＋</span>{col.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between gap-3 p-3">
+                    <p className="text-[11px] text-slate-400">Se guarda por usuario en este navegador.</p>
+                    <button type="button" onClick={resetColumnas}
+                      className="text-xs font-medium text-slate-600 hover:text-slate-900">Restablecer</button>
+                  </div>
                 </div>
-                <div className="p-2 max-h-80 overflow-y-auto">
-                  {clienteColumns.map((col) => {
-                    const checked = visibleColumnSet.has(col.key);
-                    return (
-                      <label
-                        key={col.key}
-                        className={`flex items-center justify-between gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
-                          col.required ? "text-slate-500 bg-slate-50" : "text-slate-700 hover:bg-slate-50 cursor-pointer"
-                        }`}
-                      >
-                        <span>{col.label}</span>
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          disabled={col.required}
-                          onChange={() => toggleColumn(col.key)}
-                          className="h-4 w-4 rounded border-slate-300 text-[#4FAEB2] focus:ring-[#4FAEB2]"
-                        />
-                      </label>
-                    );
-                  })}
-                </div>
-                <div className="flex items-center justify-between gap-3 p-3 border-t border-slate-100">
-                  <p className="text-[11px] text-slate-400">Empresa / Nombre queda siempre visible.</p>
-                  <button
-                    type="button"
-                    onClick={resetColumnas}
-                    className="text-xs font-medium text-slate-600 hover:text-slate-900"
-                  >
-                    Restablecer columnas
-                  </button>
-                </div>
-              </div>
-            )}
+              );
+            })()}
           </div>
         </div>
       </div>
