@@ -735,6 +735,11 @@ function UsuarioDetailContent() {
                   </SectionCard>
                 ) : null}
 
+                {/* Permisos granulares por acción (fase 2 tanda 10) */}
+                {usuario.puede_editar_modulos && !usuario.es_admin_empresa && (usuario.modulo_ids?.length ?? 0) > 0 && (
+                  <AccionesGranularesPanel usuarioId={String(id)} moduloIds={usuario.modulo_ids ?? []} />
+                )}
+
                 {usuario.puede_editar_modulos && !usuario.es_admin_empresa && (usuario.modulos_empresa?.length ?? 0) > 0 ? (
                   <SectionCard title="Módulos del usuario" icon="📦">
                     <p className="text-xs text-gray-500 mb-4">
@@ -921,5 +926,126 @@ export default function UsuarioDetailPage() {
     >
       <UsuarioDetailContent />
     </Suspense>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Permisos granulares por acción (fase 2 tanda 10)
+// ─────────────────────────────────────────────────────────────────────────
+
+const ACCIONES_LABEL: Record<string, string> = {
+  ver: "Ver", crear: "Crear", editar: "Editar", eliminar: "Eliminar",
+  anular: "Anular", descontar: "Descontar", conciliar: "Conciliar", autorizar: "Autorizar",
+};
+const ACCIONES_BASE = ["ver", "crear", "editar", "eliminar"] as const;
+
+type PermFila = {
+  modulo_id: string;
+  slug: string;
+  nombre: string;
+  acciones: Record<string, boolean>;
+};
+
+function AccionesGranularesPanel({ usuarioId, moduloIds }: { usuarioId: string; moduloIds: string[] }) {
+  const [filas, setFilas] = useState<PermFila[]>([]);
+  const [cargando, setCargando] = useState(true);
+  const [warning, setWarning] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [savingKey, setSavingKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancel = false;
+    setCargando(true);
+    fetchWithSupabaseSession(`/api/usuarios/${usuarioId}/acciones`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        if (cancel) return;
+        if (!j?.success) throw new Error(j?.error ?? "Error");
+        setFilas((j.data?.acciones ?? []) as PermFila[]);
+        setWarning(j.data?.warning ?? null);
+      })
+      .catch((e) => { if (!cancel) setErr(e instanceof Error ? e.message : "Error"); })
+      .finally(() => { if (!cancel) setCargando(false); });
+    return () => { cancel = true; };
+    // Refetch cuando cambian los módulos otorgados (ej: se marca uno nuevo).
+  }, [usuarioId, moduloIds.join(",")]);
+
+  async function togglear(f: PermFila, accion: string) {
+    const key = `${f.modulo_id}:${accion}`;
+    setSavingKey(key); setErr(null);
+    const nuevoValor = !f.acciones[accion];
+    // Optimista
+    setFilas((prev) => prev.map((x) => x.modulo_id === f.modulo_id
+      ? { ...x, acciones: { ...x.acciones, [accion]: nuevoValor } } : x));
+    try {
+      const r = await fetchWithSupabaseSession(`/api/usuarios/${usuarioId}/acciones`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modulo_id: f.modulo_id, acciones: { [accion]: nuevoValor } }),
+      });
+      const j = await r.json();
+      if (!j?.success) throw new Error(j?.error ?? "Error");
+    } catch (e) {
+      // Revertir en error
+      setFilas((prev) => prev.map((x) => x.modulo_id === f.modulo_id
+        ? { ...x, acciones: { ...x.acciones, [accion]: !nuevoValor } } : x));
+      setErr(e instanceof Error ? e.message : "Error al guardar.");
+    } finally {
+      setSavingKey(null);
+    }
+  }
+
+  return (
+    <SectionCard title="Permisos por acción" icon="🔒">
+      <p className="text-xs text-gray-500 mb-4">
+        Para cada módulo con acceso, elegí qué puede hacer este usuario. Las 4 acciones base van tildadas por defecto —
+        destildar restringe el permiso.
+      </p>
+      {warning && <p className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">{warning}</p>}
+      {err && <p className="mb-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{err}</p>}
+      {cargando ? (
+        <p className="text-sm text-slate-400 animate-pulse py-4 text-center">Cargando permisos…</p>
+      ) : filas.length === 0 ? (
+        <p className="text-xs text-slate-400 py-4 text-center">Sin módulos otorgados todavía. Marcá módulos en el bloque de abajo primero.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 border-b border-slate-200">
+              <tr>
+                <th className="text-left px-3 py-2 text-[11px] uppercase font-semibold text-slate-600">Módulo</th>
+                {ACCIONES_BASE.map((a) => (
+                  <th key={a} className="text-center px-2 py-2 text-[11px] uppercase font-semibold text-slate-600 w-20">
+                    {ACCIONES_LABEL[a]}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {filas.map((f) => (
+                <tr key={f.modulo_id}>
+                  <td className="px-3 py-2">
+                    <p className="font-medium text-slate-800">{f.nombre}</p>
+                    <p className="text-[10px] text-slate-400 font-mono">{f.slug}</p>
+                  </td>
+                  {ACCIONES_BASE.map((a) => {
+                    const key = `${f.modulo_id}:${a}`;
+                    return (
+                      <td key={a} className="text-center px-2 py-2">
+                        <input
+                          type="checkbox"
+                          checked={f.acciones[a] === true}
+                          disabled={savingKey === key}
+                          onChange={() => togglear(f, a)}
+                          className="h-4 w-4 rounded border-slate-300 text-[#4FAEB2] focus:ring-[#4FAEB2]"
+                        />
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </SectionCard>
   );
 }
