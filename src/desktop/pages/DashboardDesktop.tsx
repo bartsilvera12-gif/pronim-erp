@@ -2606,7 +2606,6 @@ function DashVentas({
 const PERIODO_OPTS: { id: Periodo; label: string }[] = [
   { id: "hoy",       label: "Hoy"        },
   { id: "ayer",      label: "Ayer"       },
-  { id: "anteayer",  label: "Anteayer"   },
   { id: "7d",        label: "7 días"     },
   { id: "30d",       label: "30 días"    },
   { id: "mes",       label: "Mes actual" },
@@ -2881,7 +2880,10 @@ export default function DashboardPage() {
         </div>
 
         <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-          {usuarios.length > 0 && (
+          {/* Selector "Viendo como" — oculto por pedido de Karen (confundía sin
+              agregar valor operativo; el super_admin ya ve la vista global
+              por defecto). Reactivable cambiando false → usuarios.length > 0. */}
+          {false && usuarios.length > 0 && (
             <div className="flex flex-col gap-1.5 sm:items-end">
               <span className="text-[10px] font-medium uppercase tracking-wide text-slate-500">
                 Viendo como
