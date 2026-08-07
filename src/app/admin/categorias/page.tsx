@@ -165,6 +165,40 @@ export default function AdminCategoriasPage() {
     }
   }
 
+  async function editarNombre(c: Categoria) {
+    const nuevo = window.prompt(`Nuevo nombre para "${c.nombre}":`, c.nombre);
+    if (nuevo == null || !nuevo.trim() || nuevo.trim() === c.nombre) return;
+    try {
+      const r = await fetchWithSupabaseSession(`/api/franjas/${c.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nombre: nuevo.trim() }),
+      });
+      const j = await r.json();
+      if (!r.ok || !j.success) throw new Error(j?.error ?? "Error");
+      await cargar();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error inesperado");
+    }
+  }
+
+  async function borrarCategoria(c: Categoria) {
+    const ok = window.confirm(
+      `¿Borrar la categoría "${c.nombre}" (${c.precio_venta.toLocaleString("es-PY")})?\n\n` +
+      `Si tiene ventas o movimientos asociados, no se puede borrar — solo desactivar.\n` +
+      `Los datos históricos se preservan.`,
+    );
+    if (!ok) return;
+    try {
+      const r = await fetchWithSupabaseSession(`/api/franjas/${c.id}`, { method: "DELETE" });
+      const j = await r.json();
+      if (!r.ok || !j.success) throw new Error(j?.error ?? "Error");
+      await cargar();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error al borrar");
+    }
+  }
+
   async function editarPrecio(c: Categoria) {
     const nuevo = window.prompt(`Nuevo precio para ${c.nombre}:`, String(c.precio_venta));
     if (nuevo == null) return;
@@ -308,14 +342,30 @@ export default function AdminCategoriasPage() {
                         {c.activo ? "Activa" : "Inactiva"}
                       </button>
                     </td>
-                    <td className="py-2 text-right space-x-1">
-                      <button
-                        type="button"
-                        onClick={() => editarPrecio(c)}
-                        className="rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
-                      >
-                        Editar precio
-                      </button>
+                    <td className="py-2 text-right">
+                      <div className="inline-flex items-center gap-1 flex-wrap justify-end">
+                        <button
+                          type="button"
+                          onClick={() => editarPrecio(c)}
+                          className="rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
+                          title="Cambiar el precio de venta">
+                          Precio
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => editarNombre(c)}
+                          className="rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
+                          title="Renombrar la categoría (útil para nombres duplicados)">
+                          Nombre
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => borrarCategoria(c)}
+                          className="rounded-md border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100"
+                          title="Borrar (si tiene ventas, ofrecerá desactivar)">
+                          ✕
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

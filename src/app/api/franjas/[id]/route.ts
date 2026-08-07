@@ -83,6 +83,16 @@ export async function PATCH(
       sets.push(`stock_minimo = $${i++}`);
       values.push(sm);
     }
+    // Renombrar franja (label libre) — mantenemos el sku auto para no
+    // romper referencias históricas.
+    if (body.nombre !== undefined) {
+      const n = String(body.nombre).trim();
+      if (!n) {
+        return NextResponse.json(errorResponse("Nombre inválido."), { status: 400 });
+      }
+      sets.push(`nombre = $${i++}`);
+      values.push(n.slice(0, 120));
+    }
     if (!sets.length) {
       return NextResponse.json(errorResponse("Nada para actualizar."), { status: 400 });
     }
@@ -123,5 +133,102 @@ export async function PATCH(
       );
     }
     return NextResponse.json(errorResponse("Error inesperado."), { status: 500 });
+  }
+}
+
+/**
+ * DELETE /api/franjas/[id]
+ * Borra una franja de precio si no tiene movimientos, ventas ni recepciones.
+ * Si tiene, retorna 409 con mensaje sugiriendo desactivarla en su lugar.
+ */
+export async function DELETE(
+  request: NextRequest,
+  ctxParams: { params: Promise<{ id: string }> },
+) {
+  try {
+    const { id } = await ctxParams.params;
+    const ctx = await getTenantSupabaseFromAuth(request);
+    if (!ctx) return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
+    const auth = await getAuthWithRol(request);
+    const esSuper = isSuperAdmin(auth);
+    if (!esSuper && !auth?.sucursal_id) {
+      return NextResponse.json(errorResponse("Necesitás sucursal asignada."), { status: 403 });
+    }
+    const empresaId = ctx.auth.empresa_id;
+
+    const schema = await fetchDataSchemaForEmpresaId(empresaId);
+    assertAllowedChatDataSchema(schema);
+    const pool = getChatPostgresPool();
+    if (!pool) return NextResponse.json(errorResponse("Sin conexión Postgres."), { status: 500 });
+
+    const productosT = quoteSchemaTable(schema, "productos");
+    const ventasItemsT = quoteSchemaTable(schema, "ventas_items");
+    const recepItemsT = quoteSchemaTable(schema, "cliente_recepciones_items");
+    const movT = quoteSchemaTable(schema, "movimientos_inventario");
+    const stockSucT = quoteSchemaTable(schema, "producto_stock_sucursal");
+
+    const client = await pool.connect();
+    try {
+      // Verificar que la franja existe y pertenece a la empresa (+ sucursal si aplica)
+      let scopeCond = "";
+      const params: unknown[] = [id, empresaId];
+      if (!esSuper && auth?.sucursal_id) {
+        params.push(auth.sucursal_id);
+        scopeCond = ` AND (sucursal_id = $3 OR sucursal_id IS NULL)`;
+      }
+      const chk = await client.query<{ id: string; nombre: string }>(
+        `SELECT id, nombre FROM ${productosT}
+         WHERE id = $1 AND empresa_id = $2 AND es_franja_precio = true${scopeCond}
+         LIMIT 1`,
+        params,
+      );
+      if (!chk.rows.length) {
+        return NextResponse.json(errorResponse("Categoría no encontrada."), { status: 404 });
+      }
+
+      // Chequeo de referencias (best-effort — si las tablas no existen, salta).
+      let usos = 0;
+      try {
+        const q1 = await client.query<{ n: string }>(
+          `SELECT COUNT(*)::text AS n FROM ${ventasItemsT} WHERE producto_id = $1`, [id],
+        );
+        usos += Number(q1.rows[0]?.n ?? 0);
+      } catch { /* tabla no existe */ }
+      try {
+        const q2 = await client.query<{ n: string }>(
+          `SELECT COUNT(*)::text AS n FROM ${recepItemsT} WHERE producto_id = $1`, [id],
+        );
+        usos += Number(q2.rows[0]?.n ?? 0);
+      } catch { /* tabla no existe */ }
+      try {
+        const q3 = await client.query<{ n: string }>(
+          `SELECT COUNT(*)::text AS n FROM ${movT} WHERE producto_id = $1`, [id],
+        );
+        usos += Number(q3.rows[0]?.n ?? 0);
+      } catch { /* tabla no existe */ }
+
+      if (usos > 0) {
+        return NextResponse.json(
+          errorResponse(
+            `No se puede borrar: la categoría tiene ${usos} movimiento(s) o venta(s) asociada(s). Podés desactivarla para que deje de aparecer sin perder el historial.`,
+          ),
+          { status: 409 },
+        );
+      }
+
+      // Borrar dependencias limpias (stock_sucursal sin movimientos = OK borrar)
+      try { await client.query(`DELETE FROM ${stockSucT} WHERE producto_id = $1`, [id]); } catch { /* tabla no existe */ }
+      await client.query(
+        `DELETE FROM ${productosT} WHERE id = $1 AND empresa_id = $2 AND es_franja_precio = true`,
+        [id, empresaId],
+      );
+      return NextResponse.json(successResponse({ ok: true, nombre: chk.rows[0].nombre }));
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[/api/franjas/[id] DELETE]", msg);
+    return NextResponse.json(errorResponse("Error al borrar."), { status: 500 });
   }
 }
