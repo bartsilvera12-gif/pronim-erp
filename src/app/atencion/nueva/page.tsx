@@ -2621,8 +2621,33 @@ function ColumnaAtencion(props: {
         </>
       )}
 
+      {lineas.length > 0 && permitirDescuento && (
+        <div className="mt-3 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50/40 px-3 py-2">
+          <span className="text-[11px] font-semibold uppercase text-amber-800 whitespace-nowrap">
+            Descuento a todas
+          </span>
+          <MontoInput
+            value={0} decimals={false} placeholder="0"
+            onChange={(n) => {
+              const monto = Math.max(0, n);
+              lineas.forEach((l, idx) => {
+                const clamped = Math.min(monto, l.precio_unitario);
+                onActualizar(idx, { descuento_unitario: clamped });
+              });
+            }}
+            className="w-24 rounded-md border border-amber-200 bg-white px-2 py-1 text-right text-sm focus:outline-none focus:ring-2 focus:ring-amber-300"
+          />
+          <span className="text-[11px] text-amber-700">c/u a cada línea (ej: 1000 = R$1 a cada prenda)</span>
+          <button type="button"
+            onClick={() => lineas.forEach((_, idx) => onActualizar(idx, { descuento_unitario: 0 }))}
+            className="ml-auto text-[11px] text-slate-500 hover:text-slate-800 underline">
+            Limpiar
+          </button>
+        </div>
+      )}
+
       {lineas.length > 0 && (
-        <div className="mt-4 rounded-lg border border-slate-200 bg-white overflow-x-auto">
+        <div className="mt-2 rounded-lg border border-slate-200 bg-white overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
