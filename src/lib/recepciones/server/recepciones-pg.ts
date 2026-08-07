@@ -47,7 +47,7 @@ export interface RecepcionItemInput {
   tipo_prenda_id?: string | null;
 }
 
-export type MetodoPagoRecepcion = "credito" | "efectivo" | "transferencia";
+export type MetodoPagoRecepcion = "credito" | "efectivo" | "transferencia" | "consignacion";
 
 export interface RecepcionPagoInput {
   metodo: MetodoPagoRecepcion;
@@ -242,6 +242,11 @@ export async function crearRecepcionEnClientePg(
   const creditoInput = p.pagos.find((x) => x.metodo === "credito");
   const efectivoInput = p.pagos.find((x) => x.metodo === "efectivo");
   const transfInput = p.pagos.find((x) => x.metodo === "transferencia");
+  // Consignación: la mercadería queda del cliente hasta que se venda.
+  // El monto entra al ledger como categoria='consignacion' (si el schema
+  // tiene la columna) — el cliente puede retirarlo después en efectivo o
+  // usarlo en compra. Requiere migración 20260911.
+  const consignInput = p.pagos.find((x) => x.metodo === "consignacion");
 
   const cliT = quoteSchemaTable(schema, "clientes");
   const recepT = quoteSchemaTable(schema, "cliente_recepciones");
@@ -590,6 +595,66 @@ export async function crearRecepcionEnClientePg(
           p.createdBy, p.usuarioNombre,
         ],
       );
+    }
+
+    // Consignación: ENTRADA con origen='consignacion' + categoria='consignacion'
+    // Requiere columna `categoria` (migración 20260911). Si no está, degradamos
+    // a origen='consignacion' sin categoria — el saldo cae en la vista legacy
+    // pero al menos queda registrado y no se pierde el pago.
+    if (consignInput) {
+      const cCols = await client.query<{ column_name: string }>(
+        `SELECT column_name FROM information_schema.columns
+          WHERE table_schema = $1 AND table_name = 'cliente_creditos_movimientos'`,
+        [schema],
+      );
+      const cSet = new Set(cCols.rows.map((r) => r.column_name));
+      const tieneCategoria = cSet.has("categoria");
+      // También chequeamos si el CHECK de origen ya incluye 'consignacion'
+      // (migración 20260911). Si no está, degradamos a 'ajuste_manual' con
+      // observación explícita.
+      let origen = "consignacion";
+      try {
+        const chk = await client.query<{ conname: string; consrc: string | null }>(
+          `SELECT pg_get_constraintdef(c.oid) AS consrc, c.conname
+             FROM pg_constraint c
+             JOIN pg_class t ON t.oid = c.conrelid
+             JOIN pg_namespace n ON n.oid = t.relnamespace
+            WHERE n.nspname = $1 AND t.relname = 'cliente_creditos_movimientos'
+              AND c.conname LIKE '%origen%check%'
+            LIMIT 1`,
+          [schema],
+        );
+        const consrc = chk.rows[0]?.consrc ?? "";
+        if (!consrc.includes("'consignacion'")) origen = "ajuste_manual";
+      } catch { /* seguimos con consignacion; si falla el INSERT abortará la tx */ }
+
+      if (tieneCategoria) {
+        await client.query(
+          `INSERT INTO ${creditosT} (
+             empresa_id, cliente_id, tipo, monto, origen, categoria,
+             referencia_id, referencia_tipo, referencia_numero, observaciones,
+             created_by, usuario_nombre
+           ) VALUES ($1,$2,'ENTRADA',$3,$9,'consignacion',$4,'recepcion',$5,$6,$7,$8)`,
+          [
+            p.empresaId, p.clienteId, Number(consignInput.monto), recepcionId, numero,
+            `Recepción ${numero}: consignación (retirable en efectivo o usable en compra)`,
+            p.createdBy, p.usuarioNombre, origen,
+          ],
+        );
+      } else {
+        await client.query(
+          `INSERT INTO ${creditosT} (
+             empresa_id, cliente_id, tipo, monto, origen, referencia_id,
+             referencia_tipo, referencia_numero, observaciones,
+             created_by, usuario_nombre
+           ) VALUES ($1,$2,'ENTRADA',$3,$9,$4,'recepcion',$5,$6,$7,$8)`,
+          [
+            p.empresaId, p.clienteId, Number(consignInput.monto), recepcionId, numero,
+            `Recepción ${numero}: CONSIGNACIÓN (migración de cartera pendiente)`,
+            p.createdBy, p.usuarioNombre, origen,
+          ],
+        );
+      }
     }
 
     // Evento historial — SAVEPOINT: si el INSERT falla (tabla ausente,

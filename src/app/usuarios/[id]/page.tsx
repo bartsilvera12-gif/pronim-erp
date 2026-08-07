@@ -792,6 +792,9 @@ function UsuarioDetailContent() {
                   </SectionCard>
                 ) : null}
 
+                {/* Idioma del usuario (fase 2 tanda 19) */}
+                <IdiomaUsuarioPanel usuarioId={String(id)} />
+
                 {/* Permisos granulares por acción (fase 2 tanda 10) */}
                 {usuario.puede_editar_modulos && !usuario.es_admin_empresa && (usuario.modulo_ids?.length ?? 0) > 0 && (
                   <AccionesGranularesPanel usuarioId={String(id)} moduloIds={usuario.modulo_ids ?? []} />
@@ -1002,6 +1005,72 @@ type PermFila = {
   nombre: string;
   acciones: Record<string, boolean>;
 };
+
+function IdiomaUsuarioPanel({ usuarioId }: { usuarioId: string }) {
+  const [lang, setLang] = useState<"es" | "pt-BR" | "en">("es");
+  const [cargando, setCargando] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState<{ tipo: "ok" | "err"; texto: string } | null>(null);
+  useEffect(() => {
+    let cancel = false;
+    fetchWithSupabaseSession(`/api/usuarios/${usuarioId}/idioma`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => { if (!cancel && j?.success) setLang((j.data?.lang as "es"|"pt-BR"|"en") ?? "es"); })
+      .catch(() => { /* ignore */ })
+      .finally(() => { if (!cancel) setCargando(false); });
+    return () => { cancel = true; };
+  }, [usuarioId]);
+  async function guardar(nuevo: "es" | "pt-BR" | "en") {
+    setSaving(true); setMsg(null);
+    try {
+      const r = await fetchWithSupabaseSession(`/api/usuarios/${usuarioId}/idioma`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lang: nuevo }),
+      });
+      const j = await r.json();
+      if (!j?.success) throw new Error(j?.error ?? "Error");
+      setLang(nuevo);
+      setMsg({ tipo: "ok", texto: "Idioma actualizado. El usuario verá el cambio en su próximo inicio de sesión." });
+      setTimeout(() => setMsg(null), 4000);
+    } catch (e) {
+      setMsg({ tipo: "err", texto: e instanceof Error ? e.message : "Error" });
+    } finally { setSaving(false); }
+  }
+  return (
+    <SectionCard title="Idioma del usuario" icon="🌎">
+      <p className="text-xs text-gray-500 mb-3">
+        Elegí el idioma con el que este usuario ve la interfaz. Las sucursales de Brasil usan portugués con moneda R$.
+      </p>
+      {cargando ? (
+        <p className="text-sm text-slate-400 animate-pulse">Cargando…</p>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          {([
+            ["es", "🇵🇾 Español (Gs.)"],
+            ["pt-BR", "🇧🇷 Português (R$)"],
+            ["en", "🇺🇸 English (US$)"],
+          ] as const).map(([code, label]) => (
+            <button key={code} type="button" disabled={saving}
+              onClick={() => guardar(code)}
+              className={`rounded-lg border px-4 py-2 text-sm font-medium transition disabled:opacity-50 ${
+                lang === code
+                  ? "border-[#4FAEB2] bg-[#4FAEB2]/10 text-[#3F8E91] ring-2 ring-[#4FAEB2]/20"
+                  : "border-slate-200 bg-white text-slate-600 hover:border-[#4FAEB2] hover:text-[#3F8E91]"
+              }`}>
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+      {msg && (
+        <p className={`mt-3 rounded-lg px-3 py-2 text-xs ${
+          msg.tipo === "ok" ? "border border-emerald-200 bg-emerald-50 text-emerald-700"
+          : "border border-red-200 bg-red-50 text-red-700"
+        }`}>{msg.texto}</p>
+      )}
+    </SectionCard>
+  );
+}
 
 function AccionesGranularesPanel({ usuarioId, moduloIds }: { usuarioId: string; moduloIds: string[] }) {
   const [filas, setFilas] = useState<PermFila[]>([]);

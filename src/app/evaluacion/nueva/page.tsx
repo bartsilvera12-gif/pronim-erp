@@ -61,6 +61,7 @@ export default function NuevaEvaluacionPage() {
   const [pagoCredito, setPagoCredito] = useState<string>("");
   const [pagoEfectivo, setPagoEfectivo] = useState<string>("");
   const [pagoTransf, setPagoTransf] = useState<string>("");
+  const [pagoConsign, setPagoConsign] = useState<string>("");
   const [transfEntidadId, setTransfEntidadId] = useState<string>("");
   const [transfReferencia, setTransfReferencia] = useState<string>("");
   const [entidades, setEntidades] = useState<{ id: string; nombre: string; tipo: string | null }[]>([]);
@@ -294,7 +295,8 @@ export default function NuevaEvaluacionPage() {
     const nCred = Number(pagoCredito) || 0;
     const nEfec = Number(pagoEfectivo) || 0;
     const nTran = Number(pagoTransf) || 0;
-    const suma = nCred + nEfec + nTran;
+    const nCons = Number(pagoConsign) || 0;
+    const suma = nCred + nEfec + nTran + nCons;
     if (suma > 0 && Math.abs(suma - totalTrae) > 1) {
       setError(`El reparto no cuadra: asignado ${fmtGs(suma)} de ${fmtGs(totalTrae)}.`);
       return;
@@ -325,6 +327,7 @@ export default function NuevaEvaluacionPage() {
       const nCred = Number(pagoCredito) || 0;
       const nEfec = Number(pagoEfectivo) || 0;
       const nTran = Number(pagoTransf) || 0;
+      const nCons = Number(pagoConsign) || 0;
       const pagos: Array<{ metodo: string; monto: number; entidad_bancaria_id?: string; referencia?: string }> = [];
       if (nCred > 0) pagos.push({ metodo: "credito", monto: nCred });
       if (nEfec > 0) pagos.push({ metodo: "efectivo", monto: nEfec });
@@ -333,6 +336,7 @@ export default function NuevaEvaluacionPage() {
         entidad_bancaria_id: transfEntidadId || undefined,
         referencia: transfReferencia || undefined,
       });
+      if (nCons > 0) pagos.push({ metodo: "consignacion", monto: nCons });
 
       const traePayload = {
         items: trae.map((l) => ({
@@ -662,12 +666,14 @@ export default function NuevaEvaluacionPage() {
             credito={pagoCredito}
             efectivo={pagoEfectivo}
             transf={pagoTransf}
+            consign={pagoConsign}
             transfEntidadId={transfEntidadId}
             transfReferencia={transfReferencia}
             entidades={entidades}
             onCredito={setPagoCredito}
             onEfectivo={setPagoEfectivo}
             onTransf={setPagoTransf}
+            onConsign={setPagoConsign}
             onTransfEntidadId={setTransfEntidadId}
             onTransfReferencia={setTransfReferencia}
           />
@@ -773,20 +779,22 @@ export default function NuevaEvaluacionPage() {
 
 function RepartoPago(props: {
   total: number;
-  credito: string; efectivo: string; transf: string;
+  credito: string; efectivo: string; transf: string; consign: string;
   transfEntidadId: string; transfReferencia: string;
   entidades: { id: string; nombre: string; tipo: string | null }[];
   onCredito: (s: string) => void;
   onEfectivo: (s: string) => void;
   onTransf: (s: string) => void;
+  onConsign: (s: string) => void;
   onTransfEntidadId: (s: string) => void;
   onTransfReferencia: (s: string) => void;
 }) {
-  const { total, credito, efectivo, transf, transfEntidadId, transfReferencia, entidades } = props;
+  const { total, credito, efectivo, transf, consign, transfEntidadId, transfReferencia, entidades } = props;
   const numCred = Number(credito) || 0;
   const numEfec = Number(efectivo) || 0;
   const numTran = Number(transf) || 0;
-  const suma = numCred + numEfec + numTran;
+  const numCons = Number(consign) || 0;
+  const suma = numCred + numEfec + numTran + numCons;
   const diff = total - suma;
   const cuadra = Math.abs(diff) <= 1;
 
@@ -875,6 +883,30 @@ function RepartoPago(props: {
           }}
           className="text-[11px] text-slate-500 hover:text-slate-700 underline whitespace-nowrap"
           title="Poner el restante en transferencia"
+        >
+          Resto acá
+        </button>
+      </div>
+
+      {/* Consignación */}
+      <div className={rowCls}>
+        <span className={`${chipBase} border-amber-200 bg-amber-50 text-amber-700 w-32 text-center`}
+          title="La mercadería queda del cliente hasta venderla. Puede retirarse en efectivo o usarse en compra.">
+          📦 Consignación
+        </span>
+        <MontoInput
+          value={consign} decimals={false}
+          onChange={(n) => props.onConsign(n > 0 ? String(n) : "")}
+          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-right focus:outline-none focus:ring-2 focus:ring-amber-500"
+        />
+        <button
+          type="button"
+          onClick={() => {
+            const restante = Math.max(0, total - numCred - numEfec - numTran);
+            props.onConsign(restante > 0 ? String(restante) : "");
+          }}
+          className="text-[11px] text-slate-500 hover:text-slate-700 underline whitespace-nowrap"
+          title="Poner el restante en consignación"
         >
           Resto acá
         </button>

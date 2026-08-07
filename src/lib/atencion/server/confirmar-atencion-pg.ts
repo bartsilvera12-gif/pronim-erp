@@ -62,7 +62,7 @@ export interface ConfirmarAtencionInput {
      *  Si no viene, se asume TODO va a crédito (comportamiento legacy).
      *  La suma debe igualar `totalFinalEvaluado`. */
     pagos?: {
-      metodo: "credito" | "efectivo" | "transferencia";
+      metodo: "credito" | "efectivo" | "transferencia" | "consignacion";
       monto: number;
       entidad_bancaria_id?: string | null;
       referencia?: string | null;
@@ -306,7 +306,7 @@ export async function confirmarAtencionEnClientePg(
       //     con cambio directo genera 100% crédito para que se aplique en
       //     la venta subsiguiente).
       let pagosRecepcion: {
-        metodo: "credito" | "efectivo" | "transferencia";
+        metodo: "credito" | "efectivo" | "transferencia" | "consignacion";
         monto: number;
         entidad_bancaria_id?: string | null;
         referencia?: string | null;

@@ -133,11 +133,11 @@ async function runProcesar(
           if (!x || typeof x !== "object") return null;
           const r = x as Record<string, unknown>;
           const metodo = String(r.metodo ?? "").toLowerCase();
-          if (metodo !== "credito" && metodo !== "efectivo" && metodo !== "transferencia") return null;
+          if (metodo !== "credito" && metodo !== "efectivo" && metodo !== "transferencia" && metodo !== "consignacion") return null;
           const monto = Number(r.monto);
           if (!(monto > 0)) return null;
           return {
-            metodo: metodo as "credito" | "efectivo" | "transferencia",
+            metodo: metodo as "credito" | "efectivo" | "transferencia" | "consignacion",
             monto,
             entidad_bancaria_id:
               typeof r.entidad_bancaria_id === "string" && r.entidad_bancaria_id
@@ -147,7 +147,7 @@ async function runProcesar(
                 ? r.referencia : null,
           };
         })
-        .filter((x): x is { metodo: "credito" | "efectivo" | "transferencia"; monto: number; entidad_bancaria_id: string | null; referencia: string | null } => !!x);
+        .filter((x): x is { metodo: "credito" | "efectivo" | "transferencia" | "consignacion"; monto: number; entidad_bancaria_id: string | null; referencia: string | null } => !!x);
       return {
         items: out,
         totalFinalEvaluado: totalFinal,
