@@ -443,29 +443,40 @@ export async function confirmarAtencionEnClientePg(
         (s, it) => s + (Math.max(0, Number(it.descuento_unitario) || 0) * Number(it.cantidad || 0)), 0,
       );
       if (descGeneral > 0 || descLineaTotal > 0) {
-        try {
-          const auditT = quoteSchemaTable(schema, "auditoria_eventos");
-          await client.query(
-            `INSERT INTO ${auditT} (
-               empresa_id, usuario_id, usuario_nombre, sucursal_id,
-               tipo, entidad, entidad_id, referencia,
-               dato_nuevo, motivo
-             ) VALUES ($1,$2,$3,$4,'descuento_aplicado','venta',$5,$6,$7::jsonb,$8)`,
-            [
-              p.empresaId, p.createdBy, p.usuarioNombre, p.sucursalId,
-              ventaOut.id, ventaOut.numero_control,
-              JSON.stringify({
-                descuento_general: descGeneral,
-                descuento_lineas_total: descLineaTotal,
-                total_final: r.total,
-              }),
-              v.descuentoMotivo ?? null,
-            ],
-          );
-        } catch (e) {
-          // Silencioso si la tabla no existe (migración no corrida).
-          if ((e as { code?: string } | null)?.code !== "42P01") {
+        // Chequeo previo: si la tabla auditoria_eventos NO existe (migración
+        // 20260912 no aplicada), NO ejecutamos el INSERT — un error dentro de
+        // la tx abortaría toda la venta aunque el catch de JS lo silencie.
+        const auditExiste = await client.query<{ exists: boolean }>(
+          `SELECT EXISTS (SELECT 1 FROM information_schema.tables
+                           WHERE table_schema = $1 AND table_name = 'auditoria_eventos') AS exists`,
+          [schema],
+        ).then((r) => r.rows[0]?.exists === true).catch(() => false);
+        if (auditExiste) {
+          try {
+            const auditT = quoteSchemaTable(schema, "auditoria_eventos");
+            await client.query(
+              `INSERT INTO ${auditT} (
+                 empresa_id, usuario_id, usuario_nombre, sucursal_id,
+                 tipo, entidad, entidad_id, referencia,
+                 dato_nuevo, motivo
+               ) VALUES ($1,$2,$3,$4,'descuento_aplicado','venta',$5,$6,$7::jsonb,$8)`,
+              [
+                p.empresaId, p.createdBy, p.usuarioNombre, p.sucursalId,
+                ventaOut.id, ventaOut.numero_control,
+                JSON.stringify({
+                  descuento_general: descGeneral,
+                  descuento_lineas_total: descLineaTotal,
+                  total_final: r.total,
+                }),
+                v.descuentoMotivo ?? null,
+              ],
+            );
+          } catch (e) {
             console.error("[confirmar-atencion audit descuento]", e);
+            // Nota: si esto falla, la tx ya está corrupta. No hay forma de
+            // recuperar limpio — pero al menos ahora sólo ocurre cuando el
+            // schema tiene un problema puntual (columna distinta), no por
+            // tabla ausente.
           }
         }
       }
