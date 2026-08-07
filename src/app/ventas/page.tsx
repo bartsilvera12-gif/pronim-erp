@@ -6,6 +6,7 @@ import {
   useColumnasPersistidas, ColumnasDropdown, type ColumnaDef,
 } from "@/components/tabla/segmentos-guardados";
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import EdgeScrollArea from "@/components/ui/EdgeScrollArea";
 import { FancySelect } from "@/components/ui/FancySelect";
 import MobileFab from "@/components/ui/MobileFab";
@@ -240,6 +241,28 @@ export default function VentasPage() {
   };
   const { segmentos: segsGuardados, guardar: guardarSeg, borrar: borrarSeg } =
     useSegmentosGuardados<VentaSegData>("neura.erp.ventas.segmentos.v1");
+
+  // Pre-aplicar filtros desde querystring (drill desde dashboard).
+  // Ejemplos: /ventas?segmento=hoy · ?estado=anulada · ?pago=tarjeta
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    if (!searchParams) return;
+    const seg = searchParams.get("segmento");
+    if (seg && ["hoy","semana","mes","con_descuento","anuladas"].includes(seg)) {
+      setSegmento(seg as typeof segmento);
+    }
+    const est = searchParams.get("estado");
+    if (est === "completada" || est === "anulada") setFiltroEstado(est);
+    const pago = searchParams.get("pago");
+    if (pago && ["efectivo","tarjeta","transferencia","qr","billetera","otro"].includes(pago)) {
+      setFiltroPago(pago as typeof filtroPago);
+    }
+    const suc = searchParams.get("sucursal_id");
+    if (suc) setFiltroSucursal(suc);
+    const q = searchParams.get("q");
+    if (q) setBusqueda(q);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [sucursales, setSucursales] = useState<{ id: string; nombre: string }[]>([]);
   const [cargandoLista, setCargandoLista] = useState(true);
   // Modal para anular una venta desde el listado. La venta a anular

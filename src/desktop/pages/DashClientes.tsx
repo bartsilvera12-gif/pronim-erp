@@ -132,19 +132,24 @@ export default function DashClientes({ desde, hasta }: { desde: string; hasta: s
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         <KpiCard icon={<Users className="h-5 w-5" />} tone="rose"
           label="Total clientes" value={fmtN(k.total)}
-          tip="Total de clientes que matchean el filtro actual (segmento, sucursal, búsqueda)." />
+          tip="Total de clientes que matchean el filtro actual (segmento, sucursal, búsqueda)."
+          href="/clientes" />
         <KpiCard icon={<Crown className="h-5 w-5" />} tone="amber"
           label="VIP" value={fmtN(k.vip)}
-          tip="total_historico ≥ Gs. 5.000.000 o ≥ 6 compras en 90 días." />
+          tip="total_historico ≥ Gs. 5.000.000 o ≥ 6 compras en 90 días."
+          href="/clientes?segmento=vip" />
         <KpiCard icon={<Star className="h-5 w-5" />} tone="emerald"
           label="Frecuentes" value={fmtN(k.habitual)}
-          tip="Con compras pero no VIP y no Dormido." />
+          tip="Con compras pero no VIP y no Dormido."
+          href="/clientes" />
         <KpiCard icon={<UserPlus className="h-5 w-5" />} tone="sky"
           label="Nuevos" value={fmtN(k.nuevo)}
-          tip="Sin compras históricas registradas." />
+          tip="Sin compras históricas registradas."
+          href="/clientes?segmento=nuevos" />
         <KpiCard icon={<Moon className="h-5 w-5" />} tone="lavender"
           label="Dormidos" value={fmtN(k.dormido)}
-          tip="Con compras pero > 120 días sin visita." />
+          tip="Con compras pero > 120 días sin visita."
+          href="/clientes?segmento=dormidos" />
       </div>
 
       {/* Fila 2: actividad + crédito + cadencia */}
@@ -212,11 +217,11 @@ const TONE_ICON_BG: Record<Tone, string> = {
   peach:    "bg-orange-100 text-orange-600 ring-1 ring-orange-200",
 };
 
-function KpiCard({ icon, tone, label, value, tip }: {
-  icon: React.ReactNode; tone: Tone; label: string; value: string; tip?: string;
+function KpiCard({ icon, tone, label, value, tip, href }: {
+  icon: React.ReactNode; tone: Tone; label: string; value: string; tip?: string; href?: string;
 }) {
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 flex items-center gap-3 shadow-sm hover:shadow-md transition" title={tip}>
+  const inner = (
+    <>
       <div className={`h-11 w-11 shrink-0 rounded-xl flex items-center justify-center ${TONE_ICON_BG[tone]}`}>
         {icon}
       </div>
@@ -224,8 +229,18 @@ function KpiCard({ icon, tone, label, value, tip }: {
         <p className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold truncate">{label}</p>
         <p className="mt-0.5 text-xl font-bold text-slate-900 tabular-nums truncate">{value}</p>
       </div>
-    </div>
+      {href && <span aria-hidden className="text-[#4FAEB2] opacity-40 group-hover:opacity-100 transition text-lg">→</span>}
+    </>
   );
+  const base = "rounded-2xl border border-slate-200 bg-white p-4 flex items-center gap-3 shadow-sm hover:shadow-md transition";
+  if (href) {
+    return (
+      <a href={href} className={`${base} hover:border-[#4FAEB2] cursor-pointer group`} title={tip ? `${tip} · Click para ver la lista` : "Click para ver la lista"}>
+        {inner}
+      </a>
+    );
+  }
+  return <div className={base} title={tip}>{inner}</div>;
 }
 
 function DistribucionSegmentos({ kpis }: { kpis: Payload["kpis"] }) {

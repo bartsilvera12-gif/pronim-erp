@@ -2,6 +2,7 @@
 import { confirm,alert } from "@/components/ui/dialog";
 
 import { useEffect, useMemo, useState, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   useSegmentosGuardados, SegmentosGuardadosBar,
@@ -115,6 +116,22 @@ export default function InventarioPage() {
   };
   const { segmentos: segsGuardados, guardar: guardarSeg, borrar: borrarSeg } =
     useSegmentosGuardados<InvSegData>("neura.erp.inventario.segmentos.v1");
+
+  // Pre-aplicar filtros desde querystring (drill desde dashboard).
+  // Ejemplos: /inventario?stock=bajo · ?segmento=nunca_vendido · ?q=remera
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    if (!searchParams) return;
+    const seg = searchParams.get("segmento");
+    if (seg && ["recien","no_vendido_30","no_vendido_90","nunca_vendido","alto_markup","bajo_markup"].includes(seg)) {
+      setSegmento(seg as Segmento);
+    }
+    const stock = searchParams.get("stock");
+    if (stock === "sin_stock" || stock === "bajo" || stock === "con_stock") setFiltroStock(stock);
+    const q = searchParams.get("q");
+    if (q) setFiltroPorNombre(q);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Paginación client-side. Default 50 (chico, legible, no fríe al browser
   // con 6000 filas). El usuario puede subir a 100 o "todos" si quiere ver

@@ -502,6 +502,27 @@ export default function ClientesPage() {
     }
   }, [searchParams]);
 
+  // Pre-aplicar filtros desde querystring (drill desde dashboard).
+  // Ejemplos: /clientes?segmento=vip · ?estado=inactivo · ?q=Betim
+  useEffect(() => {
+    if (!searchParams) return;
+    const seg = searchParams.get("segmento");
+    if (seg && ["nuevos","dormidos","vip","con_credito","nunca","semana","sin_volver_60"].includes(seg)) {
+      setSegmento(seg as typeof segmento);
+    }
+    const est = searchParams.get("estado");
+    if (est === "activo" || est === "inactivo") setFiltroEstado(est);
+    const ori = searchParams.get("origen");
+    if (ori === "CRM" || ori === "VENTA" || ori === "MANUAL") setFiltroOrigen(ori);
+    const tipo = searchParams.get("tipo");
+    if (tipo === "empresa" || tipo === "persona") setFiltroTipo(tipo);
+    const q = searchParams.get("q");
+    if (q) setBusqueda(q);
+    // Solo en primer render — el usuario luego puede cambiarlos sin que se
+    // sobreescriban.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Umbral VIP relativo: top 15% del total comprado. Se recalcula cuando
   // cambia el universo de clientes cargado.
   const vipUmbralTotal = useMemo(() => {

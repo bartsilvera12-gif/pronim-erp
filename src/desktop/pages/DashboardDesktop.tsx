@@ -694,8 +694,9 @@ function KpiCard({
   );
   if (href) {
     return (
-      <motion.a href={href} whileHover={{ y: -2 }} className={`${cardCls} block cursor-pointer hover:border-[#4FAEB2]`}>
+      <motion.a href={href} whileHover={{ y: -2 }} className={`${cardCls} block cursor-pointer hover:border-[#4FAEB2] group`} title="Ver detalle">
         {inner}
+        <span aria-hidden className="absolute bottom-2 right-2 text-[#4FAEB2] opacity-40 group-hover:opacity-100 transition-opacity text-sm">→</span>
       </motion.a>
     );
   }
@@ -2059,7 +2060,7 @@ function DashInventario({
           color={bajosStock > 0 ? "text-rose-600" : "text-emerald-600"}
           accent={bajosStock > 0 ? "danger" : "neutral"}
           variation={bajosStock > 0 ? -2 : undefined}
-          href="/inventario"
+          href="/inventario?stock=bajo"
         />
         <KpiCard
           icon={<Icon.Diamond className="h-4 w-4" />}
@@ -2349,7 +2350,7 @@ function DashVentas({
           value={`Gs. ${formatGsFull(totalHoy)}`}
           sub={`${ventasHoy.length} transacciones`}
           color="text-slate-900"
-          href="/ventas"
+          href="/ventas?segmento=hoy"
         />
         <KpiCard
           icon={<Icon.Calendar className="h-4 w-4" />}
@@ -2358,7 +2359,7 @@ function DashVentas({
           sub={`${ventasMes.length} transacciones`}
           color="text-[#3F8E91]"
           accent="featured"
-          href="/ventas"
+          href="/ventas?segmento=mes"
         />
         <KpiCard
           icon={<Icon.Ticket className="h-4 w-4" />}

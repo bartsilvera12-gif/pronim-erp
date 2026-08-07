@@ -210,7 +210,7 @@ export default function DashboardSucursalSimple() {
               return (
                 <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   <KpiCard
-                    href="/ventas"
+                    href="/ventas?segmento=hoy"
                     label={t("Ventas de hoy")}
                     value={fmtGs(data.ventas.total_hoy)}
                     sub={`${data.ventas.count_hoy} ${t("operación(es)")}`}
@@ -242,7 +242,7 @@ export default function DashboardSucursalSimple() {
             {/* KPIs secundarios: mes / operaciones / clientes atendidos */}
             <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <KpiCard
-                href="/ventas"
+                href="/ventas?segmento=mes"
                 label={t("Ventas del mes")}
                 value={fmtGs(data.ventas.total_mes)}
                 sub={diffMesPct != null
@@ -375,9 +375,11 @@ function KpiCard({ label, value, sub, tone, href }: {
     return (
       <Link
         href={href}
-        className={`rounded-xl border p-3 shadow-sm ${cls} block transition hover:shadow-md hover:-translate-y-0.5 hover:border-[#4FAEB2]`}
+        className={`relative rounded-xl border p-3 shadow-sm ${cls} block transition hover:shadow-md hover:-translate-y-0.5 hover:border-[#4FAEB2] group`}
+        title="Ver detalle"
       >
         {body}
+        <span aria-hidden className="absolute bottom-1.5 right-2 text-[#4FAEB2] opacity-40 group-hover:opacity-100 transition-opacity text-xs">→</span>
       </Link>
     );
   }

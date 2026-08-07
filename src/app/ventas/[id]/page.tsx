@@ -158,6 +158,26 @@ export default function VentaDetallePage({ params }: { params: Promise<{ id: str
         </section>
 
         {/* Totales */}
+        {/* Drill-outs: explorar más desde esta venta */}
+        <section className="flex flex-wrap gap-2 text-xs">
+          {venta.cliente_id && (
+            <Link href={`/clientes/${venta.cliente_id}`}
+              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 hover:border-[#4FAEB2] hover:text-[#3F8E91]">
+              👤 {t("Historial del cliente")} →
+            </Link>
+          )}
+          <Link href={`/inventario/movimientos?venta=${venta.numero_control}`}
+            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 hover:border-[#4FAEB2] hover:text-[#3F8E91]">
+            📦 {t("Movimientos de stock generados")} →
+          </Link>
+          {venta.sucursal_id && (
+            <Link href={`/ventas?sucursal_id=${venta.sucursal_id}&segmento=hoy`}
+              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 hover:border-[#4FAEB2] hover:text-[#3F8E91]">
+              🏬 {t("Ventas de hoy en esta sucursal")} →
+            </Link>
+          )}
+        </section>
+
         <section className="rounded-xl border border-slate-200 bg-white shadow-sm p-4 space-y-1.5 max-w-md ml-auto">
           <ResumenRow label={t("Subtotal items")} value={fmt(venta.items.reduce((s, i) => s + (i.precio_venta_original ?? i.precio_venta) * i.cantidad, 0))} />
           {totalDescuentoLinea > 0 && (
