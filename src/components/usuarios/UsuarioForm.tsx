@@ -86,8 +86,11 @@ export function emptyUsuarioForm(): UsuarioFormValues {
 export type SucursalOpt = { id: string; nombre: string; es_principal?: boolean; activo?: boolean };
 
 export function nivelFromRolDb(rol: string | null | undefined): NivelUsuario {
-  const r = (rol ?? "").trim().toLowerCase();
+  const r = (rol ?? "").trim().toLowerCase().replace(/\s+/g, " ");
   if (r === "administrador" || r === "admin") return "administrador";
+  // Un super_admin caía en el `return "usuario"` de abajo: el formulario lo
+  // mostraba como usuario operativo y le exigía sucursal obligatoria.
+  if (r === "super_admin" || r === "super admin" || r === "superadmin") return "administrador";
   if (r === "supervisor") return "supervisor";
   return "usuario";
 }
@@ -111,8 +114,17 @@ export type UsuarioFormProps = {
   extraSections?: React.ReactNode;
   /** Solo administradores pueden cambiar nivel (rol ERP). */
   nivelAccesoDisabled?: boolean;
-  /** Catálogo de sucursales activas de la empresa. */
+  /** Catálogo de sucursales activas de la empresa. `undefined` = cargando. */
   sucursales?: SucursalOpt[];
+  /** Mensaje cuando el catálogo no se pudo cargar (se muestra al usuario). */
+  sucursalesError?: string | null;
+  /** Reintento manual del fetch de sucursales. */
+  onRecargarSucursales?: () => void;
+  /**
+   * Sucursal ya asignada al usuario. Se agrega como opción aunque no esté en
+   * el catálogo activo (sucursal desactivada), para no perder el valor al editar.
+   */
+  sucursalActual?: SucursalOpt | null;
 };
 
 export function UsuarioFormFields({
@@ -128,12 +140,24 @@ export function UsuarioFormFields({
   extraSections,
   nivelAccesoDisabled,
   sucursales,
+  sucursalesError = null,
+  onRecargarSucursales,
+  sucursalActual = null,
 }: UsuarioFormProps) {
   const fLabel = usuarioFormLabel;
   const fInput = fieldClassName ?? usuarioFormInput;
   const fSelect = usuarioFormSelect;
   const showComision = form.tipo_contrato === "comision" || form.tipo_contrato === "mixto";
   const showSalario = form.tipo_contrato !== "comision";
+
+  const sucursalesCargando = sucursales === undefined;
+  const opcionesSucursal: SucursalOpt[] = (() => {
+    const base = sucursales ?? [];
+    if (sucursalActual?.id && !base.some((s) => s.id === sucursalActual.id)) {
+      return [...base, sucursalActual];
+    }
+    return base;
+  })();
 
   return (
     <>
@@ -304,20 +328,42 @@ export function UsuarioFormFields({
               value={form.sucursal_id}
               onChange={onChange}
               className={fSelect}
+              disabled={sucursalesCargando}
               required={form.nivel !== "administrador"}
             >
               {form.nivel === "administrador" ? (
                 <option value="">Todas las sucursales</option>
               ) : (
-                <option value="">Seleccioná una sucursal…</option>
+                <option value="">
+                  {sucursalesCargando ? "Cargando sucursales…" : "Seleccioná una sucursal…"}
+                </option>
               )}
-              {(sucursales ?? []).map((s) => (
+              {opcionesSucursal.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.nombre}{s.es_principal ? " (Principal)" : ""}
+                  {s.activo === false ? " (Inactiva)" : ""}
                 </option>
               ))}
             </select>
-            {sucursales !== undefined && sucursales.length === 0 ? (
+            {sucursalesError ? (
+              <p className="text-xs text-red-600 mt-1">
+                No se pudo cargar la lista de sucursales: {sucursalesError}
+                {onRecargarSucursales ? (
+                  <>
+                    {" "}
+                    <button
+                      type="button"
+                      onClick={onRecargarSucursales}
+                      className="underline decoration-dotted underline-offset-2 font-medium"
+                    >
+                      Reintentar
+                    </button>
+                  </>
+                ) : null}
+              </p>
+            ) : sucursalesCargando ? (
+              <p className="text-xs text-gray-400 mt-1">Cargando sucursales de tu empresa…</p>
+            ) : opcionesSucursal.length === 0 ? (
               <p className="text-xs text-amber-700 mt-1">
                 Todavía no hay sucursales activas en tu empresa.{" "}
                 <a href="/admin/sucursales" target="_blank" rel="noopener noreferrer" className="underline decoration-dotted underline-offset-2 font-medium">

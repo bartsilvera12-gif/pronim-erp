@@ -1,16 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import {
   emptyUsuarioForm,
   rolFromNivelForm,
   UsuarioFormFields,
-  type SucursalOpt,
   type UsuarioFormValues,
 } from "@/components/usuarios/UsuarioForm";
+import { useSucursales } from "@/components/usuarios/useSucursales";
 
 export type UsuarioNuevoFormProps = {
   variant?: "page" | "modal";
@@ -30,32 +30,11 @@ export default function UsuarioNuevoForm({
   const [showPwd2, setShowPwd2] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
-  const [sucursales, setSucursales] = useState<SucursalOpt[]>([]);
-
-  useEffect(() => {
-    let cancel = false;
-    fetchWithSupabaseSession("/api/sucursales", { cache: "no-store" })
-      .then(async (r) => {
-        const j = await r.json().catch(() => ({}));
-        if (cancel) return;
-        if (!r.ok || j?.success === false) {
-          // Antes se tragaba silencioso; ahora dejamos rastro para diagnosticar.
-          console.error("[UsuarioNuevoForm] /api/sucursales fallo", { status: r.status, body: j });
-          setSucursales([]);
-          return;
-        }
-        const arr =
-          (j?.data?.sucursales as SucursalOpt[] | undefined) ??
-          (j?.sucursales as SucursalOpt[] | undefined) ??
-          [];
-        setSucursales(arr);
-      })
-      .catch((e) => {
-        console.error("[UsuarioNuevoForm] /api/sucursales fetch error", e);
-        setSucursales([]);
-      });
-    return () => { cancel = true; };
-  }, []);
+  const {
+    sucursales,
+    error: sucursalesError,
+    recargar: recargarSucursales,
+  } = useSucursales();
 
   const closeOrBack = () => {
     if (onClose) onClose();
@@ -108,7 +87,11 @@ export default function UsuarioNuevoForm({
     }
 
     if (form.nivel !== "administrador" && !form.sucursal_id) {
-      setError("La sucursal es obligatoria para usuarios y supervisores.");
+      setError(
+        sucursales !== undefined && sucursales.length === 0
+          ? "La sucursal es obligatoria para usuarios y supervisores, y tu empresa todavía no tiene ninguna. Creá una en Administración → Sucursales."
+          : "La sucursal es obligatoria para usuarios y supervisores."
+      );
       return;
     }
 
@@ -191,6 +174,8 @@ export default function UsuarioNuevoForm({
           showPwd2={showPwd2}
           setShowPwd2={setShowPwd2}
           sucursales={sucursales}
+          sucursalesError={sucursalesError}
+          onRecargarSucursales={recargarSucursales}
         />
 
         <div className="flex items-center justify-end gap-3">

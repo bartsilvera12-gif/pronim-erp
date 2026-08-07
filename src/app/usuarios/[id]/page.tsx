@@ -13,8 +13,10 @@ import {
   usuarioFormInputGray,
   usuarioFormLabel,
   UsuarioFormFields,
+  type SucursalOpt,
   type UsuarioFormValues,
 } from "@/components/usuarios/UsuarioForm";
+import { useSucursales } from "@/components/usuarios/useSucursales";
 import type { AreaUsuario, TipoContrato } from "@/lib/usuarios/types";
 
 type ModuloOpt = { id: string; nombre: string; slug: string };
@@ -34,6 +36,7 @@ type Usuario = {
   rol: string | null;
   estado: string | null;
   created_at: string;
+  sucursal_id?: string | null;
   modulo_ids?: string[];
   modulos_empresa?: ModuloOpt[];
   dashboard_views_empresa?: { id: string; nombre: string; slug: string; orden: number }[];
@@ -126,6 +129,7 @@ function usuarioToForm(u: Usuario): UsuarioFormValues {
     modulo_ids: u.modulo_ids ?? [],
     dashboard_view_ids: u.dashboard_view_ids ?? [],
     default_dashboard_view_id: u.default_dashboard_view_id ?? "",
+    sucursal_id: u.sucursal_id ?? "",
   };
 }
 
@@ -155,6 +159,26 @@ function UsuarioDetailContent() {
   const [omniScheduleId, setOmniScheduleId] = useState<string>("");
   /** Aviso no bloqueante cuando el guardado omnicanal no pudo usar el schema tenant (PostgREST). */
   const [omnicanalWarning, setOmnicanalWarning] = useState<string | null>(null);
+
+  const {
+    sucursales,
+    error: sucursalesError,
+    recargar: recargarSucursales,
+  } = useSucursales();
+
+  /**
+   * La sucursal que el usuario ya tiene se ofrece como opción aunque el
+   * catálogo activo no la traiga (sucursal desactivada): si no, el select
+   * aparecía en blanco y al guardar se perdía la asignación.
+   */
+  const sucursalAsignadaId = usuario?.sucursal_id ?? null;
+  const sucursalActualOpt: SucursalOpt | null = sucursalAsignadaId
+    ? ((sucursales ?? []).find((s) => s.id === sucursalAsignadaId) ?? {
+        id: sucursalAsignadaId,
+        nombre: "Sucursal asignada (inactiva)",
+        activo: false,
+      })
+    : null;
 
   useEffect(() => {
     if (!id) return;
@@ -225,6 +249,17 @@ function UsuarioDetailContent() {
       return;
     }
 
+    // Sucursal obligatoria para no-admin (validación cliente; el servidor la re-valida).
+    const nivelEfectivo = usuario.puede_editar_rol ? form.nivel : nivelFromRolDb(usuario.rol);
+    if (nivelEfectivo !== "administrador" && !form.sucursal_id) {
+      setFormError(
+        sucursales !== undefined && sucursales.length === 0
+          ? "La sucursal es obligatoria para usuarios y supervisores, y tu empresa todavía no tiene ninguna. Creá una en Administración → Sucursales."
+          : "La sucursal es obligatoria para usuarios y supervisores."
+      );
+      return;
+    }
+
     setGuardando(true);
     setOmnicanalWarning(null);
     try {
@@ -241,9 +276,15 @@ function UsuarioDetailContent() {
         area: form.area,
         estado: form.estado,
       };
-      if (usuario.puede_editar_rol) {
+      // Solo mandamos `rol` si realmente cambió el nivel: así editar un dato
+      // suelto de un super_admin no lo degrada a "administrador".
+      if (usuario.puede_editar_rol && form.nivel !== nivelFromRolDb(usuario.rol)) {
         body.rol = rolFromNivelForm(form.nivel);
       }
+
+      // sucursal_id siempre se envía: string vacío se normaliza a null en server.
+      body.sucursal_id = form.sucursal_id || null;
+
       if (usuario.puede_editar_modulos && !usuario.es_admin_empresa) {
         body.modulo_ids = form.modulo_ids;
       }
@@ -286,7 +327,10 @@ function UsuarioDetailContent() {
         setOmnicanalWarning(json.omnicanal_warning.trim());
       }
 
-      const rolActualizado = usuario.puede_editar_rol ? rolFromNivelForm(form.nivel) : usuario.rol;
+      const rolActualizado =
+        usuario.puede_editar_rol && form.nivel !== nivelFromRolDb(usuario.rol)
+          ? rolFromNivelForm(form.nivel)
+          : usuario.rol;
 
       const salarioParsed =
         form.salario_base.trim() === ""
@@ -321,6 +365,7 @@ function UsuarioDetailContent() {
 
       setUsuario({
         ...usuario,
+        sucursal_id: form.sucursal_id || null,
         nombre: form.nombre.trim(),
         email: form.email.trim().toLowerCase(),
         telefono: form.telefono.trim() || null,
@@ -527,6 +572,14 @@ function UsuarioDetailContent() {
               {[
                 { label: "Nivel", value: labelNivelDisplay(usuario.rol) },
                 { label: "Área", value: labelArea(usuario.area) },
+                {
+                  label: "Sucursal",
+                  value: usuario.sucursal_id
+                    ? (sucursalActualOpt?.nombre ?? "—")
+                    : nivelFromRolDb(usuario.rol) === "administrador"
+                      ? "Todas las sucursales"
+                      : "— sin asignar —",
+                },
               ].map((i) => (
                 <div key={i.label}>
                   <p className="text-xs text-gray-400">{i.label}</p>
@@ -670,6 +723,10 @@ function UsuarioDetailContent() {
             onSalarioBaseChange={(n) => setForm((prev) => ({ ...prev, salario_base: String(n) }))}
             fieldClassName={usuarioFormInputGray}
             nivelAccesoDisabled={!usuario.puede_editar_rol}
+            sucursales={sucursales}
+            sucursalesError={sucursalesError}
+            onRecargarSucursales={recargarSucursales}
+            sucursalActual={sucursalActualOpt}
             extraSections={
               <>
                 {showResetPwd ? (

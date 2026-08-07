@@ -15,6 +15,7 @@ import {
   type SucursalOpt,
   type UsuarioFormValues,
 } from "@/components/usuarios/UsuarioForm";
+import { useSucursales } from "@/components/usuarios/useSucursales";
 import { FancySelect, type FancySelectOption } from "@/app/dashboard/proyectos/components/FancySelect";
 import type { AreaUsuario, TipoContrato } from "@/lib/usuarios/types";
 
@@ -197,30 +198,21 @@ export default function UsuarioDetalleClient({
   const [modulosCollapsed, setModulosCollapsed] = useState(false);
   const [modulosSearch, setModulosSearch] = useState("");
 
-  const [sucursales, setSucursales] = useState<SucursalOpt[]>([]);
-  useEffect(() => {
-    let cancel = false;
-    fetchWithSupabaseSession("/api/sucursales", { cache: "no-store" })
-      .then(async (r) => {
-        const j = await r.json().catch(() => ({}));
-        if (cancel) return;
-        if (!r.ok || j?.success === false) {
-          console.error("[UsuarioDetalleClient] /api/sucursales fallo", { status: r.status, body: j });
-          setSucursales([]);
-          return;
-        }
-        const arr =
-          (j?.data?.sucursales as SucursalOpt[] | undefined) ??
-          (j?.sucursales as SucursalOpt[] | undefined) ??
-          [];
-        setSucursales(arr);
+  const {
+    sucursales,
+    error: sucursalesError,
+    recargar: recargarSucursales,
+  } = useSucursales();
+
+  /** La sucursal ya asignada se ofrece como opción aunque esté desactivada. */
+  const sucursalAsignadaId = usuario?.sucursal_id ?? null;
+  const sucursalActualOpt: SucursalOpt | null = sucursalAsignadaId
+    ? ((sucursales ?? []).find((s) => s.id === sucursalAsignadaId) ?? {
+        id: sucursalAsignadaId,
+        nombre: "Sucursal asignada (inactiva)",
+        activo: false,
       })
-      .catch((e) => {
-        console.error("[UsuarioDetalleClient] /api/sucursales fetch error", e);
-        setSucursales([]);
-      });
-    return () => { cancel = true; };
-  }, []);
+    : null;
 
   useEffect(() => {
     if (!id) return;
@@ -298,7 +290,11 @@ export default function UsuarioDetalleClient({
     // Sucursal obligatoria para no-admin (validación cliente; el servidor la re-valida).
     const nivelEfectivo = usuario.puede_editar_rol ? form.nivel : nivelFromRolDb(usuario.rol);
     if (nivelEfectivo !== "administrador" && !form.sucursal_id) {
-      setFormError("La sucursal es obligatoria para usuarios y supervisores.");
+      setFormError(
+        sucursales !== undefined && sucursales.length === 0
+          ? "La sucursal es obligatoria para usuarios y supervisores, y tu empresa todavía no tiene ninguna. Creá una en Administración → Sucursales."
+          : "La sucursal es obligatoria para usuarios y supervisores."
+      );
       return;
     }
 
@@ -318,7 +314,9 @@ export default function UsuarioDetalleClient({
         area: form.area,
         estado: form.estado,
       };
-      if (usuario.puede_editar_rol) {
+      // Solo mandamos `rol` si realmente cambió el nivel: así editar un dato
+      // suelto de un super_admin no lo degrada a "administrador".
+      if (usuario.puede_editar_rol && form.nivel !== nivelFromRolDb(usuario.rol)) {
         body.rol = rolFromNivelForm(form.nivel);
       }
 
@@ -366,7 +364,10 @@ export default function UsuarioDetalleClient({
         setOmnicanalWarning(json.omnicanal_warning.trim());
       }
 
-      const rolActualizado = usuario.puede_editar_rol ? rolFromNivelForm(form.nivel) : usuario.rol;
+      const rolActualizado =
+        usuario.puede_editar_rol && form.nivel !== nivelFromRolDb(usuario.rol)
+          ? rolFromNivelForm(form.nivel)
+          : usuario.rol;
 
       const salarioParsed =
         form.salario_base.trim() === ""
@@ -639,7 +640,7 @@ export default function UsuarioDetalleClient({
                 {
                   label: "Sucursal",
                   value: usuario.sucursal_id
-                    ? (sucursales.find((s) => s.id === usuario.sucursal_id)?.nombre ?? "—")
+                    ? (sucursalActualOpt?.nombre ?? "—")
                     : (usuario.es_admin_empresa
                         ? "Todas las sucursales"
                         : "Sin asignar (requiere configuración)"),
@@ -788,6 +789,9 @@ export default function UsuarioDetalleClient({
             fieldClassName={usuarioFormInputGray}
             nivelAccesoDisabled={!usuario.puede_editar_rol}
             sucursales={sucursales}
+            sucursalesError={sucursalesError}
+            onRecargarSucursales={recargarSucursales}
+            sucursalActual={sucursalActualOpt}
             extraSections={
               <>
                 {showResetPwd ? (
