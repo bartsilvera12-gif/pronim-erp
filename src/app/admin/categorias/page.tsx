@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { useT, useMoney } from "@/lib/i18n/context";
+import { PromptModal, ConfirmModal } from "@/components/ui/PromptModal";
 import { fmtActive } from "@/lib/i18n/currency";
 
 /**
@@ -62,6 +63,10 @@ export default function AdminCategoriasPage() {
   const [creando, setCreando] = useState(false);
   const [sembrando, setSembrando] = useState(false);
   const [ajusteAbierto, setAjusteAbierto] = useState<Categoria | null>(null);
+  // Estados de modales branded (reemplazan window.prompt/confirm)
+  const [editNombreModal, setEditNombreModal] = useState<Categoria | null>(null);
+  const [editPrecioModal, setEditPrecioModal] = useState<Categoria | null>(null);
+  const [borrarModal, setBorrarModal] = useState<Categoria | null>(null);
   const [sucursales, setSucursales] = useState<Sucursal[]>([]);
 
   async function cargar() {
@@ -165,9 +170,8 @@ export default function AdminCategoriasPage() {
     }
   }
 
-  async function editarNombre(c: Categoria) {
-    const nuevo = window.prompt(`Nuevo nombre para "${c.nombre}":`, c.nombre);
-    if (nuevo == null || !nuevo.trim() || nuevo.trim() === c.nombre) return;
+  async function aplicarNuevoNombre(c: Categoria, nuevo: string) {
+    if (!nuevo.trim() || nuevo.trim() === c.nombre) { setEditNombreModal(null); return; }
     try {
       const r = await fetchWithSupabaseSession(`/api/franjas/${c.id}`, {
         method: "PATCH",
@@ -176,35 +180,32 @@ export default function AdminCategoriasPage() {
       });
       const j = await r.json();
       if (!r.ok || !j.success) throw new Error(j?.error ?? "Error");
+      setEditNombreModal(null);
       await cargar();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error inesperado");
+      setEditNombreModal(null);
     }
   }
 
-  async function borrarCategoria(c: Categoria) {
-    const ok = window.confirm(
-      `¿Borrar la categoría "${c.nombre}" (${c.precio_venta.toLocaleString("es-PY")})?\n\n` +
-      `Si tiene ventas o movimientos asociados, no se puede borrar — solo desactivar.\n` +
-      `Los datos históricos se preservan.`,
-    );
-    if (!ok) return;
+  async function aplicarBorrar(c: Categoria) {
     try {
       const r = await fetchWithSupabaseSession(`/api/franjas/${c.id}`, { method: "DELETE" });
       const j = await r.json();
       if (!r.ok || !j.success) throw new Error(j?.error ?? "Error");
+      setBorrarModal(null);
       await cargar();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error al borrar");
+      setBorrarModal(null);
     }
   }
 
-  async function editarPrecio(c: Categoria) {
-    const nuevo = window.prompt(`Nuevo precio para ${c.nombre}:`, String(c.precio_venta));
-    if (nuevo == null) return;
+  async function aplicarNuevoPrecio(c: Categoria, nuevo: string) {
     const p = parseFloat(nuevo);
     if (!Number.isFinite(p) || p <= 0) {
       setError("Precio inválido.");
+      setEditPrecioModal(null);
       return;
     }
     try {
@@ -215,9 +216,11 @@ export default function AdminCategoriasPage() {
       });
       const j = await r.json();
       if (!r.ok || !j.success) throw new Error(j?.error ?? "Error");
+      setEditPrecioModal(null);
       await cargar();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error inesperado");
+      setEditPrecioModal(null);
     }
   }
 
@@ -346,21 +349,21 @@ export default function AdminCategoriasPage() {
                       <div className="inline-flex items-center gap-1 flex-wrap justify-end">
                         <button
                           type="button"
-                          onClick={() => editarPrecio(c)}
+                          onClick={() => setEditPrecioModal(c)}
                           className="rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
                           title="Cambiar el precio de venta">
                           Precio
                         </button>
                         <button
                           type="button"
-                          onClick={() => editarNombre(c)}
+                          onClick={() => setEditNombreModal(c)}
                           className="rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
                           title="Renombrar la categoría (útil para nombres duplicados)">
                           Nombre
                         </button>
                         <button
                           type="button"
-                          onClick={() => borrarCategoria(c)}
+                          onClick={() => setBorrarModal(c)}
                           className="rounded-md border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100"
                           title="Borrar (si tiene ventas, ofrecerá desactivar)">
                           ✕
@@ -386,6 +389,47 @@ export default function AdminCategoriasPage() {
           }}
         />
       )}
+
+      {/* Modales branded (reemplazan window.prompt / window.confirm) */}
+      <PromptModal
+        open={editNombreModal != null}
+        title="Renombrar categoría"
+        description={editNombreModal ? `Nombre actual: "${editNombreModal.nombre}"` : undefined}
+        initialValue={editNombreModal?.nombre ?? ""}
+        placeholder="Nuevo nombre"
+        confirmLabel="Guardar"
+        onConfirm={(v) => editNombreModal && aplicarNuevoNombre(editNombreModal, v)}
+        onCancel={() => setEditNombreModal(null)}
+      />
+      <PromptModal
+        open={editPrecioModal != null}
+        title="Cambiar precio"
+        description={editPrecioModal ? `Categoría: ${editPrecioModal.nombre}` : undefined}
+        initialValue={editPrecioModal ? String(editPrecioModal.precio_venta) : ""}
+        placeholder="Nuevo precio"
+        inputType="number"
+        confirmLabel="Guardar"
+        onConfirm={(v) => editPrecioModal && aplicarNuevoPrecio(editPrecioModal, v)}
+        onCancel={() => setEditPrecioModal(null)}
+      />
+      <ConfirmModal
+        open={borrarModal != null}
+        title="Borrar categoría"
+        message={
+          borrarModal ? (
+            <>
+              <p>¿Borrar la categoría <strong>&quot;{borrarModal.nombre}&quot;</strong> ({fmtActive(borrarModal.precio_venta)})?</p>
+              <p className="mt-2 text-xs text-slate-500">
+                Si tiene ventas o movimientos asociados no se puede borrar — solo desactivar. Los datos históricos se preservan.
+              </p>
+            </>
+          ) : null
+        }
+        confirmLabel="Borrar"
+        tone="danger"
+        onConfirm={() => borrarModal && aplicarBorrar(borrarModal)}
+        onCancel={() => setBorrarModal(null)}
+      />
     </div>
   );
 }
