@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import {
-  useSegmentosGuardados, SegmentosGuardadosBar,
+  useSegmentosGuardados, SegmentosGuardadosBar, ModalGuardarSegmento,
   useColumnasPersistidas, ColumnasDropdown, type ColumnaDef,
 } from "@/components/tabla/segmentos-guardados";
 import { useEffect, useState } from "react";
@@ -239,8 +239,10 @@ export default function VentasPage() {
     busqueda: string; filtroTipo: string; filtroIva: string; filtroSucursal: string;
     filtroPago: string; filtroEstado: string; segmento: string;
   };
-  const { segmentos: segsGuardados, guardar: guardarSeg, borrar: borrarSeg } =
-    useSegmentosGuardados<VentaSegData>("neura.erp.ventas.segmentos.v1");
+  const {
+    segmentos: segsGuardados, guardar: guardarSeg, borrar: borrarSeg,
+    pendingData: pendingSegData, confirmarGuardado: confirmarSeg, cancelarGuardado: cancelarSeg,
+  } = useSegmentosGuardados<VentaSegData>("neura.erp.ventas.segmentos.v1");
 
   // Pre-aplicar filtros desde querystring (drill desde dashboard).
   // Ejemplos: /ventas?segmento=hoy · ?estado=anulada · ?pago=tarjeta
@@ -623,9 +625,14 @@ export default function VentasPage() {
           }}
           onBorrar={borrarSeg}
         />
+        <ModalGuardarSegmento
+          open={pendingSegData != null}
+          onConfirm={confirmarSeg}
+          onCancel={cancelarSeg}
+        />
 
         {/* Segmentos rápidos por período / estado */}
-        <div className="flex flex-wrap gap-1.5 -mt-2">
+        <div className="flex flex-wrap gap-1.5">
           {(() => {
             const now = Date.now();
             const startOfDay = (() => { const x = new Date(); x.setHours(0,0,0,0); return x.getTime(); })();

@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
-  useSegmentosGuardados, SegmentosGuardadosBar,
+  useSegmentosGuardados, SegmentosGuardadosBar, ModalGuardarSegmento,
   useColumnasPersistidas, ColumnasDropdown, type ColumnaDef,
 } from "@/components/tabla/segmentos-guardados";
 import { Eye, EyeOff, Star, Trash2 } from "lucide-react";
@@ -114,8 +114,10 @@ export default function InventarioPage() {
     filtroStock: string; filtroDistribuidor: string; segmento: string;
     precioMin: string; precioMax: string; tab: string;
   };
-  const { segmentos: segsGuardados, guardar: guardarSeg, borrar: borrarSeg } =
-    useSegmentosGuardados<InvSegData>("neura.erp.inventario.segmentos.v1");
+  const {
+    segmentos: segsGuardados, guardar: guardarSeg, borrar: borrarSeg,
+    pendingData: pendingSegData, confirmarGuardado: confirmarSeg, cancelarGuardado: cancelarSeg,
+  } = useSegmentosGuardados<InvSegData>("neura.erp.inventario.segmentos.v1");
 
   // Pre-aplicar filtros desde querystring (drill desde dashboard).
   // Ejemplos: /inventario?stock=bajo · ?segmento=nunca_vendido · ?q=remera
@@ -628,6 +630,11 @@ export default function InventarioPage() {
                 setTab((s.data.tab as typeof tab) ?? "reventa");
               }}
               onBorrar={borrarSeg}
+            />
+            <ModalGuardarSegmento
+              open={pendingSegData != null}
+              onConfirm={confirmarSeg}
+              onCancel={cancelarSeg}
             />
             <div className="ml-auto">
               <ColumnasDropdown<InvColKey>

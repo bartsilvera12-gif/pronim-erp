@@ -11,6 +11,7 @@ import type { Cliente } from "@/lib/clientes/types";
 import { etiquetaVisibleTipoServicio, type ClienteTipoServicioRow } from "@/lib/clientes/tipo-servicio-catalogo";
 import { filasTiposDesdeSistemaEstatico, fetchTiposFormCliente } from "@/lib/clientes/fetch-tipos-servicio-form";
 import { useUserCfg, useMoney } from "@/lib/i18n/context";
+import { ModalGuardarSegmento } from "@/components/tabla/segmentos-guardados";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -388,15 +389,17 @@ export default function ClientesPage() {
     setSegmentosGuardados(next);
     try { window.localStorage.setItem(SEG_STORAGE, JSON.stringify(next)); } catch { /* ignore */ }
   }
-  function guardarSegmentoActual() {
-    const nombre = window.prompt("Nombre para este segmento (ej: VIP con crédito):", "");
-    if (!nombre || !nombre.trim()) return;
+  const [modalGuardarOpen, setModalGuardarOpen] = useState(false);
+  function guardarSegmentoActual() { setModalGuardarOpen(true); }
+  function confirmarGuardarSegmento(nombre: string) {
+    if (!nombre.trim()) { setModalGuardarOpen(false); return; }
     const item: SegmentoGuardado = {
       id: `seg-${Date.now()}`, nombre: nombre.trim().slice(0, 40),
       busqueda, filtroEstado, filtroOrigen, filtroTipo, filtroTipoServicio,
       segmentoQuickKey: segmento,
     };
     persistSegmentos([...segmentosGuardados, item]);
+    setModalGuardarOpen(false);
   }
   function aplicarSegmento(s: SegmentoGuardado) {
     setBusqueda(s.busqueda ?? "");
@@ -751,26 +754,45 @@ export default function ClientesPage() {
 
       {/* Segmentos guardados por el usuario (localStorage) */}
       {(segmentosGuardados.length > 0 || hayFiltros) && (
-        <div className="flex flex-wrap gap-1.5 items-center">
+        <div className="flex flex-wrap gap-2 items-center">
+          {segmentosGuardados.length > 0 && (
+            <span className="text-[10px] uppercase font-semibold tracking-wide text-slate-400 mr-1">
+              Mis filtros
+            </span>
+          )}
           {segmentosGuardados.map((s) => (
-            <div key={s.id} className="inline-flex items-center rounded-full border border-[#4FAEB2]/40 bg-[#4FAEB2]/5 pl-2 pr-1 py-0.5 text-xs">
+            <div key={s.id} className="inline-flex items-center rounded-full border border-[#4FAEB2]/50 bg-gradient-to-r from-[#4FAEB2]/10 to-[#4FAEB2]/5 pl-3 pr-1 py-1 text-xs shadow-sm">
               <button type="button" onClick={() => aplicarSegmento(s)}
-                className="text-[#3F8E91] hover:text-[#2A6668] font-semibold mr-1" title="Aplicar este segmento">
-                ★ {s.nombre}
+                className="inline-flex items-center gap-1 text-[#3F8E91] hover:text-[#2A6668] font-semibold mr-1.5"
+                title="Aplicar este segmento">
+                <span className="text-amber-500">★</span> {s.nombre}
               </button>
               <button type="button" onClick={() => borrarSegmento(s.id)}
-                className="text-slate-400 hover:text-rose-600 px-1" title="Borrar segmento">✕</button>
+                className="w-5 h-5 rounded-full flex items-center justify-center text-slate-400 hover:text-white hover:bg-rose-500 transition"
+                title="Borrar segmento">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3 w-3">
+                  <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+                </svg>
+              </button>
             </div>
           ))}
           {hayFiltros && (
             <button type="button" onClick={guardarSegmentoActual}
-              className="inline-flex items-center gap-1 rounded-full border border-dashed border-slate-300 bg-white px-3 py-0.5 text-xs text-slate-500 hover:border-[#4FAEB2] hover:text-[#3F8E91]"
+              className="inline-flex items-center gap-1 rounded-full border border-dashed border-[#4FAEB2] bg-white px-3 py-1 text-xs font-medium text-[#3F8E91] hover:bg-[#4FAEB2]/5 hover:border-[#3F8E91] transition"
               title="Guardar los filtros actuales como segmento reutilizable">
-              ＋ Guardar filtro actual
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
+                <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
+              </svg>
+              Guardar filtro actual
             </button>
           )}
         </div>
       )}
+      <ModalGuardarSegmento
+        open={modalGuardarOpen}
+        onConfirm={confirmarGuardarSegmento}
+        onCancel={() => setModalGuardarOpen(false)}
+      />
 
       {/* Segmentos rápidos */}
       <div className="flex flex-wrap gap-1.5">
