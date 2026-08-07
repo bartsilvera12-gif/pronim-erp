@@ -1,9 +1,10 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { translate, type Lang } from "./dict";
 import { fmtMoneda, fmtMonedaCompact, monedaSymbol, setActiveCfg, type Moneda } from "./currency";
+import { createBrowserClient } from "@supabase/ssr";
 
 /**
  * Provider global que carga la config del usuario (lang + moneda de su
@@ -27,40 +28,71 @@ const Ctx = createContext<UserCfg>(DEFAULT);
 export function I18nProvider({ children }: { children: React.ReactNode }) {
   const [cfg, setCfg] = useState<UserCfg>(DEFAULT);
 
-  useEffect(() => {
-    let cancel = false;
-    // Reintenta hasta 3 veces con espera creciente si la respuesta no
-    // trae usuario. Antes: si la sesión de Supabase no estaba lista al
-    // primer render (JWT aún no en localStorage), la request salía sin
-    // Bearer → 401 → cfg quedaba en 'es' hasta el próximo hard-refresh.
-    // Karen reportó tener que refrescar 2 veces para ver pt-BR.
-    async function loadCfg() {
-      const delays = [0, 400, 1200];
-      for (const d of delays) {
-        if (cancel) return;
-        if (d > 0) await new Promise(res => setTimeout(res, d));
-        try {
-          const r = await fetchWithSupabaseSession("/api/usuarios/me", { cache: "no-store" });
-          if (r.status === 401) continue; // sesión aún no lista → reintentar
-          const j = await r.json();
-          const u = j?.usuario as { lang?: string; sucursal_moneda?: string } | undefined;
-          if (!u) continue;
-          const lang: Lang = (u.lang === "pt-BR" || u.lang === "en") ? u.lang as Lang : "es";
-          const moneda: Moneda = (u.sucursal_moneda === "BRL" || u.sucursal_moneda === "USD" || u.sucursal_moneda === "ARS")
-            ? u.sucursal_moneda as Moneda
-            : "PYG";
-          if (!cancel) setCfg({ lang, moneda });
-          return;
-        } catch { /* seguir con siguiente reintento */ }
-      }
+  // Función reutilizable para refetchear la cfg. Se llama al montar,
+  // en cambios de auth (login/logout/token refresh) y al recuperar foco.
+  const loadCfg = useCallback(async (signal?: { cancelled: boolean }) => {
+    const delays = [0, 400, 1200];
+    for (const d of delays) {
+      if (signal?.cancelled) return;
+      if (d > 0) await new Promise(res => setTimeout(res, d));
+      try {
+        const r = await fetchWithSupabaseSession("/api/usuarios/me", { cache: "no-store" });
+        if (r.status === 401) continue;
+        const j = await r.json();
+        const u = j?.usuario as { lang?: string; sucursal_moneda?: string } | undefined;
+        if (!u) continue;
+        const lang: Lang = (u.lang === "pt-BR" || u.lang === "en") ? u.lang as Lang : "es";
+        const moneda: Moneda = (u.sucursal_moneda === "BRL" || u.sucursal_moneda === "USD" || u.sucursal_moneda === "ARS")
+          ? u.sucursal_moneda as Moneda
+          : "PYG";
+        if (!signal?.cancelled) setCfg({ lang, moneda });
+        return;
+      } catch { /* siguiente reintento */ }
     }
-    void loadCfg();
-    return () => { cancel = true; };
   }, []);
 
-  // Publicar la config al registro global — permite que helpers module-scope
-  // (fmtActive/fmtActiveCompact) devuelvan valores en la moneda del usuario
-  // sin necesidad de hooks.
+  // Carga inicial + reset a DEFAULT en logout
+  useEffect(() => {
+    const signal = { cancelled: false };
+    void loadCfg(signal);
+    return () => { signal.cancelled = true; };
+  }, [loadCfg]);
+
+  // Reload cuando cambia el estado de auth (login/logout/switch user).
+  // Antes, después de un cambio de sucursal/usuario el idioma quedaba con el
+  // valor del usuario anterior hasta hard-refresh.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!url || !key) return;
+    const supa = createBrowserClient(url, key);
+    const { data: sub } = supa.auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_OUT") {
+        setCfg(DEFAULT);
+        return;
+      }
+      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "USER_UPDATED") {
+        const signal = { cancelled: false };
+        void loadCfg(signal);
+      }
+    });
+    return () => { sub.subscription.unsubscribe(); };
+  }, [loadCfg]);
+
+  // Refresco al recuperar foco de la ventana (usuario vuelve de otra tab
+  // donde puede haber cambiado su idioma en /usuarios/[id]).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onFocus = () => {
+      const signal = { cancelled: false };
+      void loadCfg(signal);
+    };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [loadCfg]);
+
+  // Publicar la config al registro global.
   setActiveCfg(cfg.moneda, cfg.lang);
   return <Ctx.Provider value={cfg}>{children}</Ctx.Provider>;
 }
