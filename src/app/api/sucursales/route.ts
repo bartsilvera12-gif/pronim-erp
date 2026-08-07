@@ -4,6 +4,9 @@ import { isAdmin } from "@/lib/middleware/auth";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
 
+/** Monedas soportadas por el CHECK de `sucursales.moneda`. */
+const MONEDAS_VALIDAS = ["PYG", "BRL", "USD", "ARS"] as const;
+
 function slugify(input: string): string {
   return input
     .toLowerCase()
@@ -27,18 +30,31 @@ export async function GET(request: NextRequest) {
     if (!ctx) {
       return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
     }
+    const supabase = ctx.supabase;
     const empresaId = ctx.auth.empresa_id;
     const url = new URL(request.url);
     const incluirInactivas = url.searchParams.get("incluir_inactivas") === "1";
     try {
-      let q = ctx.supabase
-        .from("sucursales")
-        .select("id,nombre,slug,es_principal,activo")
-        .eq("empresa_id", empresaId);
-      if (!incluirInactivas) q = q.eq("activo", true);
-      const { data, error } = await q
-        .order("es_principal", { ascending: false })
-        .order("nombre", { ascending: true });
+      /**
+       * `moneda` se agregó en una migración posterior. Si el schema todavía no
+       * la tiene, PostgREST rechaza el select entero y el listado quedaría
+       * vacío — por eso se reintenta con las columnas base.
+       */
+      async function listar(columnas: string) {
+        let q = supabase
+          .from("sucursales")
+          .select(columnas)
+          .eq("empresa_id", empresaId);
+        if (!incluirInactivas) q = q.eq("activo", true);
+        return q
+          .order("es_principal", { ascending: false })
+          .order("nombre", { ascending: true });
+      }
+
+      let { data, error } = await listar("id,nombre,slug,es_principal,activo,moneda");
+      if (error) {
+        ({ data, error } = await listar("id,nombre,slug,es_principal,activo"));
+      }
       if (error) {
         // Log server-side pero no romper el cliente. Antes se tragaba el
         // error silencioso y el dropdown quedaba vacío sin explicación.
@@ -86,7 +102,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    let body: { nombre?: string; slug?: string; es_principal?: boolean };
+    let body: { nombre?: string; slug?: string; moneda?: string; es_principal?: boolean };
     try { body = await request.json(); } catch {
       return NextResponse.json(errorResponse("JSON inválido."), { status: 400 });
     }
@@ -100,6 +116,15 @@ export async function POST(request: NextRequest) {
     const slugRaw = String(body.slug ?? "").trim();
     const slug = slugRaw ? slugify(slugRaw) : slugify(nombre);
     const esPrincipal = body.es_principal === true;
+
+    const monedaRaw = String(body.moneda ?? "").trim().toUpperCase();
+    if (monedaRaw && !(MONEDAS_VALIDAS as readonly string[]).includes(monedaRaw)) {
+      return NextResponse.json(
+        errorResponse(`Moneda inválida. Opciones: ${MONEDAS_VALIDAS.join(", ")}.`),
+        { status: 400 },
+      );
+    }
+    const moneda = monedaRaw || "PYG";
 
     const empresaId = ctx.auth.empresa_id;
 
@@ -116,17 +141,27 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const ins = await ctx.supabase
+    const filaBase = {
+      empresa_id: empresaId,
+      nombre,
+      slug,
+      es_principal: esPrincipal,
+      activo: true,
+    };
+    // Igual que en el GET: si el schema todavía no tiene `moneda`, insertamos
+    // sin esa columna en vez de fallar el alta entera.
+    let ins = await ctx.supabase
       .from("sucursales")
-      .insert({
-        empresa_id: empresaId,
-        nombre,
-        slug,
-        es_principal: esPrincipal,
-        activo: true,
-      })
+      .insert({ ...filaBase, moneda })
       .select("id,nombre,slug,es_principal,activo")
       .single();
+    if (ins.error && (ins.error as { code?: string }).code === "PGRST204") {
+      ins = await ctx.supabase
+        .from("sucursales")
+        .insert(filaBase)
+        .select("id,nombre,slug,es_principal,activo")
+        .single();
+    }
 
     if (ins.error) {
       const code = (ins.error as { code?: string }).code;
@@ -169,7 +204,7 @@ export async function POST(request: NextRequest) {
 
 /**
  * PATCH /api/sucursales (admin-only) — actualiza una sucursal.
- * Body: { id, nombre?, es_principal?, activo? }.
+ * Body: { id, nombre?, moneda?, es_principal?, activo? }.
  */
 export async function PATCH(request: NextRequest) {
   try {
@@ -185,7 +220,13 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    let body: { id?: string; nombre?: string; es_principal?: boolean; activo?: boolean };
+    let body: {
+      id?: string;
+      nombre?: string;
+      moneda?: string;
+      es_principal?: boolean;
+      activo?: boolean;
+    };
     try { body = await request.json(); } catch {
       return NextResponse.json(errorResponse("JSON inválido."), { status: 400 });
     }
@@ -206,7 +247,20 @@ export async function PATCH(request: NextRequest) {
     if (typeof body.nombre === "string") {
       const n = body.nombre.trim();
       if (!n) return NextResponse.json(errorResponse("El nombre no puede estar vacío."), { status: 400 });
+      if (n.length > 80) {
+        return NextResponse.json(errorResponse("El nombre no puede superar 80 caracteres."), { status: 400 });
+      }
       updates.nombre = n;
+    }
+    if (typeof body.moneda === "string") {
+      const m = body.moneda.trim().toUpperCase();
+      if (!(MONEDAS_VALIDAS as readonly string[]).includes(m)) {
+        return NextResponse.json(
+          errorResponse(`Moneda inválida. Opciones: ${MONEDAS_VALIDAS.join(", ")}.`),
+          { status: 400 },
+        );
+      }
+      updates.moneda = m;
     }
     if (typeof body.activo === "boolean") updates.activo = body.activo;
     if (typeof body.es_principal === "boolean" && body.es_principal === true) {

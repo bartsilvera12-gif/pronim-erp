@@ -4,13 +4,27 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 
+const MONEDAS = [
+  { value: "PYG", label: "Guaraníes (Gs.)" },
+  { value: "BRL", label: "Reales (R$)" },
+  { value: "USD", label: "Dólares (US$)" },
+  { value: "ARS", label: "Pesos argentinos ($)" },
+] as const;
+
 type Sucursal = {
   id: string;
   nombre: string;
   slug: string;
   es_principal: boolean;
   activo: boolean;
+  /** Ausente en schemas viejos sin la migración de multi-moneda. */
+  moneda?: string | null;
 };
+
+function monedaLabel(m: string | null | undefined): string {
+  const v = (m ?? "PYG").trim().toUpperCase();
+  return MONEDAS.find((x) => x.value === v)?.label ?? v;
+}
 
 async function unwrap<T>(r: Response): Promise<T> {
   const j = await r.json().catch(() => ({}));
@@ -26,6 +40,8 @@ export default function AdminSucursalesPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  /** Sucursal en edición. `null` = modal cerrado. */
+  const [editando, setEditando] = useState<Sucursal | null>(null);
 
   async function cargar() {
     setError(null);
@@ -116,6 +132,7 @@ export default function AdminSucursalesPage() {
               <tr>
                 <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3 uppercase tracking-wide">Nombre</th>
                 <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3 uppercase tracking-wide">Slug</th>
+                <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3 uppercase tracking-wide">Moneda</th>
                 <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3 uppercase tracking-wide">Principal</th>
                 <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3 uppercase tracking-wide">Estado</th>
                 <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3 uppercase tracking-wide">Acciones</th>
@@ -126,6 +143,7 @@ export default function AdminSucursalesPage() {
                 <tr key={s.id} className={s.activo ? "" : "opacity-60"}>
                   <td className="px-4 py-3 font-medium text-slate-800">{s.nombre}</td>
                   <td className="px-4 py-3 text-slate-500">{s.slug}</td>
+                  <td className="px-4 py-3 text-slate-600">{monedaLabel(s.moneda)}</td>
                   <td className="px-4 py-3">
                     {s.es_principal ? (
                       <span className="inline-flex items-center gap-1 rounded-full border border-[#4FAEB2]/30 bg-[#4FAEB2]/10 px-2 py-0.5 text-xs font-semibold text-[#3F8E91]">
@@ -152,15 +170,24 @@ export default function AdminSucursalesPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <button
-                      type="button"
-                      onClick={() => toggleActivo(s)}
-                      disabled={s.es_principal && s.activo}
-                      title={s.es_principal && s.activo ? "No podés desactivar la sucursal principal. Marcá otra como principal primero." : ""}
-                      className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {s.activo ? "Desactivar" : "Reactivar"}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setEditando(s)}
+                        className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:border-[#4FAEB2]/60 hover:text-[#3F8E91] hover:bg-slate-50"
+                      >
+                        Editar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => toggleActivo(s)}
+                        disabled={s.es_principal && s.activo}
+                        title={s.es_principal && s.activo ? "No podés desactivar la sucursal principal. Marcá otra como principal primero." : ""}
+                        className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {s.activo ? "Desactivar" : "Reactivar"}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -177,11 +204,25 @@ export default function AdminSucursalesPage() {
       </div>
 
       {modalOpen && (
-        <NuevaSucursalModal
+        <SucursalModal
+          sucursal={null}
           onClose={() => setModalOpen(false)}
-          onCreated={() => {
+          onSaved={() => {
             setModalOpen(false);
             setSuccess("Sucursal creada. Ya podés asignarle usuarios y abrir caja.");
+            setTimeout(() => setSuccess(null), 4000);
+            cargar();
+          }}
+        />
+      )}
+
+      {editando && (
+        <SucursalModal
+          sucursal={editando}
+          onClose={() => setEditando(null)}
+          onSaved={() => {
+            setEditando(null);
+            setSuccess("Sucursal actualizada.");
             setTimeout(() => setSuccess(null), 4000);
             cargar();
           }}
@@ -191,17 +232,32 @@ export default function AdminSucursalesPage() {
   );
 }
 
-function NuevaSucursalModal({
+/**
+ * Alta y edición de sucursal en un solo modal.
+ * `sucursal === null` → alta (POST). Con sucursal → edición (PATCH).
+ *
+ * El slug no se edita: es la clave única por empresa y ya está referenciado
+ * por datos existentes. `es_principal` se cambia desde la tabla.
+ */
+function SucursalModal({
+  sucursal,
   onClose,
-  onCreated,
+  onSaved,
 }: {
+  sucursal: Sucursal | null;
   onClose: () => void;
-  onCreated: () => void;
+  onSaved: () => void;
 }) {
-  const [nombre, setNombre] = useState("");
+  const esEdicion = sucursal !== null;
+  const [nombre, setNombre] = useState(sucursal?.nombre ?? "");
+  const [moneda, setMoneda] = useState((sucursal?.moneda ?? "PYG").trim().toUpperCase());
   const [esPrincipal, setEsPrincipal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const monedaCambio =
+    esEdicion && moneda !== (sucursal.moneda ?? "PYG").trim().toUpperCase();
+  const sinCambios = esEdicion && nombre.trim() === sucursal.nombre && !monedaCambio;
 
   async function submit() {
     setError(null);
@@ -212,17 +268,30 @@ function NuevaSucursalModal({
     setSaving(true);
     try {
       const res = await fetchWithSupabaseSession("/api/sucursales", {
-        method: "POST",
+        method: esEdicion ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nombre: nombre.trim(), es_principal: esPrincipal }),
+        // En edición `moneda` va solo si cambió: en schemas sin esa columna
+        // mandarla siempre rompería un simple renombre.
+        body: JSON.stringify(
+          esEdicion
+            ? { id: sucursal.id, nombre: nombre.trim(), ...(monedaCambio ? { moneda } : {}) }
+            : { nombre: nombre.trim(), moneda, es_principal: esPrincipal },
+        ),
       });
       const j = await res.json().catch(() => ({}));
       if (!res.ok || j?.success === false) {
-        throw new Error(j?.error ?? `No se pudo crear la sucursal (${res.status}).`);
+        throw new Error(
+          j?.error ??
+            `No se pudo ${esEdicion ? "actualizar" : "crear"} la sucursal (${res.status}).`,
+        );
       }
-      onCreated();
+      onSaved();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Error al crear la sucursal.");
+      setError(
+        e instanceof Error
+          ? e.message
+          : `Error al ${esEdicion ? "actualizar" : "crear"} la sucursal.`,
+      );
     } finally {
       setSaving(false);
     }
@@ -233,9 +302,13 @@ function NuevaSucursalModal({
       <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
         <div className="mb-1 flex items-start justify-between gap-2">
           <div>
-            <h3 className="text-base font-semibold text-slate-900">Nueva sucursal</h3>
+            <h3 className="text-base font-semibold text-slate-900">
+              {esEdicion ? "Editar sucursal" : "Nueva sucursal"}
+            </h3>
             <p className="mt-1 text-xs text-slate-500">
-              Cada sucursal maneja stock, cajas y ventas de forma independiente. Los clientes y créditos se comparten.
+              {esEdicion
+                ? "Cambiá el nombre con el que aparece en todo el sistema y la moneda con la que opera."
+                : "Cada sucursal maneja stock, cajas y ventas de forma independiente. Los clientes y créditos se comparten."}
             </p>
           </div>
           <button
@@ -265,21 +338,46 @@ function NuevaSucursalModal({
               className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
             />
             <p className="mt-1 text-[11px] text-slate-400">
-              El identificador interno (slug) se genera automáticamente a partir del nombre.
+              {esEdicion
+                ? `El identificador interno (slug: ${sucursal.slug}) no cambia: ya está referenciado por los datos existentes.`
+                : "El identificador interno (slug) se genera automáticamente a partir del nombre."}
             </p>
           </div>
-          <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={esPrincipal}
-              onChange={(e) => setEsPrincipal(e.target.checked)}
-              className="h-4 w-4 rounded border-slate-300 text-[#4FAEB2] focus:ring-[#4FAEB2]"
-            />
-            <span>
-              Marcar como <strong>sucursal principal</strong>
-              <span className="ml-1 text-xs text-slate-400">(si ya había otra, deja de serlo)</span>
-            </span>
-          </label>
+
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Moneda
+            </label>
+            <select
+              value={moneda}
+              onChange={(e) => setMoneda(e.target.value)}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2] bg-white"
+            >
+              {MONEDAS.map((m) => (
+                <option key={m.value} value={m.value}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-[11px] text-slate-400">
+              Con esta moneda se muestran precios, ventas y reportes de la sucursal.
+            </p>
+          </div>
+
+          {!esEdicion && (
+            <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={esPrincipal}
+                onChange={(e) => setEsPrincipal(e.target.checked)}
+                className="h-4 w-4 rounded border-slate-300 text-[#4FAEB2] focus:ring-[#4FAEB2]"
+              />
+              <span>
+                Marcar como <strong>sucursal principal</strong>
+                <span className="ml-1 text-xs text-slate-400">(si ya había otra, deja de serlo)</span>
+              </span>
+            </label>
+          )}
         </div>
 
         {error && (
@@ -300,10 +398,13 @@ function NuevaSucursalModal({
           <button
             type="button"
             onClick={submit}
-            disabled={saving || !nombre.trim()}
+            disabled={saving || !nombre.trim() || sinCambios}
+            title={sinCambios ? "No hay cambios que guardar." : ""}
             className="rounded-lg bg-[#4FAEB2] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#3F8E91] disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500"
           >
-            {saving ? "Creando…" : "Crear sucursal"}
+            {esEdicion
+              ? saving ? "Guardando…" : "Guardar cambios"
+              : saving ? "Creando…" : "Crear sucursal"}
           </button>
         </div>
       </div>
