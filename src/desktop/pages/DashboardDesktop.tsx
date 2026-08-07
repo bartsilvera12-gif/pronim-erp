@@ -207,7 +207,7 @@ function labelClienteDimension(raw: string): string {
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type Periodo = "hoy" | "7d" | "30d" | "mes" | "anio";
+type Periodo = "hoy" | "ayer" | "anteayer" | "7d" | "30d" | "mes" | "anio" | "custom";
 type TabDash = DashboardTabSlug;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -259,18 +259,42 @@ function formatFecha(s: string): string {
   return dt.toLocaleDateString("es-PY", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
-function getRango(periodo: Periodo): { desde: Date; hasta: Date } {
+// Ref a nivel módulo — el DashboardPage lo sincroniza desde su state
+// cada vez que cambia el rango custom. Los sub-componentes que llaman a
+// getRango(periodo) leen desde acá sin necesidad de threading de props.
+const _customRango: { desde?: string; hasta?: string } = {};
+
+function getRango(
+  periodo: Periodo,
+  customDesde?: string,
+  customHasta?: string,
+): { desde: Date; hasta: Date } {
+  // Fallback a las refs del módulo cuando el caller no las pasa (los
+  // sub-componentes históricos solo pasaban `periodo`).
+  if (customDesde === undefined) customDesde = _customRango.desde;
+  if (customHasta === undefined) customHasta = _customRango.hasta;
   const ahora = new Date();
+  const startOfDayOffset = (offsetDias: number): Date => {
+    const d = new Date(ahora);
+    d.setDate(d.getDate() + offsetDias);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  };
+  const endOfDayOffset = (offsetDias: number): Date => {
+    const d = new Date(ahora);
+    d.setDate(d.getDate() + offsetDias);
+    d.setHours(23, 59, 59, 999);
+    return d;
+  };
   switch (periodo) {
     case "mes":
       return rangoMesCalendarioLocal(ahora);
-    case "hoy": {
-      const desde = new Date(ahora);
-      desde.setHours(0, 0, 0, 0);
-      const hasta = new Date(ahora);
-      hasta.setHours(23, 59, 59, 999);
-      return { desde, hasta };
-    }
+    case "hoy":
+      return { desde: startOfDayOffset(0), hasta: endOfDayOffset(0) };
+    case "ayer":
+      return { desde: startOfDayOffset(-1), hasta: endOfDayOffset(-1) };
+    case "anteayer":
+      return { desde: startOfDayOffset(-2), hasta: endOfDayOffset(-2) };
     case "7d": {
       const hasta = new Date(ahora);
       hasta.setHours(23, 59, 59, 999);
@@ -291,6 +315,23 @@ function getRango(periodo: Periodo): { desde: Date; hasta: Date } {
       const desde = new Date(ahora.getFullYear(), 0, 1, 0, 0, 0, 0);
       const hasta = new Date(ahora.getFullYear(), 11, 31, 23, 59, 59, 999);
       return { desde, hasta };
+    }
+    case "custom": {
+      // Parseamos YYYY-MM-DD como fecha local (no UTC) para que el rango
+      // matchee al calendario del usuario. Si algo falla, fallback a mes.
+      const parseLocal = (ymd?: string): Date | null => {
+        if (!ymd || !/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return null;
+        const [y, m, d] = ymd.split("-").map(Number);
+        return new Date(y, (m ?? 1) - 1, d ?? 1);
+      };
+      const dD = parseLocal(customDesde);
+      const dH = parseLocal(customHasta);
+      if (!dD || !dH) return rangoMesCalendarioLocal(ahora);
+      dD.setHours(0, 0, 0, 0);
+      dH.setHours(23, 59, 59, 999);
+      // Si invirtieron, corrigen
+      if (dD.getTime() > dH.getTime()) return { desde: dH, hasta: dD };
+      return { desde: dD, hasta: dH };
     }
     default:
       return rangoMesCalendarioLocal(ahora);
@@ -2563,11 +2604,14 @@ function DashVentas({
 // ── Página principal ──────────────────────────────────────────────────────────
 
 const PERIODO_OPTS: { id: Periodo; label: string }[] = [
-  { id: "hoy",  label: "Hoy"       },
-  { id: "7d",   label: "7 días"    },
-  { id: "30d",  label: "30 días"   },
-  { id: "mes",  label: "Mes actual"},
-  { id: "anio", label: "Año"       },
+  { id: "hoy",       label: "Hoy"        },
+  { id: "ayer",      label: "Ayer"       },
+  { id: "anteayer",  label: "Anteayer"   },
+  { id: "7d",        label: "7 días"     },
+  { id: "30d",       label: "30 días"    },
+  { id: "mes",       label: "Mes actual" },
+  { id: "anio",      label: "Año"        },
+  { id: "custom",    label: "📅 Custom"  },
 ];
 
 const TAB_VALID: TabDash[] = ["financiero", "inventario", "ventas", "clientes"];
@@ -2589,6 +2633,19 @@ export default function DashboardPage() {
   const [dashScope, setDashScope] = useState<DashScope>({ kind: "pending" });
   const [tab,      setTab]      = useState<TabDash>(getInitialTab);
   const [periodo,  setPeriodo]  = useState<Periodo>("mes");
+  // Fase 2 tanda 20: rango custom (fechas libres). Defaults: últimos 7d.
+  const [customDesde, setCustomDesde] = useState<string>(() => {
+    const d = new Date(); d.setDate(d.getDate() - 7);
+    return d.toISOString().slice(0, 10);
+  });
+  const [customHasta, setCustomHasta] = useState<string>(() => new Date().toISOString().slice(0, 10));
+
+  // Sincronizamos la ref del módulo para que sub-componentes que llaman
+  // getRango(periodo) sin custom vean el rango custom actual.
+  useEffect(() => {
+    _customRango.desde = customDesde;
+    _customRango.hasta = customHasta;
+  }, [customDesde, customHasta]);
   const [config,   setConfig]   = useState<ConfigGlobal | null>(null);
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [usuarioId, setUsuarioId] = useState<number | null>(null);
@@ -2842,24 +2899,45 @@ export default function DashboardPage() {
               </select>
             </div>
           )}
-          <div className="flex flex-wrap gap-1 rounded-xl border border-[#4FAEB2]/45 bg-white p-1 shadow-sm">
-            {PERIODO_OPTS.map((p) => {
-              const active = periodo === p.id;
-              return (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => setPeriodo(p.id)}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
-                    active
-                      ? "bg-[#4FAEB2] text-white shadow-sm shadow-[#4FAEB2]/30"
-                      : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
-                  }`}
-                >
-                  {p.label}
-                </button>
-              );
-            })}
+          <div className="flex flex-wrap items-center gap-1">
+            <div className="flex flex-wrap gap-1 rounded-xl border border-[#4FAEB2]/45 bg-white p-1 shadow-sm">
+              {PERIODO_OPTS.map((p) => {
+                const active = periodo === p.id;
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => setPeriodo(p.id)}
+                    className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
+                      active
+                        ? "bg-[#4FAEB2] text-white shadow-sm shadow-[#4FAEB2]/30"
+                        : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                    }`}
+                  >
+                    {p.label}
+                  </button>
+                );
+              })}
+            </div>
+            {/* Date pickers cuando periodo === custom */}
+            {periodo === "custom" && (
+              <div className="flex items-center gap-1 rounded-xl border border-[#4FAEB2] bg-[#4FAEB2]/5 px-2 py-1 shadow-sm">
+                <input type="date" value={customDesde}
+                  max={customHasta || undefined}
+                  onChange={(e) => setCustomDesde(e.target.value)}
+                  className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
+                  title="Desde"
+                />
+                <span className="text-slate-400 text-xs">→</span>
+                <input type="date" value={customHasta}
+                  min={customDesde || undefined}
+                  max={new Date().toISOString().slice(0, 10)}
+                  onChange={(e) => setCustomHasta(e.target.value)}
+                  className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
+                  title="Hasta"
+                />
+              </div>
+            )}
           </div>
         </div>
       </header>
