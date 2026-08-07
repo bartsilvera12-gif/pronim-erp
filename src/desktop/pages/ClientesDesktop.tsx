@@ -752,50 +752,14 @@ export default function ClientesPage() {
         )}
       </div>
 
-      {/* Segmentos guardados por el usuario (localStorage) */}
-      {(segmentosGuardados.length > 0 || hayFiltros) && (
-        <div className="flex flex-wrap gap-2 items-center">
-          {segmentosGuardados.length > 0 && (
-            <span className="text-[10px] uppercase font-semibold tracking-wide text-slate-400 mr-1">
-              Mis filtros
-            </span>
-          )}
-          {segmentosGuardados.map((s) => (
-            <div key={s.id} className="inline-flex items-center rounded-full border border-[#4FAEB2]/50 bg-gradient-to-r from-[#4FAEB2]/10 to-[#4FAEB2]/5 pl-3 pr-1 py-1 text-xs shadow-sm">
-              <button type="button" onClick={() => aplicarSegmento(s)}
-                className="inline-flex items-center gap-1 text-[#3F8E91] hover:text-[#2A6668] font-semibold mr-1.5"
-                title="Aplicar este segmento">
-                <span className="text-amber-500">★</span> {s.nombre}
-              </button>
-              <button type="button" onClick={() => borrarSegmento(s.id)}
-                className="w-5 h-5 rounded-full flex items-center justify-center text-slate-400 hover:text-white hover:bg-rose-500 transition"
-                title="Borrar segmento">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3 w-3">
-                  <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
-                </svg>
-              </button>
-            </div>
-          ))}
-          {hayFiltros && (
-            <button type="button" onClick={guardarSegmentoActual}
-              className="inline-flex items-center gap-1 rounded-full border border-dashed border-[#4FAEB2] bg-white px-3 py-1 text-xs font-medium text-[#3F8E91] hover:bg-[#4FAEB2]/5 hover:border-[#3F8E91] transition"
-              title="Guardar los filtros actuales como segmento reutilizable">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
-                <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
-              </svg>
-              Guardar filtro actual
-            </button>
-          )}
-        </div>
-      )}
       <ModalGuardarSegmento
         open={modalGuardarOpen}
         onConfirm={confirmarGuardarSegmento}
         onCancel={() => setModalGuardarOpen(false)}
       />
 
-      {/* Segmentos rápidos */}
-      <div className="flex flex-wrap gap-1.5">
+      {/* Fila única: chips rápidos + guardados + botón guardar */}
+      <div className="flex flex-wrap gap-1.5 items-center">
         {([
           ["", "Todos", clientes.length],
           ["nuevos", `Nuevos (${umbrales.dias_nuevo}d)`, clientes.filter((c) => (diasDesde(c.created_at) ?? 9999) <= umbrales.dias_nuevo).length],
@@ -825,6 +789,41 @@ export default function ClientesPage() {
             </button>
           );
         })}
+
+        {/* Separador + guardados inline */}
+        {segmentosGuardados.length > 0 && (
+          <>
+            <span aria-hidden className="mx-1 h-5 w-px bg-slate-200" />
+            {segmentosGuardados.map((s) => (
+              <div key={s.id} className="inline-flex items-center rounded-full border border-[#4FAEB2]/50 bg-gradient-to-r from-[#4FAEB2]/10 to-[#4FAEB2]/5 pl-2.5 pr-1 py-1 text-xs shadow-sm">
+                <button type="button" onClick={() => aplicarSegmento(s)}
+                  className="inline-flex items-center gap-1 text-[#3F8E91] hover:text-[#2A6668] font-semibold mr-1"
+                  title="Aplicar este segmento">
+                  <span className="text-amber-500 text-xs">★</span> {s.nombre}
+                </button>
+                <button type="button" onClick={() => borrarSegmento(s.id)}
+                  className="w-4 h-4 rounded-full flex items-center justify-center text-slate-400 hover:text-white hover:bg-rose-500 transition"
+                  title="Borrar segmento">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-2.5 w-2.5">
+                    <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+                  </svg>
+                </button>
+              </div>
+            ))}
+          </>
+        )}
+
+        {/* Guardar filtro — icono al final derecho */}
+        {hayFiltros && (
+          <button type="button" onClick={guardarSegmentoActual}
+            className="ml-auto inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-500 hover:border-[#4FAEB2] hover:text-[#3F8E91] hover:bg-[#4FAEB2]/5 transition"
+            title="Guardar esta combinación de filtros">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
+              <path fillRule="evenodd" d="M6.32 2.577a49.255 49.255 0 0 1 7.36 0 3 3 0 0 1 2.82 2.995v11.856a.75.75 0 0 1-1.212.59L10 14.187l-5.288 3.83A.75.75 0 0 1 3.5 17.428V5.572a3 3 0 0 1 2.82-2.995Z" clipRule="evenodd" />
+            </svg>
+            Guardar filtro
+          </button>
+        )}
       </div>
 
       {/* Contador */}

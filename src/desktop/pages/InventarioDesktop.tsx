@@ -604,53 +604,14 @@ export default function InventarioPage() {
             )}
           </div>
 
-          {/* Segmentos guardados por el usuario + botón Columnas */}
-          <div className="mt-3 flex items-center gap-2 flex-wrap">
-            <SegmentosGuardadosBar<InvSegData>
-              segmentos={segsGuardados}
-              puedeGuardar={Boolean(filtroPorNombre || filtroPorSku || filtroPorCosto || filtroPorPrecio || filtroValuacion || filtroUbicacion || filtroTipo !== "todos" || filtroStock !== "todos" || filtroDistribuidor || segmento || precioMin || precioMax || tab !== "reventa")}
-              onGuardar={() => guardarSeg({
-                filtroPorNombre, filtroPorSku, filtroPorCosto, filtroPorPrecio,
-                filtroValuacion, filtroUbicacion, filtroTipo,
-                filtroStock, filtroDistribuidor, segmento, precioMin, precioMax, tab,
-              })}
-              onAplicar={(s) => {
-                setFiltroPorNombre(s.data.filtroPorNombre ?? "");
-                setFiltroPorSku(s.data.filtroPorSku ?? "");
-                setFiltroPorCosto(s.data.filtroPorCosto ?? "");
-                setFiltroPorPrecio(s.data.filtroPorPrecio ?? "");
-                setFiltroValuacion((s.data.filtroValuacion as MetodoValuacion | "") ?? "");
-                setFiltroUbicacion(s.data.filtroUbicacion ?? "");
-                setFiltroTipo((s.data.filtroTipo as typeof filtroTipo) ?? "todos");
-                setFiltroStock((s.data.filtroStock as FiltroStock) ?? "todos");
-                setFiltroDistribuidor(s.data.filtroDistribuidor ?? "");
-                setSegmento((s.data.segmento as Segmento) ?? "");
-                setPrecioMin(s.data.precioMin ?? "");
-                setPrecioMax(s.data.precioMax ?? "");
-                setTab((s.data.tab as typeof tab) ?? "reventa");
-              }}
-              onBorrar={borrarSeg}
-            />
-            <ModalGuardarSegmento
-              open={pendingSegData != null}
-              onConfirm={confirmarSeg}
-              onCancel={cancelarSeg}
-            />
-            <div className="ml-auto">
-              <ColumnasDropdown<InvColKey>
-                abierto={colsOpen}
-                onToggle={() => setColsOpen((v) => !v)}
-                todas={INV_COLUMNAS_ALL}
-                visibles={colVis}
-                onToggleColumna={colToggle}
-                onMover={colMover}
-                onReset={colReset}
-              />
-            </div>
-          </div>
+          <ModalGuardarSegmento
+            open={pendingSegData != null}
+            onConfirm={confirmarSeg}
+            onCancel={cancelarSeg}
+          />
 
-          {/* Segmentos rápidos por rotación / recencia / markup */}
-          <div className="mt-3 flex flex-wrap gap-1.5">
+          {/* Fila única: chips + guardados + columnas + guardar */}
+          <div className="mt-3 flex flex-wrap gap-1.5 items-center">
             {([
               ["", "Todos", todos.length],
               ["recien", "Recién ingresados (30d)", todos.filter((p) => p.created_at && (Date.now() - Date.parse(p.created_at)) / 86_400_000 <= 30).length],
@@ -679,6 +640,70 @@ export default function InventarioPage() {
                 </button>
               );
             })}
+
+            {/* Separador + guardados inline */}
+            {segsGuardados.length > 0 && (
+              <>
+                <span aria-hidden className="mx-1 h-5 w-px bg-slate-200" />
+                {segsGuardados.map((s) => (
+                  <div key={s.id} className="inline-flex items-center rounded-full border border-[#4FAEB2]/50 bg-gradient-to-r from-[#4FAEB2]/10 to-[#4FAEB2]/5 pl-2.5 pr-1 py-1 text-xs shadow-sm">
+                    <button type="button" onClick={() => {
+                      setFiltroPorNombre(s.data.filtroPorNombre ?? "");
+                      setFiltroPorSku(s.data.filtroPorSku ?? "");
+                      setFiltroPorCosto(s.data.filtroPorCosto ?? "");
+                      setFiltroPorPrecio(s.data.filtroPorPrecio ?? "");
+                      setFiltroValuacion((s.data.filtroValuacion as MetodoValuacion | "") ?? "");
+                      setFiltroUbicacion(s.data.filtroUbicacion ?? "");
+                      setFiltroTipo((s.data.filtroTipo as typeof filtroTipo) ?? "todos");
+                      setFiltroStock((s.data.filtroStock as FiltroStock) ?? "todos");
+                      setFiltroDistribuidor(s.data.filtroDistribuidor ?? "");
+                      setSegmento((s.data.segmento as Segmento) ?? "");
+                      setPrecioMin(s.data.precioMin ?? "");
+                      setPrecioMax(s.data.precioMax ?? "");
+                      setTab((s.data.tab as typeof tab) ?? "reventa");
+                    }}
+                      className="inline-flex items-center gap-1 text-[#3F8E91] hover:text-[#2A6668] font-semibold mr-1"
+                      title="Aplicar este segmento">
+                      <span className="text-amber-500 text-xs">★</span> {s.nombre}
+                    </button>
+                    <button type="button" onClick={() => borrarSeg(s.id)}
+                      className="w-4 h-4 rounded-full flex items-center justify-center text-slate-400 hover:text-white hover:bg-rose-500 transition"
+                      title="Borrar segmento">
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-2.5 w-2.5">
+                        <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+              </>
+            )}
+
+            {/* Botón guardar filtro (icono discreto) al final izquierdo del ml-auto group */}
+            <div className="ml-auto flex items-center gap-1.5">
+              {(filtroPorNombre || filtroPorSku || filtroPorCosto || filtroPorPrecio || filtroValuacion || filtroUbicacion || filtroTipo !== "todos" || filtroStock !== "todos" || filtroDistribuidor || segmento || precioMin || precioMax || tab !== "reventa") && (
+                <button type="button" onClick={() => guardarSeg({
+                  filtroPorNombre, filtroPorSku, filtroPorCosto, filtroPorPrecio,
+                  filtroValuacion, filtroUbicacion, filtroTipo,
+                  filtroStock, filtroDistribuidor, segmento, precioMin, precioMax, tab,
+                })}
+                  className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-500 hover:border-[#4FAEB2] hover:text-[#3F8E91] hover:bg-[#4FAEB2]/5 transition"
+                  title="Guardar esta combinación de filtros">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
+                    <path fillRule="evenodd" d="M6.32 2.577a49.255 49.255 0 0 1 7.36 0 3 3 0 0 1 2.82 2.995v11.856a.75.75 0 0 1-1.212.59L10 14.187l-5.288 3.83A.75.75 0 0 1 3.5 17.428V5.572a3 3 0 0 1 2.82-2.995Z" clipRule="evenodd" />
+                  </svg>
+                  Guardar filtro
+                </button>
+              )}
+              <ColumnasDropdown<InvColKey>
+                abierto={colsOpen}
+                onToggle={() => setColsOpen((v) => !v)}
+                todas={INV_COLUMNAS_ALL}
+                visibles={colVis}
+                onToggleColumna={colToggle}
+                onMover={colMover}
+                onReset={colReset}
+              />
+            </div>
           </div>
         </div>
 
