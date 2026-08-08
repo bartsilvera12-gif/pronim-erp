@@ -57,6 +57,11 @@ export async function POST(
         producto_id?: string;
         splits?: { producto_id?: string; cantidad?: number }[];
       }[];
+      // Modo "bucket libre" (fase 2 post-launch): cantidad total puede
+      // diferir de la recepción original. El backend borra los items
+      // originales y reinserta las líneas del bucket, prorrateando el
+      // total_credito uniformemente entre las nuevas unidades.
+      overrides_flat?: { producto_id: string; cantidad: number }[];
     };
     // Normalizamos a la forma agrupada por item_id → splits[]. Cualquier
     // override sin `splits` se convierte al formato splits=[{producto_id}]
@@ -101,8 +106,9 @@ export async function POST(
       // Cabecera + validación tenant + estado + scope de sucursal.
       const cab = await client.query<{
         id: string; numero_control: string; estado: string; sucursal_id: string;
+        total_credito: string | number;
       }>(
-        `SELECT id, numero_control, estado, sucursal_id
+        `SELECT id, numero_control, estado, sucursal_id, total_credito
          FROM ${recepT}
          WHERE id = $1 AND empresa_id = $2
          FOR UPDATE`,
@@ -122,8 +128,71 @@ export async function POST(
         return NextResponse.json(errorResponse(`No se puede ingresar en estado '${rec.estado}'.`), { status: 400 });
       }
 
-      // 1) Aplicar overrides si vinieron: reasignar producto_id (opcionalmente
-      //    repartiendo el item en varias franjas → splits).
+      // 1.a) Modo bucket libre: la clienta puede ingresar MÁS o MENOS
+      //      prendas que la evaluación original. Reemplazamos todos los
+      //      items de la recepción por el bucket, prorrateando el
+      //      total_credito uniformemente sobre las nuevas unidades.
+      const bucketFlat = Array.isArray(body.overrides_flat) ? body.overrides_flat : [];
+      if (bucketFlat.length > 0) {
+        const totalCredito = Number(rec.total_credito ?? 0);
+        const totalUnidadesBucket = bucketFlat.reduce(
+          (s, b) => s + (Number.isFinite(b.cantidad) && b.cantidad > 0 ? Math.floor(b.cantidad) : 0),
+          0,
+        );
+        if (totalUnidadesBucket === 0) {
+          throw new Error("El bucket no tiene unidades para ingresar.");
+        }
+        // Validar productos destino
+        const uniqProds = [...new Set(bucketFlat.map((b) => b.producto_id))];
+        const prodQ = await client.query<{
+          id: string; nombre: string; sku: string;
+          precio_venta: string; activo: boolean; es_franja_precio: boolean;
+        }>(
+          `SELECT id, nombre, sku, precio_venta::text, activo, es_franja_precio
+             FROM ${prodT}
+            WHERE empresa_id = $1 AND id = ANY($2::uuid[])`,
+          [auth.empresa_id, uniqProds],
+        );
+        const prodById = new Map(prodQ.rows.map((p) => [p.id, p]));
+        for (const b of bucketFlat) {
+          const p = prodById.get(b.producto_id);
+          if (!p) throw new Error(`Franja destino no encontrada: ${b.producto_id}`);
+          if (!p.activo) throw new Error(`Franja ${p.nombre} está inactiva.`);
+          if (!p.es_franja_precio) throw new Error(`Producto ${p.nombre} no es una franja de precio válida.`);
+        }
+        // Costo prorrateado uniforme (mismo costo unitario para todas las unidades).
+        const costoUnitProrrateado = Math.round(totalCredito / totalUnidadesBucket);
+        // Borrar items originales
+        await client.query(
+          `DELETE FROM ${recepItT} WHERE recepcion_id = $1`,
+          [recepcionId],
+        );
+        // Insertar líneas del bucket
+        for (const b of bucketFlat) {
+          const c = Math.floor(Number(b.cantidad) || 0);
+          if (c <= 0) continue;
+          const p = prodById.get(b.producto_id)!;
+          const precioVenta = Number(p.precio_venta);
+          const margenPct = precioVenta > 0
+            ? ((precioVenta - costoUnitProrrateado) / precioVenta) * 100
+            : null;
+          await client.query(
+            `INSERT INTO ${recepItT} (
+               empresa_id, recepcion_id, producto_id, producto_nombre, sku,
+               cantidad, precio_compra_unitario, precio_venta_snapshot,
+               subtotal, margen_bruto_pct
+             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+            [
+              auth.empresa_id, recepcionId, p.id, p.nombre, p.sku,
+              c, costoUnitProrrateado, precioVenta,
+              costoUnitProrrateado * c, margenPct,
+            ],
+          );
+        }
+      }
+
+      // 1.b) Overrides clásico (por item_id): reasignar producto_id
+      //    manteniendo la cantidad original — restringido a cambios de franja.
       if (overridesByItem.size > 0) {
         // Validamos que todos los productos destino existan en el tenant.
         const uniqProds = [

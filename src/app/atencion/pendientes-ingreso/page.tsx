@@ -634,36 +634,41 @@ function PreviewIngresoModal({
                           sub="ganancia ÷ costo"
                         />
                       </div>
+                      {/* Info: diferencia de cantidad entre evaluación e ingreso.
+                          NO bloquea — Karen: 'es común una evaluación de 10 prendas
+                          ingresar 12, o de 25 ingresar solo 20'. */}
                       <div className={`mt-3 rounded-lg px-3 py-2 text-sm font-medium ${
-                        restan !== 0
-                          ? "bg-amber-100 text-amber-800"
+                        restan > 0
+                          ? "bg-sky-50 text-sky-800 border border-sky-200"
+                          : restan < 0
+                          ? "bg-fuchsia-50 text-fuchsia-800 border border-fuchsia-200"
                           : totalMargen < 0
                           ? "bg-rose-100 text-rose-800"
-                          : deltaVsPrevisto > 0
-                          ? "bg-emerald-100 text-emerald-800"
-                          : deltaVsPrevisto < 0
-                          ? "bg-amber-100 text-amber-800"
-                          : "bg-slate-100 text-slate-700"
+                          : "bg-emerald-100 text-emerald-800"
                       }`}>
                         {restan > 0 ? (
-                          <>Falta asignar <strong>{restan}</strong> de <strong>{totalUnidades}</strong> prendas. Clickeá franjas de arriba.</>
+                          <>
+                            Evaluación: <strong>{totalUnidades}</strong> prendas · Ingresando: <strong>{totalUnidades - restan}</strong> (<strong>−{restan}</strong>).
+                            Está bien si ingresás menos — el monto pagado al cliente ({"Gs. " + Math.round(totalCosto).toLocaleString("es-PY")}) queda fijo.
+                          </>
                         ) : restan < 0 ? (
-                          <>Sobran <strong>{-restan}</strong> unidades. Bajá la cantidad de alguna franja.</>
+                          <>
+                            Evaluación: <strong>{totalUnidades}</strong> prendas · Ingresando: <strong>{totalUnidades + Math.abs(restan)}</strong> (<strong>+{Math.abs(restan)}</strong>).
+                            Está bien si ingresás más — el monto pagado al cliente ({"Gs. " + Math.round(totalCosto).toLocaleString("es-PY")}) queda fijo.
+                          </>
                         ) : totalMargen < 0 ? (
                           <>⚠ Vas a <strong>perder Gs. {Math.round(Math.abs(totalMargen)).toLocaleString("es-PY")}</strong> con estos precios. Revisá antes de ingresar.</>
-                        ) : deltaVsPrevisto > 0 ? (
-                          <>✓ Vas a ganar <strong>Gs. {Math.round(Math.abs(deltaVsPrevisto)).toLocaleString("es-PY")} más</strong> de lo previsto originalmente.</>
-                        ) : deltaVsPrevisto < 0 ? (
-                          <>Estás ganando <strong>Gs. {Math.round(Math.abs(deltaVsPrevisto)).toLocaleString("es-PY")} menos</strong> de lo previsto originalmente. Aún así hay ganancia.</>
                         ) : (
-                          <>Ganancia igual a la prevista originalmente.</>
+                          <>
+                            ✓ Coincide con la evaluación. Vas a ganar <strong>Gs. {Math.round(totalMargen).toLocaleString("es-PY")}</strong> si se vende todo al precio de la franja.
+                          </>
                         )}
                       </div>
                     </div>
 
                     <p className="mt-3 text-[11px] text-slate-500">
-                      Clickeá las franjas de arriba para armar el ingreso. Podés cambiar la cantidad de cada franja después.
-                      Al confirmar, las prendas ingresan al stock con estos precios.
+                      Podés ingresar más o menos prendas de las evaluadas — el monto pagado al cliente queda fijo.
+                      Al confirmar, se ingresan al stock con estos precios y el costo se prorratea entre las unidades ingresadas.
                     </p>
                   </>
                 );
@@ -694,50 +699,25 @@ function PreviewIngresoModal({
                           type="button"
                           onClick={async () => {
                             if (!data) return;
-                            // Validación: si el bucket está vacío, cargar todo
-                            // con precios originales (equivalente a "sin overrides").
-                            const overrides: { item_id: string; splits: { producto_id: string; cantidad: number }[] }[] = [];
-                            if (bucket.length > 0) {
-                              const asignadas = bucket.reduce((s, b) => s + b.cantidad, 0);
-                              const totalUnidades = data.items.reduce((s, it) => s + it.cantidad, 0);
-                              if (asignadas !== totalUnidades) {
-                                setErr(`Asignaste ${asignadas} de ${totalUnidades} prendas. La suma tiene que dar exacto.`);
-                                return;
-                              }
-                              if (bucket.some((b) => !b.franjaId || b.cantidad <= 0)) {
-                                setErr("Todas las franjas del bucket deben tener cantidad > 0.");
-                                return;
-                              }
-                              // Distribuimos las unidades del bucket sobre los
-                              // items en orden. El costo prorrateado es el
-                              // mismo, así que el orden no afecta rentabilidad.
-                              const bucketFlat: string[] = [];
-                              for (const b of bucket) {
-                                for (let i = 0; i < b.cantidad; i++) bucketFlat.push(b.franjaId);
-                              }
-                              let cursor = 0;
-                              for (const it of data.items) {
-                                const asignadasItem = bucketFlat.slice(cursor, cursor + it.cantidad);
-                                cursor += it.cantidad;
-                                const porFranja = new Map<string, number>();
-                                for (const fid of asignadasItem) {
-                                  porFranja.set(fid, (porFranja.get(fid) ?? 0) + 1);
-                                }
-                                overrides.push({
-                                  item_id: it.id,
-                                  splits: Array.from(porFranja.entries()).map(([producto_id, cantidad]) => ({ producto_id, cantidad })),
-                                });
-                              }
-                            }
                             setConfirmando(true);
                             setErr(null);
                             try {
+                              // Bucket libre: la cantidad ingresada puede ser
+                              // MENOR o MAYOR a la evaluación. El backend
+                              // borra items originales y reinserta con costo
+                              // prorrateado sobre las nuevas unidades.
+                              const bucketValido = bucket.filter((b) => b.franjaId && b.cantidad > 0);
+                              const payload = bucketValido.length > 0
+                                ? { overrides_flat: bucketValido.map((b) => ({
+                                    producto_id: b.franjaId, cantidad: b.cantidad,
+                                  })) }
+                                : {};
                               const rr = await fetchWithSupabaseSession(
                                 `/api/recepciones/${recepcionId}/ingresar-con-overrides`,
                                 {
                                   method: "POST",
                                   headers: { "Content-Type": "application/json" },
-                                  body: JSON.stringify({ overrides }),
+                                  body: JSON.stringify(payload),
                                 },
                               );
                               const j = await rr.json().catch(() => ({}));
