@@ -1,23 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthWithRol, isAdmin } from "@/lib/middleware/auth";
 import { createServiceRoleClient } from "@/lib/supabase/service-admin";
+import { getChatPostgresPool } from "@/lib/supabase/chat-pg-pool";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
 import { logAuditoria } from "@/lib/auditoria/log";
 
 /**
  * GET  /api/usuarios/[id]/acciones
- *   → { acciones: [{ modulo_id, slug, nombre, acciones: {ver, crear, editar, eliminar, …} }] }
+ * PATCH /api/usuarios/[id]/acciones  (admin only)
  *
- * PATCH /api/usuarios/[id]/acciones (admin only)
- *   Body: { modulo_id, acciones: { ver?, crear?, editar?, eliminar?, ... } }
- *   → merge del objeto acciones (no reemplaza).
- *
- * Requiere migración 20260916_usuario_modulos_acciones para persistir.
- * Si la columna no existe, PATCH devuelve error explícito.
+ * Usa el pool de PG directo apuntando a public.usuario_modulos y public.modulos
+ * porque el cliente Supabase-JS del proyecto va a `pronimerp` por default y la
+ * tabla usuario_modulos vive en `public` (catalog schema).
  */
 
 const DEFAULT_ACC = { ver: true, crear: true, editar: true, eliminar: true } as const;
+
+async function verificarEmpresaUsuario(usuarioId: string, empresaAdmin: string): Promise<boolean> {
+  const supabase = createServiceRoleClient();
+  const { data } = await supabase.from("usuarios").select("empresa_id").eq("id", usuarioId).maybeSingle();
+  return !!data && (data as { empresa_id: string }).empresa_id === empresaAdmin;
+}
 
 export async function GET(
   request: NextRequest,
@@ -28,50 +32,39 @@ export async function GET(
     const auth = await getAuthWithRol(request);
     if (!auth) return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
 
-    const supabase = createServiceRoleClient();
-    // Verificar empresa
-    const { data: u } = await supabase
-      .from("usuarios")
-      .select("id, empresa_id")
-      .eq("id", usuarioId).maybeSingle();
-    if (!u || (u as { empresa_id: string }).empresa_id !== auth.empresa_id) {
-      return NextResponse.json(errorResponse("Usuario no encontrado."), { status: 404 });
-    }
+    const ok = await verificarEmpresaUsuario(usuarioId, auth.empresa_id);
+    if (!ok) return NextResponse.json(errorResponse("Usuario no encontrado."), { status: 404 });
 
-    const { data, error } = await supabase
-      .from("usuario_modulos")
-      .select("modulo_id, acciones, modulos(id, slug, nombre)")
-      .eq("usuario_id", usuarioId);
-    if (error) {
-      // Si la columna acciones no existe, la caemos gracefully
-      if ((error.message || "").includes("acciones")) {
-        const { data: sinAcc } = await supabase
-          .from("usuario_modulos")
-          .select("modulo_id, modulos(id, slug, nombre)")
-          .eq("usuario_id", usuarioId);
-        return NextResponse.json(successResponse({
-          acciones: (sinAcc ?? []).map((r) => ({
-            modulo_id: (r as { modulo_id: string }).modulo_id,
-            slug: (r as unknown as { modulos: { slug: string; nombre: string } }).modulos?.slug ?? "",
-            nombre: (r as unknown as { modulos: { slug: string; nombre: string } }).modulos?.nombre ?? "",
-            acciones: { ...DEFAULT_ACC },
-          })),
-          warning: "Migración pendiente: aplicá 20260916_usuario_modulos_acciones para persistir.",
-        }));
-      }
-      return NextResponse.json(errorResponse(error.message), { status: 500 });
-    }
+    const pool = getChatPostgresPool();
+    if (!pool) return NextResponse.json(errorResponse("Sin conexión Postgres."), { status: 500 });
+
+    // Chequear si la columna acciones existe en public.usuario_modulos
+    const colsQ = await pool.query<{ column_name: string }>(
+      `SELECT column_name FROM information_schema.columns
+        WHERE table_schema='public' AND table_name='usuario_modulos'`,
+    );
+    const cols = new Set(colsQ.rows.map((r) => r.column_name));
+    const tieneAcciones = cols.has("acciones");
+
+    const selectAcc = tieneAcciones ? "um.acciones" : "NULL::jsonb AS acciones";
+    const q = await pool.query<{
+      modulo_id: string; slug: string; nombre: string; acciones: Record<string, unknown> | null;
+    }>(
+      `SELECT um.modulo_id::text, m.slug, m.nombre, ${selectAcc}
+         FROM public.usuario_modulos um
+         JOIN public.modulos m ON m.id = um.modulo_id
+        WHERE um.usuario_id = $1::uuid`,
+      [usuarioId],
+    );
 
     return NextResponse.json(successResponse({
-      acciones: (data ?? []).map((r) => {
-        const mod = (r as { modulos: { id?: string; slug?: string; nombre?: string } | null }).modulos;
-        return {
-          modulo_id: (r as { modulo_id: string }).modulo_id,
-          slug: mod?.slug ?? "",
-          nombre: mod?.nombre ?? "",
-          acciones: { ...DEFAULT_ACC, ...((r as { acciones?: Record<string, unknown> }).acciones ?? {}) },
-        };
-      }),
+      acciones: q.rows.map((r) => ({
+        modulo_id: r.modulo_id,
+        slug: r.slug ?? "",
+        nombre: r.nombre ?? "",
+        acciones: { ...DEFAULT_ACC, ...(r.acciones ?? {}) },
+      })),
+      warning: tieneAcciones ? null : "Migración pendiente: aplicá 20260916_usuario_modulos_acciones para persistir.",
     }));
   } catch (err) {
     console.error("[usuarios/[id]/acciones GET]", err);
@@ -98,39 +91,46 @@ export async function PATCH(
       return NextResponse.json(errorResponse("modulo_id y acciones son requeridos."), { status: 400 });
     }
 
-    const supabase = createServiceRoleClient();
-    // Verificar empresa
-    const { data: u } = await supabase
-      .from("usuarios").select("id, empresa_id, nombre, email")
-      .eq("id", usuarioId).maybeSingle();
-    if (!u || (u as { empresa_id: string }).empresa_id !== auth.empresa_id) {
-      return NextResponse.json(errorResponse("Usuario no encontrado."), { status: 404 });
+    const ok = await verificarEmpresaUsuario(usuarioId, auth.empresa_id);
+    if (!ok) return NextResponse.json(errorResponse("Usuario no encontrado."), { status: 404 });
+
+    const pool = getChatPostgresPool();
+    if (!pool) return NextResponse.json(errorResponse("Sin conexión Postgres."), { status: 500 });
+
+    // Chequear columna acciones
+    const colsQ = await pool.query<{ column_name: string }>(
+      `SELECT column_name FROM information_schema.columns
+        WHERE table_schema='public' AND table_name='usuario_modulos'`,
+    );
+    const cols = new Set(colsQ.rows.map((r) => r.column_name));
+    if (!cols.has("acciones")) {
+      return NextResponse.json(
+        errorResponse("Aplicá la migración 20260916_usuario_modulos_acciones para poder editar permisos por acción."),
+        { status: 400 },
+      );
     }
 
-    // Fetch actual + merge + update
-    const { data: cur, error: eCur } = await supabase
-      .from("usuario_modulos")
-      .select("id, acciones")
-      .eq("usuario_id", usuarioId).eq("modulo_id", modId).maybeSingle();
-    if (eCur) return NextResponse.json(errorResponse(eCur.message), { status: 500 });
-    if (!cur) {
-      return NextResponse.json(errorResponse("El usuario no tiene acceso al módulo. Otorgale acceso primero."), { status: 400 });
+    // Fetch current + merge + update
+    const cur = await pool.query<{ id: string; acciones: Record<string, unknown> | null }>(
+      `SELECT id, acciones FROM public.usuario_modulos
+        WHERE usuario_id = $1::uuid AND modulo_id = $2::uuid LIMIT 1`,
+      [usuarioId, modId],
+    );
+    if (!cur.rows.length) {
+      return NextResponse.json(
+        errorResponse("El usuario no tiene acceso al módulo. Otorgale acceso primero."),
+        { status: 400 },
+      );
     }
-    const nuevas = { ...(cur as { acciones?: Record<string, unknown> }).acciones ?? {}, ...parche };
-    // Normalizar a boolean.
+
+    const nuevas = { ...(cur.rows[0].acciones ?? {}), ...parche };
     const norm: Record<string, boolean> = {};
     for (const [k, v] of Object.entries(nuevas)) norm[k] = v === true;
 
-    const { error: eUpd } = await supabase
-      .from("usuario_modulos")
-      .update({ acciones: norm })
-      .eq("id", (cur as { id: string }).id);
-    if (eUpd) {
-      if ((eUpd.message || "").includes("acciones")) {
-        return NextResponse.json(errorResponse("Aplicá la migración 20260916_usuario_modulos_acciones para poder editar permisos por acción."), { status: 400 });
-      }
-      return NextResponse.json(errorResponse(eUpd.message), { status: 500 });
-    }
+    await pool.query(
+      `UPDATE public.usuario_modulos SET acciones = $1::jsonb WHERE id = $2::uuid`,
+      [JSON.stringify(norm), cur.rows[0].id],
+    );
 
     await logAuditoria({
       empresaId: auth.empresa_id,
@@ -140,8 +140,7 @@ export async function PATCH(
       tipo: "permisos_actualizados",
       entidad: "usuario",
       entidadId: usuarioId,
-      referencia: (u as { email?: string }).email ?? null,
-      datoAnterior: (cur as { acciones?: Record<string, unknown> }).acciones ?? null,
+      datoAnterior: cur.rows[0].acciones ?? null,
       datoNuevo: norm,
     });
 

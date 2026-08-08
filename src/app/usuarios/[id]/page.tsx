@@ -218,6 +218,17 @@ function UsuarioDetailContent() {
       }));
       return;
     }
+    if (type === "checkbox" && name.startsWith("dash_")) {
+      const did = (e.target as HTMLInputElement).value;
+      const checked = (e.target as HTMLInputElement).checked;
+      setForm((prev) => ({
+        ...prev,
+        dashboard_view_ids: checked
+          ? [...prev.dashboard_view_ids, did]
+          : prev.dashboard_view_ids.filter((d) => d !== did),
+      }));
+      return;
+    }
     if (type === "checkbox") {
       setForm((prev) => ({ ...prev, [name]: (e.target as HTMLInputElement).checked }));
       return;
