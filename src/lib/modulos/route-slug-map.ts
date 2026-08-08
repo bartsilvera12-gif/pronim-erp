@@ -87,13 +87,25 @@ export function isModuleSlugGranted(routeSlug: string, grantedSlugs: Set<string>
 export function canAccessSidebarSlug(
   slug: string,
   grantedSlugs: Set<string>,
-  esSuperAdmin: boolean
+  esSuperAdmin: boolean,
+  rol?: string | null,
 ): boolean {
   if (esSuperAdmin) return true;
   // Dashboard siempre visible: admins ven el completo, usuarios con sucursal
   // fija ven el reducido (DashboardSucursalSimple). No hay ninguna razón para
   // esconderlo — es la home después del login.
   if (slug === "dashboard") return true;
+  // Administración autoservicio: un admin_empresa (rol 'administrador'/'admin')
+  // siempre necesita poder llegar a Usuarios, Sucursales, Metas y
+  // Configuración, aunque esos slugs no estén explicitamente activados en
+  // empresa_modulos. Antes: Karen reportaba 'no encuentro donde crear
+  // usuarios' porque la empresa no tenia el modulo 'usuarios' en empresa_modulos.
+  const r = (rol ?? "").trim().toLowerCase();
+  const esAdminEmpresa = r === "administrador" || r === "admin" || r === "admin_empresa";
+  if (esAdminEmpresa && (
+    slug === "usuarios" || slug === "sucursales" ||
+    slug === "metas" || slug === "configuracion"
+  )) return true;
   return isModuleSlugGranted(slug, grantedSlugs);
 }
 

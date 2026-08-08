@@ -629,15 +629,15 @@ export default function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarPr
     setFavoritos(toggleFavorito(id));
   };
 
-  const modulosSlugs = new Set(modulos.map((m) => m.slug));
-  const hasAccess = (slug: string) => canAccessSidebarSlug(slug, modulosSlugs, esSuperAdmin);
-
   // Gate por sucursal: operativos de sucursal NO Principal no ven Categorias
   // (solo Principal edita el catalogo web).
   // Transferencias de inventario: solo administradores (esSuperAdmin, rol admin/administrador).
   // Karen: las sucursales no deben mover stock entre sí, solo el admin.
   const { usuario: usuarioActual } = useUsuarioActual();
   const rolActual = (usuarioActual?.rol ?? "").trim().toLowerCase();
+  const modulosSlugs = new Set(modulos.map((m) => m.slug));
+  const hasAccess = (slug: string) => canAccessSidebarSlug(slug, modulosSlugs, esSuperAdmin, rolActual);
+
   const esAdminGeneral = esSuperAdmin
     || rolActual === "admin"
     || rolActual === "administrador"
