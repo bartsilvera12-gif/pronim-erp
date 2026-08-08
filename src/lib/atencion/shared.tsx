@@ -15,6 +15,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import MontoInput from "@/components/ui/MontoInput";
 import { fmtActive } from "@/lib/i18n/currency";
+import { PromptModal } from "@/components/ui/PromptModal";
 
 export type Franja = {
   id: string;
@@ -76,12 +77,18 @@ export function ColumnaAtencion(props: {
   accionesHeader?: React.ReactNode;
   slotDebajo?: React.ReactNode;
   tiposPrenda?: TipoPrenda[];
+  /** Si viene, se muestra botón "+ Franja con precio manual" al pie del grid.
+   *  Crea la franja server-side y devuelve la Franja para agregarla al toque. */
+  onCrearFranjaManual?: (precio: number) => Promise<Franja | null>;
 }) {
   const {
     titulo, descripcion, tono, franjas, cargando, lineas, total,
     onAgregar, onActualizar, onQuitar, permitirEditarPrecio, permitirDescuento,
-    subtotalItems, accionesHeader, slotDebajo, tiposPrenda,
+    subtotalItems, accionesHeader, slotDebajo, tiposPrenda, onCrearFranjaManual,
   } = props;
+  const [modalManualOpen, setModalManualOpen] = useState(false);
+  const [creandoManual, setCreandoManual] = useState(false);
+  const [errorManual, setErrorManual] = useState<string | null>(null);
   const border = tono === "emerald" ? "border-emerald-200" : "border-sky-200";
   const bg = tono === "emerald" ? "bg-emerald-50/40" : "bg-sky-50/40";
   const btn = tono === "emerald"
@@ -120,21 +127,66 @@ export function ColumnaAtencion(props: {
           No hay franjas de precio configuradas. Un administrador debe crearlas en <Link href="/admin/franjas" className="underline">Categorías</Link>.
         </p>
       ) : (
-        <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-          {franjas.map((f) => (
-            <button
-              key={f.id}
-              type="button"
-              onClick={() => onAgregar(f)}
-              title={f.nombre}
-              className={`rounded-lg border bg-white px-2 py-2 text-center transition-colors active:scale-95 ${btn}`}
-            >
-              {short(f.nombre) && <p className="text-[10px] text-slate-400 uppercase">{short(f.nombre)}</p>}
-              <p className="text-sm font-bold text-slate-800">{fmtGs(Number(f.precio_venta) || 0)}</p>
+        <>
+          <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+            {franjas.map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => onAgregar(f)}
+                title={f.nombre}
+                className={`rounded-lg border bg-white px-2 py-2 text-center transition-colors active:scale-95 ${btn}`}
+              >
+                {short(f.nombre) && <p className="text-[10px] text-slate-400 uppercase">{short(f.nombre)}</p>}
+                <p className="text-sm font-bold text-slate-800">{fmtGs(Number(f.precio_venta) || 0)}</p>
+              </button>
+            ))}
+          </div>
+          {onCrearFranjaManual && (
+            <button type="button"
+              onClick={() => { setErrorManual(null); setModalManualOpen(true); }}
+              className={`mt-2 w-full rounded-lg border border-dashed py-2 text-xs font-medium hover:bg-slate-50 ${
+                tono === "emerald"
+                  ? "border-emerald-300 text-emerald-700 hover:border-emerald-400"
+                  : "border-sky-300 text-sky-700 hover:border-sky-400"
+              }`}>
+              ＋ Franja con precio manual
             </button>
-          ))}
-        </div>
+          )}
+        </>
       )}
+      {errorManual && (
+        <p className="mt-1 text-xs text-rose-600">{errorManual}</p>
+      )}
+      <PromptModal
+        open={modalManualOpen}
+        title="Franja con precio manual"
+        description="Escribí el precio exacto. Se crea la categoría al vuelo y se agrega al carrito."
+        inputType="number"
+        placeholder="Ej: 27.500"
+        confirmLabel={creandoManual ? "Creando…" : "Crear y agregar"}
+        onCancel={() => setModalManualOpen(false)}
+        onConfirm={async (v) => {
+          const precio = Number(String(v).replace(/[^\d]/g, ""));
+          if (!(precio > 0) || !onCrearFranjaManual) {
+            setErrorManual("Precio inválido.");
+            setModalManualOpen(false);
+            return;
+          }
+          setCreandoManual(true); setErrorManual(null);
+          try {
+            const franja = await onCrearFranjaManual(precio);
+            if (franja) onAgregar(franja);
+            else setErrorManual("No se pudo crear la franja.");
+            setModalManualOpen(false);
+          } catch (e) {
+            setErrorManual(e instanceof Error ? e.message : "Error al crear la franja.");
+            setModalManualOpen(false);
+          } finally {
+            setCreandoManual(false);
+          }
+        }}
+      />
 
       {lineas.length > 0 && permitirDescuento && (
         <DescuentoATodasBar lineas={lineas} onActualizar={onActualizar} />

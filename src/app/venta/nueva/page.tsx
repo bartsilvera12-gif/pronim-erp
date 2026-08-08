@@ -684,6 +684,31 @@ export default function NuevaVentaPage() {
         onQuitar={quitarLinea}
         permitirEditarPrecio={false}
         permitirDescuento
+        onCrearFranjaManual={async (precio: number) => {
+          try {
+            const r = await fetchWithSupabaseSession("/api/franjas", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ precio_venta: precio }),
+            });
+            const j = await r.json();
+            if (!r.ok || !j?.success) throw new Error(j?.error ?? "Error al crear franja.");
+            const nueva = j.data?.franja as Franja | undefined;
+            if (nueva) {
+              setFranjas((prev) => {
+                if (prev.some((f) => f.id === nueva.id)) return prev;
+                return [...prev, nueva].sort(
+                  (a, b) => (Number(a.precio_venta) || 0) - (Number(b.precio_venta) || 0),
+                );
+              });
+              return nueva;
+            }
+            return null;
+          } catch (e) {
+            console.error("[crearFranjaManual venta]", e);
+            return null;
+          }
+        }}
       />
 
       {/* Balance + cobro */}
