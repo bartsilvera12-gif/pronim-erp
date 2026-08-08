@@ -421,9 +421,11 @@ export function NuevoClienteRapidoModal({
 }
 
 /**
- * Fila "Descuento a todas" con state local. Se debounce-aplica a todas las
- * líneas cuando el usuario deja de tipear (o al blur). Antes usaba MontoInput
- * controlado con value=0 fijo lo que reseteaba la entrada al primer render.
+ * Fila "Descuento total". El usuario escribe UN monto y ese es el descuento
+ * TOTAL del carrito, prorrateado entre todas las unidades. Cuando cambia la
+ * cantidad de ítems, se recalcula el per-unit para mantener el total fijo
+ * (que era la queja de Karen: 'se multiplica el descuento cuando agrego
+ * más producto').
  */
 function DescuentoATodasBar({
   lineas, onActualizar,
@@ -432,22 +434,26 @@ function DescuentoATodasBar({
   onActualizar: (idx: number, patch: Partial<Linea>) => void;
 }) {
   const [valor, setValor] = useState<string>("");
-  // Aplicar cambios a todas las líneas cuando el valor cambia. Debounced
-  // implícito porque solo se aplica cuando cambia el string, no en cada tecla.
+  const totalUnidades = lineas.reduce((s, l) => s + (l.cantidad || 0), 0);
+  // Redistribuir cada vez que cambia el monto o el total de unidades.
   useEffect(() => {
-    if (valor === "") return; // no tocar hasta que escriban algo
-    const monto = Math.max(0, Number(valor.replace(/[^\d]/g, "")) || 0);
+    if (valor === "") return;
+    const total = Math.max(0, Number(valor.replace(/[^\d]/g, "")) || 0);
+    if (totalUnidades === 0) return;
+    const perUnit = total === 0 ? 0 : Math.floor(total / totalUnidades);
     lineas.forEach((l, idx) => {
-      const clamped = Math.min(monto, l.precio_unitario);
-      onActualizar(idx, { descuento_unitario: clamped });
+      const clamped = Math.min(perUnit, l.precio_unitario);
+      if ((l.descuento_unitario ?? 0) !== clamped) {
+        onActualizar(idx, { descuento_unitario: clamped });
+      }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [valor]);
+  }, [valor, totalUnidades]);
 
   return (
-    <div className="mt-3 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50/40 px-3 py-2">
+    <div className="mt-3 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50/40 px-3 py-2 flex-wrap">
       <span className="text-[11px] font-semibold uppercase text-amber-800 whitespace-nowrap">
-        Descuento a todas
+        Descuento total
       </span>
       <input
         type="text" inputMode="numeric" pattern="[0-9]*"
@@ -460,14 +466,16 @@ function DescuentoATodasBar({
         placeholder="0"
         className="w-28 rounded-md border border-amber-200 bg-white px-2 py-1 text-right text-sm focus:outline-none focus:ring-2 focus:ring-amber-300"
       />
-      <span className="text-[11px] text-amber-700">c/u a cada línea</span>
+      <span className="text-[11px] text-amber-700">
+        prorrateado entre {totalUnidades} unidad(es)
+      </span>
       <button type="button"
         onClick={() => {
           setValor("");
           lineas.forEach((_, idx) => onActualizar(idx, { descuento_unitario: 0 }));
         }}
         className="ml-auto text-[11px] text-slate-500 hover:text-slate-800 underline">
-        Limpiar descuentos
+        Limpiar
       </button>
     </div>
   );
