@@ -17,6 +17,29 @@ import { logAuditoria } from "@/lib/auditoria/log";
 
 const DEFAULT_ACC = { ver: true, crear: true, editar: true, eliminar: true } as const;
 
+// En monocliente Pronim las tablas de catálogo (usuario_modulos, modulos) pueden
+// vivir en `public` o en el schema de la app (`pronimerp`). Detectamos al vuelo
+// dónde existen para evitar "relation does not exist".
+async function resolveSchemas(
+  pool: NonNullable<ReturnType<typeof getChatPostgresPool>>,
+): Promise<{ um: string; mod: string } | null> {
+  const r = await pool.query<{ table_schema: string; table_name: string }>(
+    `SELECT table_schema, table_name
+       FROM information_schema.tables
+      WHERE table_name IN ('usuario_modulos','modulos')
+        AND table_schema IN ('public','pronimerp')`,
+  );
+  const bySchema = new Map<string, Set<string>>();
+  for (const row of r.rows) {
+    if (!bySchema.has(row.table_schema)) bySchema.set(row.table_schema, new Set());
+    bySchema.get(row.table_schema)!.add(row.table_name);
+  }
+  const pickUm = ["pronimerp","public"].find((s) => bySchema.get(s)?.has("usuario_modulos"));
+  const pickMod = ["pronimerp","public"].find((s) => bySchema.get(s)?.has("modulos"));
+  if (!pickUm || !pickMod) return null;
+  return { um: pickUm, mod: pickMod };
+}
+
 async function verificarEmpresaUsuario(usuarioId: string, empresaAdmin: string): Promise<boolean> {
   const supabase = createServiceRoleClient();
   const { data } = await supabase.from("usuarios").select("empresa_id").eq("id", usuarioId).maybeSingle();
@@ -38,10 +61,17 @@ export async function GET(
     const pool = getChatPostgresPool();
     if (!pool) return NextResponse.json(errorResponse("Sin conexión Postgres."), { status: 500 });
 
-    // Chequear si la columna acciones existe en public.usuario_modulos
+    const schemas = await resolveSchemas(pool);
+    if (!schemas) {
+      return NextResponse.json(errorResponse(
+        "Tablas de módulos no encontradas (usuario_modulos / modulos). Aplicá las migraciones base."
+      ), { status: 500 });
+    }
+    // Chequear si la columna acciones existe en <schema>.usuario_modulos
     const colsQ = await pool.query<{ column_name: string }>(
       `SELECT column_name FROM information_schema.columns
-        WHERE table_schema='public' AND table_name='usuario_modulos'`,
+        WHERE table_schema=$1 AND table_name='usuario_modulos'`,
+      [schemas.um],
     );
     const cols = new Set(colsQ.rows.map((r) => r.column_name));
     const tieneAcciones = cols.has("acciones");
@@ -51,8 +81,8 @@ export async function GET(
       modulo_id: string; slug: string; nombre: string; acciones: Record<string, unknown> | null;
     }>(
       `SELECT um.modulo_id::text, m.slug, m.nombre, ${selectAcc}
-         FROM public.usuario_modulos um
-         JOIN public.modulos m ON m.id = um.modulo_id
+         FROM ${schemas.um}.usuario_modulos um
+         JOIN ${schemas.mod}.modulos m ON m.id = um.modulo_id
         WHERE um.usuario_id = $1::uuid`,
       [usuarioId],
     );
@@ -97,10 +127,17 @@ export async function PATCH(
     const pool = getChatPostgresPool();
     if (!pool) return NextResponse.json(errorResponse("Sin conexión Postgres."), { status: 500 });
 
+    const schemas = await resolveSchemas(pool);
+    if (!schemas) {
+      return NextResponse.json(errorResponse(
+        "Tablas de módulos no encontradas (usuario_modulos / modulos). Aplicá las migraciones base."
+      ), { status: 500 });
+    }
     // Chequear columna acciones
     const colsQ = await pool.query<{ column_name: string }>(
       `SELECT column_name FROM information_schema.columns
-        WHERE table_schema='public' AND table_name='usuario_modulos'`,
+        WHERE table_schema=$1 AND table_name='usuario_modulos'`,
+      [schemas.um],
     );
     const cols = new Set(colsQ.rows.map((r) => r.column_name));
     if (!cols.has("acciones")) {
@@ -112,7 +149,7 @@ export async function PATCH(
 
     // Fetch current + merge + update
     const cur = await pool.query<{ id: string; acciones: Record<string, unknown> | null }>(
-      `SELECT id, acciones FROM public.usuario_modulos
+      `SELECT id, acciones FROM ${schemas.um}.usuario_modulos
         WHERE usuario_id = $1::uuid AND modulo_id = $2::uuid LIMIT 1`,
       [usuarioId, modId],
     );
@@ -128,7 +165,7 @@ export async function PATCH(
     for (const [k, v] of Object.entries(nuevas)) norm[k] = v === true;
 
     await pool.query(
-      `UPDATE public.usuario_modulos SET acciones = $1::jsonb WHERE id = $2::uuid`,
+      `UPDATE ${schemas.um}.usuario_modulos SET acciones = $1::jsonb WHERE id = $2::uuid`,
       [JSON.stringify(norm), cur.rows[0].id],
     );
 
