@@ -57,7 +57,7 @@ export default function NuevaEvaluacionPage() {
   // ── Reparto del pago al cliente ──────────────────────────────────────
   // Karen: sumen todo, dividen ÷2 / ÷2.5 / ÷3 para dar el precio, y ese
   // precio se paga en crédito + efectivo + transferencia (mezclable).
-  const [divisor, setDivisor] = useState<1 | 2 | 2.5 | 3 | "custom">(1);
+  const [divisor, setDivisor] = useState<1 | 2 | 2.5 | 3 | "custom">(2.5);
   const [pagoCredito, setPagoCredito] = useState<string>("");
   const [pagoEfectivo, setPagoEfectivo] = useState<string>("");
   const [pagoTransf, setPagoTransf] = useState<string>("");
@@ -270,7 +270,7 @@ export default function NuevaEvaluacionPage() {
     setTrae([]); setTraeMontoFinal(""); setIngresarAlStock(false);
     setObservaciones(""); setError(null);
     setCliente(null); setClienteQuery(""); setClienteOpen(false);
-    setDivisor(1);
+    setDivisor(2.5);
     setPagoCredito(""); setPagoEfectivo(""); setPagoTransf("");
     setTransfEntidadId(""); setTransfReferencia("");
   }
