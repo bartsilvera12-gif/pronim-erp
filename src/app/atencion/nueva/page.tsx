@@ -783,7 +783,23 @@ export default function NuevaAtencionPage() {
 
   function actualizarLinea(bucket: "trae" | "lleva", idx: number, patch: Partial<Linea>) {
     const setter = bucket === "trae" ? setTrae : setLleva;
-    setter((prev) => prev.map((l, i) => i === idx ? { ...l, ...patch } : l));
+    setter((prev) => prev.map((l, i) => {
+      if (i !== idx) return l;
+      const next = { ...l, ...patch };
+      // Si cambia la cantidad y hay descuento manual en la línea, preservar el
+      // DESCUENTO TOTAL de la línea (lump) — la cajera lo puso pensando en el
+      // ítem, no por unidad. Sin esto, agregar unidades multiplicaría el
+      // descuento (issue reportado por Tassi: 1.000 → 5.000 al pasar de 1 a 5).
+      const oldCant = Math.max(1, Number(l.cantidad) || 1);
+      const newCant = Math.max(1, Number(next.cantidad) || 1);
+      const oldUnit = Number(l.descuento_unitario) || 0;
+      const patchTocaDesc = Object.prototype.hasOwnProperty.call(patch, "descuento_unitario");
+      if (!patchTocaDesc && oldUnit > 0 && oldCant !== newCant) {
+        const lump = oldUnit * oldCant;
+        next.descuento_unitario = Math.min(next.precio_unitario, Math.round(lump / newCant));
+      }
+      return next;
+    }));
   }
   function quitarLinea(bucket: "trae" | "lleva", idx: number) {
     const setter = bucket === "trae" ? setTrae : setLleva;

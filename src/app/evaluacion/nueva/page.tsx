@@ -210,6 +210,25 @@ export default function NuevaEvaluacionPage() {
   const totalTrae = totalTraeManual != null ? totalTraeManual : totalTraeSubtotal;
   const ajusteEvaluacion = totalTrae - totalTraeSubtotal;
 
+  // Recalcular monto final automáticamente al cambiar el subtotal (agregar/quitar
+  // productos) o el divisor. Sólo cuando el divisor es fijo (1 / 2 / 2.5 / 3);
+  // si está en "custom" respetamos lo que escribió el usuario.
+  useEffect(() => {
+    if (divisor === "custom") return;
+    if (totalTraeSubtotal <= 0) {
+      if (traeMontoFinal) {
+        setTraeMontoFinal("");
+        setPagoCredito(""); setPagoEfectivo(""); setPagoTransf("");
+      }
+      return;
+    }
+    const nuevo = Math.round(totalTraeSubtotal / divisor);
+    setTraeMontoFinal(String(nuevo));
+    setPagoCredito(String(nuevo));
+    setPagoEfectivo(""); setPagoTransf("");
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [totalTraeSubtotal, divisor]);
+
   const clientesFiltrados = useMemo(() => {
     const q = clienteQuery.trim().toLowerCase();
     const qDigits = q.replace(/\D/g, "");
