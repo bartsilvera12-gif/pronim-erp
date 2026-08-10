@@ -1725,7 +1725,6 @@ export default function NuevaAtencionPage() {
                     value={descuentoMotivo}
                     onChange={(e) => setDescuentoMotivo(e.target.value)}
                     className="w-full rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300"
-                    disabled={descuentoGeneralNum <= 0}
                     aria-label="Motivo del descuento"
                   >
                     {motivosDesc.map((m) => (

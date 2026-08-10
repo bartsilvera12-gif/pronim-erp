@@ -807,7 +807,6 @@ export default function NuevaVentaPage() {
                     value={descuentoMotivo}
                     onChange={(e) => setDescuentoMotivo(e.target.value)}
                     className="w-full rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300"
-                    disabled={descuentoGeneralNum <= 0}
                     aria-label="Motivo del descuento"
                   >
                     {motivosDesc.map((m) => (
@@ -963,6 +962,12 @@ export default function NuevaVentaPage() {
         <div className="flex flex-wrap items-center gap-3 pt-1">
           <button type="button" onClick={preConfirmar}
             disabled={enviando || !cliente || lleva.length === 0}
+            title={
+              enviando ? t("Enviando…")
+              : !cliente ? t("Falta elegir un cliente arriba")
+              : lleva.length === 0 ? t("Cargá al menos una prenda que el cliente lleva")
+              : t("Confirmar venta")
+            }
             className="rounded-lg bg-[#4FAEB2] hover:bg-[#3F8E91] disabled:bg-slate-200 disabled:text-slate-500 disabled:cursor-not-allowed text-white text-sm font-semibold px-6 py-2.5 transition-colors shadow-sm active:scale-95">
             {enviando ? t("Registrando…") : t("Confirmar venta")}
           </button>
