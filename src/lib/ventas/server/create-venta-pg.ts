@@ -624,9 +624,9 @@ export async function createVentaEnClientePg(
       // deuda de stock quede registrada y visible en Inventario.
       await client.query(
         `INSERT INTO ${stockSucT} (producto_id, sucursal_id, stock_actual, updated_at)
-         VALUES ($2, $3, -$1, now())
+         VALUES ($2, $3, -($1::numeric), now())
          ON CONFLICT (producto_id, sucursal_id) DO UPDATE
-           SET stock_actual = ${stockSucT}.stock_actual - $1,
+           SET stock_actual = ${stockSucT}.stock_actual - $1::numeric,
                updated_at = now()`,
         [qty, prodId, params.sucursalId],
       );
