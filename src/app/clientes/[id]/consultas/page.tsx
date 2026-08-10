@@ -127,7 +127,10 @@ export default function ConsultasClientePage() {
   const [evTitulo, setEvTitulo] = useState("");
   const [evDescripcion, setEvDescripcion] = useState("");
   const [evMonto, setEvMonto] = useState("");
-  const [evGenerarCredito, setEvGenerarCredito] = useState(false);
+  // Default true: cuando registran un cashback, en el 99% de los casos quieren
+  // que se acredite como crédito a favor. Antes venía en false y el saldo
+  // quedaba en 0 aunque el evento existiera.
+  const [evGenerarCredito, setEvGenerarCredito] = useState(true);
   const [evPosteando, setEvPosteando] = useState(false);
   const [evPanelAbierto, setEvPanelAbierto] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -234,7 +237,7 @@ export default function ConsultasClientePage() {
       setEvTitulo("");
       setEvDescripcion("");
       setEvMonto("");
-      setEvGenerarCredito(false);
+      setEvGenerarCredito(true);
       setEvPanelAbierto(false);
       await cargar();
     } catch (e) {
@@ -348,7 +351,7 @@ export default function ConsultasClientePage() {
                     onChange={(e) => setEvGenerarCredito(e.target.checked)}
                     className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
                   />
-                  Generar crédito a favor por este monto
+                  Acreditar como crédito a favor (recomendado)
                 </label>
               </div>
             )}
