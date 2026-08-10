@@ -454,6 +454,9 @@ export function construirPatchActualizacionCliente(datos: ActualizarClienteInput
   }
   if (datos.estado !== undefined) patch.estado = datos.estado ?? null;
   if (datos.tipo_servicio_cliente !== undefined) patch.tipo_servicio_cliente = datos.tipo_servicio_cliente ?? null;
+  if ((datos as { es_vip?: unknown }).es_vip !== undefined) {
+    patch.es_vip = (datos as { es_vip?: unknown }).es_vip === true;
+  }
   patch.updated_at = new Date().toISOString();
   return patch;
 }

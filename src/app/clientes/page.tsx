@@ -427,15 +427,27 @@ export default function ClientesPage() {
           <h1 className="mt-1 text-lg font-semibold tracking-tight text-slate-900">{t("Clientes")}</h1>
           <p className="mt-0.5 text-xs text-slate-500">{t("Base de clientes activos de la empresa")}</p>
         </div>
-        <Link
-          href="/clientes/nuevo"
-          className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[#4FAEB2] px-3 py-1.5 text-xs font-semibold text-white shadow-sm shadow-[#4FAEB2]/25 transition-colors hover:bg-[#3F8E91] active:scale-95"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
-            <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
-          </svg>
-          {t("Nuevo cliente")}
-        </Link>
+        <div className="flex shrink-0 items-center gap-2">
+          <Link
+            href="/clientes/segmentos"
+            className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 active:scale-95"
+            title="Explorar segmentos: VIP, con crédito, inactivos, en riesgo…"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+              <path fillRule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm0-14a6 6 0 0 1 5.196 9l-5.196-3V4Z" clipRule="evenodd" />
+            </svg>
+            Segmentos
+          </Link>
+          <Link
+            href="/clientes/nuevo"
+            className="flex items-center gap-1.5 rounded-lg bg-[#4FAEB2] px-3 py-1.5 text-xs font-semibold text-white shadow-sm shadow-[#4FAEB2]/25 transition-colors hover:bg-[#3F8E91] active:scale-95"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+              <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
+            </svg>
+            {t("Nuevo cliente")}
+          </Link>
+        </div>
       </div>
 
       {/* Filtros */}
