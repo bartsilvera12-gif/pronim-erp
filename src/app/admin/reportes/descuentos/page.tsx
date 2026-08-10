@@ -68,6 +68,43 @@ export default function ReporteDescuentosPage() {
     motivoFiltro ? ventas.filter((v) => v.descuento_motivo === motivoFiltro) : ventas,
   [ventas, motivoFiltro]);
 
+  function exportarCsv() {
+    const rows: string[] = [];
+    const esc = (v: unknown) => {
+      const s = v == null ? "" : String(v);
+      return /[",;\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    rows.push(["Fecha","N° Venta","Sucursal","Motivo","Total venta (Gs)","Descuento (Gs)"].join(";"));
+    ventasFiltradas.forEach((v) => {
+      rows.push([
+        fmtFecha(v.fecha),
+        v.numero_control,
+        v.sucursal_nombre ?? "",
+        v.motivo_label ?? v.descuento_motivo ?? "",
+        String(v.total),
+        String(v.descuento_general),
+      ].map(esc).join(";"));
+    });
+    // Fila de totales
+    const totalVentas = ventasFiltradas.reduce((s, v) => s + Number(v.total || 0), 0);
+    const totalDesc = ventasFiltradas.reduce((s, v) => s + Number(v.descuento_general || 0), 0);
+    rows.push("");
+    rows.push(["","","","TOTAL", String(totalVentas), String(totalDesc)].map(esc).join(";"));
+    // BOM UTF-8 para que Excel abra bien acentos
+    const csv = "﻿" + rows.join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `descuentos_${desde}_a_${hasta}${motivoFiltro ? `_${motivoFiltro}` : ""}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function imprimir() {
+    window.print();
+  }
+
   return (
     <div className="max-w-6xl space-y-6">
       <div className="flex items-center gap-2 text-sm text-gray-400">
@@ -98,6 +135,19 @@ export default function ReporteDescuentosPage() {
         <span className="ml-auto text-xs text-slate-400">
           {ventasCount} venta(s) con descuento · <strong className="text-slate-700">{fmt(total)}</strong> descontado
         </span>
+        <div className="w-full flex gap-2 print:hidden">
+          <button type="button" onClick={exportarCsv}
+            disabled={ventasFiltradas.length === 0}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-40 disabled:cursor-not-allowed">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4"><path d="M10.75 2.75a.75.75 0 0 0-1.5 0v8.614L6.295 8.235a.75.75 0 1 0-1.09 1.03l4.25 4.5a.75.75 0 0 0 1.09 0l4.25-4.5a.75.75 0 0 0-1.09-1.03l-2.955 3.129V2.75Z"/><path d="M3.5 12.75a.75.75 0 0 0-1.5 0v2.5A2.75 2.75 0 0 0 4.75 18h10.5A2.75 2.75 0 0 0 18 15.25v-2.5a.75.75 0 0 0-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5Z"/></svg>
+            Exportar CSV ({ventasFiltradas.length})
+          </button>
+          <button type="button" onClick={imprimir}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4"><path fillRule="evenodd" d="M5 2.75A.75.75 0 0 1 5.75 2h8.5a.75.75 0 0 1 .75.75V5.5h1a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-1V17.25a.75.75 0 0 1-.75.75h-8.5a.75.75 0 0 1-.75-.75V13.5H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h1V2.75Zm1.5.75V5.5h7V3.5h-7Zm7 10h-7v3.5h7V13.5Zm2-6.5a.5.5 0 1 0 0 1 .5.5 0 0 0 0-1Z" clipRule="evenodd"/></svg>
+            Imprimir / PDF
+          </button>
+        </div>
       </div>
 
       {warning && <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">{warning}</div>}
