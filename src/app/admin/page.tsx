@@ -27,6 +27,7 @@ const SECCIONES: SeccionAdmin[] = [
   { href: "/configuracion/entidades-bancarias", emoji: "🏦", titulo: "Entidades bancarias", descripcion: "Bancos / tarjetas / billeteras que se pueden asociar a un pago.",   tono: "sky" },
   { href: "/admin/conciliacion",       emoji: "🏦", titulo: "Conciliación bancaria",  descripcion: "Estado de cada pago (pendiente / confirmada / conciliada).",           tono: "sky" },
   { href: "/admin/auditoria",          emoji: "📋", titulo: "Auditoría",              descripcion: "Log de cambios sensibles con antes/después/motivo.",                    tono: "slate" },
+  { href: "/admin/reportes/ventas",    emoji: "📈", titulo: "Reporte de ventas",     descripcion: "Facturado / tickets / método. Click en KPI o sucursal para drill.",     tono: "emerald" },
   { href: "/admin/reportes/descuentos", emoji: "📊", titulo: "Reporte de descuentos", descripcion: "Cuánto se descontó por motivo, sucursal y período. Drill a ventas.",   tono: "rose" },
   { href: "/admin/reportes/compras",   emoji: "🛒", titulo: "Compras y evaluaciones", descripcion: "Valor pagado, prendas, markup, pendientes de ingreso al stock.",       tono: "sky" },
   { href: "/admin/empresas",           emoji: "🏢", titulo: "Empresas",               descripcion: "Datos generales de la empresa (super admin).",                          tono: "slate" },
