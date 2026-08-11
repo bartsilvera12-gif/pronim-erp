@@ -32,6 +32,7 @@ const SECCIONES: SeccionAdmin[] = [
   { href: "/admin/reportes/creditos",   emoji: "💰", titulo: "Créditos y cashback",    descripcion: "Saldos por cliente, entradas/salidas, drill por origen y tipo.",       tono: "emerald" },
   { href: "/admin/reportes/compras",   emoji: "🛒", titulo: "Compras y evaluaciones", descripcion: "Valor pagado, prendas, markup, pendientes de ingreso al stock.",       tono: "sky" },
   { href: "/admin/reportes/evaluaciones", emoji: "🧾", titulo: "Evaluaciones (drill)", descripcion: "Drill por sucursal / evaluadora / estado / tipo de prenda + CSV.",       tono: "sky" },
+  { href: "/admin/reportes/inventario", emoji: "📦", titulo: "Inventario (drill)",    descripcion: "Stock, valor, bajo stock y sin stock. Drill por categoría/tipo/sucursal.", tono: "amber" },
   { href: "/admin/empresas",           emoji: "🏢", titulo: "Empresas",               descripcion: "Datos generales de la empresa (super admin).",                          tono: "slate" },
   { href: "/usuarios",                 emoji: "👥", titulo: "Usuarios y permisos",    descripcion: "Alta, cargo, sucursal, permisos por módulo.",                           tono: "rose" },
 ];
