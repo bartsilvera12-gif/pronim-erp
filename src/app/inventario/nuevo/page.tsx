@@ -230,7 +230,7 @@ export default function NuevoProductoPage() {
     setErrorDuplicado(null);
     setErrorGeneral(null);
     try {
-      const res = await fetch("/api/productos/codigo-barras", { method: "POST", credentials: "include" });
+      const res = await fetch("/api/productos/codigo-interno", { method: "POST", credentials: "include" });
       const json = await res.json();
       if (res.ok && json?.success && json.data?.codigo) {
         setForm((prev) => ({ ...prev, codigo_barras: json.data.codigo as string }));
