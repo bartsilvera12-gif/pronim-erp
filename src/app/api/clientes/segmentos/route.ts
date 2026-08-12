@@ -7,19 +7,18 @@ import { getChatPostgresPool, quoteSchemaTable } from "@/lib/supabase/chat-pg-po
 import { assertAllowedChatDataSchema } from "@/lib/supabase/chat-data-schema";
 
 /**
- * GET /api/clientes/segmentos?tipo=<slug>
+ * GET /api/clientes/segmentos
  *
- * Sin `tipo`: devuelve los counts de todos los segmentos.
- * Con `tipo`: devuelve el listado detallado del segmento.
+ * Filtros combinables (todos AND):
+ *   ?vip=1 & con_credito=1 & con_cashback=1
+ *   & inactivos_90d=1 & nuevos_mes=1 & en_riesgo=1
+ *   & q=texto  (busca en nombre/teléfono/email)
  *
- * Segmentos:
- *  - vip           → clientes marcados manualmente como VIP (clientes.es_vip)
- *  - con_credito   → saldo de crédito disponible > 0
- *  - con_cashback  → cashback pendiente > 0
- *  - inactivos_90d → última compra hace >= 90 días (o sin compra)
- *  - nuevos_mes    → creados dentro del mes calendario en curso
- *  - en_riesgo     → antes compraban seguido (≥2 compras en 90d prev.)
- *                    y hace ≥45d que no vuelven
+ * Devuelve:
+ *   - segmentos: baseline counts (cuántos clientes de la empresa hay en cada
+ *     segmento en total, sin considerar los filtros — para poder tildar más)
+ *   - clientes: los que cumplen TODOS los filtros activos
+ *   - count: total del listado devuelto
  */
 
 type SegmentoSlug =
@@ -27,12 +26,12 @@ type SegmentoSlug =
   | "inactivos_90d" | "nuevos_mes" | "en_riesgo";
 
 const SEGMENTOS: { slug: SegmentoSlug; label: string; descripcion: string; emoji: string }[] = [
-  { slug: "vip",           label: "VIP",                  descripcion: "Marcados manualmente como VIP.",                     emoji: "⭐" },
-  { slug: "con_credito",   label: "Con crédito a favor",  descripcion: "Saldo de crédito disponible mayor a cero.",         emoji: "💰" },
-  { slug: "con_cashback",  label: "Con cashback",         descripcion: "Cashback acreditado pendiente de usar.",             emoji: "🎁" },
-  { slug: "inactivos_90d", label: "Inactivos +90 días",   descripcion: "Última compra hace 90 días o más (o sin compra).",  emoji: "📅" },
-  { slug: "nuevos_mes",    label: "Nuevos este mes",      descripcion: "Alta dentro del mes calendario en curso.",           emoji: "🆕" },
-  { slug: "en_riesgo",     label: "En riesgo",            descripcion: "Antes venían seguido y hace ≥45 días no vuelven.",   emoji: "📉" },
+  { slug: "vip",           label: "VIP",                 descripcion: "Marcados manualmente como VIP.",                    emoji: "⭐" },
+  { slug: "con_credito",   label: "Con crédito a favor", descripcion: "Saldo de crédito disponible mayor a cero.",        emoji: "💰" },
+  { slug: "con_cashback",  label: "Con cashback",        descripcion: "Cashback acreditado pendiente de usar.",            emoji: "🎁" },
+  { slug: "inactivos_90d", label: "Inactivos +90 días",  descripcion: "Última compra hace 90 días o más (o sin compra).", emoji: "📅" },
+  { slug: "nuevos_mes",    label: "Nuevos este mes",     descripcion: "Alta dentro del mes calendario en curso.",          emoji: "🆕" },
+  { slug: "en_riesgo",     label: "En riesgo",           descripcion: "Antes venían seguido y hace ≥45 días no vuelven.",  emoji: "📉" },
 ];
 
 export async function GET(request: NextRequest) {
@@ -41,7 +40,15 @@ export async function GET(request: NextRequest) {
     if (!auth) return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
 
     const url = new URL(request.url);
-    const tipo = (url.searchParams.get("tipo") ?? "").trim().toLowerCase() as SegmentoSlug | "";
+    const flags: Record<SegmentoSlug, boolean> = {
+      vip:            url.searchParams.get("vip") === "1",
+      con_credito:    url.searchParams.get("con_credito") === "1",
+      con_cashback:   url.searchParams.get("con_cashback") === "1",
+      inactivos_90d:  url.searchParams.get("inactivos_90d") === "1",
+      nuevos_mes:     url.searchParams.get("nuevos_mes") === "1",
+      en_riesgo:      url.searchParams.get("en_riesgo") === "1",
+    };
+    const q = (url.searchParams.get("q") ?? "").trim().toLowerCase();
 
     const schema = assertAllowedChatDataSchema(await fetchDataSchemaForEmpresaId(auth.empresa_id));
     const pool = getChatPostgresPool();
@@ -51,10 +58,6 @@ export async function GET(request: NextRequest) {
     const ventasT = quoteSchemaTable(schema, "ventas");
     const credT = quoteSchemaTable(schema, "cliente_creditos_movimientos");
 
-    // ── CTEs comunes ────────────────────────────────────────────────
-    // - actividad: última venta + total comprado + count por cliente
-    // - creditos: saldo total y saldo cashback (origen='cashback')
-    // Chequeamos existencia de tablas/columnas para degradar sin romper.
     const tblQ = await pool.query<{ table_name: string }>(
       `SELECT table_name FROM information_schema.tables
         WHERE table_schema = $1 AND table_name IN ('ventas','cliente_creditos_movimientos')`,
@@ -84,7 +87,6 @@ export async function GET(request: NextRequest) {
     const ventasFiltroEstado = vCols.has("estado") ? "AND (v.estado IS NULL OR v.estado <> 'anulada')" : "";
     const ventasFechaCol = vCols.has("fecha") ? "v.fecha" : "v.created_at";
 
-    // Empresa gate en cada CTE
     const actividadCTE = hasVentas ? `
       actividad AS (
         SELECT v.cliente_id,
@@ -114,6 +116,32 @@ export async function GET(request: NextRequest) {
       )
     ` : `creditos AS (SELECT NULL::uuid AS cliente_id, 0::numeric AS saldo_credito, 0::numeric AS saldo_cashback WHERE false)`;
 
+    // Expresiones booleanas por segmento (reutilizables en filtros y counts)
+    const expr: Record<SegmentoSlug, string> = {
+      vip:            `${hasEsVip ? "COALESCE(c.es_vip,false)" : "false"} = true`,
+      con_credito:    `COALESCE(cr.saldo_credito,0)  > 0`,
+      con_cashback:   `COALESCE(cr.saldo_cashback,0) > 0`,
+      inactivos_90d:  `(a.ultima_venta_at IS NULL OR a.ultima_venta_at < now() - interval '90 days')`,
+      nuevos_mes:     `c.created_at >= date_trunc('month', now())`,
+      en_riesgo:      `COALESCE(a.cnt_prev_90d,0) >= 2 AND (a.ultima_venta_at IS NULL OR a.ultima_venta_at < now() - interval '45 days')`,
+    };
+
+    // Baseline counts (por segmento, sin considerar filtros)
+    const countsQ = await pool.query<Record<SegmentoSlug | "total", string>>(
+      `WITH ${actividadCTE}, ${creditosCTE}
+       SELECT ${SEGMENTOS.map((s) => `COUNT(*) FILTER (WHERE ${expr[s.slug]})::text AS ${s.slug}`).join(",\n              ")},
+              COUNT(*)::text AS total
+         FROM ${cliT} c
+         LEFT JOIN actividad a  ON a.cliente_id  = c.id
+         LEFT JOIN creditos cr  ON cr.cliente_id = c.id
+        WHERE c.empresa_id = $1`,
+      [auth.empresa_id],
+    );
+    const cntRow = countsQ.rows[0] ?? {} as Record<string, string>;
+
+    // Filtros activos → WHERE combinado con AND
+    const activos = (Object.entries(flags) as [SegmentoSlug, boolean][]).filter(([, on]) => on).map(([k]) => k);
+
     const selectBase = `
       c.id::text                                    AS id,
       COALESCE(c.empresa, c.nombre_contacto, c.nombre, 'Cliente') AS nombre,
@@ -127,74 +155,37 @@ export async function GET(request: NextRequest) {
       COALESCE(cr.saldo_cashback,0)::text           AS saldo_cashback
     `;
 
-    // ── Modo COUNTS ──────────────────────────────────────────────────
-    if (!tipo) {
-      const q = await pool.query<{
-        vip: string; con_credito: string; con_cashback: string;
-        inactivos_90d: string; nuevos_mes: string; en_riesgo: string; total: string;
-      }>(
-        `WITH ${actividadCTE}, ${creditosCTE}
-         SELECT
-           COUNT(*) FILTER (WHERE ${hasEsVip ? "COALESCE(c.es_vip,false)" : "false"} = true)::text AS vip,
-           COUNT(*) FILTER (WHERE COALESCE(cr.saldo_credito,0)  > 0)::text                       AS con_credito,
-           COUNT(*) FILTER (WHERE COALESCE(cr.saldo_cashback,0) > 0)::text                       AS con_cashback,
-           COUNT(*) FILTER (WHERE a.ultima_venta_at IS NULL
-                                OR a.ultima_venta_at < now() - interval '90 days')::text          AS inactivos_90d,
-           COUNT(*) FILTER (WHERE c.created_at >= date_trunc('month', now()))::text               AS nuevos_mes,
-           COUNT(*) FILTER (WHERE COALESCE(a.cnt_prev_90d,0) >= 2
-                                AND (a.ultima_venta_at IS NULL OR a.ultima_venta_at < now() - interval '45 days'))::text AS en_riesgo,
-           COUNT(*)::text AS total
-         FROM ${cliT} c
-         LEFT JOIN actividad a  ON a.cliente_id  = c.id
-         LEFT JOIN creditos cr  ON cr.cliente_id = c.id
-         WHERE c.empresa_id = $1`,
-        [auth.empresa_id],
-      );
-      const row = q.rows[0] ?? {} as Record<string, string>;
-      return NextResponse.json(successResponse({
-        segmentos: SEGMENTOS.map((s) => ({
-          ...s,
-          count: Number(row[s.slug] ?? 0),
-        })),
-        total_clientes: Number(row.total ?? 0),
-      }));
+    const params: unknown[] = [auth.empresa_id];
+    const whereParts: string[] = ["c.empresa_id = $1"];
+    for (const slug of activos) whereParts.push(expr[slug]);
+    if (q) {
+      params.push(`%${q}%`);
+      const p = `$${params.length}`;
+      whereParts.push(`(LOWER(COALESCE(c.empresa, c.nombre_contacto, c.nombre, '')) LIKE ${p}
+                        OR LOWER(COALESCE(c.telefono, '')) LIKE ${p}
+                        OR LOWER(COALESCE(c.email, '')) LIKE ${p})`);
     }
 
-    // ── Modo LISTADO ────────────────────────────────────────────────
-    const filtros: Record<SegmentoSlug, string> = {
-      vip:            `${hasEsVip ? "COALESCE(c.es_vip,false)" : "false"} = true`,
-      con_credito:    `COALESCE(cr.saldo_credito,0)  > 0`,
-      con_cashback:   `COALESCE(cr.saldo_cashback,0) > 0`,
-      inactivos_90d:  `(a.ultima_venta_at IS NULL OR a.ultima_venta_at < now() - interval '90 days')`,
-      nuevos_mes:     `c.created_at >= date_trunc('month', now())`,
-      en_riesgo:      `COALESCE(a.cnt_prev_90d,0) >= 2 AND (a.ultima_venta_at IS NULL OR a.ultima_venta_at < now() - interval '45 days')`,
-    };
-    if (!(tipo in filtros)) {
-      return NextResponse.json(errorResponse("Segmento inválido."), { status: 400 });
-    }
-    const where = filtros[tipo as SegmentoSlug];
-
-    const q = await pool.query<Record<string, unknown>>(
+    const listado = await pool.query<Record<string, unknown>>(
       `WITH ${actividadCTE}, ${creditosCTE}
        SELECT ${selectBase}
          FROM ${cliT} c
          LEFT JOIN actividad a  ON a.cliente_id  = c.id
          LEFT JOIN creditos cr  ON cr.cliente_id = c.id
-        WHERE c.empresa_id = $1
-          AND ${where}
-        ORDER BY
-          CASE WHEN '${tipo}' IN ('vip','con_credito','con_cashback') THEN COALESCE(a.total_comprado,0) END DESC NULLS LAST,
-          a.ultima_venta_at DESC NULLS LAST,
-          c.created_at DESC
-        LIMIT 1000`,
-      [auth.empresa_id],
+        WHERE ${whereParts.join(" AND ")}
+        ORDER BY COALESCE(a.total_comprado,0) DESC NULLS LAST,
+                 a.ultima_venta_at DESC NULLS LAST,
+                 c.created_at DESC
+        LIMIT 2000`,
+      params,
     );
 
-    const meta = SEGMENTOS.find((s) => s.slug === tipo)!;
     return NextResponse.json(successResponse({
-      segmento: meta,
-      clientes: q.rows,
-      count: q.rows.length,
+      segmentos: SEGMENTOS.map((s) => ({ ...s, count: Number(cntRow[s.slug] ?? 0) })),
+      total_clientes: Number(cntRow.total ?? 0),
+      filtros_activos: activos,
+      clientes: listado.rows,
+      count: listado.rows.length,
     }));
   } catch (err) {
     console.error("[clientes/segmentos GET]", err);
