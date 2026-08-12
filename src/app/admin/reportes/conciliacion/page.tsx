@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { useMoney } from "@/lib/i18n/context";
+import { ActiveFiltersBar, type ActiveChip } from "@/components/reportes/ActiveFiltersBar";
 
 type Pago = {
   id: string; venta_id: string | null; numero_control: string | null;
@@ -221,10 +222,18 @@ export default function ReporteConciliacionPage() {
         )}
         <input type="text" placeholder="Buscar N° venta / referencia / titular / obs…" value={q} onChange={(e) => setQ(e.target.value)}
           className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm min-w-[220px]" />
-        {hayFiltros && (
-          <button type="button" onClick={limpiar} className="ml-1 text-xs text-slate-500 hover:text-slate-800 underline">Limpiar</button>
-        )}
       </div>
+
+      <ActiveFiltersBar
+        resourceLabel="pagos"
+        resultCount={pagos.length}
+        onClearAll={hayFiltros ? limpiar : undefined}
+        chips={([
+          estF && { key: "est", emoji: "🏷️", label: `Estado: ${ESTADO_LABEL[estF] ?? estF}`, onRemove: () => setEstF("") },
+          metF && { key: "met", emoji: "💳", label: `Método: ${metF}`, onRemove: () => setMetF("") },
+          q.trim() && { key: "q", label: `Búsqueda: "${q.trim()}"`, onRemove: () => setQ("") },
+        ].filter(Boolean) as ActiveChip[])}
+      />
 
       {/* KPIs por estado (clickeables) */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">

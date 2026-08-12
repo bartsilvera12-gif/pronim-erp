@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { useMoney } from "@/lib/i18n/context";
+import { ActiveFiltersBar, type ActiveChip } from "@/components/reportes/ActiveFiltersBar";
 
 type Kpis = {
   entradas_periodo: number; salidas_periodo: number; ajustes_periodo: number; neto_periodo: number;
@@ -220,18 +221,22 @@ export default function ReporteCreditosPage() {
             {porOri.map((o) => <option key={o.origen} value={o.origen}>{o.origen}</option>)}
           </select>
         )}
-        {clienteFObj && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-[#4FAEB2]/10 border border-[#4FAEB2]/30 px-2 py-0.5 text-xs text-[#3F8E91]">
-            Cliente: {clienteFObj.cliente_nombre}
-            <button type="button" onClick={() => setClienteF("")} className="ml-1 text-[#3F8E91] hover:text-[#2a6a6d]">×</button>
-          </span>
-        )}
         <input type="text" placeholder="Buscar cliente / referencia / obs…" value={q} onChange={(e) => setQ(e.target.value)}
           className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm min-w-[180px]" />
-        {hayFiltros && (
-          <button type="button" onClick={limpiar} className="ml-1 text-xs text-slate-500 hover:text-slate-800 underline">Limpiar</button>
-        )}
       </div>
+
+      <ActiveFiltersBar
+        resourceLabel="movimientos"
+        resultCount={movs.length}
+        onClearAll={hayFiltros ? limpiar : undefined}
+        chips={([
+          tipoF && { key: "tipo", emoji: "↕️", label: `Tipo: ${tipoF}`, onRemove: () => setTipoF("") },
+          categoriaF && { key: "cat", emoji: "🏷️", label: `Categoría: ${categoriaF}`, onRemove: () => setCategoriaF("") },
+          origenF && { key: "ori", emoji: "📍", label: `Origen: ${origenF}`, onRemove: () => setOrigenF("") },
+          clienteFObj && { key: "cli", emoji: "👥", label: `Cliente: ${clienteFObj.cliente_nombre}`, onRemove: () => setClienteF("") },
+          q.trim() && { key: "q", label: `Búsqueda: "${q.trim()}"`, onRemove: () => setQ("") },
+        ].filter(Boolean) as ActiveChip[])}
+      />
 
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { useMoney } from "@/lib/i18n/context";
+import { ActiveFiltersBar, type ActiveChip } from "@/components/reportes/ActiveFiltersBar";
 
 type Kpis = { ventas_total: number; dias_operados: number; dias_meta_alcanzada: number; comision_total: number };
 type Dia = { fecha: string; sucursal_id: string | null; sucursal_nombre: string; meta: number; ventas: number; alcanzada: boolean; comision_pct: number; comision_total: number };
@@ -182,10 +183,17 @@ export default function ReporteMetasPage() {
             {opciones.usuarios.map((u) => <option key={u.id} value={u.id}>{u.nombre}</option>)}
           </select>
         )}
-        {hayFiltros && (
-          <button type="button" onClick={limpiar} className="ml-1 text-xs text-slate-500 hover:text-slate-800 underline">Limpiar</button>
-        )}
       </div>
+
+      <ActiveFiltersBar
+        resourceLabel="filas día×sucursal"
+        resultCount={dias.length}
+        onClearAll={hayFiltros ? limpiar : undefined}
+        chips={([
+          sucF && { key: "suc", emoji: "🏬", label: `Sucursal: ${opciones.sucursales.find((s) => s.id === sucF)?.nombre ?? sucF}`, onRemove: () => setSucF("") },
+          usrF && { key: "usr", emoji: "👤", label: `Vendedora: ${opciones.usuarios.find((u) => u.id === usrF)?.nombre ?? usrF}`, onRemove: () => setUsrF("") },
+        ].filter(Boolean) as ActiveChip[])}
+      />
 
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { useMoney } from "@/lib/i18n/context";
+import { ActiveFiltersBar, type ActiveChip } from "@/components/reportes/ActiveFiltersBar";
 
 type Kpis = { total_facturado: number; cantidad_ventas: number; ticket_promedio: number; total_descuento: number; con_descuento_count: number };
 type PorSuc = { sucursal_id: string | null; sucursal_nombre: string; total: number; cnt: number };
@@ -211,10 +212,21 @@ export default function ReporteVentasDrillPage() {
         </label>
         <input type="text" placeholder="Buscar cliente / N° venta…" value={q} onChange={(e) => setQ(e.target.value)}
           className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm min-w-[180px]" />
-        {hayFiltros && (
-          <button type="button" onClick={limpiar} className="ml-1 text-xs text-slate-500 hover:text-slate-800 underline">Limpiar</button>
-        )}
       </div>
+
+      <ActiveFiltersBar
+        resourceLabel="ventas"
+        resultCount={ventas.length}
+        totalCount={kpis.cantidad_ventas}
+        onClearAll={hayFiltros ? limpiar : undefined}
+        chips={([
+          sucursalF && { key: "suc", emoji: "🏬", label: `Sucursal: ${opciones.sucursales.find((s) => s.id === sucursalF)?.nombre ?? sucursalF}`, onRemove: () => setSucursalF("") },
+          usuarioF && { key: "usr", emoji: "👤", label: `Usuario: ${opciones.usuarios.find((u) => u.id === usuarioF)?.nombre ?? usuarioF}`, onRemove: () => setUsuarioF("") },
+          metodoF && { key: "met", emoji: "💳", label: `Método: ${metodoF}`, onRemove: () => setMetodoF("") },
+          conDesc && { key: "desc", emoji: "🏷️", label: "Solo con descuento", onRemove: () => setConDesc(false) },
+          q.trim() && { key: "q", label: `Búsqueda: "${q.trim()}"`, onRemove: () => setQ("") },
+        ].filter(Boolean) as ActiveChip[])}
+      />
 
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

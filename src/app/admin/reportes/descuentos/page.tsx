@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { useMoney } from "@/lib/i18n/context";
+import { ActiveFiltersBar, type ActiveChip } from "@/components/reportes/ActiveFiltersBar";
 
 /**
  * Reporte de descuentos aplicados por motivo — con drill-down.
@@ -230,15 +231,21 @@ export default function ReporteDescuentosPage() {
           value={clienteQ} onChange={(e) => setClienteQ(e.target.value)}
           className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm min-w-[180px]" />
 
-        {hayFiltrosExtra && (
-          <button type="button" onClick={limpiarFiltros}
-            className="ml-1 text-xs text-slate-500 hover:text-slate-800 underline">Limpiar</button>
-        )}
-
-        <span className="ml-auto text-xs text-slate-500">
-          <strong className="text-slate-800">{ventasCount}</strong> venta(s) · <strong className="text-slate-800">{fmt(total)}</strong> descontado
-        </span>
       </div>
+
+      <ActiveFiltersBar
+        resourceLabel="ventas con descuento"
+        resultCount={ventas.length}
+        totalCount={ventasCount}
+        onClearAll={hayFiltrosExtra ? limpiarFiltros : undefined}
+        chips={([
+          motivoFiltro && { key: "motivo", emoji: "🏷️", label: `Motivo: ${opciones.motivos.find((m) => m.codigo === motivoFiltro)?.label ?? motivoFiltro}`, onRemove: () => setMotivoFiltro("") },
+          sucursalFiltro && { key: "sucursal", emoji: "🏬", label: `Sucursal: ${opciones.sucursales.find((s) => s.id === sucursalFiltro)?.nombre ?? sucursalFiltro}`, onRemove: () => setSucursalFiltro("") },
+          usuarioFiltro && { key: "usuario", emoji: "👤", label: `Usuario: ${opciones.usuarios.find((u) => u.id === usuarioFiltro)?.nombre ?? usuarioFiltro}`, onRemove: () => setUsuarioFiltro("") },
+          clienteQ.trim() && { key: "q", label: `Búsqueda: "${clienteQ.trim()}"`, onRemove: () => setClienteQ("") },
+        ].filter(Boolean) as ActiveChip[])}
+        right={<span className="text-xs text-slate-500">· <strong className="text-slate-800">{fmt(total)}</strong> descontado</span>}
+      />
 
       {warning && <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">{warning}</div>}
 

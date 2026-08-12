@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { useMoney } from "@/lib/i18n/context";
+import { ActiveFiltersBar, type ActiveChip } from "@/components/reportes/ActiveFiltersBar";
 
 type Kpis = {
   turnos_total: number; turnos_cerrados: number; turnos_abiertos: number;
@@ -221,10 +222,20 @@ export default function ReporteCajasPage() {
         </select>
         <input type="text" placeholder="Buscar N° / usuario / obs…" value={q} onChange={(e) => setQ(e.target.value)}
           className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm min-w-[180px]" />
-        {hayFiltros && (
-          <button type="button" onClick={limpiar} className="ml-1 text-xs text-slate-500 hover:text-slate-800 underline">Limpiar</button>
-        )}
       </div>
+
+      <ActiveFiltersBar
+        resourceLabel="turnos"
+        resultCount={cajas.length}
+        totalCount={kpis.turnos_total}
+        onClearAll={hayFiltros ? limpiar : undefined}
+        chips={([
+          estF && { key: "est", emoji: "🏷️", label: `Estado: ${estF}`, onRemove: () => setEstF("") },
+          usrF && { key: "usr", emoji: "👤", label: `Usuario: ${opciones.usuarios.find((u) => u.id === usrF)?.nombre ?? usrF}`, onRemove: () => setUsrF("") },
+          difF && { key: "dif", emoji: "⚖️", label: `Diferencia: ${difF === "1" ? "≠ 0" : difF === "pos" ? "sobrante" : "faltante"}`, onRemove: () => setDifF("") },
+          q.trim() && { key: "q", label: `Búsqueda: "${q.trim()}"`, onRemove: () => setQ("") },
+        ].filter(Boolean) as ActiveChip[])}
+      />
 
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
