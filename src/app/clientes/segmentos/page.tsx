@@ -79,6 +79,71 @@ export default function ClientesSegmentosPage() {
   const [colsVis, setColsVis] = useState<Set<ColKey>>(new Set(COLUMNAS.map((c) => c.key)));
   const [pickerOpen, setPickerOpen] = useState(false);
 
+  // Vistas guardadas
+  type Vista = { id: string; nombre: string; filtros: Record<string, unknown>; updated_at: string };
+  const [vistas, setVistas] = useState<Vista[]>([]);
+  const [vistasOpen, setVistasOpen] = useState(false);
+  const [vistaActivaId, setVistaActivaId] = useState<string | null>(null);
+  const [guardandoVista, setGuardandoVista] = useState(false);
+
+  async function cargarVistas() {
+    try {
+      const r = await fetchWithSupabaseSession("/api/clientes/segmentos/vistas", { cache: "no-store" });
+      const j = await r.json();
+      if (j?.success) setVistas((j.data?.vistas ?? []) as Vista[]);
+    } catch { /* silencioso */ }
+  }
+  useEffect(() => { cargarVistas(); }, []);
+
+  function aplicarVista(v: Vista) {
+    const s = new Set<SegmentoSlug>();
+    const flagsPos = ["vip","con_credito","con_cashback","inactivos_90d","nuevos_mes","en_riesgo"] as const;
+    for (const k of flagsPos) if (v.filtros[k] === true) s.add(k);
+    setFiltros(s);
+    setQ(typeof v.filtros.q === "string" ? v.filtros.q : "");
+    setVistaActivaId(v.id);
+    setVistasOpen(false);
+  }
+
+  async function guardarVistaActual() {
+    if (filtros.size === 0 && !q.trim()) {
+      setError("Aplicá al menos un filtro antes de guardar.");
+      return;
+    }
+    const sugerido = filtrosActivos.map((s) => s.label).join(" + ") + (q.trim() ? ` · "${q.trim()}"` : "");
+    const nombre = window.prompt("Nombre para esta vista:", sugerido.slice(0, 80));
+    if (!nombre || !nombre.trim()) return;
+    setGuardandoVista(true);
+    try {
+      const filtrosBody: Record<string, unknown> = {};
+      filtros.forEach((k) => { filtrosBody[k] = true; });
+      if (q.trim()) filtrosBody.q = q.trim();
+      const r = await fetchWithSupabaseSession("/api/clientes/segmentos/vistas", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nombre: nombre.trim(), filtros: filtrosBody }),
+      });
+      const j = await r.json();
+      if (!r.ok || !j.success) throw new Error(j?.error ?? "Error");
+      await cargarVistas();
+      if (j.data?.vista?.id) setVistaActivaId(j.data.vista.id);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo guardar la vista.");
+    } finally {
+      setGuardandoVista(false);
+    }
+  }
+
+  async function borrarVista(v: Vista) {
+    if (!window.confirm(`¿Borrar la vista "${v.nombre}"?`)) return;
+    try {
+      await fetchWithSupabaseSession(`/api/clientes/segmentos/vistas?id=${v.id}`, { method: "DELETE" });
+      await cargarVistas();
+      if (vistaActivaId === v.id) setVistaActivaId(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo borrar la vista.");
+    }
+  }
+
   function toggleFiltro(slug: SegmentoSlug) {
     setFiltros((prev) => {
       const s = new Set(prev);
@@ -172,11 +237,49 @@ export default function ClientesSegmentosPage() {
 
   return (
     <div className="max-w-6xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Segmentos de clientes</h1>
-        <p className="text-sm text-slate-500 mt-0.5">
-          Combiná criterios para acotar la lista. Los filtros son <strong>acumulativos</strong> — tildá varios para ver la intersección.
-        </p>
+      <div className="flex items-start justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Segmentos de clientes</h1>
+          <p className="text-sm text-slate-500 mt-0.5">
+            Combiná criterios para acotar la lista. Los filtros son <strong>acumulativos</strong> — tildá varios para ver la intersección.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 print:hidden relative">
+          <button type="button" onClick={() => setVistasOpen((v) => !v)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+            ⭐ Vistas guardadas ({vistas.length})
+          </button>
+          {vistasOpen && (
+            <div className="absolute right-0 top-9 z-20 rounded-lg border border-slate-200 bg-white shadow-lg p-2 min-w-[280px] max-h-[400px] overflow-y-auto">
+              {vistas.length === 0 ? (
+                <p className="text-xs text-slate-400 px-2 py-4 text-center italic">
+                  No hay vistas guardadas todavía.<br/>Aplicá filtros y hacé click en &ldquo;Guardar vista&rdquo;.
+                </p>
+              ) : (
+                <ul className="space-y-1">
+                  {vistas.map((v) => (
+                    <li key={v.id} className={`group flex items-center gap-1 rounded-md px-2 py-1.5 text-sm cursor-pointer ${vistaActivaId === v.id ? "bg-[#4FAEB2]/10" : "hover:bg-slate-50"}`}>
+                      <button type="button" onClick={() => aplicarVista(v)} className="flex-1 text-left">
+                        <p className={`text-xs font-semibold ${vistaActivaId === v.id ? "text-[#3F8E91]" : "text-slate-800"}`}>{v.nombre}</p>
+                        <p className="text-[10px] text-slate-400">
+                          {Object.keys(v.filtros).filter((k) => k !== "q" && (v.filtros as Record<string, unknown>)[k] === true).length} filtro(s)
+                          {typeof v.filtros.q === "string" && v.filtros.q ? ` · "${v.filtros.q}"` : ""}
+                        </p>
+                      </button>
+                      <button type="button" onClick={(e) => { e.stopPropagation(); borrarVista(v); }}
+                        className="opacity-0 group-hover:opacity-100 transition text-rose-500 hover:text-rose-700 text-sm px-1"
+                        title="Borrar vista">×</button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+          <button type="button" onClick={guardarVistaActual} disabled={guardandoVista || (filtros.size === 0 && !q.trim())}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-[#4FAEB2] text-white px-3 py-1.5 text-xs font-semibold hover:bg-[#3F8E91] shadow-sm disabled:opacity-40 disabled:cursor-not-allowed">
+            💾 Guardar vista
+          </button>
+        </div>
       </div>
 
       {error && (
