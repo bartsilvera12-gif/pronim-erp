@@ -32,9 +32,25 @@ export async function GET(
     if (!pool) return NextResponse.json(errorResponse("Sin conexión Postgres."), { status: 500 });
 
     const creditosT = quoteSchemaTable(schema, "cliente_creditos_movimientos");
+    const clientesT = quoteSchemaTable(schema, "clientes");
 
     const client = await pool.connect();
     try {
+      // Scope de cartera por sucursal: si el cliente no está en el scope
+      // del usuario, devolvemos 404 igual que /api/clientes/[id].
+      if (ctx.auth.scope_clientes) {
+        const scopeQ = await client.query<{ scope_clientes: string | null }>(
+          `SELECT scope_clientes FROM ${clientesT}
+            WHERE id = $1 AND empresa_id = $2 LIMIT 1`,
+          [clienteId, empresaId],
+        ).catch((e) => (e?.code === "42703" ? { rows: [] as Array<{ scope_clientes: string | null }> } : Promise.reject(e)));
+        if (scopeQ.rows.length > 0) {
+          const rowScope = scopeQ.rows[0].scope_clientes;
+          if (rowScope != null && rowScope !== ctx.auth.scope_clientes) {
+            return NextResponse.json(errorResponse("Cliente no encontrado"), { status: 404 });
+          }
+        }
+      }
       // Detección: si el schema tiene ya la columna `categoria` (migración
       // fase 2 tanda 4), usamos ese campo — más limpio que inferir por origen.
       const colsQ = await client.query<{ column_name: string }>(

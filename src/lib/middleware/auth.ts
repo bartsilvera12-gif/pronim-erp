@@ -9,6 +9,12 @@ export interface UsuarioConEmpresa {
   usuarioCatalogId?: string | null;
   /** Sucursal del usuario (Joyería Artesanos multi-sucursal). NULL = ve todas. */
   sucursal_id?: string | null;
+  /**
+   * Scope de cartera de clientes/créditos de la sucursal del usuario.
+   * Ej: 'lilo_palmeras' (sucursales que comparten cartera), o el slug
+   * propio para sucursales aisladas. NULL = admin sin sucursal → ve todos.
+   */
+  scope_clientes?: string | null;
 }
 
 export interface UsuarioConEmpresaYRol extends UsuarioConEmpresa {
@@ -35,6 +41,7 @@ export async function getAuthWithRol(request?: Request | null): Promise<UsuarioC
     rol: r.ctx.usuarioRol ?? undefined,
     nombre: r.ctx.usuarioNombre ?? undefined,
     sucursal_id: r.ctx.sucursal_id ?? null,
+    scope_clientes: r.ctx.scope_clientes ?? null,
   };
 }
 
@@ -66,5 +73,6 @@ export async function getUserAndEmpresa(request?: Request | null): Promise<Usuar
     empresa_id: r.ctx.empresa_id,
     usuarioCatalogId: r.ctx.usuarioCatalogId ?? null,
     sucursal_id: r.ctx.sucursal_id ?? null,
+    scope_clientes: r.ctx.scope_clientes ?? null,
   };
 }

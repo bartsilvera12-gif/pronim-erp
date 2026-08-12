@@ -7,6 +7,7 @@ import { createServiceRoleClient } from "@/lib/supabase/service-admin";
 import { fetchPerfilTributarioDetalle } from "@/lib/clientes/tributario-server";
 import { construirPatchActualizacionCliente, type ActualizarClienteInput } from "@/lib/clientes/storage";
 import { ensureSemillasCatalogoTipos, tipoServicioSlugValido } from "@/lib/clientes/tipo-servicio-catalogo";
+import { rowMatchesClientesScope } from "@/lib/clientes/scope";
 
 /**
  * GET /api/clientes/:id — un cliente de la empresa (mismo schema que el resto de APIs tenant).
@@ -42,6 +43,12 @@ export async function GET(
     }
     if (!data) {
       console.warn("[api/clientes/[id]] GET sin fila", { clienteId, empresa_id: auth.empresa_id });
+      return NextResponse.json(errorResponse("Cliente no encontrado"), { status: 404 });
+    }
+    // Scope de cartera por sucursal: si el cliente no está en el scope del
+    // usuario, devolvemos 404 (no filtramos vía SQL para no romper tenants
+    // sin la columna aún migrada).
+    if (!rowMatchesClientesScope(data as { scope_clientes?: string | null }, auth.scope_clientes)) {
       return NextResponse.json(errorResponse("Cliente no encontrado"), { status: 404 });
     }
 
@@ -118,15 +125,31 @@ export async function PATCH(
 
     const { data: existing, error: errExist } = await supabase
       .from("clientes")
-      .select("id, deleted_at")
+      .select("id, deleted_at, scope_clientes")
       .eq("id", clienteId)
       .eq("empresa_id", auth.empresa_id)
       .maybeSingle();
 
     if (errExist || !existing) {
+      // Reintento sin scope_clientes (tenant sin migration).
+      if (errExist && /scope_clientes/i.test(errExist.message ?? "")) {
+        const retry = await supabase
+          .from("clientes")
+          .select("id, deleted_at")
+          .eq("id", clienteId)
+          .eq("empresa_id", auth.empresa_id)
+          .maybeSingle();
+        if (retry.error || !retry.data) {
+          return NextResponse.json(errorResponse("Cliente no encontrado"), { status: 404 });
+        }
+      } else {
+        return NextResponse.json(errorResponse("Cliente no encontrado"), { status: 404 });
+      }
+    }
+    if (existing && !rowMatchesClientesScope(existing as { scope_clientes?: string | null }, auth.scope_clientes)) {
       return NextResponse.json(errorResponse("Cliente no encontrado"), { status: 404 });
     }
-    const delAt = (existing as { deleted_at?: string | null }).deleted_at;
+    const delAt = (existing as { deleted_at?: string | null } | null)?.deleted_at;
     if (delAt != null && String(delAt).trim() !== "") {
       return NextResponse.json(errorResponse("Cliente no encontrado"), { status: 404 });
     }
@@ -214,12 +237,15 @@ export async function DELETE(
     /** Sin `.is("deleted_at", null)` en el SELECT: en algunos tenants la columna no existe en PostgREST. */
     const { data: cliente, error: errCliente } = await supabase
       .from("clientes")
-      .select("id, empresa_id, deleted_at")
+      .select("id, empresa_id, deleted_at, scope_clientes")
       .eq("id", clienteId)
       .eq("empresa_id", auth.empresa_id)
       .maybeSingle();
 
     if (errCliente || !cliente) {
+      return NextResponse.json(errorResponse("Cliente no encontrado o ya eliminado"), { status: 404 });
+    }
+    if (!rowMatchesClientesScope(cliente as { scope_clientes?: string | null }, auth.scope_clientes)) {
       return NextResponse.json(errorResponse("Cliente no encontrado o ya eliminado"), { status: 404 });
     }
 

@@ -51,9 +51,24 @@ export async function GET(
 
     const creditosT = quoteSchemaTable(schema, "cliente_creditos_movimientos");
     const consumosT = quoteSchemaTable(schema, "cliente_creditos_consumos");
+    const clientesT = quoteSchemaTable(schema, "clientes");
 
     const client = await pool.connect();
     try {
+      // Scope de cartera por sucursal.
+      if (ctx.auth.scope_clientes) {
+        const scopeQ = await client.query<{ scope_clientes: string | null }>(
+          `SELECT scope_clientes FROM ${clientesT}
+            WHERE id = $1 AND empresa_id = $2 LIMIT 1`,
+          [clienteId, empresaId],
+        ).catch((e) => (e?.code === "42703" ? { rows: [] as Array<{ scope_clientes: string | null }> } : Promise.reject(e)));
+        if (scopeQ.rows.length > 0) {
+          const rowScope = scopeQ.rows[0].scope_clientes;
+          if (rowScope != null && rowScope !== ctx.auth.scope_clientes) {
+            return NextResponse.json(errorResponse("Cliente no encontrado"), { status: 404 });
+          }
+        }
+      }
       // Lotes: ENTRADAs + AJUSTEs positivos.
       const lotesQ = await client.query<{
         entrada_id: string;

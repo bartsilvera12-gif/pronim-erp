@@ -126,7 +126,14 @@ export async function GET(request: NextRequest) {
       en_riesgo:      `COALESCE(a.cnt_prev_90d,0) >= 2 AND (a.ultima_venta_at IS NULL OR a.ultima_venta_at < now() - interval '45 days')`,
     };
 
-    // Baseline counts (por segmento, sin considerar filtros)
+    // Baseline counts (por segmento, sin considerar filtros de segmento)
+    // Scope de cartera se aplica igual, para que las tarjetas reflejen el
+    // pool real que ve el usuario según su sucursal.
+    const scopeFilter = (auth.scope_clientes && cliCols.has("scope_clientes"))
+      ? "AND c.scope_clientes = $2"
+      : "";
+    const countsParams: unknown[] = [auth.empresa_id];
+    if (auth.scope_clientes && cliCols.has("scope_clientes")) countsParams.push(auth.scope_clientes);
     const countsQ = await pool.query<Record<SegmentoSlug | "total", string>>(
       `WITH ${actividadCTE}, ${creditosCTE}
        SELECT ${SEGMENTOS.map((s) => `COUNT(*) FILTER (WHERE ${expr[s.slug]})::text AS ${s.slug}`).join(",\n              ")},
@@ -134,8 +141,8 @@ export async function GET(request: NextRequest) {
          FROM ${cliT} c
          LEFT JOIN actividad a  ON a.cliente_id  = c.id
          LEFT JOIN creditos cr  ON cr.cliente_id = c.id
-        WHERE c.empresa_id = $1`,
-      [auth.empresa_id],
+        WHERE c.empresa_id = $1 ${scopeFilter}`,
+      countsParams,
     );
     const cntRow = countsQ.rows[0] ?? {} as Record<string, string>;
 
@@ -158,6 +165,12 @@ export async function GET(request: NextRequest) {
     const params: unknown[] = [auth.empresa_id];
     const whereParts: string[] = ["c.empresa_id = $1"];
     for (const slug of activos) whereParts.push(expr[slug]);
+    // Scope de cartera por sucursal (best-effort: si la columna no existe,
+    // la lectura del middleware devuelve null y no filtramos).
+    if (auth.scope_clientes && cliCols.has("scope_clientes")) {
+      params.push(auth.scope_clientes);
+      whereParts.push(`c.scope_clientes = $${params.length}`);
+    }
     if (q) {
       params.push(`%${q}%`);
       const p = `$${params.length}`;

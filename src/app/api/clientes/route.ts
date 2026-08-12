@@ -237,6 +237,11 @@ export async function GET(request: NextRequest) {
       .select("*")
       .eq("empresa_id", auth.empresa_id)
       .order("created_at", { ascending: false });
+    // Scope de cartera por sucursal (Lilo+Palmeras comparten, resto aisladas).
+    // NULL scope = admin/sin sucursal → sin filtro.
+    if (auth.scope_clientes) {
+      q = q.eq("scope_clientes", auth.scope_clientes);
+    }
     if (!incluirEliminados) {
       q = q.is("deleted_at", null);
     }
@@ -368,8 +373,14 @@ export async function POST(request: NextRequest) {
       (typeof auth.user?.email === "string" ? auth.user.email.trim() : "") ||
       null;
 
+    // Scope de cartera: el cliente nuevo hereda el scope de la sucursal
+    // del usuario. Admins sin sucursal → 'lilo_palmeras' (grupo compartido
+    // por defecto). El scope puede editarse manualmente después.
+    const scopeCliente = auth.scope_clientes ?? "lilo_palmeras";
+
     const insertBase = {
       empresa_id:           auth.empresa_id,
+      scope_clientes:        scopeCliente,
       created_by_user_id:    auth.user.id,
       created_by_nombre:     nombreCreador,
       tipo_cliente:         tipo_cliente ?? "empresa",
@@ -440,6 +451,20 @@ export async function POST(request: NextRequest) {
         error = null;
       } else {
         error = second.error;
+      }
+    }
+
+    // Si falla con `scope_clientes` (tenant sin la migration de cartera-por-
+    // sucursal aplicada), reintentar sin esa columna.
+    if (error && /scope_clientes/i.test(error.message ?? "")) {
+      const { scope_clientes: _drop, ...rest } = rowWithPlan as Record<string, unknown>;
+      void _drop;
+      const third = await supabase.from("clientes").insert([rest]).select().single();
+      if (!third.error) {
+        data = third.data;
+        error = null;
+      } else {
+        error = third.error;
       }
     }
 

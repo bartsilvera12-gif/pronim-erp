@@ -26,6 +26,13 @@ export type ApiAuthContext = {
   usuarioNombre?: string | null;
   /** Sucursal del usuario (Joyería Artesanos multi-sucursal). NULL = ve todas. */
   sucursal_id?: string | null;
+  /**
+   * Scope de cartera de clientes/créditos de la sucursal del usuario.
+   * Ej: 'lilo_palmeras' (Lilo + Palmeras comparten), o el slug propio para
+   * sucursales aisladas. NULL cuando el usuario no tiene sucursal_id
+   * (admins que ven todas) o la columna aún no existe en el tenant.
+   */
+  scope_clientes?: string | null;
 };
 
 export type ApiAuthResult =
@@ -82,6 +89,31 @@ async function fetchSucursalIdBestEffort(
     if (error) return null;
     const raw = (data as { sucursal_id?: string | null } | null)?.sucursal_id;
     return typeof raw === "string" ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Best-effort: lee `sucursales.scope_clientes` para la sucursal del usuario.
+ * Devuelve null si el usuario no tiene sucursal, o si la columna no existe
+ * aún (tenant sin la migration aplicada) — el caller debe interpretarlo
+ * como "sin filtro por scope" (comportamiento previo a esta feature).
+ */
+async function fetchScopeClientesBestEffort(
+  client: AppSupabaseClient,
+  sucursalId: string | null,
+): Promise<string | null> {
+  if (!sucursalId) return null;
+  try {
+    const { data, error } = await client
+      .from("sucursales")
+      .select("scope_clientes")
+      .eq("id", sucursalId)
+      .maybeSingle();
+    if (error) return null;
+    const raw = (data as { scope_clientes?: string | null } | null)?.scope_clientes;
+    return typeof raw === "string" && raw.trim() ? raw.trim() : null;
   } catch {
     return null;
   }
@@ -244,6 +276,7 @@ export async function resolveApiAuthContext(
   const sucursal_id = usuarioCatalogId
     ? await fetchSucursalIdBestEffort(userScopedSupabase, usuarioCatalogId)
     : null;
+  const scope_clientes = await fetchScopeClientesBestEffort(userScopedSupabase, sucursal_id);
 
   if (empresa_id) {
     return {
@@ -256,6 +289,7 @@ export async function resolveApiAuthContext(
         usuarioRol,
         usuarioNombre,
         sucursal_id,
+        scope_clientes,
       },
     };
   }
@@ -271,6 +305,7 @@ export async function resolveApiAuthContext(
         usuarioRol,
         usuarioNombre,
         sucursal_id,
+        scope_clientes,
       },
     };
   }
