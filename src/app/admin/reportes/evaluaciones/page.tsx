@@ -5,6 +5,7 @@ import Link from "next/link";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { useMoney } from "@/lib/i18n/context";
 import { ActiveFiltersBar, type ActiveChip } from "@/components/reportes/ActiveFiltersBar";
+import { VistasGuardadasBar } from "@/components/reportes/VistasGuardadasBar";
 
 type Kpis = {
   total_pagado: number; cantidad_evaluaciones: number; prendas_evaluadas: number;
@@ -187,11 +188,26 @@ export default function ReporteEvaluacionesPage() {
         <span>/</span>
         <span className="text-gray-700 font-medium">Reporte de compras / evaluaciones</span>
       </div>
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Compras / evaluaciones</h1>
-        <p className="text-sm text-slate-500 mt-0.5 print:hidden">
-          Recepciones de prendas evaluadas. Click en KPI, sucursal, evaluadora, estado o tipo de prenda para filtrar.
-        </p>
+      <div className="flex items-start justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Compras / evaluaciones</h1>
+          <p className="text-sm text-slate-500 mt-0.5 print:hidden">
+            Recepciones de prendas evaluadas. Click en KPI, sucursal, evaluadora, estado o tipo de prenda para filtrar.
+          </p>
+        </div>
+        <VistasGuardadasBar
+          reporteKey="evaluaciones"
+          hayFiltros={hayFiltros}
+          filtrosActuales={{ sucursal_id: sucF, usuario_id: usrF, tipo_prenda_id: tpF, estado: estF, q }}
+          nombreSugerido="Vista de evaluaciones"
+          onAplicar={(f) => {
+            setSucF(typeof f.sucursal_id === "string" ? f.sucursal_id : "");
+            setUsrF(typeof f.usuario_id === "string" ? f.usuario_id : "");
+            setTpF(typeof f.tipo_prenda_id === "string" ? f.tipo_prenda_id : "");
+            setEstF(typeof f.estado === "string" ? f.estado : "");
+            setQ(typeof f.q === "string" ? f.q : "");
+          }}
+        />
       </div>
 
       {/* Filtros */}

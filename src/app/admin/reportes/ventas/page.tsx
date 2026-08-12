@@ -5,6 +5,7 @@ import Link from "next/link";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { useMoney } from "@/lib/i18n/context";
 import { ActiveFiltersBar, type ActiveChip } from "@/components/reportes/ActiveFiltersBar";
+import { VistasGuardadasBar } from "@/components/reportes/VistasGuardadasBar";
 
 type Kpis = { total_facturado: number; cantidad_ventas: number; ticket_promedio: number; total_descuento: number; con_descuento_count: number };
 type PorSuc = { sucursal_id: string | null; sucursal_nombre: string; total: number; cnt: number };
@@ -175,11 +176,26 @@ export default function ReporteVentasDrillPage() {
         <span>/</span>
         <span className="text-gray-700 font-medium">Reporte de ventas</span>
       </div>
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Reporte de ventas</h1>
-        <p className="text-sm text-slate-500 mt-0.5 print:hidden">
-          Click en KPI o en cualquier sucursal/usuario/método para filtrar el listado. Exportá CSV o imprimí para reuniones.
-        </p>
+      <div className="flex items-start justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Reporte de ventas</h1>
+          <p className="text-sm text-slate-500 mt-0.5 print:hidden">
+            Click en KPI o en cualquier sucursal/usuario/método para filtrar el listado. Exportá CSV o imprimí para reuniones.
+          </p>
+        </div>
+        <VistasGuardadasBar
+          reporteKey="ventas"
+          hayFiltros={hayFiltros}
+          filtrosActuales={{ sucursal_id: sucursalF, usuario_id: usuarioF, metodo_pago: metodoF, con_descuento: conDesc, q }}
+          nombreSugerido="Vista de ventas"
+          onAplicar={(f) => {
+            setSucursalF(typeof f.sucursal_id === "string" ? f.sucursal_id : "");
+            setUsuarioF(typeof f.usuario_id === "string" ? f.usuario_id : "");
+            setMetodoF(typeof f.metodo_pago === "string" ? f.metodo_pago : "");
+            setConDesc(f.con_descuento === true);
+            setQ(typeof f.q === "string" ? f.q : "");
+          }}
+        />
       </div>
 
       {/* Filtros */}

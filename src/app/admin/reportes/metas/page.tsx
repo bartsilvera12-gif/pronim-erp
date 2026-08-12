@@ -5,6 +5,7 @@ import Link from "next/link";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { useMoney } from "@/lib/i18n/context";
 import { ActiveFiltersBar, type ActiveChip } from "@/components/reportes/ActiveFiltersBar";
+import { VistasGuardadasBar } from "@/components/reportes/VistasGuardadasBar";
 
 type Kpis = { ventas_total: number; dias_operados: number; dias_meta_alcanzada: number; comision_total: number };
 type Dia = { fecha: string; sucursal_id: string | null; sucursal_nombre: string; meta: number; ventas: number; alcanzada: boolean; comision_pct: number; comision_total: number };
@@ -152,11 +153,23 @@ export default function ReporteMetasPage() {
         <span>/</span>
         <span className="text-gray-700 font-medium">Metas y comisiones</span>
       </div>
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Metas y comisiones</h1>
-        <p className="text-sm text-slate-500 mt-0.5 print:hidden">
-          Días con meta alcanzada, ventas vs meta y comisiones estimadas por vendedora.
-        </p>
+      <div className="flex items-start justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Metas y comisiones</h1>
+          <p className="text-sm text-slate-500 mt-0.5 print:hidden">
+            Días con meta alcanzada, ventas vs meta y comisiones estimadas por vendedora.
+          </p>
+        </div>
+        <VistasGuardadasBar
+          reporteKey="metas"
+          hayFiltros={hayFiltros}
+          filtrosActuales={{ sucursal_id: sucF, usuario_id: usrF }}
+          nombreSugerido="Vista de metas"
+          onAplicar={(f) => {
+            setSucF(typeof f.sucursal_id === "string" ? f.sucursal_id : "");
+            setUsrF(typeof f.usuario_id === "string" ? f.usuario_id : "");
+          }}
+        />
       </div>
 
       {!hayMetas && (

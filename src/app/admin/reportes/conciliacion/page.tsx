@@ -5,6 +5,7 @@ import Link from "next/link";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { useMoney } from "@/lib/i18n/context";
 import { ActiveFiltersBar, type ActiveChip } from "@/components/reportes/ActiveFiltersBar";
+import { VistasGuardadasBar } from "@/components/reportes/VistasGuardadasBar";
 
 type Pago = {
   id: string; venta_id: string | null; numero_control: string | null;
@@ -199,9 +200,22 @@ export default function ReporteConciliacionPage() {
             Click en un estado o método para filtrar la lista. Exportá o imprimí para conferir contra extractos bancarios.
           </p>
         </div>
-        <Link href="/admin/conciliacion" className="print:hidden text-xs text-[#3F8E91] hover:underline font-semibold">
-          Ir al panel operativo →
-        </Link>
+        <div className="flex items-center gap-3 flex-wrap">
+          <VistasGuardadasBar
+            reporteKey="conciliacion"
+            hayFiltros={hayFiltros}
+            filtrosActuales={{ estado: estF, metodo_pago: metF, q }}
+            nombreSugerido="Vista de conciliación"
+            onAplicar={(f) => {
+              setEstF(typeof f.estado === "string" ? f.estado : "");
+              setMetF(typeof f.metodo_pago === "string" ? f.metodo_pago : "");
+              setQ(typeof f.q === "string" ? f.q : "");
+            }}
+          />
+          <Link href="/admin/conciliacion" className="print:hidden text-xs text-[#3F8E91] hover:underline font-semibold">
+            Ir al panel operativo →
+          </Link>
+        </div>
       </div>
 
       {/* Filtros */}

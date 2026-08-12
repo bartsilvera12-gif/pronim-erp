@@ -5,6 +5,7 @@ import Link from "next/link";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { useMoney } from "@/lib/i18n/context";
 import { ActiveFiltersBar, type ActiveChip } from "@/components/reportes/ActiveFiltersBar";
+import { VistasGuardadasBar } from "@/components/reportes/VistasGuardadasBar";
 
 /**
  * Reporte de descuentos aplicados por motivo — con drill-down.
@@ -190,11 +191,29 @@ export default function ReporteDescuentosPage() {
         <span className="text-gray-700 font-medium">Reporte de descuentos</span>
       </div>
 
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Reporte de descuentos</h1>
-        <p className="text-sm text-slate-500 mt-0.5 print:hidden">
-          Click en cualquier motivo, sucursal o usuario para filtrar. Exportá el listado a CSV o imprimí para reuniones.
-        </p>
+      <div className="flex items-start justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Reporte de descuentos</h1>
+          <p className="text-sm text-slate-500 mt-0.5 print:hidden">
+            Click en cualquier motivo, sucursal o usuario para filtrar. Exportá el listado a CSV o imprimí para reuniones.
+          </p>
+        </div>
+        <VistasGuardadasBar
+          reporteKey="descuentos"
+          hayFiltros={hayFiltrosExtra}
+          filtrosActuales={{ motivo: motivoFiltro, sucursal_id: sucursalFiltro, usuario_id: usuarioFiltro, q: clienteQ }}
+          nombreSugerido={[
+            motivoFiltro && `Motivo ${motivoFiltro}`,
+            sucursalFiltro && "Sucursal",
+            usuarioFiltro && "Usuario",
+          ].filter(Boolean).join(" + ")}
+          onAplicar={(f) => {
+            setMotivoFiltro(typeof f.motivo === "string" ? f.motivo : "");
+            setSucursalFiltro(typeof f.sucursal_id === "string" ? f.sucursal_id : "");
+            setUsuarioFiltro(typeof f.usuario_id === "string" ? f.usuario_id : "");
+            setClienteQ(typeof f.q === "string" ? f.q : "");
+          }}
+        />
       </div>
 
       {/* Filtros */}

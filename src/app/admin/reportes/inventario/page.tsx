@@ -5,6 +5,7 @@ import Link from "next/link";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { useMoney } from "@/lib/i18n/context";
 import { ActiveFiltersBar, type ActiveChip } from "@/components/reportes/ActiveFiltersBar";
+import { VistasGuardadasBar } from "@/components/reportes/VistasGuardadasBar";
 
 type Kpis = { productos_total: number; unidades_total: number; valor_stock: number; bajo_stock_count: number; sin_stock_count: number };
 type PorCat = { cat_id: string; cat_nombre: string; cnt: number; unidades: number; valor: number };
@@ -165,11 +166,27 @@ export default function ReporteInventarioPage() {
         <span>/</span>
         <span className="text-gray-700 font-medium">Reporte de inventario</span>
       </div>
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Inventario</h1>
-        <p className="text-sm text-slate-500 mt-0.5 print:hidden">
-          Stock y valor por categoría, tipo y sucursal. Click en KPI o agregado para filtrar el listado.
-        </p>
+      <div className="flex items-start justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Inventario</h1>
+          <p className="text-sm text-slate-500 mt-0.5 print:hidden">
+            Stock y valor por categoría, tipo y sucursal. Click en KPI o agregado para filtrar el listado.
+          </p>
+        </div>
+        <VistasGuardadasBar
+          reporteKey="inventario"
+          hayFiltros={hayFiltros}
+          filtrosActuales={{ categoria_id: catF, tipo_prenda_id: tpF, sucursal_id: sucF, solo_bajo_stock: soloBajo, sin_stock: sinStock, q }}
+          nombreSugerido="Vista de inventario"
+          onAplicar={(f) => {
+            setCatF(typeof f.categoria_id === "string" ? f.categoria_id : "");
+            setTpF(typeof f.tipo_prenda_id === "string" ? f.tipo_prenda_id : "");
+            setSucF(typeof f.sucursal_id === "string" ? f.sucursal_id : "");
+            setSoloBajo(f.solo_bajo_stock === true);
+            setSinStock(f.sin_stock === true);
+            setQ(typeof f.q === "string" ? f.q : "");
+          }}
+        />
       </div>
 
       {/* Filtros */}

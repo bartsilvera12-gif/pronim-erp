@@ -5,6 +5,7 @@ import Link from "next/link";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { useMoney } from "@/lib/i18n/context";
 import { ActiveFiltersBar, type ActiveChip } from "@/components/reportes/ActiveFiltersBar";
+import { VistasGuardadasBar } from "@/components/reportes/VistasGuardadasBar";
 
 type Kpis = {
   entradas_periodo: number; salidas_periodo: number; ajustes_periodo: number; neto_periodo: number;
@@ -188,11 +189,26 @@ export default function ReporteCreditosPage() {
         <span>/</span>
         <span className="text-gray-700 font-medium">Reporte de créditos y cashback</span>
       </div>
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Créditos y cashback</h1>
-        <p className="text-sm text-slate-500 mt-0.5 print:hidden">
-          Movimientos y saldos. Click en un cliente / origen / tipo para filtrar. Exportá CSV o imprimí.
-        </p>
+      <div className="flex items-start justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Créditos y cashback</h1>
+          <p className="text-sm text-slate-500 mt-0.5 print:hidden">
+            Movimientos y saldos. Click en un cliente / origen / tipo para filtrar. Exportá CSV o imprimí.
+          </p>
+        </div>
+        <VistasGuardadasBar
+          reporteKey="creditos"
+          hayFiltros={hayFiltros}
+          filtrosActuales={{ tipo: tipoF, origen: origenF, categoria: categoriaF, cliente_id: clienteF, q }}
+          nombreSugerido="Vista de créditos"
+          onAplicar={(f) => {
+            setTipoF(typeof f.tipo === "string" ? f.tipo : "");
+            setOrigenF(typeof f.origen === "string" ? f.origen : "");
+            setCategoriaF(typeof f.categoria === "string" ? f.categoria : "");
+            setClienteF(typeof f.cliente_id === "string" ? f.cliente_id : "");
+            setQ(typeof f.q === "string" ? f.q : "");
+          }}
+        />
       </div>
 
       {/* Filtros */}

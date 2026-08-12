@@ -5,6 +5,7 @@ import Link from "next/link";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { useMoney } from "@/lib/i18n/context";
 import { ActiveFiltersBar, type ActiveChip } from "@/components/reportes/ActiveFiltersBar";
+import { VistasGuardadasBar } from "@/components/reportes/VistasGuardadasBar";
 
 type Kpis = {
   turnos_total: number; turnos_cerrados: number; turnos_abiertos: number;
@@ -190,11 +191,25 @@ export default function ReporteCajasPage() {
         <span>/</span>
         <span className="text-gray-700 font-medium">Cierres de caja</span>
       </div>
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Cierres de caja</h1>
-        <p className="text-sm text-slate-500 mt-0.5 print:hidden">
-          Turnos abiertos/cerrados con contado vs esperado. Click en KPI o usuario para filtrar.
-        </p>
+      <div className="flex items-start justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Cierres de caja</h1>
+          <p className="text-sm text-slate-500 mt-0.5 print:hidden">
+            Turnos abiertos/cerrados con contado vs esperado. Click en KPI o usuario para filtrar.
+          </p>
+        </div>
+        <VistasGuardadasBar
+          reporteKey="cajas"
+          hayFiltros={hayFiltros}
+          filtrosActuales={{ estado: estF, usuario_id: usrF, con_diferencia: difF, q }}
+          nombreSugerido="Vista de cajas"
+          onAplicar={(f) => {
+            setEstF(typeof f.estado === "string" ? f.estado : "");
+            setUsrF(typeof f.usuario_id === "string" ? f.usuario_id : "");
+            setDifF(typeof f.con_diferencia === "string" ? f.con_diferencia : "");
+            setQ(typeof f.q === "string" ? f.q : "");
+          }}
+        />
       </div>
 
       {/* Filtros */}
