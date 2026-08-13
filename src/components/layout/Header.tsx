@@ -116,10 +116,7 @@ export default function Header({ onOpenMobileSidebar }: HeaderProps = {}) {
   useEffect(() => {
     let alive = true;
     let seenIds = new Set<string>();
-    // MODO PRUEBA: se dispara sonido también en el primer load si hay
-    // pendientes, así al refrescar la pestaña Karen puede confirmar que
-    // el audio funciona en su navegador. Cuando esté todo probado se
-    // puede volver a activar el guard de esPrimerLoad.
+    let esPrimerLoad = true;
     async function loadNotif() {
       try {
         const r = await fetchWithSupabaseSession("/api/recepciones/pendientes", { cache: "no-store" });
@@ -129,12 +126,13 @@ export default function Header({ onOpenMobileSidebar }: HeaderProps = {}) {
         setNotifPend(arr);
         setNotifClientes((j.data?.clientes as Record<string, string>) ?? {});
         setNotifSucursales((j.data?.sucursales as Record<string, string>) ?? {});
-        // Suena UNA sola vez si hay al menos una notificación nueva
-        // (por más pendientes que sean). Karen quiere un solo bloop al
-        // recargar, no una ráfaga.
+        // Sonido solo cuando aparece una recepción NUEVA después del primer
+        // load. El primer load poblamos seenIds sin sonar para que refrescar
+        // la pestaña no dispare "bloop" cada vez que se abre el ERP.
         const hayNuevas = arr.some(n => !seenIds.has(n.id));
-        if (hayNuevas) playNotifSound();
+        if (hayNuevas && !esPrimerLoad) playNotifSound();
         seenIds = new Set(arr.map(n => n.id));
+        esPrimerLoad = false;
       } catch { /* silencioso */ }
     }
     void loadNotif();
