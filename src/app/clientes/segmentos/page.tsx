@@ -133,11 +133,6 @@ export default function ClientesSegmentosPage() {
             className="inline-flex items-center gap-1.5 rounded-lg bg-[#4FAEB2] hover:bg-[#3F8E91] text-white px-3 py-1.5 text-xs font-semibold shadow-sm">
             + Nuevo cliente
           </Link>
-          <Link href="/clientes"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 px-3 py-1.5 text-xs font-semibold"
-            title="Lista clásica con datos tributarios">
-            Lista clásica
-          </Link>
         </div>
       </div>
 
