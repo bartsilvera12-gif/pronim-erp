@@ -722,7 +722,20 @@ export default function NuevaAtencionPage() {
         const idx = prev.findIndex((l) => l.franja_id === franja.id);
         if (idx >= 0) {
           const copy = [...prev];
-          copy[idx] = { ...copy[idx], cantidad: copy[idx].cantidad + cant };
+          const l = copy[idx];
+          const oldCant = Math.max(1, l.cantidad);
+          const newCant = oldCant + cant;
+          const oldUnit = Number(l.descuento_unitario) || 0;
+          // Preservar el DESCUENTO TOTAL de la línea (lump). El descuento se
+          // aplicó pensando en el ítem, no por unidad — al agregar más prendas
+          // iguales el descuento total NO debe multiplicarse. Recomputamos
+          // descuento_unitario = lump / newCant.
+          let nuevoDescUnit = oldUnit;
+          if (oldUnit > 0) {
+            const lump = oldUnit * oldCant;
+            nuevoDescUnit = Math.min(l.precio_unitario, Math.round(lump / newCant));
+          }
+          copy[idx] = { ...l, cantidad: newCant, descuento_unitario: nuevoDescUnit };
           return copy;
         }
         return [...prev, nueva];
