@@ -94,6 +94,9 @@ export default function NuevaAtencionPage() {
   const [cliente, setCliente] = useState<Cliente | null>(null);
   const [clienteOpen, setClienteOpen] = useState(false);
   const [creditoDisponible, setCreditoDisponible] = useState(0);
+  const [saldoCredito, setSaldoCredito] = useState(0);
+  const [saldoCashback, setSaldoCashback] = useState(0);
+  const [saldoConsignacion, setSaldoConsignacion] = useState(0);
   const [nuevoClienteOpen, setNuevoClienteOpen] = useState(false);
 
   // Segmento del cliente derivado de KPIs + timeline (ver ventas/nueva).
@@ -586,16 +589,20 @@ export default function NuevaAtencionPage() {
 
   // Cargar saldo de crédito al elegir cliente
   useEffect(() => {
-    if (!cliente) { setCreditoDisponible(0); setAplicarCredito(""); return; }
+    if (!cliente) { setCreditoDisponible(0); setSaldoCredito(0); setSaldoCashback(0); setSaldoConsignacion(0); setAplicarCredito(""); return; }
     let cancel = false;
     fetchWithSupabaseSession(`/api/clientes/${cliente.id}/creditos`, { cache: "no-store" })
       .then((r) => r.json())
       .then((j) => {
         if (cancel) return;
-        const s = Number(j?.data?.saldo ?? 0);
+        const d = j?.data ?? {};
+        const s = Number(d.saldo ?? 0);
         setCreditoDisponible(Number.isFinite(s) ? s : 0);
+        setSaldoCredito(Number(d.saldo_credito ?? 0) || 0);
+        setSaldoCashback(Number(d.saldo_cashback ?? 0) || 0);
+        setSaldoConsignacion(Number(d.saldo_consignacion ?? 0) || 0);
       })
-      .catch(() => { if (!cancel) setCreditoDisponible(0); });
+      .catch(() => { if (!cancel) { setCreditoDisponible(0); setSaldoCredito(0); setSaldoCashback(0); setSaldoConsignacion(0); } });
     return () => { cancel = true; };
   }, [cliente]);
 
@@ -1401,8 +1408,27 @@ export default function NuevaAtencionPage() {
               </div>
               <p className="text-xs text-slate-500">
                 {cliente.ruc ? `RUC ${cliente.ruc} · ` : ""}
-                Crédito disponible: <span className="font-semibold text-emerald-700">{fmtGs(creditoDisponible)}</span>
+                Saldo total a favor: <span className="font-semibold text-emerald-700">{fmtGs(creditoDisponible)}</span>
               </p>
+              {creditoDisponible > 0 && (
+                <div className="mt-1 flex flex-wrap gap-1.5">
+                  {saldoCredito > 0 && (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+                      💰 Crédito {fmtGs(saldoCredito)}
+                    </span>
+                  )}
+                  {saldoCashback > 0 && (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-pink-200 bg-pink-50 px-2 py-0.5 text-[11px] font-semibold text-pink-700">
+                      🎁 Cashback {fmtGs(saldoCashback)}
+                    </span>
+                  )}
+                  {saldoConsignacion > 0 && (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-700">
+                      📦 Consignación {fmtGs(saldoConsignacion)}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
             <button
               type="button"
