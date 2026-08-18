@@ -167,7 +167,7 @@ const MENU_STRUCTURE_FULL: MenuItem[] = [
     { label: "Transferencias", href: "/inventario/transferencias" },
     { label: "Categorías", href: "/inventario/categorias" },
   ]},
-  { key: "clientes", slug: "clientes", label: "Clientes", href: "/clientes", icon: Users },
+  { key: "clientes", slug: "clientes", label: "Clientes", href: "/clientes/segmentos", icon: Users },
   {
     key: "compras",
     slug: "compras",

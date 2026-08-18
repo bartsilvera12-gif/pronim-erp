@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, type ReactNode } from "react";
+import * as XLSX from "xlsx";
 
 /**
  * DataExplorer — explorador de datos tipo Excel, entity-agnostic.
@@ -208,6 +209,46 @@ export function DataExplorer<T>(props: {
     return a === "right" ? "text-right" : a === "center" ? "text-center" : "text-left";
   }
 
+  // Valor tipado para Excel: números/montos como number, fechas como Date, resto texto.
+  function valorXlsx(c: ColumnDef<T>, row: T): string | number | Date {
+    const v = c.get(row);
+    if (v == null || v === "") return "";
+    if (c.type === "number" || c.type === "money") return Number(v) || 0;
+    if (c.type === "date") { const d = new Date(v); return isNaN(d.getTime()) ? String(v) : d; }
+    return String(v);
+  }
+
+  function exportarXlsx() {
+    const aoa: (string | number | Date)[][] = [];
+    aoa.push(colsVis.map((c) => c.label));
+    ordenadas.forEach((r) => aoa.push(colsVis.map((c) => valorXlsx(c, r))));
+    if (hayTotales) {
+      aoa.push([]);
+      aoa.push(colsVis.map((c, i) => {
+        if (c.total === "sum") return Math.round(totales[c.key]);
+        if (i === 0) return "TOTAL";
+        return "";
+      }));
+    }
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    // Ancho de columnas + formato de moneda / fecha por columna.
+    ws["!cols"] = colsVis.map((c) => ({ wch: c.type === "money" ? 16 : c.type === "date" ? 13 : 20 }));
+    const nRows = aoa.length;
+    colsVis.forEach((c, ci) => {
+      if (c.type !== "money" && c.type !== "date") return;
+      for (let ri = 1; ri < nRows; ri++) {
+        const addr = XLSX.utils.encode_cell({ r: ri, c: ci });
+        const cell = ws[addr];
+        if (!cell || cell.v === "" || cell.v == null) continue;
+        if (c.type === "money") { cell.t = "n"; cell.z = "#,##0"; }
+        else if (c.type === "date" && cell.v instanceof Date) { cell.t = "d"; cell.z = "dd/mm/yyyy"; }
+      }
+    });
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Datos");
+    XLSX.writeFile(wb, `${csvName}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  }
+
   function exportarCsv() {
     const esc = (s: string) => /[",;\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
     const lines: string[] = [];
@@ -340,9 +381,15 @@ export function DataExplorer<T>(props: {
           <button type="button" onClick={limpiarTodo} className="text-xs text-slate-500 hover:text-slate-800 underline">Limpiar todo</button>
         )}
 
+        <button type="button" onClick={exportarXlsx} disabled={ordenadas.length === 0}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-40"
+          title="Descargar en Excel (.xlsx)">
+          Exportar Excel
+        </button>
         <button type="button" onClick={exportarCsv} disabled={ordenadas.length === 0}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-40">
-          Exportar CSV
+          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+          title="Descargar en CSV">
+          CSV
         </button>
         <button type="button" onClick={() => window.print()}
           className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
