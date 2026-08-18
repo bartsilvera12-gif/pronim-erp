@@ -49,6 +49,17 @@ export async function GET(request: NextRequest) {
     );
     const tU = `"${uSchemaQ.rows[0]?.table_schema ?? "public"}"."usuarios"`;
 
+    // ventas puede no tener columna de usuario/vendedora.
+    const vColQ = await pool.query<{ column_name: string }>(
+      `SELECT column_name FROM information_schema.columns WHERE table_schema = $1 AND table_name = 'ventas'`,
+      [schema],
+    );
+    const vCols = new Set(vColQ.rows.map((r) => r.column_name));
+    const userCol = ["created_by", "usuario_id", "vendedor_id", "created_by_id"].find((c) => vCols.has(c)) ?? null;
+    const hayUsuario = userCol != null;
+    const uJoin = hayUsuario ? `LEFT JOIN ${tU} u ON u.id = v.${userCol}` : "";
+    const uNombreGrp = hayUsuario ? "COALESCE(u.nombre, u.email, 'Sin usuario')" : "'Sin usuario'";
+
     const tblQ = await pool.query<{ table_name: string }>(
       `SELECT table_name FROM information_schema.tables
         WHERE table_schema = $1 AND table_name = 'metas_sucursal'`,
@@ -72,13 +83,13 @@ export async function GET(request: NextRequest) {
     if (hasta) push("v.fecha <  (? ::date + interval '1 day')", hasta);
     if (sucursalId) push("v.sucursal_id = ?::uuid", sucursalId);
     if (auth.sucursal_id) push("v.sucursal_id = ?::uuid", auth.sucursal_id);
-    if (usuarioId) push("v.created_by = ?::uuid", usuarioId);
+    if (usuarioId && hayUsuario) push(`v.${userCol} = ?::uuid`, usuarioId);
     conds.push("(v.estado IS NULL OR v.estado <> 'anulada')");
     conds.push("v.sucursal_id IS NOT NULL");
 
     const from = `${tV} v
        LEFT JOIN ${tS} s ON s.id = v.sucursal_id
-       LEFT JOIN ${tU} u ON u.id = v.created_by
+       ${uJoin}
        ${hayMetas ? `LEFT JOIN ${tM} m ON m.sucursal_id = v.sucursal_id AND COALESCE(m.activo,true) = true` : ""}`;
 
     // Metas por sucursal (para uso en subquery si aplica)
@@ -133,17 +144,18 @@ export async function GET(request: NextRequest) {
     const porSuc = Array.from(porSucMap.values()).sort((a, b) => b.ventas - a.ventas);
 
     // Por usuario (vendedora / cajera) — comisión proporcional al share dentro del día×sucursal
-    const porUsrRaw = await pool.query<{ usuario_id: string | null; usuario_nombre: string | null; dia: string; sucursal_id: string | null; ventas: string }>(
-      `SELECT v.created_by::text AS usuario_id,
-              COALESCE(u.nombre, u.email, 'Sin usuario') AS usuario_nombre,
+    const porUsrRaw = hayUsuario ? await pool.query<{ usuario_id: string | null; usuario_nombre: string | null; dia: string; sucursal_id: string | null; ventas: string }>(
+      `SELECT v.${userCol}::text AS usuario_id,
+              ${uNombreGrp} AS usuario_nombre,
               date_trunc('day', v.fecha)::date::text AS dia,
               v.sucursal_id::text,
               COALESCE(SUM(v.total),0)::text AS ventas
          FROM ${from} WHERE ${conds.join(" AND ")}
-        GROUP BY v.created_by, COALESCE(u.nombre, u.email, 'Sin usuario'),
+        GROUP BY v.${userCol}, ${uNombreGrp},
                  date_trunc('day', v.fecha)::date, v.sucursal_id`,
       params,
-    ).catch(() => ({ rows: [] as Array<{ usuario_id: string | null; usuario_nombre: string | null; dia: string; sucursal_id: string | null; ventas: string }> }));
+    ).catch(() => ({ rows: [] as Array<{ usuario_id: string | null; usuario_nombre: string | null; dia: string; sucursal_id: string | null; ventas: string }> }))
+    : { rows: [] as Array<{ usuario_id: string | null; usuario_nombre: string | null; dia: string; sucursal_id: string | null; ventas: string }> };
 
     // Índice de comisión pct por (día, sucursal)
     const pctBySucDia = new Map<string, number>();

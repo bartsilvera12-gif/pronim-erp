@@ -47,6 +47,18 @@ export async function GET(request: NextRequest) {
     const usuariosSchema = usuariosSchemaQ.rows[0]?.table_schema ?? "public";
     const tU = `"${usuariosSchema}"."usuarios"`;
 
+    // ventas puede no tener columna de usuario — detectamos cuál existe.
+    const vColQ = await pool.query<{ column_name: string }>(
+      `SELECT column_name FROM information_schema.columns WHERE table_schema = $1 AND table_name = 'ventas'`,
+      [schema],
+    );
+    const vCols = new Set(vColQ.rows.map((r) => r.column_name));
+    const userCol = ["created_by", "usuario_id", "vendedor_id", "created_by_id"].find((c) => vCols.has(c)) ?? null;
+    const hayUsuario = userCol != null;
+    const uJoin = hayUsuario ? `LEFT JOIN ${tU} u ON u.id = v.${userCol}` : "";
+    const uIdSel = hayUsuario ? `v.${userCol}::text` : "NULL::text";
+    const uNombreGrp = hayUsuario ? "COALESCE(u.nombre, u.email, 'Sin usuario')" : "'Sin usuario'";
+
     const sp = request.nextUrl.searchParams;
     const desde = sp.get("desde");
     const hasta = sp.get("hasta");
@@ -67,21 +79,22 @@ export async function GET(request: NextRequest) {
     if (sucursalId) push("v.sucursal_id = ?::uuid", sucursalId);
     if (auth.sucursal_id) push("v.sucursal_id = ?::uuid", auth.sucursal_id);
     if (motivo) push("COALESCE(v.descuento_motivo,'otro') = ?", motivo);
-    if (usuarioId) push("v.created_by = ?::uuid", usuarioId);
+    if (usuarioId && hayUsuario) push(`v.${userCol} = ?::uuid`, usuarioId);
     if (clienteId) push("v.cliente_id = ?::uuid", clienteId);
     if (q) {
       params.push(`%${q.toLowerCase()}%`);
       const p = `$${params.length}`;
+      const usuarioLike = hayUsuario ? `OR LOWER(COALESCE(u.nombre, u.email, '')) LIKE ${p}` : "";
       conds.push(`(LOWER(v.numero_control) LIKE ${p}
                    OR LOWER(COALESCE(c.empresa, c.nombre_contacto, c.nombre, '')) LIKE ${p}
-                   OR LOWER(COALESCE(u.nombre, u.email, '')) LIKE ${p})`);
+                   ${usuarioLike})`);
     }
     conds.push("(v.estado IS NULL OR v.estado <> 'anulada')");
 
     const fromJoin = `${tV} v
        LEFT JOIN ${tS} s ON s.id = v.sucursal_id
        LEFT JOIN ${tC} c ON c.id = v.cliente_id
-       LEFT JOIN ${tU} u ON u.id = v.created_by`;
+       ${uJoin}`;
 
     // Agregado por motivo
     const byMotivo = await pool.query<{
@@ -117,19 +130,20 @@ export async function GET(request: NextRequest) {
     ).catch(() => ({ rows: [] as Array<{ sucursal_id: string | null; sucursal_nombre: string | null; total: string; cnt: string }> }));
 
     // Agregado por usuario (cajera)
-    const byUsr = await pool.query<{
+    const byUsr = hayUsuario ? await pool.query<{
       usuario_id: string | null; usuario_nombre: string | null; total: string; cnt: string;
     }>(
-      `SELECT v.created_by::text AS usuario_id,
-              COALESCE(u.nombre, u.email, 'Sin usuario') AS usuario_nombre,
+      `SELECT v.${userCol}::text AS usuario_id,
+              ${uNombreGrp} AS usuario_nombre,
               COALESCE(SUM(v.descuento_general), 0)::text AS total,
               COUNT(*)::text                              AS cnt
          FROM ${fromJoin}
         WHERE ${conds.join(" AND ")}
-        GROUP BY v.created_by, COALESCE(u.nombre, u.email, 'Sin usuario')
+        GROUP BY v.${userCol}, ${uNombreGrp}
         ORDER BY total DESC`,
       params,
-    ).catch(() => ({ rows: [] as Array<{ usuario_id: string | null; usuario_nombre: string | null; total: string; cnt: string }> }));
+    ).catch(() => ({ rows: [] as Array<{ usuario_id: string | null; usuario_nombre: string | null; total: string; cnt: string }> }))
+    : { rows: [] as Array<{ usuario_id: string | null; usuario_nombre: string | null; total: string; cnt: string }> };
 
     // Ventas detalle (drill) — hasta 1000
     const ventas = await pool.query<{
@@ -144,8 +158,8 @@ export async function GET(request: NextRequest) {
               v.sucursal_id::text, s.nombre AS sucursal_nombre,
               v.cliente_id::text,
               COALESCE(c.empresa, c.nombre_contacto, c.nombre) AS cliente_nombre,
-              v.created_by::text AS usuario_id,
-              COALESCE(u.nombre, u.email) AS usuario_nombre
+              ${uIdSel} AS usuario_id,
+              ${hayUsuario ? "COALESCE(u.nombre, u.email)" : "NULL::text"} AS usuario_nombre
          FROM ${fromJoin}
         WHERE ${conds.join(" AND ")}
         ORDER BY v.fecha DESC
