@@ -51,7 +51,16 @@ export default function ClientesSegmentosPage() {
   const [cargando, setCargando] = useState(true);
 
   // Quick-filters de segmento (pegan al server, muestran baseline counts).
-  const [filtros, setFiltros] = useState<Set<SegmentoSlug>>(new Set());
+  // Se pueden prefijar por URL (?vip=1&con_credito=1…) para que un indicador
+  // del dashboard abra la lista ya filtrada.
+  const [filtros, setFiltros] = useState<Set<SegmentoSlug>>(() => {
+    const s = new Set<SegmentoSlug>();
+    if (typeof window !== "undefined") {
+      const p = new URLSearchParams(window.location.search);
+      for (const k of FLAGS_POS) if (p.get(k) === "1") s.add(k);
+    }
+    return s;
+  });
   const [error, setError] = useState<string | null>(null);
 
   function toggleFiltro(slug: SegmentoSlug) {

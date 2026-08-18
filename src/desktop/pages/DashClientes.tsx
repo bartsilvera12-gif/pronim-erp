@@ -133,43 +133,48 @@ export default function DashClientes({ desde, hasta }: { desde: string; hasta: s
         <KpiCard icon={<Users className="h-5 w-5" />} tone="rose"
           label="Total clientes" value={fmtN(k.total)}
           tip="Total de clientes que matchean el filtro actual (segmento, sucursal, búsqueda)."
-          href="/clientes" />
+          href="/clientes/segmentos" />
         <KpiCard icon={<Crown className="h-5 w-5" />} tone="amber"
           label="VIP" value={fmtN(k.vip)}
-          tip="total_historico ≥ Gs. 5.000.000 o ≥ 6 compras en 90 días."
-          href="/clientes?segmento=vip" />
+          tip="Marcados como VIP."
+          href="/clientes/segmentos?vip=1" />
         <KpiCard icon={<Star className="h-5 w-5" />} tone="emerald"
           label="Frecuentes" value={fmtN(k.habitual)}
           tip="Con compras pero no VIP y no Dormido."
-          href="/clientes" />
+          href="/clientes/segmentos" />
         <KpiCard icon={<UserPlus className="h-5 w-5" />} tone="sky"
           label="Nuevos" value={fmtN(k.nuevo)}
-          tip="Sin compras históricas registradas."
-          href="/clientes?segmento=nuevos" />
+          tip="Alta este mes."
+          href="/clientes/segmentos?nuevos_mes=1" />
         <KpiCard icon={<Moon className="h-5 w-5" />} tone="lavender"
           label="Dormidos" value={fmtN(k.dormido)}
-          tip="Con compras pero > 120 días sin visita."
-          href="/clientes?segmento=dormidos" />
+          tip="Más de 90 días sin visita."
+          href="/clientes/segmentos?inactivos_90d=1" />
       </div>
 
       {/* Fila 2: actividad + crédito + cadencia */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         <KpiCard icon={<Truck className="h-5 w-5" />} tone="sky"
           label="Solo traen" value={fmtN(k.solo_trae)}
-          tip="Clientes con recepciones pero ninguna venta." />
+          tip="Clientes con recepciones pero ninguna venta."
+          href="/clientes/segmentos" />
         <KpiCard icon={<ShoppingBag className="h-5 w-5" />} tone="emerald"
           label="Solo compran" value={fmtN(k.solo_lleva)}
-          tip="Clientes con ventas pero ninguna recepción." />
+          tip="Clientes con ventas pero ninguna recepción."
+          href="/clientes/segmentos" />
         <KpiCard icon={<ArrowLeftRight className="h-5 w-5" />} tone="peach"
           label="Ambos (trae + lleva)" value={fmtN(k.ambos)}
-          tip="Clientes con recepciones y ventas." />
+          tip="Clientes con recepciones y ventas."
+          href="/clientes/segmentos" />
         <KpiCard icon={<Wallet className="h-5 w-5" />} tone="amber"
           label="Crédito disponible total" value={fmtGs(k.credito_disponible_total)}
-          tip="SUM de saldos > 0 de todos los clientes en el filtro." />
+          tip="SUM de saldos > 0 de todos los clientes en el filtro."
+          href="/clientes/segmentos?con_credito=1" />
         <KpiCard icon={<CalendarDays className="h-5 w-5" />} tone="lavender"
           label="Prom. días desde última visita"
           value={k.prom_dias_entre_visitas != null ? `${k.prom_dias_entre_visitas} días` : "—"}
-          tip="AVG de días desde la última visita, sobre clientes con al menos 1 visita." />
+          tip="AVG de días desde la última visita, sobre clientes con al menos 1 visita."
+          href="/clientes/segmentos" />
       </div>
 
       {/* Distribución donut + barras + segmento principal */}
