@@ -852,6 +852,28 @@ export default function VentasPage() {
                 })
               )}
             </tbody>
+            {!cargandoLista && filtradasOrdenadas.length > 0 && (() => {
+              const totalMonto = filtradasOrdenadas.reduce((s, v) => s + (Number(v.total) || 0), 0);
+              const totalCant = filtradasOrdenadas.reduce((s, v) => s + v.items.reduce((si, i) => si + i.cantidad, 0), 0);
+              const totalItems = filtradasOrdenadas.reduce((s, v) => s + v.items.length, 0);
+              let etiquetaPuesta = false;
+              return (
+                <tfoot className="border-t-2 border-slate-300 bg-slate-50">
+                  <tr>
+                    {colVis.map((k) => {
+                      if (k === "total") return <td key={k} className="py-3 pr-4 text-right tabular-nums font-bold text-slate-900 align-middle">{formatGs(totalMonto)}</td>;
+                      if (k === "cant_total") return <td key={k} className="py-3 pr-4 text-right tabular-nums font-bold text-slate-800 align-middle hidden lg:table-cell">{totalCant}</td>;
+                      if (k === "items_count") return <td key={k} className="py-3 pr-4 text-center tabular-nums font-bold text-slate-800 align-middle hidden lg:table-cell">{totalItems}</td>;
+                      if (!etiquetaPuesta && (k === "numero_control" || k === "productos")) {
+                        etiquetaPuesta = true;
+                        return <td key={k} className="py-3 pr-4 text-xs font-bold uppercase tracking-wide text-slate-600 align-middle">{t("Total")} ({filtradasOrdenadas.length})</td>;
+                      }
+                      return <td key={k} className="py-3 pr-4" />;
+                    })}
+                  </tr>
+                </tfoot>
+              );
+            })()}
           </table>
         </EdgeScrollArea>
 
