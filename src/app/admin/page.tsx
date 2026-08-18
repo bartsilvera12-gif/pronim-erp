@@ -21,6 +21,7 @@ const SECCIONES: SeccionAdmin[] = [
   { href: "/admin/categorias",         emoji: "📂", titulo: "Categorías",             descripcion: "Categorías generales del catálogo.",                                   tono: "slate" },
   { href: "/admin/promociones",        emoji: "🎁", titulo: "Promociones y campañas", descripcion: "Descuentos automáticos, cupones, cashback.",                            tono: "fuchsia" },
   { href: "/admin/motivos-descuento",  emoji: "💰", titulo: "Motivos de descuento",   descripcion: "Lista editable que aparece al cerrar una venta con descuento.",         tono: "amber" },
+  { href: "/admin/cartera",            emoji: "🎟️", titulo: "Crédito y cashback",     descripcion: "Vencimiento del cashback (30 días default). El crédito no vence.",      tono: "emerald" },
   { href: "/admin/categorias-clientes", emoji: "🧑‍🤝‍🧑", titulo: "Categorías de clientes", descripcion: "Umbrales VIP / dormido / sin volver / nuevo — configurables.",       tono: "fuchsia" },
   { href: "/configuracion/tipos-prenda", emoji: "👕", titulo: "Tipos de producto",       descripcion: "Catálogo de tipos (remera, jean, calzado…) usado en evaluaciones.",     tono: "slate" },
   { href: "/admin/formas-pago",        emoji: "💳", titulo: "Formas de pago",         descripcion: "Renombrar, reordenar o desactivar métodos (efectivo / tarjeta / QR…).",  tono: "emerald" },

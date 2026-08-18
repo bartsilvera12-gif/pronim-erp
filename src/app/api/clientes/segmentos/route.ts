@@ -67,6 +67,20 @@ export async function GET(request: NextRequest) {
     const hasVentas = tables.has("ventas");
     const hasCred = tables.has("cliente_creditos_movimientos");
 
+    // ¿La tabla de créditos tiene la columna vencimiento_at? Si sí, el
+    // cashback vencido (vencimiento_at < now()) NO cuenta como saldo disponible.
+    let credHasVenc = false;
+    if (hasCred) {
+      const ccQ = await pool.query<{ column_name: string }>(
+        `SELECT column_name FROM information_schema.columns
+          WHERE table_schema = $1 AND table_name = 'cliente_creditos_movimientos' AND column_name = 'vencimiento_at'`,
+        [schema],
+      );
+      credHasVenc = ccQ.rows.length > 0;
+    }
+    // Cashback ENTRADA solo suma si no está vencido.
+    const cashVigente = credHasVenc ? "AND (m.vencimiento_at IS NULL OR m.vencimiento_at >= now())" : "";
+
     const colQ = await pool.query<{ column_name: string }>(
       `SELECT column_name FROM information_schema.columns
         WHERE table_schema = $1 AND table_name = 'clientes'`,
@@ -107,9 +121,9 @@ export async function GET(request: NextRequest) {
       creditos AS (
         SELECT m.cliente_id,
                COALESCE(SUM(CASE WHEN tipo IN ('ENTRADA','AJUSTE') THEN monto ELSE -monto END),0)::numeric AS saldo_credito,
-               COALESCE(SUM(CASE WHEN tipo='ENTRADA' AND origen='cashback' THEN monto
+               GREATEST(0, COALESCE(SUM(CASE WHEN tipo='ENTRADA' AND origen='cashback' ${cashVigente} THEN monto
                                  WHEN tipo='SALIDA' AND origen='cashback' THEN -monto
-                                 ELSE 0 END),0)::numeric AS saldo_cashback
+                                 ELSE 0 END),0))::numeric AS saldo_cashback
           FROM ${credT} m
          WHERE m.empresa_id = $1
          GROUP BY m.cliente_id

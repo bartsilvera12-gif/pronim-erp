@@ -65,9 +65,15 @@ export async function GET(
 
       let saldoCredito = 0, saldoCashback = 0, saldoConsignacion = 0;
       if (tieneCategoria) {
+        // Cashback ENTRADA vencido (vencimiento_at < now()) NO cuenta como saldo.
+        const cashVencidoCero = tieneVencimiento
+          ? `WHEN categoria='cashback' AND tipo='ENTRADA' AND vencimiento_at IS NOT NULL AND vencimiento_at < now() THEN 0`
+          : "";
         const saldoQ = await client.query<{ categoria: string; saldo: string }>(
           `SELECT categoria,
-                  COALESCE(SUM(CASE WHEN tipo IN ('ENTRADA','AJUSTE') THEN monto ELSE -monto END),0)::text AS saldo
+                  COALESCE(SUM(CASE ${cashVencidoCero}
+                                    WHEN tipo IN ('ENTRADA','AJUSTE') THEN monto
+                                    ELSE -monto END),0)::text AS saldo
              FROM ${creditosT}
             WHERE empresa_id = $1 AND cliente_id = $2
             GROUP BY categoria`,

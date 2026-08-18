@@ -38,6 +38,7 @@ import {
   ValidationError,
   IdempotencyConflictError,
 } from "@/lib/atencion/server/errors";
+import { fetchCarteraConfig } from "@/lib/cartera/cartera-config";
 
 export interface ConfirmarAtencionInput {
   schema: string;
@@ -513,13 +514,20 @@ export async function confirmarAtencionEnClientePg(
           );
           const carteraSet = new Set(carteraCols.rows.map((r) => r.column_name));
           if (carteraSet.has("categoria") && carteraSet.has("promocion_id")) {
+            const tieneVenc = carteraSet.has("vencimiento_at");
+            const cfg = await fetchCarteraConfig(schema, p.empresaId);
+            const dias = cfg.cashback_vencimiento_dias;
+            const vencSql = tieneVenc
+              ? (dias > 0 ? `, now() + (${dias} * interval '1 day')` : `, NULL::timestamptz`)
+              : "";
+            const vencCol = tieneVenc ? ", vencimiento_at" : "";
             await client.query(
               `INSERT INTO ${creditosT} (
                  empresa_id, cliente_id, tipo, monto, origen, categoria,
                  promocion_id,
                  referencia_id, referencia_tipo, referencia_numero,
-                 observaciones, created_by, usuario_nombre
-               ) VALUES ($1,$2,'ENTRADA',$3,'cashback','cashback',$4,$5,'venta',$6,$7,$8,$9)`,
+                 observaciones, created_by, usuario_nombre${vencCol}
+               ) VALUES ($1,$2,'ENTRADA',$3,'cashback','cashback',$4,$5,'venta',$6,$7,$8,$9${vencSql})`,
               [
                 p.empresaId, p.clienteId, promoEvaluada.cashback,
                 promoEvaluada.promocionId,
@@ -566,6 +574,19 @@ export async function confirmarAtencionEnClientePg(
       const byId = new Map(beneficiosCfg.map((b) => [String(b.id), b]));
 
       const eventosT = quoteSchemaTable(schema, "cliente_eventos");
+
+      // Detección de columnas de cartera (una vez para todo el loop) +
+      // config de vencimiento de cashback.
+      const benCarteraCols = await client.query<{ column_name: string }>(
+        `SELECT column_name FROM information_schema.columns
+          WHERE table_schema = $1 AND table_name = 'cliente_creditos_movimientos'`,
+        [schema],
+      );
+      const benCarteraSet = new Set(benCarteraCols.rows.map((r) => r.column_name));
+      const benTieneCategoria = benCarteraSet.has("categoria");
+      const benTieneVenc = benCarteraSet.has("vencimiento_at");
+      const carteraCfg = await fetchCarteraConfig(schema, p.empresaId);
+      const cashbackDias = carteraCfg.cashback_vencimiento_dias;
       for (const b of p.beneficiosCredito) {
         const monto = Math.round(Number(b.monto) || 0);
         if (!(monto > 0)) {
@@ -620,12 +641,18 @@ export async function confirmarAtencionEnClientePg(
         const tipoEvento = cfgB.tipo_evento;
         // Cashback → origen='cashback' (queda separado en la ficha). Resto → 'ajuste_manual'.
         const origenCredito = esCashback ? "cashback" : "ajuste_manual";
+        // Categoría + vencimiento: solo el cashback vence (según config).
+        const benCols = ["empresa_id", "cliente_id", "tipo", "monto", "origen"];
+        const benVals = ["$1", "$2", "'ENTRADA'", "$3", "$4"];
+        if (benTieneCategoria) { benCols.push("categoria"); benVals.push(esCashback ? "'cashback'" : "'credito'"); }
+        benCols.push("referencia_tipo", "referencia_numero", "observaciones", "created_by", "usuario_nombre");
+        benVals.push("$5", "$6", "$7", "$8", "$9");
+        if (benTieneVenc && esCashback && cashbackDias > 0) {
+          benCols.push("vencimiento_at");
+          benVals.push(`now() + (${cashbackDias} * interval '1 day')`);
+        }
         await client.query(
-          `INSERT INTO ${creditosT} (
-             empresa_id, cliente_id, tipo, monto, origen,
-             referencia_tipo, referencia_numero, observaciones,
-             created_by, usuario_nombre
-           ) VALUES ($1,$2,'ENTRADA',$3,$4,$5,$6,$7,$8,$9)`,
+          `INSERT INTO ${creditosT} (${benCols.join(", ")}) VALUES (${benVals.join(", ")})`,
           [
             p.empresaId, p.clienteId, monto, origenCredito,
             tipoEvento, cfgB.id,

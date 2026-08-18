@@ -7,6 +7,7 @@ import { postgrestGet, getAccessTokenForRequest } from "@/lib/supabase/postgrest
 import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema";
 import { getChatPostgresPool, quoteSchemaTable } from "@/lib/supabase/chat-pg-pool";
 import { assertAllowedChatDataSchema } from "@/lib/supabase/chat-data-schema";
+import { fetchCarteraConfig } from "@/lib/cartera/cartera-config";
 
 const TIPOS_VALIDOS = new Set([
   "reclamo",
@@ -156,13 +157,33 @@ export async function POST(
       const evento = ins.rows[0];
 
       if (generarCredito) {
+        // Detectar columnas de cartera (categoria / vencimiento_at) para poblar
+        // correctamente el cashback: categoria='cashback' + vencimiento según config.
+        const carteraCols = await client.query<{ column_name: string }>(
+          `SELECT column_name FROM information_schema.columns
+            WHERE table_schema = $1 AND table_name = 'cliente_creditos_movimientos'`,
+          [schema],
+        );
+        const carteraSet = new Set(carteraCols.rows.map((r) => r.column_name));
+        const tieneCategoria = carteraSet.has("categoria");
+        const tieneVenc = carteraSet.has("vencimiento_at");
+
+        const cfg = await fetchCarteraConfig(schema, auth.empresa_id);
+        const dias = cfg.cashback_vencimiento_dias;
+        // vencimiento = now() + dias, o NULL si dias = 0 (sin vencimiento)
+        const vencExpr = tieneVenc
+          ? (dias > 0 ? `now() + ($8::int * interval '1 day')` : `NULL::timestamptz`)
+          : null;
+
+        const cols = ["empresa_id", "cliente_id", "tipo", "monto", "origen"];
+        const vals = ["$1", "$2", "'ENTRADA'", "$3", "'cashback'"];
+        if (tieneCategoria) { cols.push("categoria"); vals.push("'cashback'"); }
+        cols.push("referencia_tipo", "referencia_numero", "observaciones", "created_by", "usuario_nombre");
+        vals.push("'cashback'", "$4", "$5", "$6", "$7");
+        if (vencExpr) { cols.push("vencimiento_at"); vals.push(vencExpr); }
+
         await client.query(
-          `INSERT INTO ${creditosT} (
-             empresa_id, cliente_id, tipo, monto, origen,
-             referencia_tipo, referencia_numero, observaciones,
-             created_by, usuario_nombre
-           ) VALUES ($1, $2, 'ENTRADA', $3, 'ajuste_manual',
-                     'cashback', $4, $5, $6, $7)`,
+          `INSERT INTO ${creditosT} (${cols.join(", ")}) VALUES (${vals.join(", ")})`,
           [
             auth.empresa_id,
             clienteId,
@@ -171,6 +192,7 @@ export async function POST(
             `Cashback: ${descripcion.slice(0, 200)}`,
             auth.user.id ?? null,
             auth.nombre ?? null,
+            ...(vencExpr && dias > 0 ? [dias] : []),
           ],
         );
       }
