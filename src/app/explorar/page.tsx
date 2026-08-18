@@ -3,12 +3,12 @@
 import Link from "next/link";
 
 const SECCIONES = [
-  { href: "/explorar/ventas",        emoji: "🧾", titulo: "Ventas",                 desc: "Cada venta: fecha, tienda, cliente, valor, forma de pago, descuento, cantidad." },
-  { href: "/clientes/segmentos",     emoji: "🧑‍🤝‍🧑", titulo: "Clientes",               desc: "Cartera completa: última compra, total comprado, crédito, cashback, VIP." },
-  { href: "/explorar/evaluaciones",  emoji: "👕", titulo: "Compras / Evaluaciones",  desc: "Prendas evaluadas por cliente: sucursal, evaluadora, total pagado, estado." },
-  { href: "/explorar/inventario",    emoji: "📦", titulo: "Inventario",              desc: "Productos: stock, valor, costo, precio, categoría, tipo, bajo/sin stock." },
-  { href: "/explorar/creditos",      emoji: "💰", titulo: "Créditos y Cashback",     desc: "Movimientos de cartera: cliente, tipo, categoría, origen, monto." },
-  { href: "/explorar/caja",          emoji: "💵", titulo: "Cierres de caja",         desc: "Turnos: apertura/cierre, contado vs esperado, diferencias, por usuario." },
+  { href: "/explorar/ventas",        titulo: "Ventas",                 desc: "Cada venta: fecha, tienda, cliente, valor, forma de pago, descuento, cantidad." },
+  { href: "/clientes/segmentos",     titulo: "Clientes",               desc: "Cartera completa: última compra, total comprado, crédito, cashback, VIP." },
+  { href: "/explorar/evaluaciones",  titulo: "Compras / Evaluaciones",  desc: "Prendas evaluadas por cliente: sucursal, evaluadora, total pagado, estado." },
+  { href: "/explorar/inventario",    titulo: "Inventario",              desc: "Productos: stock, valor, costo, precio, categoría, tipo, bajo/sin stock." },
+  { href: "/explorar/creditos",      titulo: "Créditos y Cashback",     desc: "Movimientos de cartera: cliente, tipo, categoría, origen, monto." },
+  { href: "/explorar/caja",          titulo: "Cierres de caja",         desc: "Turnos: apertura/cierre, contado vs esperado, diferencias, por usuario." },
 ];
 
 export default function ExplorarHubPage() {
@@ -27,7 +27,6 @@ export default function ExplorarHubPage() {
           <Link key={s.href} href={s.href}
             className="group rounded-xl border border-slate-200 bg-white p-4 shadow-sm hover:border-[#4FAEB2]/50 hover:shadow transition">
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-2xl">{s.emoji}</span>
               <h2 className="text-sm font-bold text-slate-800 group-hover:text-[#3F8E91]">{s.titulo}</h2>
             </div>
             <p className="text-xs text-slate-500">{s.desc}</p>
