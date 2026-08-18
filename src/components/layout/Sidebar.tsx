@@ -168,6 +168,7 @@ const MENU_STRUCTURE_FULL: MenuItem[] = [
     { label: "Categorías", href: "/inventario/categorias" },
   ]},
   { key: "clientes", slug: "clientes", label: "Clientes", href: "/clientes/segmentos", icon: Users },
+  { key: "explorar", slug: "explorar", label: "Explorar (Excel)", href: "/explorar", icon: Search },
   {
     key: "compras",
     slug: "compras",

@@ -57,6 +57,9 @@ export function isModuleSlugGranted(routeSlug: string, grantedSlugs: Set<string>
     return true;
   }
   if (routeSlug === "gestion-clientes" && grantedSlugs.has("clientes")) return true;
+  // Explorar (Excel): hub de exploración de datos. Visible si tiene acceso a
+  // cualquiera de las áreas que explora (ventas / clientes / inventario).
+  if (routeSlug === "explorar" && (grantedSlugs.has("ventas") || grantedSlugs.has("clientes") || grantedSlugs.has("inventario"))) return true;
   if (routeSlug === "notas_credito" && grantedSlugs.has("ventas")) return true;
   // Otros ingresos: comparte el paraguas de finanzas (gastos).
   if (routeSlug === "otros_ingresos" && (grantedSlugs.has("gastos") || grantedSlugs.has("pagos"))) return true;
