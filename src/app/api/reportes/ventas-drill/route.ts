@@ -120,12 +120,14 @@ export async function GET(request: NextRequest) {
       params,
     ).catch(() => ({ rows: [] as Array<{ metodo_pago: string | null; total: string; cnt: string }> }));
 
+    const tVI = quoteSchemaTable(schema, "ventas_items");
     const ventas = await pool.query<{
       id: string; numero_control: string; fecha: string; total: string;
       descuento_general: string; metodo_pago: string | null; estado: string | null;
       sucursal_id: string | null; sucursal_nombre: string | null;
       cliente_id: string | null; cliente_nombre: string | null;
       usuario_id: string | null; usuario_nombre: string | null;
+      cant_productos: string;
     }>(
       `SELECT v.id::text, v.numero_control, v.fecha, v.total::text,
               COALESCE(v.descuento_general,0)::text AS descuento_general,
@@ -134,11 +136,12 @@ export async function GET(request: NextRequest) {
               v.cliente_id::text,
               COALESCE(c.empresa, c.nombre_contacto, c.nombre) AS cliente_nombre,
               v.created_by::text AS usuario_id,
-              COALESCE(u.nombre, u.email) AS usuario_nombre
+              COALESCE(u.nombre, u.email) AS usuario_nombre,
+              COALESCE((SELECT SUM(it.cantidad) FROM ${tVI} it WHERE it.venta_id = v.id),0)::text AS cant_productos
          FROM ${from} WHERE ${conds.join(" AND ")}
-        ORDER BY v.fecha DESC LIMIT 1000`,
+        ORDER BY v.fecha DESC LIMIT 2000`,
       params,
-    ).catch(() => ({ rows: [] as Array<{ id: string; numero_control: string; fecha: string; total: string; descuento_general: string; metodo_pago: string | null; estado: string | null; sucursal_id: string | null; sucursal_nombre: string | null; cliente_id: string | null; cliente_nombre: string | null; usuario_id: string | null; usuario_nombre: string | null }> }));
+    ).catch(() => ({ rows: [] as Array<{ id: string; numero_control: string; fecha: string; total: string; descuento_general: string; metodo_pago: string | null; estado: string | null; sucursal_id: string | null; sucursal_nombre: string | null; cliente_id: string | null; cliente_nombre: string | null; usuario_id: string | null; usuario_nombre: string | null; cant_productos: string }> }));
 
     const opSuc = await pool.query<{ id: string; nombre: string }>(
       `SELECT id::text, nombre FROM ${tS} WHERE empresa_id = $1 ORDER BY nombre`,
@@ -165,6 +168,7 @@ export async function GET(request: NextRequest) {
         ...r,
         total: Number(r.total),
         descuento_general: Number(r.descuento_general),
+        cant_productos: Number(r.cant_productos),
       })),
       opciones: {
         sucursales: opSuc.rows,
