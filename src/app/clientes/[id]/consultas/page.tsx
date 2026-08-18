@@ -2,7 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams } from "next/navigation";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 
 function formatGs(n: number): string {
@@ -115,8 +115,10 @@ type TipoEvento = "reclamo" | "elogio" | "beneficio" | "descuento" | "cashback" 
 export default function ConsultasClientePage() {
   const params = useParams<{ id: string }>();
   const clienteId = params?.id ?? "";
-  const searchParams = useSearchParams();
-  const isEmbed = searchParams?.get("embed") === "1";
+  const [isEmbed, setIsEmbed] = useState(false);
+  useEffect(() => {
+    setIsEmbed(new URLSearchParams(window.location.search).get("embed") === "1");
+  }, []);
 
   const [kpis, setKpis] = useState<KPIs | null>(null);
   const [timeline, setTimeline] = useState<TimelineEvent[]>([]);

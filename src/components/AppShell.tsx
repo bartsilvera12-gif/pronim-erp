@@ -1,6 +1,7 @@
 "use client";
 
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import Sidebar from "./layout/Sidebar";
 import Header from "./layout/Header";
 
@@ -8,12 +9,14 @@ const STANDALONE_ROUTES = ["/login"];
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
   const isStandalone = pathname && STANDALONE_ROUTES.includes(pathname);
-  // Modo embebido (iframe dentro de un modal): sin sidebar ni header,
-  // solo el contenido con scroll propio. Se usa en el modal de detalle de
-  // cliente desde la caja.
-  const isEmbed = searchParams?.get("embed") === "1";
+  // Modo embebido (iframe dentro de un modal): sin sidebar ni header, solo
+  // el contenido con scroll propio. Leemos el flag de la URL client-side
+  // (sin useSearchParams para no forzar Suspense boundary en todas las rutas).
+  const [isEmbed, setIsEmbed] = useState(false);
+  useEffect(() => {
+    setIsEmbed(new URLSearchParams(window.location.search).get("embed") === "1");
+  }, [pathname]);
 
   if (isStandalone) {
     return <>{children}</>;
