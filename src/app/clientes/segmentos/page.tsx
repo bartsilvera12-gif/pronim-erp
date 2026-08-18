@@ -127,6 +127,23 @@ export default function ClientesSegmentosPage() {
   const columnasVis = useMemo(() => COLUMNAS.filter((c) => colsVis.has(c.key)), [colsVis]);
   const filtrosActivos = useMemo(() => segmentos.filter((s) => filtros.has(s.slug)), [segmentos, filtros]);
 
+  // Ordenar por última compra (fecha), más reciente primero; sin compras al final.
+  const clientesOrdenados = useMemo(() => {
+    return [...clientes].sort((a, b) => {
+      const ta = a.ultima_venta_at ? new Date(a.ultima_venta_at).getTime() : 0;
+      const tb = b.ultima_venta_at ? new Date(b.ultima_venta_at).getTime() : 0;
+      return tb - ta;
+    });
+  }, [clientes]);
+
+  // Totales de las columnas monetarias / conteo (para la fila final).
+  const totales = useMemo(() => ({
+    compras: clientes.reduce((s, c) => s + (Number(c.cnt_ventas) || 0), 0),
+    total_comprado: clientes.reduce((s, c) => s + (Number(c.total_comprado) || 0), 0),
+    credito: clientes.reduce((s, c) => s + (Number(c.saldo_credito) || 0), 0),
+    cashback: clientes.reduce((s, c) => s + (Number(c.saldo_cashback) || 0), 0),
+  }), [clientes]);
+
   function toggleCol(k: ColKey) {
     setColsVis((prev) => {
       const s = new Set(prev);
@@ -338,13 +355,13 @@ export default function ClientesSegmentosPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {clientes.map((c) => (
+                {clientesOrdenados.map((c) => (
                   <tr key={c.id} className="hover:bg-slate-50">
                     {columnasVis.map((col) => {
                       if (col.key === "nombre")         return <td key={col.key} className="px-3 py-2 text-xs text-slate-800 font-medium">{c.nombre}</td>;
                       if (col.key === "contacto")       return <td key={col.key} className="px-3 py-2 text-xs text-slate-600"><div>{c.telefono ?? ""}</div>{c.email && <div className="text-[10px] text-slate-400">{c.email}</div>}</td>;
                       if (col.key === "vip")            return <td key={col.key} className="px-3 py-2 text-center"><button type="button" onClick={() => toggleVip(c)} title={c.es_vip ? "Quitar VIP" : "Marcar VIP"} className={`text-lg leading-none transition print:hidden ${c.es_vip ? "opacity-100" : "opacity-30 hover:opacity-70"}`}>{c.es_vip ? "⭐" : "☆"}</button><span className="hidden print:inline text-slate-700">{c.es_vip ? "VIP" : ""}</span></td>;
-                      if (col.key === "ultima")         return <td key={col.key} className="px-3 py-2 text-xs text-slate-600 whitespace-nowrap">{fmtFechaCorta(c.ultima_venta_at)}</td>;
+                      if (col.key === "ultima")         return <td key={col.key} className="px-3 py-2 text-xs text-slate-600 whitespace-nowrap">{fmtFechaAbs(c.ultima_venta_at)}</td>;
                       if (col.key === "compras")        return <td key={col.key} className="px-3 py-2 text-right tabular-nums text-xs text-slate-600">{c.cnt_ventas}</td>;
                       if (col.key === "total_comprado") return <td key={col.key} className="px-3 py-2 text-right tabular-nums text-xs text-slate-700">{fmt(c.total_comprado)}</td>;
                       if (col.key === "credito")        return <td key={col.key} className="px-3 py-2 text-right tabular-nums font-semibold text-emerald-700">{Number(c.saldo_credito) > 0 ? fmt(c.saldo_credito) : "—"}</td>;
@@ -359,6 +376,20 @@ export default function ClientesSegmentosPage() {
                   </tr>
                 ))}
               </tbody>
+              <tfoot className="border-t-2 border-slate-200 bg-slate-50">
+                <tr>
+                  {columnasVis.map((col, i) => {
+                    if (col.key === "compras")        return <td key={col.key} className="px-3 py-2 text-right tabular-nums text-xs font-bold text-slate-800">{totales.compras}</td>;
+                    if (col.key === "total_comprado") return <td key={col.key} className="px-3 py-2 text-right tabular-nums text-xs font-bold text-slate-800">{fmt(totales.total_comprado)}</td>;
+                    if (col.key === "credito")        return <td key={col.key} className="px-3 py-2 text-right tabular-nums text-xs font-bold text-emerald-700">{fmt(totales.credito)}</td>;
+                    if (col.key === "cashback")       return <td key={col.key} className="px-3 py-2 text-right tabular-nums text-xs font-bold text-pink-700">{fmt(totales.cashback)}</td>;
+                    // Primera celda: etiqueta TOTAL
+                    if (i === 0)                      return <td key={col.key} className="px-3 py-2 text-xs font-bold text-slate-700 uppercase">Total ({clientes.length})</td>;
+                    return <td key={col.key} className="px-3 py-2" />;
+                  })}
+                  <td className="px-3 py-2 print:hidden" />
+                </tr>
+              </tfoot>
             </table>
           </div>
         )}
