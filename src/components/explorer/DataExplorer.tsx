@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { Fragment, useMemo, useState, type ReactNode } from "react";
 // xlsx se carga dinámicamente al exportar (chunk aparte) para no inflar el
 // bundle de cada página de explorador ni la memoria del build.
 
@@ -85,8 +85,11 @@ export function DataExplorer<T>(props: {
   const [q, setQ] = useState("");
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [groupKey, setGroupKey] = useState<string>(""); // "" = sin agrupar
 
   const colsVis = useMemo(() => columns.filter((c) => visibles.has(c.key)), [columns, visibles]);
+  // Columnas por las que tiene sentido agrupar (texto / enum / fecha).
+  const groupables = useMemo(() => columns.filter((c) => c.type === "text" || c.type === "enum" || c.type === "date"), [columns]);
 
   function toggleCol(k: string) {
     setVisibles((prev) => {
@@ -186,6 +189,41 @@ export function DataExplorer<T>(props: {
     return out;
   }, [colsVis, ordenadas]);
   const hayTotales = colsVis.some((c) => c.total);
+  const sumCols = colsVis.filter((c) => c.total === "sum");
+
+  // ── Agrupación (tipo tabla dinámica) ────────────────────────────────
+  // Si groupKey está activo, dividimos las filas por el valor de esa columna,
+  // con subtotal + media (promedio) por grupo. Los grupos se ordenan por el
+  // primer subtotal (sum) descendente; si no hay sum, por cantidad.
+  const grupos = useMemo(() => {
+    if (!groupKey) return null;
+    const gcol = columns.find((c) => c.key === groupKey);
+    if (!gcol) return null;
+    const map = new Map<string, T[]>();
+    for (const row of ordenadas) {
+      const raw = gcol.get(row);
+      const label = gcol.type === "date" ? fmtDate(raw) : (raw == null || raw === "" ? "— (sin dato)" : String(raw));
+      const arr = map.get(label) ?? [];
+      arr.push(row);
+      map.set(label, arr);
+    }
+    const primeraSum = sumCols[0];
+    const lista = Array.from(map.entries()).map(([label, rows]) => {
+      const subt: Record<string, number> = {};
+      const media: Record<string, number> = {};
+      for (const c of sumCols) {
+        const s = rows.reduce((acc, r) => acc + (Number(c.get(r)) || 0), 0);
+        subt[c.key] = s;
+        media[c.key] = rows.length > 0 ? s / rows.length : 0;
+      }
+      return { label, rows, subt, media, count: rows.length };
+    });
+    lista.sort((a, b) => {
+      if (primeraSum) return (b.subt[primeraSum.key] ?? 0) - (a.subt[primeraSum.key] ?? 0);
+      return b.count - a.count;
+    });
+    return lista;
+  }, [groupKey, columns, ordenadas, sumCols]);
 
   const filtrosActivos = Object.entries(filtros).filter(([, f]) =>
     (f.text && f.text.trim()) || (f.numA !== undefined && f.numA !== "") ||
@@ -286,6 +324,17 @@ export function DataExplorer<T>(props: {
         {toolbarExtra}
         <input type="text" placeholder="Buscar en todo…" value={q} onChange={(e) => setQ(e.target.value)}
           className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm min-w-[180px]" />
+
+        {groupables.length > 0 && (
+          <div className="inline-flex items-center gap-1">
+            <span className="text-[11px] text-slate-500 whitespace-nowrap">Agrupar por:</span>
+            <select value={groupKey} onChange={(e) => setGroupKey(e.target.value)}
+              className={`rounded-lg border px-2 py-1.5 text-xs font-semibold ${groupKey ? "border-[#4FAEB2] bg-[#4FAEB2]/10 text-[#3F8E91]" : "border-slate-200 bg-white text-slate-700"}`}>
+              <option value="">— sin agrupar —</option>
+              {groupables.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
+            </select>
+          </div>
+        )}
 
         <div className="relative">
           <button type="button" onClick={() => { setColPickerOpen((v) => !v); setFiltrosOpen(false); }}
@@ -446,29 +495,71 @@ export function DataExplorer<T>(props: {
                 {detailHref && <th className="px-3 py-2 print:hidden" />}
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
-              {ordenadas.slice(0, 1000).map((row, i) => (
-                <tr key={i} className="hover:bg-slate-50">
-                  {colsVis.map((c) => (
-                    <td key={c.key} className={`px-3 py-2 text-xs text-slate-700 ${alignCls(c)} ${(c.type === "number" || c.type === "money") ? "tabular-nums" : ""}`}>
-                      {celda(c, row)}
-                    </td>
-                  ))}
-                  {detailHref && (
-                    <td className="px-3 py-2 print:hidden">
-                      <a href={detailHref(row)} className="text-[#3F8E91] hover:underline text-xs font-medium">Ver</a>
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
+            {grupos ? (
+              /* ── Vista AGRUPADA: subtotal + media por grupo ── */
+              <tbody className="divide-y divide-slate-100">
+                {grupos.map((g) => (
+                  <Fragment key={g.label}>
+                    <tr className="bg-[#4FAEB2]/10 border-t border-[#4FAEB2]/30">
+                      <td colSpan={colsVis.length + (detailHref ? 1 : 0)} className="px-3 py-2 text-xs font-bold text-[#3F8E91]">
+                        {g.label} <span className="font-normal text-slate-500">· {g.count} {g.count === 1 ? "registro" : "registros"}</span>
+                      </td>
+                    </tr>
+                    {g.rows.slice(0, 500).map((row, i) => (
+                      <tr key={i} className="hover:bg-slate-50">
+                        {colsVis.map((c) => (
+                          <td key={c.key} className={`px-3 py-2 text-xs text-slate-700 ${alignCls(c)} ${(c.type === "number" || c.type === "money") ? "tabular-nums" : ""}`}>
+                            {celda(c, row)}
+                          </td>
+                        ))}
+                        {detailHref && (
+                          <td className="px-3 py-2 print:hidden">
+                            <a href={detailHref(row)} className="text-[#3F8E91] hover:underline text-xs font-medium">Ver</a>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                    {sumCols.length > 0 && (
+                      <tr className="bg-slate-50 border-t border-slate-200 text-[11px]">
+                        {colsVis.map((c, i) => (
+                          <td key={c.key} className={`px-3 py-1.5 font-semibold text-slate-700 ${alignCls(c)} ${(c.type === "number" || c.type === "money") ? "tabular-nums" : ""}`}>
+                            {c.total === "sum"
+                              ? <div><div>{c.type === "money" ? fmtMoneyGs(g.subt[c.key]) : g.subt[c.key]}</div><div className="text-[9px] font-normal text-slate-400">media {c.type === "money" ? fmtMoneyGs(g.media[c.key]) : Math.round(g.media[c.key] * 10) / 10}</div></div>
+                              : i === 0 ? `Subtotal ${g.label}` : ""}
+                          </td>
+                        ))}
+                        {detailHref && <td className="print:hidden" />}
+                      </tr>
+                    )}
+                  </Fragment>
+                ))}
+              </tbody>
+            ) : (
+              <tbody className="divide-y divide-slate-100">
+                {ordenadas.slice(0, 1000).map((row, i) => (
+                  <tr key={i} className="hover:bg-slate-50">
+                    {colsVis.map((c) => (
+                      <td key={c.key} className={`px-3 py-2 text-xs text-slate-700 ${alignCls(c)} ${(c.type === "number" || c.type === "money") ? "tabular-nums" : ""}`}>
+                        {celda(c, row)}
+                      </td>
+                    ))}
+                    {detailHref && (
+                      <td className="px-3 py-2 print:hidden">
+                        <a href={detailHref(row)} className="text-[#3F8E91] hover:underline text-xs font-medium">Ver</a>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            )}
             {hayTotales && (
               <tfoot className="border-t-2 border-slate-300 bg-slate-50">
                 <tr>
                   {colsVis.map((c, i) => (
-                    <td key={c.key} className={`px-3 py-2 text-xs font-bold text-slate-800 ${alignCls(c)} ${(c.type === "number" || c.type === "money") ? "tabular-nums" : ""}`}>
-                      {c.total === "sum" ? (c.type === "money" ? fmtMoneyGs(totales[c.key]) : totales[c.key])
-                        : i === 0 ? `TOTAL (${ordenadas.length})` : ""}
+                    <td key={c.key} className={`px-3 py-2 text-xs font-bold text-slate-900 ${alignCls(c)} ${(c.type === "number" || c.type === "money") ? "tabular-nums" : ""}`}>
+                      {c.total === "sum"
+                        ? <div><div>{c.type === "money" ? fmtMoneyGs(totales[c.key]) : totales[c.key]}</div><div className="text-[9px] font-normal text-slate-500">media {c.type === "money" ? fmtMoneyGs(ordenadas.length ? totales[c.key] / ordenadas.length : 0) : Math.round((ordenadas.length ? totales[c.key] / ordenadas.length : 0) * 10) / 10}</div></div>
+                        : i === 0 ? `TOTAL GENERAL (${ordenadas.length})` : ""}
                     </td>
                   ))}
                   {detailHref && <td className="print:hidden" />}

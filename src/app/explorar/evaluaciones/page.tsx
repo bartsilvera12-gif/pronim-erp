@@ -42,9 +42,13 @@ export default function ExplorarEvaluacionesPage() {
       { key: "sucursal", label: "Tienda", type: "enum", get: (r) => r.sucursal_nombre ?? "", enumOptions: sucursales.map((s) => ({ value: s, label: s })) },
       { key: "evaluadora", label: "Evaluadora", type: "enum", get: (r) => r.usuario_nombre ?? "", enumOptions: evaluadoras.map((u) => ({ value: u, label: u })), defaultVisible: false },
       { key: "prendas", label: "Prendas", type: "number", get: (r) => r.prendas, total: "sum" },
-      { key: "subtotal", label: "Subtotal", type: "money", get: (r) => r.subtotal, total: "sum", defaultVisible: false },
+      { key: "subtotal", label: "Valor venta est.", type: "money", get: (r) => r.subtotal, total: "sum", defaultVisible: false },
       { key: "ajuste", label: "Ajuste", type: "money", get: (r) => r.ajuste, defaultVisible: false },
       { key: "total", label: "Total pagado", type: "money", required: true, get: (r) => r.total, total: "sum" },
+      // Markup: cuánto se estima ganar sobre lo pagado = (valor venta − pagado) / pagado.
+      { key: "markup", label: "% Ganancia est.", type: "number", defaultVisible: false,
+        get: (r) => r.total > 0 ? Math.round(((r.subtotal - r.total) / r.total) * 1000) / 10 : 0,
+        render: (r) => r.total > 0 ? `${Math.round(((r.subtotal - r.total) / r.total) * 1000) / 10}%` : "—" },
       { key: "estado", label: "Estado", type: "enum", get: (r) => r.estado ?? "", enumOptions: estados.map((e) => ({ value: e, label: e })) },
     ];
   }, [rows]);
