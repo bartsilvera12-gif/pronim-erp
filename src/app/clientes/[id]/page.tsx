@@ -2687,6 +2687,13 @@ function CarteraPanel({ clienteId }: { clienteId: string }) {
   } | null>(null);
   const [cargando, setCargando] = useState(true);
   const [ver, setVer] = useState<"credito" | "cashback" | "consignacion">("credito");
+  const [pagarOpen, setPagarOpen] = useState(false);
+  const [pagarMonto, setPagarMonto] = useState<string>("");
+  const [pagarMetodo, setPagarMetodo] = useState<"caja" | "credito">("caja");
+  const [pagando, setPagando] = useState(false);
+  const [pagarMsg, setPagarMsg] = useState<string | null>(null);
+  const [pagarError, setPagarError] = useState<string | null>(null);
+  const [reloadTick, setReloadTick] = useState(0);
 
   useEffect(() => {
     let cancel = false;
@@ -2705,7 +2712,35 @@ function CarteraPanel({ clienteId }: { clienteId: string }) {
       .catch(() => { /* silencioso */ })
       .finally(() => { if (!cancel) setCargando(false); });
     return () => { cancel = true; };
-  }, [clienteId]);
+  }, [clienteId, reloadTick]);
+
+  async function pagarConsignacion() {
+    const monto = Math.round(Number(pagarMonto.replace(/[^\d]/g, "")) || 0);
+    const saldo = data?.saldo_consignacion ?? 0;
+    if (!(monto > 0)) { setPagarError("Ingresá un monto."); return; }
+    if (monto > saldo) { setPagarError(`Máximo disponible: ${fmt(saldo)}.`); return; }
+    setPagando(true); setPagarError(null); setPagarMsg(null);
+    try {
+      const r = await fetch(`/api/clientes/${clienteId}/consignacion/pagar`, {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ monto, metodo: pagarMetodo }),
+      });
+      const j = await r.json();
+      if (!r.ok || !j.success) throw new Error(j?.error ?? "Error");
+      setPagarMsg(
+        (pagarMetodo === "caja" ? "Pagado en efectivo por caja." : "Convertido a crédito a favor.")
+        + (j.data?.caja_aviso ? ` ${j.data.caja_aviso}` : "")
+      );
+      setPagarMonto("");
+      setReloadTick((t) => t + 1);
+      setTimeout(() => setPagarOpen(false), 1500);
+    } catch (e) {
+      setPagarError(e instanceof Error ? e.message : "No se pudo pagar.");
+    } finally {
+      setPagando(false);
+    }
+  }
 
   const filtrados = useMemo(() => {
     if (!data) return [] as MovimientoCartera[];
@@ -2735,6 +2770,62 @@ function CarteraPanel({ clienteId }: { clienteId: string }) {
           value={fmt(data?.saldo_consignacion ?? 0)} tone="sky"
           active={ver === "consignacion"} onClick={() => setVer("consignacion")} />
       </div>
+
+      {/* Pago / liquidación de consignación */}
+      {ver === "consignacion" && (data?.saldo_consignacion ?? 0) > 0 && (
+        <div className="mt-3 rounded-xl border border-sky-200 bg-sky-50/50 p-3">
+          {!pagarOpen ? (
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <p className="text-xs text-sky-800">
+                Saldo de consignación: <strong>{fmt(data?.saldo_consignacion ?? 0)}</strong>. Podés pagarlo en efectivo o convertirlo en crédito.
+              </p>
+              <button type="button" onClick={() => { setPagarOpen(true); setPagarMonto(String(Math.round(data?.saldo_consignacion ?? 0))); setPagarError(null); setPagarMsg(null); }}
+                className="rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold px-3 py-1.5">
+                Pagar / liquidar consignación
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-sky-900">Pagar consignación</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[11px] text-slate-600">Monto:</span>
+                <input type="text" inputMode="numeric"
+                  value={pagarMonto === "" ? "" : Number(pagarMonto.replace(/[^\d]/g, "")).toLocaleString("es-PY")}
+                  onChange={(e) => setPagarMonto(e.target.value.replace(/[^\d]/g, ""))}
+                  className="w-32 rounded-md border border-slate-200 px-2 py-1 text-right text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-sky-400" />
+                <button type="button" onClick={() => setPagarMonto(String(Math.round(data?.saldo_consignacion ?? 0)))}
+                  className="text-[11px] text-sky-700 underline">Todo ({fmt(data?.saldo_consignacion ?? 0)})</button>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[11px] text-slate-600">Forma:</span>
+                <button type="button" onClick={() => setPagarMetodo("caja")}
+                  className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${pagarMetodo === "caja" ? "border-sky-500 bg-sky-100 text-sky-800" : "border-slate-200 bg-white text-slate-600"}`}>
+                  💵 Pago por caja (efectivo)
+                </button>
+                <button type="button" onClick={() => setPagarMetodo("credito")}
+                  className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${pagarMetodo === "credito" ? "border-emerald-500 bg-emerald-100 text-emerald-800" : "border-slate-200 bg-white text-slate-600"}`}>
+                  💰 Usar como crédito
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-500">
+                {pagarMetodo === "caja"
+                  ? "Se le paga al cliente en efectivo y se registra un egreso en la caja abierta."
+                  : "Se convierte en crédito a favor, usable en próximas compras."}
+              </p>
+              {pagarError && <p className="text-[11px] text-rose-600">{pagarError}</p>}
+              {pagarMsg && <p className="text-[11px] text-emerald-700">{pagarMsg}</p>}
+              <div className="flex justify-end gap-2">
+                <button type="button" onClick={() => setPagarOpen(false)}
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50">Cancelar</button>
+                <button type="button" onClick={pagarConsignacion} disabled={pagando}
+                  className="rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold px-4 py-1.5 disabled:opacity-50">
+                  {pagando ? "Procesando…" : "Confirmar pago"}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="mt-4 rounded-xl border border-slate-100 overflow-hidden">
         <header className="bg-slate-50 px-3 py-2 border-b border-slate-100">
