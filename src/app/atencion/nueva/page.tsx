@@ -2649,10 +2649,6 @@ function ColumnaAtencion(props: {
         </>
       )}
 
-      {lineas.length > 0 && permitirDescuento && (
-        <DescuentoATodasBarLocal lineas={lineas} onActualizar={onActualizar} />
-      )}
-
       {lineas.length > 0 && (
         <div className="mt-2 rounded-lg border border-slate-200 bg-white overflow-x-auto">
           <table className="w-full text-sm">
@@ -2904,59 +2900,3 @@ function CambioDirectoModal({
   );
 }
 
-/**
- * Fila "Descuento a todas" con state local. Escribir cualquier número → se
- * formatea con separador de miles → se aplica a todas las líneas. Antes
- * MontoInput controlado con value=0 fijo reseteaba lo tipeado.
- */
-function DescuentoATodasBarLocal({
-  lineas, onActualizar,
-}: {
-  lineas: Linea[];
-  onActualizar: (idx: number, patch: Partial<Linea>) => void;
-}) {
-  const [valor, setValor] = useState<string>("");
-  const totalUnidades = lineas.reduce((s, l) => s + (l.cantidad || 0), 0);
-  useEffect(() => {
-    if (valor === "") return;
-    const total = Math.max(0, Number(valor.replace(/[^\d]/g, "")) || 0);
-    if (totalUnidades === 0) return;
-    const perUnit = total === 0 ? 0 : Math.floor(total / totalUnidades);
-    lineas.forEach((l, idx) => {
-      const clamped = Math.min(perUnit, l.precio_unitario);
-      if ((l.descuento_unitario ?? 0) !== clamped) {
-        onActualizar(idx, { descuento_unitario: clamped });
-      }
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [valor, totalUnidades]);
-  return (
-    <div className="mt-3 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50/40 px-3 py-2 flex-wrap">
-      <span className="text-[11px] font-semibold uppercase text-amber-800 whitespace-nowrap">
-        Descuento total
-      </span>
-      <input
-        type="text" inputMode="numeric" pattern="[0-9]*"
-        value={valor === "" ? "" : Number(valor).toLocaleString("es-PY")}
-        onChange={(e) => {
-          const digits = e.target.value.replace(/[^\d]/g, "");
-          setValor(digits);
-        }}
-        onFocus={(e) => e.currentTarget.select()}
-        placeholder="0"
-        className="w-28 rounded-md border border-amber-200 bg-white px-2 py-1 text-right text-sm focus:outline-none focus:ring-2 focus:ring-amber-300"
-      />
-      <span className="text-[11px] text-amber-700">
-        prorrateado entre {totalUnidades} unidad(es)
-      </span>
-      <button type="button"
-        onClick={() => {
-          setValor("");
-          lineas.forEach((_, idx) => onActualizar(idx, { descuento_unitario: 0 }));
-        }}
-        className="ml-auto text-[11px] text-slate-500 hover:text-slate-800 underline">
-        Limpiar
-      </button>
-    </div>
-  );
-}
