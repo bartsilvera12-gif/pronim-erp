@@ -61,15 +61,29 @@ export async function GET(request: NextRequest) {
     const cliT = quoteSchemaTable(schema, "clientes");
     const ventasT = quoteSchemaTable(schema, "ventas");
     const credT = quoteSchemaTable(schema, "cliente_creditos_movimientos");
+    const recepT = quoteSchemaTable(schema, "cliente_recepciones");
 
     const tblQ = await pool.query<{ table_name: string }>(
       `SELECT table_name FROM information_schema.tables
-        WHERE table_schema = $1 AND table_name IN ('ventas','cliente_creditos_movimientos')`,
+        WHERE table_schema = $1 AND table_name IN ('ventas','cliente_creditos_movimientos','cliente_recepciones')`,
       [schema],
     );
     const tables = new Set(tblQ.rows.map((r) => r.table_name));
     const hasVentas = tables.has("ventas");
     const hasCred = tables.has("cliente_creditos_movimientos");
+    const hasRecep = tables.has("cliente_recepciones");
+
+    // Columnas opcionales de ventas / recepciones para armar "última transacción".
+    let rCols = new Set<string>();
+    if (hasRecep) {
+      const rColQ = await pool.query<{ column_name: string }>(
+        `SELECT column_name FROM information_schema.columns WHERE table_schema=$1 AND table_name='cliente_recepciones'`,
+        [schema],
+      );
+      rCols = new Set(rColQ.rows.map((r) => r.column_name));
+    }
+    const recTotalCol = rCols.has("total_final") ? "COALESCE(r.total_final, r.total_compra, 0)" : "COALESCE(r.total_compra, 0)";
+    const recCambio = rCols.has("cambio_id");
 
     // ¿La tabla de créditos tiene la columna vencimiento_at? Si sí, el
     // cashback vencido (vencimiento_at < now()) NO cuenta como saldo disponible.
@@ -134,6 +148,53 @@ export async function GET(request: NextRequest) {
       )
     ` : `creditos AS (SELECT NULL::uuid AS cliente_id, 0::numeric AS saldo_credito, 0::numeric AS saldo_cashback WHERE false)`;
 
+    // Recepciones (lo que el cliente NOS vende) — total vendido + count + última.
+    const recepCTE = hasRecep ? `
+      recact AS (
+        SELECT r.cliente_id,
+               COALESCE(SUM(${recTotalCol}),0)::numeric AS total_vendido,
+               COUNT(*) AS cnt_recep,
+               MAX(r.fecha) AS ultima_recep_at
+          FROM ${recepT} r
+         WHERE r.empresa_id = $1 AND (r.estado IS NULL OR r.estado <> 'anulada') AND r.cliente_id IS NOT NULL
+         GROUP BY r.cliente_id
+      ),
+      ur AS (
+        SELECT DISTINCT ON (r.cliente_id) r.cliente_id,
+               r.fecha AS ur_fecha, ${recTotalCol}::numeric AS ur_monto,
+               ${recCambio ? "(r.cambio_id IS NOT NULL)" : "false"} AS ur_cambio
+          FROM ${recepT} r
+         WHERE r.empresa_id = $1 AND (r.estado IS NULL OR r.estado <> 'anulada') AND r.cliente_id IS NOT NULL
+         ORDER BY r.cliente_id, r.fecha DESC
+      )
+    ` : `
+      recact AS (SELECT NULL::uuid AS cliente_id, 0::numeric AS total_vendido, 0 AS cnt_recep, NULL::timestamptz AS ultima_recep_at WHERE false),
+      ur AS (SELECT NULL::uuid AS cliente_id, NULL::timestamptz AS ur_fecha, 0::numeric AS ur_monto, false AS ur_cambio WHERE false)
+    `;
+
+    // Última venta (para tipo + monto de la última transacción).
+    const uvCTE = hasVentas ? `
+      uv AS (
+        SELECT DISTINCT ON (v.cliente_id) v.cliente_id,
+               ${ventasFechaCol} AS uv_fecha, COALESCE(v.total,0)::numeric AS uv_monto,
+               ${vCols.has("cambio_id") ? "(v.cambio_id IS NOT NULL)" : "false"} AS uv_cambio
+          FROM ${ventasT} v
+         WHERE v.empresa_id = $1 ${ventasFiltroEstado} AND v.cliente_id IS NOT NULL
+         ORDER BY v.cliente_id, ${ventasFechaCol} DESC
+      )
+    ` : `uv AS (SELECT NULL::uuid AS cliente_id, NULL::timestamptz AS uv_fecha, 0::numeric AS uv_monto, false AS uv_cambio WHERE false)`;
+
+    // Expiración de cashback: el vencimiento más próximo aún vigente.
+    const cbexpCTE = (hasCred && credHasVenc) ? `
+      cbexp AS (
+        SELECT m.cliente_id, MIN(m.vencimiento_at) AS expira
+          FROM ${credT} m
+         WHERE m.empresa_id = $1 AND m.tipo='ENTRADA' AND m.origen='cashback'
+           AND m.vencimiento_at IS NOT NULL AND m.vencimiento_at >= now()
+         GROUP BY m.cliente_id
+      )
+    ` : `cbexp AS (SELECT NULL::uuid AS cliente_id, NULL::timestamptz AS expira WHERE false)`;
+
     // Expresiones booleanas por segmento (reutilizables en filtros y counts)
     const expr: Record<SegmentoSlug, string> = {
       vip:            `${hasEsVip ? "COALESCE(c.es_vip,false)" : "false"} = true`,
@@ -167,17 +228,46 @@ export async function GET(request: NextRequest) {
     // Filtros activos → WHERE combinado con AND
     const activos = (Object.entries(flags) as [SegmentoSlug, boolean][]).filter(([, on]) => on).map(([k]) => k);
 
+    // Última transacción = la más reciente entre última venta y última recepción.
+    const ultimaTxFecha = `GREATEST(COALESCE(uv.uv_fecha, '-infinity'::timestamptz), COALESCE(ur.ur_fecha, '-infinity'::timestamptz))`;
     const selectBase = `
       c.id::text                                    AS id,
       COALESCE(c.empresa, c.nombre_contacto, c.nombre, 'Cliente') AS nombre,
       c.telefono                                    AS telefono,
       c.email                                       AS email,
+      ${cliCols.has("ruc") ? "c.ruc" : "NULL::text"}  AS ruc,
       ${hasEsVip ? "COALESCE(c.es_vip,false)" : "false"} AS es_vip,
       a.ultima_venta_at                             AS ultima_venta_at,
       COALESCE(a.total_comprado,0)::text            AS total_comprado,
       COALESCE(a.cnt_ventas,0)                      AS cnt_ventas,
+      COALESCE(recact.total_vendido,0)::text        AS total_vendido,
+      COALESCE(recact.cnt_recep,0)                  AS cnt_recep,
+      (COALESCE(a.cnt_ventas,0) + COALESCE(recact.cnt_recep,0)) AS cnt_transacciones,
       COALESCE(cr.saldo_credito,0)::text            AS saldo_credito,
-      COALESCE(cr.saldo_cashback,0)::text           AS saldo_cashback
+      COALESCE(cr.saldo_cashback,0)::text           AS saldo_cashback,
+      cbexp.expira                                  AS cashback_expira,
+      -- Status: vip > nuevo > dormido > frecuente > activo
+      CASE
+        WHEN ${hasEsVip ? "COALESCE(c.es_vip,false)" : "false"} THEN 'vip'
+        WHEN a.ultima_venta_at IS NULL AND recact.ultima_recep_at IS NULL THEN 'nuevo'
+        WHEN ${ultimaTxFecha} < now() - interval '90 days' THEN 'dormido'
+        WHEN COALESCE(a.cnt_ventas,0) + COALESCE(recact.cnt_recep,0) >= 3 THEN 'frecuente'
+        ELSE 'activo'
+      END AS status,
+      -- Última transacción (tipo / fecha / monto)
+      CASE
+        WHEN uv.uv_fecha IS NULL AND ur.ur_fecha IS NULL THEN NULL
+        WHEN COALESCE(ur.ur_fecha,'-infinity'::timestamptz) > COALESCE(uv.uv_fecha,'-infinity'::timestamptz)
+          THEN (CASE WHEN ur.ur_cambio THEN 'cambio' ELSE 'compra' END)
+        ELSE (CASE WHEN uv.uv_cambio THEN 'cambio' ELSE 'venta' END)
+      END AS ultima_tx_tipo,
+      NULLIF(${ultimaTxFecha}, '-infinity'::timestamptz) AS ultima_tx_fecha,
+      CASE
+        WHEN uv.uv_fecha IS NULL AND ur.ur_fecha IS NULL THEN NULL
+        WHEN COALESCE(ur.ur_fecha,'-infinity'::timestamptz) > COALESCE(uv.uv_fecha,'-infinity'::timestamptz)
+          THEN ur.ur_monto::text
+        ELSE uv.uv_monto::text
+      END AS ultima_tx_monto
     `;
 
     const params: unknown[] = [auth.empresa_id];
@@ -207,11 +297,15 @@ export async function GET(request: NextRequest) {
     }
 
     const listado = await pool.query<Record<string, unknown>>(
-      `WITH ${actividadCTE}, ${creditosCTE}
+      `WITH ${actividadCTE}, ${creditosCTE}, ${recepCTE}, ${uvCTE}, ${cbexpCTE}
        SELECT ${selectBase}
          FROM ${cliT} c
-         LEFT JOIN actividad a  ON a.cliente_id  = c.id
-         LEFT JOIN creditos cr  ON cr.cliente_id = c.id
+         LEFT JOIN actividad a   ON a.cliente_id   = c.id
+         LEFT JOIN creditos cr   ON cr.cliente_id  = c.id
+         LEFT JOIN recact        ON recact.cliente_id = c.id
+         LEFT JOIN uv            ON uv.cliente_id  = c.id
+         LEFT JOIN ur            ON ur.cliente_id  = c.id
+         LEFT JOIN cbexp         ON cbexp.cliente_id = c.id
         WHERE ${whereParts.join(" AND ")}
         ORDER BY COALESCE(a.total_comprado,0) DESC NULLS LAST,
                  a.ultima_venta_at DESC NULLS LAST,

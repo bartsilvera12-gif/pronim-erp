@@ -22,13 +22,25 @@ type ClienteSeg = {
   nombre: string;
   telefono: string | null;
   email: string | null;
+  ruc: string | null;
   es_vip: boolean;
+  status: string | null;
   ultima_venta_at: string | null;
   total_comprado: string;
+  total_vendido: string;
   cnt_ventas: number;
+  cnt_recep: number;
+  cnt_transacciones: number;
   saldo_credito: string;
   saldo_cashback: string;
+  cashback_expira: string | null;
+  ultima_tx_tipo: string | null;
+  ultima_tx_fecha: string | null;
+  ultima_tx_monto: string | null;
 };
+
+const STATUS_LABEL: Record<string, string> = { vip: "VIP", frecuente: "Frecuente", dormido: "Dormido", nuevo: "Nuevo", activo: "Activo" };
+const TX_LABEL: Record<string, string> = { venta: "Venta", compra: "Compra", cambio: "Cambio" };
 
 const FLAGS_POS = ["vip","con_credito","con_cashback","inactivos_90d","nuevos_mes","en_riesgo"] as const;
 
@@ -100,22 +112,34 @@ export default function ClientesSegmentosPage() {
   const filtrosActivos = useMemo(() => segmentos.filter((s) => filtros.has(s.slug)), [segmentos, filtros]);
 
   const columns = useMemo<ColumnDef<ClienteSeg>[]>(() => [
-    { key: "nombre", label: "Cliente", type: "text", required: true, get: (c) => c.nombre },
+    { key: "nombre", label: "Nombre", type: "text", required: true, get: (c) => c.nombre },
     { key: "telefono", label: "Teléfono", type: "text", get: (c) => c.telefono ?? "" },
-    { key: "email", label: "Email", type: "text", get: (c) => c.email ?? "", defaultVisible: false },
-    { key: "vip", label: "VIP", type: "enum", get: (c) => c.es_vip ? "Sí" : "No",
-      enumOptions: [{ value: "Sí", label: "VIP" }, { value: "No", label: "No VIP" }], align: "center",
-      render: (c) => (
-        <button type="button" onClick={() => toggleVip(c)} title={c.es_vip ? "Quitar VIP" : "Marcar VIP"}
-          className={`text-lg leading-none transition print:hidden ${c.es_vip ? "opacity-100" : "opacity-30 hover:opacity-70"}`}>
-          {c.es_vip ? "⭐" : "☆"}
-        </button>
-      ) },
-    { key: "ultima", label: "Última compra", type: "date", get: (c) => c.ultima_venta_at },
-    { key: "compras", label: "Compras", type: "number", get: (c) => c.cnt_ventas, total: "sum" },
+    { key: "ruc", label: "RUC", type: "text", get: (c) => c.ruc ?? "" },
+    { key: "status", label: "Status", type: "enum", get: (c) => c.status ? (STATUS_LABEL[c.status] ?? c.status) : "",
+      enumOptions: [{ value: "VIP", label: "VIP" }, { value: "Frecuente", label: "Frecuente" }, { value: "Dormido", label: "Dormido" }, { value: "Nuevo", label: "Nuevo" }, { value: "Activo", label: "Activo" }],
+      render: (c) => {
+        const s = c.status ?? "";
+        const cls = s === "vip" ? "bg-amber-50 text-amber-700 border-amber-200"
+          : s === "frecuente" ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+          : s === "dormido" ? "bg-rose-50 text-rose-700 border-rose-200"
+          : s === "nuevo" ? "bg-sky-50 text-sky-700 border-sky-200"
+          : "bg-slate-50 text-slate-600 border-slate-200";
+        return <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${cls}`}>
+          <button type="button" onClick={() => toggleVip(c)} title={c.es_vip ? "Quitar VIP" : "Marcar VIP"} className="leading-none print:hidden">{c.es_vip ? "★" : "☆"}</button>
+          {STATUS_LABEL[s] ?? "—"}
+        </span>;
+      } },
+    { key: "ult_tipo", label: "Últ. transacción", type: "enum", get: (c) => c.ultima_tx_tipo ? (TX_LABEL[c.ultima_tx_tipo] ?? c.ultima_tx_tipo) : "",
+      enumOptions: [{ value: "Venta", label: "Venta" }, { value: "Compra", label: "Compra" }, { value: "Cambio", label: "Cambio" }] },
+    { key: "ult_fecha", label: "Últ. fecha", type: "date", get: (c) => c.ultima_tx_fecha },
+    { key: "ult_monto", label: "Últ. monto", type: "money", get: (c) => Number(c.ultima_tx_monto) || 0 },
+    { key: "cnt_tx", label: "Total transacciones", type: "number", get: (c) => c.cnt_transacciones, total: "sum" },
     { key: "total_comprado", label: "Total comprado", type: "money", get: (c) => Number(c.total_comprado) || 0, total: "sum" },
-    { key: "credito", label: "Crédito", type: "money", required: true, get: (c) => Number(c.saldo_credito) || 0, total: "sum" },
-    { key: "cashback", label: "Cashback", type: "money", required: true, get: (c) => Number(c.saldo_cashback) || 0, total: "sum" },
+    { key: "total_vendido", label: "Total vendido", type: "money", get: (c) => Number(c.total_vendido) || 0, total: "sum" },
+    { key: "credito", label: "Crédito disponible", type: "money", required: true, get: (c) => Number(c.saldo_credito) || 0, total: "sum" },
+    { key: "cashback", label: "Cashback disponible", type: "money", required: true, get: (c) => Number(c.saldo_cashback) || 0, total: "sum" },
+    { key: "expira", label: "Cashback expira", type: "date", get: (c) => c.cashback_expira, defaultVisible: false },
+    { key: "email", label: "Email", type: "text", get: (c) => c.email ?? "", defaultVisible: false },
   // eslint-disable-next-line react-hooks/exhaustive-deps
   ], [clientes]);
 
