@@ -1,6 +1,6 @@
 "use client";
 
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import Sidebar from "./layout/Sidebar";
 import Header from "./layout/Header";
 
@@ -8,10 +8,23 @@ const STANDALONE_ROUTES = ["/login"];
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const isStandalone = pathname && STANDALONE_ROUTES.includes(pathname);
+  // Modo embebido (iframe dentro de un modal): sin sidebar ni header,
+  // solo el contenido con scroll propio. Se usa en el modal de detalle de
+  // cliente desde la caja.
+  const isEmbed = searchParams?.get("embed") === "1";
 
   if (isStandalone) {
     return <>{children}</>;
+  }
+
+  if (isEmbed) {
+    return (
+      <main className="h-svh overflow-y-auto overflow-x-hidden bg-[#F8FAFC] p-4 sm:p-6">
+        {children}
+      </main>
+    );
   }
 
   return (

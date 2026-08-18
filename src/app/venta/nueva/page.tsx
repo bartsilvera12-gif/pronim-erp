@@ -21,6 +21,7 @@ import {
   type AlertasConfig, type BeneficioCfg,
 } from "@/lib/atencion/alertas-config";
 import { StickerBadge } from "@/components/ui/StickerBadge";
+import { ClienteDetalleModal } from "@/components/clientes/ClienteDetalleModal";
 import {
   BalanceItem, ColumnaAtencion, NuevoClienteRapidoModal,
   fmtGs, type Cliente, type Franja, type Linea,
@@ -54,6 +55,7 @@ export default function NuevaVentaPage() {
   const [creditoDisponible, setCreditoDisponible] = useState(0);
   const [clienteSegmento, setClienteSegmento] = useState<ClienteSegmento | null>(null);
   const [clienteSegmentoLoading, setClienteSegmentoLoading] = useState(false);
+  const [detalleClienteOpen, setDetalleClienteOpen] = useState(false);
 
   // ── Alertas / beneficios ─────────────────────────────────────────────
   const [alertasConfig, setAlertasConfig] = useState<AlertasConfig>(ALERTAS_DEFAULTS);
@@ -614,7 +616,11 @@ export default function NuevaVentaPage() {
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <p className="font-semibold text-slate-800">{cliente.nombre}</p>
+                <button type="button" onClick={() => setDetalleClienteOpen(true)}
+                  title="Ver detalle completo del cliente"
+                  className="font-semibold text-slate-800 hover:text-[#3F8E91] hover:underline decoration-dotted underline-offset-2">
+                  {cliente.nombre}
+                </button>
                 {clienteSegmentoLoading && !clienteSegmento && (
                   <span className="inline-block h-5 w-24 rounded-full bg-slate-100 animate-pulse" aria-hidden />
                 )}
@@ -1029,6 +1035,14 @@ export default function NuevaVentaPage() {
         onSeguir={() => celebrarMetaAck(true)}
         onVerResultados={() => router.push("/admin/metas")}
       />
+
+      {detalleClienteOpen && cliente && (
+        <ClienteDetalleModal
+          clienteId={cliente.id}
+          clienteNombre={cliente.nombre}
+          onClose={() => setDetalleClienteOpen(false)}
+        />
+      )}
 
       {((cliente && alertasDisparadas.length > 0) || metasCumplidasHoy.length > 0) && (
         <aside aria-label="Recordatorios"

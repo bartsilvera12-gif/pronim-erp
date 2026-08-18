@@ -18,6 +18,7 @@ import {
   type BeneficioCfg,
 } from "@/lib/atencion/alertas-config";
 import { StickerBadge } from "@/components/ui/StickerBadge";
+import { ClienteDetalleModal } from "@/components/clientes/ClienteDetalleModal";
 
 // ═══════════════════════════════════════════════════════════════════════
 // POS UNIFICADO — "Nueva atención"
@@ -118,6 +119,7 @@ export default function NuevaAtencionPage() {
   const [preCierreOpen, setPreCierreOpen] = useState(false);
   const [beneficiosMarcados, setBeneficiosMarcados] = useState<Record<string, { marcado: boolean; monto: string }>>({});
   const [clienteSegmentoLoading, setClienteSegmentoLoading] = useState(false);
+  const [detalleClienteOpen, setDetalleClienteOpen] = useState(false);
 
   // Modal "Cambio directo": prenda por otra del mismo precio, sin dinero de por medio.
   const [cambioDirectoOpen, setCambioDirectoOpen] = useState(false);
@@ -1346,7 +1348,11 @@ export default function NuevaAtencionPage() {
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <p className="font-semibold text-slate-800">{cliente.nombre}</p>
+                <button type="button" onClick={() => setDetalleClienteOpen(true)}
+                  title="Ver detalle completo del cliente"
+                  className="font-semibold text-slate-800 hover:text-[#3F8E91] hover:underline decoration-dotted underline-offset-2">
+                  {cliente.nombre}
+                </button>
                 {clienteSegmentoLoading && !clienteSegmento && (
                   <span className="inline-block h-5 w-24 rounded-full bg-slate-100 animate-pulse" aria-hidden />
                 )}
@@ -1959,6 +1965,14 @@ export default function NuevaAtencionPage() {
         onSeguir={() => celebrarMetaAck(true)}
         onVerResultados={() => router.push("/admin/metas")}
       />
+
+      {detalleClienteOpen && cliente && (
+        <ClienteDetalleModal
+          clienteId={cliente.id}
+          clienteNombre={cliente.nombre}
+          onClose={() => setDetalleClienteOpen(false)}
+        />
+      )}
 
       {(pendientesIngresoCount > 0 || (cliente && alertasDisparadas.length > 0) || metasCumplidasHoy.length > 0) && (
         <aside
