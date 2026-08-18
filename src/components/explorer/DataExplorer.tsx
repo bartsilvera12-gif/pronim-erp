@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState, type ReactNode } from "react";
-import * as XLSX from "xlsx";
+// xlsx se carga dinámicamente al exportar (chunk aparte) para no inflar el
+// bundle de cada página de explorador ni la memoria del build.
 
 /**
  * DataExplorer — explorador de datos tipo Excel, entity-agnostic.
@@ -218,7 +219,8 @@ export function DataExplorer<T>(props: {
     return String(v);
   }
 
-  function exportarXlsx() {
+  async function exportarXlsx() {
+    const XLSX = await import("xlsx");
     const aoa: (string | number | Date)[][] = [];
     aoa.push(colsVis.map((c) => c.label));
     ordenadas.forEach((r) => aoa.push(colsVis.map((c) => valorXlsx(c, r))));
