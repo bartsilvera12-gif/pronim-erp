@@ -253,10 +253,18 @@ export function ColumnaAtencion(props: {
                   {permitirDescuento && (
                     <td className="px-3 py-2 text-right">
                       <MontoInput
-                        value={Number(l.descuento_unitario) || 0}
-                        onChange={(n) => onActualizar(idx, { descuento_unitario: Math.max(0, Math.min(n, l.precio_unitario)) })}
+                        /* Input = descuento TOTAL de la línea (lump). Se guarda como
+                           descuento_unitario = lump / cantidad para preservar la
+                           semántica interna del resto del código. */
+                        value={(Number(l.descuento_unitario) || 0) * Math.max(1, l.cantidad)}
+                        onChange={(nTotal) => {
+                          const cant = Math.max(1, l.cantidad);
+                          const maxTotal = l.precio_unitario * cant;
+                          const clamped = Math.max(0, Math.min(nTotal, maxTotal));
+                          onActualizar(idx, { descuento_unitario: Math.floor(clamped / cant) });
+                        }}
                         decimals={false}
-                        className="w-20 rounded-md border border-slate-200 px-2 py-1 text-right text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
+                        className="w-24 rounded-md border border-slate-200 px-2 py-1 text-right text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
                       />
                     </td>
                   )}
