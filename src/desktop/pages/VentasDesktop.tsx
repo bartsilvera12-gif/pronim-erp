@@ -81,16 +81,12 @@ function calcularMetricas(ventas: Venta[]): MetricasHoy {
 // ── Tarjeta métrica ───────────────────────────────────────────────────────────
 
 function MetricCard({
-  label, value, sub, accent,
+  label, value, sub, accent, href,
 }: {
-  label: string; value: string; sub?: string; accent?: boolean;
+  label: string; value: string; sub?: string; accent?: boolean; href?: string;
 }) {
-  return (
-    <div className={`rounded-2xl border px-5 py-4 flex flex-col gap-1 shadow-sm ${
-      accent
-        ? "bg-[#4FAEB2] border-[#4FAEB2] ring-1 ring-[#4FAEB2]/25"
-        : "bg-white border-[#4FAEB2]/30 ring-1 ring-[#4FAEB2]/10"
-    }`}>
+  const inner = (
+    <>
       <span className={`text-[10px] font-semibold uppercase tracking-[0.14em] ${
         accent ? "text-white/90" : "text-[#4FAEB2]"
       }`}>
@@ -102,8 +98,21 @@ function MetricCard({
         {value}
       </span>
       {sub && <span className={`text-xs ${accent ? "text-white/80" : "text-slate-500"}`}>{sub}</span>}
-    </div>
+    </>
   );
+  const cls = `rounded-2xl border px-5 py-4 flex flex-col gap-1 shadow-sm ${
+    accent
+      ? "bg-[#4FAEB2] border-[#4FAEB2] ring-1 ring-[#4FAEB2]/25"
+      : "bg-white border-[#4FAEB2]/30 ring-1 ring-[#4FAEB2]/10"
+  }`;
+  if (href) {
+    return (
+      <Link href={href} className={`${cls} cursor-pointer transition hover:shadow-md hover:-translate-y-0.5`} title="Ver la lista que compone este número">
+        {inner}
+      </Link>
+    );
+  }
+  return <div className={cls}>{inner}</div>;
 }
 
 // ── Helpers de fila ───────────────────────────────────────────────────────────
@@ -224,16 +233,20 @@ export default function VentasPage() {
           })}
         </p>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {(() => { const hoy = new Date().toISOString().slice(0, 10); const hrefHoy = `/explorar/ventas?desde=${hoy}&hasta=${hoy}`; return (
+          <>
           <MetricCard
             label="Facturación de hoy"
             value={`Gs. ${metricas.facturacion.toLocaleString("es-PY")}`}
             sub="Total incl. IVA"
             accent
+            href={hrefHoy}
           />
           <MetricCard
             label="Ventas de hoy"
             value={String(metricas.cantidadVentas)}
             sub={metricas.cantidadVentas === 1 ? "orden registrada" : "órdenes registradas"}
+            href={hrefHoy}
           />
           <MetricCard
             label="Ticket promedio"
@@ -243,12 +256,16 @@ export default function VentasPage() {
                 : "—"
             }
             sub="Por orden de venta"
+            href={hrefHoy}
           />
           <MetricCard
             label="Unidades vendidas"
             value={String(metricas.productosVendidos)}
             sub="Unidades despachadas"
+            href={hrefHoy}
           />
+          </>
+          ); })()}
         </div>
       </div>
 

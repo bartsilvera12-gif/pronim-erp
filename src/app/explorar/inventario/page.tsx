@@ -17,7 +17,13 @@ export default function ExplorarInventarioPage() {
   useEffect(() => {
     let cancel = false;
     setCargando(true);
-    fetchWithSupabaseSession(`/api/reportes/inventario-drill`, { cache: "no-store" })
+    const qs = new URLSearchParams();
+    if (typeof window !== "undefined") {
+      const p = new URLSearchParams(window.location.search);
+      if (p.get("solo_bajo_stock") === "1") qs.set("solo_bajo_stock", "1");
+      if (p.get("sin_stock") === "1") qs.set("sin_stock", "1");
+    }
+    fetchWithSupabaseSession(`/api/reportes/inventario-drill?${qs}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((j) => { if (!cancel && j?.success) setRows((j.data?.productos ?? []) as Prod[]); })
       .catch(() => {})

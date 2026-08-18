@@ -1,8 +1,10 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
 
 /**
  * Tarjeta KPI del ERP: etiqueta, valor grande, ícono opcional y subtítulo /
  * variación opcional. Blanca, borde suave, acento turquesa.
+ * Si se pasa `href`, la tarjeta es clickeable y abre la lista/detalle.
  */
 export default function StatCard({
   label,
@@ -12,6 +14,7 @@ export default function StatCard({
   accent = false,
   compact = false,
   className,
+  href,
 }: {
   label: string;
   value: ReactNode;
@@ -23,11 +26,12 @@ export default function StatCard({
   /** Versión sobria: menos padding, valor más chico y truncado (1 línea). */
   compact?: boolean;
   className?: string;
+  /** Si viene, la tarjeta linkea a esa ruta (indicador → lista). */
+  href?: string;
 }) {
-  return (
-    <div
-      className={`rounded-xl border border-slate-200 bg-white shadow-sm ring-1 ring-[#4FAEB2]/10 ${compact ? "p-3.5" : "p-5"} ${className ?? ""}`}
-    >
+  const cls = `rounded-xl border border-slate-200 bg-white shadow-sm ring-1 ring-[#4FAEB2]/10 ${compact ? "p-3.5" : "p-5"} ${href ? "cursor-pointer transition hover:border-[#4FAEB2] hover:shadow-md" : ""} ${className ?? ""}`;
+  const inner = (
+    <>
       <div className="flex items-start justify-between gap-3">
         <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400 truncate">
           {label}
@@ -45,6 +49,10 @@ export default function StatCard({
           {hint}
         </p>
       ) : null}
-    </div>
+    </>
   );
+  if (href) {
+    return <Link href={href} className={cls} title="Ver la lista que compone este número">{inner}</Link>;
+  }
+  return <div className={cls}>{inner}</div>;
 }

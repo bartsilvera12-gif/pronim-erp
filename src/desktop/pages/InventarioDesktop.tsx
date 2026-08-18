@@ -508,14 +508,16 @@ export default function InventarioPage() {
       {/* Resumen por pestaña */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard compact label="Total productos" value={String(resumen.total)} accent
-          hint={tab === "reventa" ? "Reventa" : tab === "menu" ? "Menú" : "Materia prima"} />
+          hint={tab === "reventa" ? "Reventa" : tab === "menu" ? "Menú" : "Materia prima"}
+          href="/explorar/inventario" />
         <StatCard compact label="Stock valorizado" value={formatGs(Math.round(resumen.stockValorizado))}
-          hint="stock × costo prom." />
+          hint="stock × costo prom." href="/explorar/inventario" />
         <StatCard compact label="Stock bajo" value={String(resumen.bajo)}
-          hint="≤ stock mínimo" />
+          hint="≤ stock mínimo" href="/explorar/inventario?solo_bajo_stock=1" />
         <StatCard compact
           label={tab === "materia" ? "Materias disponibles" : "Con stock disponible"}
-          value={String(resumen.disponibles)} hint="stock > 0" />
+          value={String(resumen.disponibles)} hint="stock > 0"
+          href="/explorar/inventario" />
       </div>
 
       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm ring-1 ring-[#4FAEB2]/15 sm:p-5 lg:p-6">
