@@ -3,6 +3,7 @@
 import Link from "next/link";
 
 const SECCIONES = [
+  { href: "/explorar/transacciones", titulo: "Transacciones (todo)",   desc: "Ventas, compras y cambios en un solo listado con signo: valor, stock, pagos por método, markup, descuento, cashback." },
   { href: "/explorar/ventas",        titulo: "Ventas",                 desc: "Cada venta: fecha, tienda, cliente, valor, forma de pago, descuento, cantidad." },
   { href: "/clientes/segmentos",     titulo: "Clientes",               desc: "Cartera completa: última compra, total comprado, crédito, cashback, VIP." },
   { href: "/explorar/evaluaciones",  titulo: "Compras / Evaluaciones",  desc: "Prendas evaluadas por cliente: sucursal, evaluadora, total pagado, estado." },
