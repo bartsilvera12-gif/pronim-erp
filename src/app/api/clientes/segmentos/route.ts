@@ -49,6 +49,10 @@ export async function GET(request: NextRequest) {
       en_riesgo:      url.searchParams.get("en_riesgo") === "1",
     };
     const q = (url.searchParams.get("q") ?? "").trim().toLowerCase();
+    // Rango de última compra (fecha). Formato YYYY-MM-DD.
+    const desde = (url.searchParams.get("desde") ?? "").trim();
+    const hasta = (url.searchParams.get("hasta") ?? "").trim();
+    const fechaOk = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s);
 
     const schema = assertAllowedChatDataSchema(await fetchDataSchemaForEmpresaId(auth.empresa_id));
     const pool = getChatPostgresPool();
@@ -191,6 +195,15 @@ export async function GET(request: NextRequest) {
       whereParts.push(`(LOWER(COALESCE(c.empresa, c.nombre_contacto, c.nombre, '')) LIKE ${p}
                         OR LOWER(COALESCE(c.telefono, '')) LIKE ${p}
                         OR LOWER(COALESCE(c.email, '')) LIKE ${p})`);
+    }
+    // Filtro por rango de última compra (fecha).
+    if (fechaOk(desde)) {
+      params.push(desde);
+      whereParts.push(`a.ultima_venta_at >= $${params.length}::timestamptz`);
+    }
+    if (fechaOk(hasta)) {
+      params.push(hasta);
+      whereParts.push(`a.ultima_venta_at < ($${params.length}::date + interval '1 day')`);
     }
 
     const listado = await pool.query<Record<string, unknown>>(

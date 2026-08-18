@@ -75,6 +75,9 @@ export default function ClientesSegmentosPage() {
   // Filtros combinables (todos AND)
   const [filtros, setFiltros] = useState<Set<SegmentoSlug>>(new Set());
   const [q, setQ] = useState("");
+  // Rango de última compra (fecha). Vacío = sin filtro de fecha.
+  const [desde, setDesde] = useState("");
+  const [hasta, setHasta] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const [colsVis, setColsVis] = useState<Set<ColKey>>(new Set(COLUMNAS.map((c) => c.key)));
@@ -87,13 +90,17 @@ export default function ClientesSegmentosPage() {
     for (const k of FLAGS_POS) if (f[k] === true) s.add(k);
     setFiltros(s);
     setQ(typeof f.q === "string" ? f.q : "");
+    setDesde(typeof f.desde === "string" ? f.desde : "");
+    setHasta(typeof f.hasta === "string" ? f.hasta : "");
   }
   const filtrosActualesObj = useMemo(() => {
     const o: Record<string, unknown> = {};
     filtros.forEach((k) => { o[k] = true; });
     if (q.trim()) o.q = q.trim();
+    if (desde) o.desde = desde;
+    if (hasta) o.hasta = hasta;
     return o;
-  }, [filtros, q]);
+  }, [filtros, q, desde, hasta]);
 
   function toggleFiltro(slug: SegmentoSlug) {
     setFiltros((prev) => {
@@ -102,7 +109,7 @@ export default function ClientesSegmentosPage() {
       return s;
     });
   }
-  function limpiarFiltros() { setFiltros(new Set()); setQ(""); }
+  function limpiarFiltros() { setFiltros(new Set()); setQ(""); setDesde(""); setHasta(""); }
 
   useEffect(() => {
     let cancel = false;
@@ -110,6 +117,8 @@ export default function ClientesSegmentosPage() {
     const qs = new URLSearchParams();
     filtros.forEach((slug) => qs.set(slug, "1"));
     if (q.trim()) qs.set("q", q.trim());
+    if (desde) qs.set("desde", desde);
+    if (hasta) qs.set("hasta", hasta);
     fetchWithSupabaseSession(`/api/clientes/segmentos?${qs}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((j) => {
@@ -122,7 +131,7 @@ export default function ClientesSegmentosPage() {
       .catch((e) => setError(e instanceof Error ? e.message : "Error"))
       .finally(() => { if (!cancel) setCargando(false); });
     return () => { cancel = true; };
-  }, [filtros, q]);
+  }, [filtros, q, desde, hasta]);
 
   const columnasVis = useMemo(() => COLUMNAS.filter((c) => colsVis.has(c.key)), [colsVis]);
   const filtrosActivos = useMemo(() => segmentos.filter((s) => filtros.has(s.slug)), [segmentos, filtros]);
@@ -201,7 +210,7 @@ export default function ClientesSegmentosPage() {
     }
   }
 
-  const hayFiltros = filtros.size > 0 || q.trim().length > 0;
+  const hayFiltros = filtros.size > 0 || q.trim().length > 0 || Boolean(desde) || Boolean(hasta);
 
   return (
     <div className="max-w-6xl space-y-6">
@@ -249,8 +258,7 @@ export default function ClientesSegmentosPage() {
                   : "border-slate-200 bg-white hover:border-[#4FAEB2]/50 hover:shadow"
               }`}
             >
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-xl">{s.emoji}</span>
+              <div className="flex items-center justify-end mb-1">
                 <span className={`text-xl font-bold tabular-nums ${activo ? "text-[#3F8E91]" : "text-slate-700"}`}>{s.count}</span>
               </div>
               <p className={`text-xs font-bold ${activo ? "text-[#3F8E91]" : "text-slate-800"}`}>{s.label}</p>
@@ -266,16 +274,22 @@ export default function ClientesSegmentosPage() {
       <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-3 print:border-0 print:shadow-none print:p-0">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs text-slate-500 font-semibold">Filtros activos:</span>
-          {filtrosActivos.length === 0 && q.trim().length === 0 ? (
+          {!hayFiltros ? (
             <span className="text-xs text-slate-400 italic">ninguno (mostrando todos los clientes)</span>
           ) : (
             <>
               {filtrosActivos.map((f) => (
                 <span key={f.slug} className="inline-flex items-center gap-1 rounded-full bg-[#4FAEB2]/10 border border-[#4FAEB2]/30 px-2 py-0.5 text-xs text-[#3F8E91] font-semibold">
-                  {f.emoji} {f.label}
+                  {f.label}
                   <button type="button" onClick={() => toggleFiltro(f.slug)} className="ml-1 text-[#3F8E91] hover:text-[#2a6a6d] print:hidden" aria-label={`Quitar ${f.label}`}>×</button>
                 </span>
               ))}
+              {(desde || hasta) && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 border border-slate-200 px-2 py-0.5 text-xs text-slate-700 font-semibold">
+                  compra: {desde || "…"} → {hasta || "…"}
+                  <button type="button" onClick={() => { setDesde(""); setHasta(""); }} className="ml-1 text-slate-600 hover:text-slate-900 print:hidden" aria-label="Quitar fechas">×</button>
+                </span>
+              )}
               {q.trim() && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 border border-slate-200 px-2 py-0.5 text-xs text-slate-700 font-semibold">
                   búsqueda: &ldquo;{q.trim()}&rdquo;
@@ -292,14 +306,22 @@ export default function ClientesSegmentosPage() {
             <span className="text-xs text-slate-500 ml-1">cliente(s){hayFiltros ? " coinciden" : ` de ${totalClientes}`}</span>
           </span>
         </div>
-        <div className="mt-2 print:hidden">
+        <div className="mt-2 flex flex-wrap items-center gap-2 print:hidden">
           <input
             type="text"
             placeholder="Búsqueda por nombre / teléfono / email…"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm"
+            className="flex-1 min-w-[200px] rounded-lg border border-slate-200 px-3 py-1.5 text-sm"
           />
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] text-slate-500 whitespace-nowrap">Última compra:</span>
+            <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)}
+              className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm" title="Desde" />
+            <span className="text-slate-400 text-xs">→</span>
+            <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)}
+              className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm" title="Hasta" />
+          </div>
         </div>
       </div>
 
