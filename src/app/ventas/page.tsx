@@ -509,12 +509,21 @@ export default function VentasPage() {
 
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-xl font-semibold">{t("Órdenes de venta")}</h2>
-          <Link
-            href="/venta/nueva"
-            className="bg-[#4FAEB2] hover:bg-[#3F8E91] text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm"
-          >
-            + {t("Nueva venta")}
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/explorar/ventas"
+              className="inline-flex items-center gap-1.5 border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+              title="Explorar ventas tipo Excel: columnas, filtros combinables, orden, export"
+            >
+              🔎 Explorar (Excel)
+            </Link>
+            <Link
+              href="/venta/nueva"
+              className="bg-[#4FAEB2] hover:bg-[#3F8E91] text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm"
+            >
+              + {t("Nueva venta")}
+            </Link>
+          </div>
         </div>
 
         {/* Filtros */}

@@ -25,8 +25,22 @@ export default function ExplorarVentasPage() {
   const [cargando, setCargando] = useState(true);
 
   // Rango de fechas del FETCH (trae los datos; los filtros finos son client-side).
-  const [desde, setDesde] = useState<string>(() => { const d = new Date(); d.setMonth(d.getMonth() - 3); return d.toISOString().slice(0, 10); });
-  const [hasta, setHasta] = useState<string>(() => new Date().toISOString().slice(0, 10));
+  // Se puede prefijar por URL (?desde=YYYY-MM-DD&hasta=YYYY-MM-DD) para que un
+  // indicador del dashboard abra la lista ya acotada al período.
+  const [desde, setDesde] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      const p = new URLSearchParams(window.location.search).get("desde");
+      if (p && /^\d{4}-\d{2}-\d{2}$/.test(p)) return p;
+    }
+    const d = new Date(); d.setMonth(d.getMonth() - 3); return d.toISOString().slice(0, 10);
+  });
+  const [hasta, setHasta] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      const p = new URLSearchParams(window.location.search).get("hasta");
+      if (p && /^\d{4}-\d{2}-\d{2}$/.test(p)) return p;
+    }
+    return new Date().toISOString().slice(0, 10);
+  });
 
   useEffect(() => {
     let cancel = false;
