@@ -326,14 +326,39 @@ export default function NuevaVentaPage() {
       const idx = prev.findIndex((l) => l.franja_id === f.id);
       if (idx >= 0) {
         const copy = [...prev];
-        copy[idx] = { ...copy[idx], cantidad: copy[idx].cantidad + 1 };
+        const l = copy[idx];
+        const oldCant = Math.max(1, l.cantidad);
+        const newCant = oldCant + 1;
+        const oldUnit = Number(l.descuento_unitario) || 0;
+        // Preservar el DESCUENTO TOTAL de la línea (lump) al sumar unidades
+        // de la misma franja — el descuento se aplicó pensando en el ítem,
+        // no por unidad.
+        let nuevoDescUnit = oldUnit;
+        if (oldUnit > 0) {
+          const lump = oldUnit * oldCant;
+          nuevoDescUnit = Math.min(l.precio_unitario, Math.round(lump / newCant));
+        }
+        copy[idx] = { ...l, cantidad: newCant, descuento_unitario: nuevoDescUnit };
         return copy;
       }
       return [...prev, { franja_id: f.id, precio_referencia: precio, precio_unitario: precio, cantidad: 1, tipo_prenda_id: null }];
     });
   }
   function actualizarLinea(idx: number, patch: Partial<Linea>) {
-    setLleva((prev) => prev.map((l, i) => i === idx ? { ...l, ...patch } : l));
+    setLleva((prev) => prev.map((l, i) => {
+      if (i !== idx) return l;
+      const next = { ...l, ...patch };
+      // Si cambia la cantidad y hay descuento manual, preservar el lump total.
+      const oldCant = Math.max(1, Number(l.cantidad) || 1);
+      const newCant = Math.max(1, Number(next.cantidad) || 1);
+      const oldUnit = Number(l.descuento_unitario) || 0;
+      const patchTocaDesc = Object.prototype.hasOwnProperty.call(patch, "descuento_unitario");
+      if (!patchTocaDesc && oldUnit > 0 && oldCant !== newCant) {
+        const lump = oldUnit * oldCant;
+        next.descuento_unitario = Math.min(next.precio_unitario, Math.round(lump / newCant));
+      }
+      return next;
+    }));
   }
   function quitarLinea(idx: number) { setLleva((prev) => prev.filter((_, i) => i !== idx)); }
 
