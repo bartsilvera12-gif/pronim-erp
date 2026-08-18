@@ -149,12 +149,39 @@ export async function GET(request: NextRequest) {
       byVenta.set(row.venta_id, list);
     }
 
+    // Resolver nombres de cliente por cliente_id (query aparte para no
+    // depender del join en la cadena de fallback de columnas).
+    const clienteIds = [...new Set(
+      ventasRes.rows.map((r) => r.cliente_id).filter((x): x is string => typeof x === "string" && x.length > 0),
+    )];
+    const nombreByCliente = new Map<string, string>();
+    if (clienteIds.length > 0) {
+      const cq = new URLSearchParams({
+        select: "id,empresa,nombre_contacto,nombre",
+        empresa_id: `eq.${empresaId}`,
+        id: `in.(${clienteIds.join(",")})`,
+      });
+      const cRes = await postgrestGet<{ id: string; empresa: string | null; nombre_contacto: string | null; nombre: string | null }>(
+        "clientes", cq.toString(), { role: "jwt", jwt, noStore: true },
+      );
+      if (cRes.ok) {
+        for (const c of cRes.rows) {
+          const nom = (c.empresa && c.empresa.trim())
+            || (c.nombre_contacto && c.nombre_contacto.trim())
+            || (c.nombre && c.nombre.trim())
+            || "";
+          if (nom) nombreByCliente.set(c.id, nom);
+        }
+      }
+    }
+
     const ventas: Venta[] = ventasRes.rows.map((r) => {
       const lineRows = byVenta.get(r.id) ?? [];
       return {
         id: r.id,
         numero_control: r.numero_control,
         cliente_id: r.cliente_id ?? null,
+        cliente_nombre: r.cliente_id ? (nombreByCliente.get(r.cliente_id) ?? null) : null,
         items: mapItems(lineRows),
         moneda: r.moneda === "USD" ? "USD" : "GS",
         tipo_cambio: num(r.tipo_cambio),

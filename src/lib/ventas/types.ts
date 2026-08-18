@@ -28,6 +28,8 @@ export interface Venta {
   id:             string;
   numero_control: string;   // VTA-000001, VTA-000002, …
   cliente_id?:    string | null;
+  /** Nombre legible del cliente, resuelto en el endpoint de listado. */
+  cliente_nombre?: string | null;
 
   items: LineaVenta[];       // 1 o más productos
 

@@ -120,21 +120,27 @@ function MetricCard({
 /** Muestra el primer producto de la venta y un badge con el resto. */
 function ResumenProductos({ v }: { v: Venta }) {
   const primero = v.items[0];
-  if (!primero) {
-    return (
-      <span className="text-xs text-gray-400">Sin líneas cargadas</span>
-    );
-  }
+  const cliente = (v.cliente_nombre ?? "").trim();
   const extra   = v.items.length - 1;
   return (
     <div className="flex flex-col gap-0.5">
+      {/* Línea principal: nombre del cliente (lo que Karen quiere ver primero).
+          Si la venta no tiene cliente asociado, cae al producto. */}
       <span className="font-medium text-gray-800 leading-tight">
-        {primero.producto_nombre}
+        {cliente || (primero ? primero.producto_nombre : "Sin cliente")}
       </span>
       <div className="flex items-center gap-2 mt-0.5">
-        <span className="font-mono text-xs text-gray-400">{primero.sku}</span>
+        {/* Detalle secundario: producto + SKU + cantidad de ítems */}
+        {primero ? (
+          <span className="text-xs text-gray-400 truncate max-w-[220px]">
+            {primero.producto_nombre}
+            {primero.sku ? <span className="font-mono"> · {primero.sku}</span> : null}
+          </span>
+        ) : (
+          <span className="text-xs text-gray-400">Sin líneas cargadas</span>
+        )}
         {extra > 0 && (
-          <span className="bg-gray-100 text-gray-500 text-xs px-1.5 py-0.5 rounded-full font-medium">
+          <span className="bg-gray-100 text-gray-500 text-xs px-1.5 py-0.5 rounded-full font-medium shrink-0">
             +{extra} más
           </span>
         )}
@@ -219,7 +225,7 @@ export default function VentasPage() {
   type VentaColKey = "numero_control" | "productos" | "items_count" | "cant_total" | "iva" | "total" | "tipo" | "pago" | "sucursal" | "fecha" | "acciones";
   const VENTAS_COLUMNAS_ALL: ColumnaDef<VentaColKey>[] = [
     { key: "numero_control", label: "Número", required: true },
-    { key: "productos", label: "Productos" },
+    { key: "productos", label: "Cliente / Productos" },
     { key: "items_count", label: "Ítems" },
     { key: "cant_total", label: "Cant. total" },
     { key: "iva", label: "IVA" },
@@ -364,6 +370,7 @@ export default function VentasPage() {
       const t = busqueda.toLowerCase().trim();
       const coincide =
         v.numero_control.toLowerCase().includes(t) ||
+        (v.cliente_nombre ?? "").toLowerCase().includes(t) ||
         v.items.some(
           (i) =>
             i.producto_nombre.toLowerCase().includes(t) ||
@@ -709,7 +716,7 @@ export default function VentasPage() {
                 {colVis.map((k) => {
                   switch (k) {
                     case "numero_control": return <SortableTh key={k} sortKey="numero_control" active={sortKey} dir={sortDir} onClick={toggleSort} className="py-3 pr-4 font-medium">{t("Número")}</SortableTh>;
-                    case "productos": return <th key={k} className="py-3 pr-4 font-medium">{t("Productos")}</th>;
+                    case "productos": return <th key={k} className="py-3 pr-4 font-medium">{t("Cliente")}</th>;
                     case "items_count": return <SortableTh key={k} sortKey="cant_items" active={sortKey} dir={sortDir} onClick={toggleSort} className="hidden py-3 pr-4 text-center font-medium lg:table-cell">{t("Ítems")}</SortableTh>;
                     case "cant_total": return <SortableTh key={k} sortKey="cant_total" active={sortKey} dir={sortDir} onClick={toggleSort} className="py-3 pr-4 font-medium text-right hidden lg:table-cell">{t("Cant. total")}</SortableTh>;
                     case "iva": return <th key={k} className="py-3 pr-4 font-medium hidden lg:table-cell">IVA</th>;
