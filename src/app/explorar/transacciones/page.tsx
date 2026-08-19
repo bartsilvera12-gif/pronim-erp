@@ -7,7 +7,7 @@ import { DataExplorer, type ColumnDef } from "@/components/explorer/DataExplorer
 type Tx = {
   id: string; numero: string | null; fecha: string; tipo: string;
   cliente_id: string | null; cliente_nombre: string | null; telefono: string | null;
-  categoria: string | null;
+  categoria: string | null; sucursal: string | null;
   valor: number; valor_stock: number; cantidad: number; markup: number | null;
   tarjeta: number; efectivo: number; transferencia: number; credito: number;
   descuento: number; beneficio: number;
@@ -36,8 +36,12 @@ export default function ExplorarTransaccionesPage() {
     return () => { cancel = true; };
   }, [desde, hasta]);
 
-  const columns = useMemo<ColumnDef<Tx>[]>(() => [
+  const columns = useMemo<ColumnDef<Tx>[]>(() => {
+    const sucursales = Array.from(new Set(rows.map((r) => r.sucursal).filter(Boolean))) as string[];
+    return [
     { key: "fecha", label: "Fecha", type: "date", required: true, get: (r) => r.fecha },
+    { key: "sucursal", label: "Sucursal", type: "enum", get: (r) => r.sucursal ?? "",
+      enumOptions: sucursales.map((s) => ({ value: s, label: s })) },
     { key: "cliente", label: "Cliente", type: "text", get: (r) => r.cliente_nombre ?? "" },
     { key: "telefono", label: "Teléfono", type: "text", get: (r) => r.telefono ?? "", defaultVisible: false },
     { key: "categoria", label: "Categoría", type: "enum", get: (r) => r.categoria ? (CAT_LABEL[r.categoria] ?? r.categoria) : "",
@@ -55,7 +59,8 @@ export default function ExplorarTransaccionesPage() {
     { key: "credito", label: "Crédito", type: "money", get: (r) => r.credito, total: "sum", defaultVisible: false },
     { key: "descuento", label: "Descuento", type: "money", get: (r) => r.descuento, total: "sum", defaultVisible: false },
     { key: "beneficio", label: "Beneficio/Cashback", type: "money", get: (r) => r.beneficio, total: "sum", defaultVisible: false },
-  ], []);
+  ];
+  }, [rows]);
 
   return (
     <DataExplorer<Tx>

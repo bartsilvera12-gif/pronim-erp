@@ -40,6 +40,7 @@ export async function GET(request: NextRequest) {
     const tRP = quoteSchemaTable(schema, "cliente_recepciones_pagos");
     const tC = quoteSchemaTable(schema, "clientes");
     const tCr = quoteSchemaTable(schema, "cliente_creditos_movimientos");
+    const tS = quoteSchemaTable(schema, "sucursales");
 
     // Detección de columnas opcionales.
     async function cols(table: string): Promise<Set<string>> {
@@ -63,6 +64,8 @@ export async function GET(request: NextRequest) {
     const vpHasDir = vpc.has("direccion");
     const crHasCat = crc.has("categoria");
     const cHasVip = cc.has("es_vip");
+    const vHasSuc = vc.has("sucursal_id");
+    const rHasSuc = rc.has("sucursal_id");
 
     const sp = request.nextUrl.searchParams;
     const desde = sp.get("desde");
@@ -161,11 +164,13 @@ export async function GET(request: NextRequest) {
           COALESCE(vpay.credito,0)::float8 AS credito,
           ${vHasDesc ? "-COALESCE(v.descuento_general,0)" : "0"}::float8 AS descuento,
           ${crHasCat ? "COALESCE(cb.cashback,0)" : "0"}::float8 AS beneficio,
+          ${vHasSuc ? "sv.nombre" : "NULL::text"} AS sucursal,
           v.numero_control AS numero
         FROM ${tV} v
         LEFT JOIN ${tC} c   ON c.id = v.cliente_id
         LEFT JOIN ult       ON ult.cliente_id = v.cliente_id
         LEFT JOIN vpay      ON vpay.venta_id = v.id
+        ${vHasSuc ? `LEFT JOIN ${tS} sv ON sv.id = v.sucursal_id` : ""}
         ${cbJoinVenta}
         WHERE v.empresa_id = $1 AND (v.estado IS NULL OR v.estado <> 'anulada') ${fVentas}
 
@@ -189,11 +194,13 @@ export async function GET(request: NextRequest) {
           -COALESCE(rpay.credito,0)::float8 AS credito,
           0::float8 AS descuento,
           0::float8 AS beneficio,
+          ${rHasSuc ? "sr.nombre" : "NULL::text"} AS sucursal,
           r.numero_control AS numero
         FROM ${tR} r
         LEFT JOIN ${tC} c ON c.id = r.cliente_id
         LEFT JOIN ult     ON ult.cliente_id = r.cliente_id
         LEFT JOIN rpay    ON rpay.recepcion_id = r.id
+        ${rHasSuc ? `LEFT JOIN ${tS} sr ON sr.id = r.sucursal_id` : ""}
         WHERE r.empresa_id = $1 AND (r.estado IS NULL OR r.estado <> 'anulada') ${fRecep}
       ) t
       ORDER BY fecha DESC
