@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeftRight, Receipt, Users, Shirt, Package, Wallet, Banknote, type LucideIcon } from "lucide-react";
+import { ArrowLeftRight, Receipt, Users, Shirt, Package, Wallet, Banknote, TrendingDown, type LucideIcon } from "lucide-react";
 
 const SECCIONES: { href: string; titulo: string; desc: string; Icon: LucideIcon; tint: string }[] = [
   { href: "/explorar/transacciones", titulo: "Transacciones (todo)",   desc: "Ventas, compras y cambios en un solo listado con signo: valor, stock, pagos por método, markup, descuento, cashback.", Icon: ArrowLeftRight, tint: "text-[#3F8E91] bg-[#4FAEB2]/10" },
@@ -11,6 +11,7 @@ const SECCIONES: { href: string; titulo: string; desc: string; Icon: LucideIcon;
   { href: "/explorar/evaluaciones",  titulo: "Compras / Evaluaciones", desc: "Prendas evaluadas por cliente: sucursal, evaluadora, total pagado, estado.", Icon: Shirt, tint: "text-sky-600 bg-sky-50" },
   { href: "/explorar/inventario",    titulo: "Inventario",             desc: "Productos: stock, valor, costo, precio, categoría, tipo, bajo/sin stock.", Icon: Package, tint: "text-amber-600 bg-amber-50" },
   { href: "/explorar/creditos",      titulo: "Créditos y Cashback",    desc: "Movimientos de cartera: cliente, tipo, categoría, origen, monto.", Icon: Wallet, tint: "text-rose-600 bg-rose-50" },
+  { href: "/explorar/gastos",        titulo: "Gastos",                 desc: "Gastos por categoría, fijos/variables, recurrentes. En qué gastamos y cuánto.", Icon: TrendingDown, tint: "text-orange-600 bg-orange-50" },
   { href: "/explorar/caja",          titulo: "Cierres de caja",        desc: "Turnos: apertura/cierre, contado vs esperado, diferencias, por usuario.", Icon: Banknote, tint: "text-teal-600 bg-teal-50" },
 ];
 
