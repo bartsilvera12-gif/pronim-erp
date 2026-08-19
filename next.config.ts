@@ -8,6 +8,10 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  // `xlsx` (SheetJS) hace requires dinámicos de módulos de Node; si Turbopack
+  // lo bundlea, los export server-side (/api/**/export) truenan en runtime.
+  // Marcándolo externo se carga nativo y funciona.
+  serverExternalPackages: ["xlsx"],
   // Next.js 16 limita el body de las requests a 10 MB por defecto. El módulo
   // de reseñas acepta videos de hasta 200 MB (MP4/WebM/MOV), por lo que hay
   // que subir este tope. El nombre `middlewareClientMaxBodySize` es engañoso:

@@ -22,7 +22,9 @@ export default function ExportExcelButton({ url, label = "Exportar Excel", class
     try {
       const res = await fetch(url, { credentials: "include" });
       if (!res.ok) {
-        void alert({ message: "No se pudo exportar (${res.status}).", variant: "warning" });
+        let detalle = "";
+        try { const j = await res.json(); detalle = j?.error ? `: ${j.error}` : ""; } catch { /* no json */ }
+        void alert({ message: `No se pudo exportar (${res.status})${detalle}.`, variant: "warning" });
         return;
       }
       const blob = await res.blob();

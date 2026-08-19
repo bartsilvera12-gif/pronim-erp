@@ -258,7 +258,9 @@ export function DataExplorer<T>(props: {
   }
 
   async function exportarXlsx() {
-    const XLSX = await import("xlsx");
+    // Interop CJS: el import dinámico puede envolver el módulo en .default.
+    const mod = await import("xlsx");
+    const XLSX = ((mod as unknown as { default?: typeof mod }).default ?? mod) as typeof mod;
     const aoa: (string | number | Date)[][] = [];
     aoa.push(colsVis.map((c) => c.label));
     ordenadas.forEach((r) => aoa.push(colsVis.map((c) => valorXlsx(c, r))));
@@ -286,7 +288,28 @@ export function DataExplorer<T>(props: {
     });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Datos");
-    XLSX.writeFile(wb, `${csvName}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    // writeFile en el browser dispara la descarga. Algunos navegadores/entornos
+    // bloquean writeFile; en ese caso generamos el blob y descargamos a mano.
+    try {
+      XLSX.writeFile(wb, `${csvName}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    } catch {
+      const out = XLSX.write(wb, { type: "array", bookType: "xlsx" }) as ArrayBuffer;
+      const blob = new Blob([out], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = `${csvName}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+  }
+
+  async function exportarXlsxSafe() {
+    try { await exportarXlsx(); }
+    catch (e) {
+      console.error("[DataExplorer] export xlsx", e);
+      // Fallback duro a CSV para no dejar al usuario sin export.
+      exportarCsv();
+    }
   }
 
   function exportarCsv() {
@@ -432,7 +455,7 @@ export function DataExplorer<T>(props: {
           <button type="button" onClick={limpiarTodo} className="text-xs text-slate-500 hover:text-slate-800 underline">Limpiar todo</button>
         )}
 
-        <button type="button" onClick={exportarXlsx} disabled={ordenadas.length === 0}
+        <button type="button" onClick={exportarXlsxSafe} disabled={ordenadas.length === 0}
           className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-40"
           title="Descargar en Excel (.xlsx)">
           Exportar Excel

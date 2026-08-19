@@ -40,7 +40,8 @@ export async function GET(request: NextRequest) {
       headers: xlsxResponseHeaders(`compras-${nowStamp()}`),
     });
   } catch (err) {
-    console.error("[/api/compras/export]", err instanceof Error ? err.message : err);
-    return new Response("No se pudo generar el Excel", { status: 500 });
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[/api/compras/export]", msg);
+    return new Response(JSON.stringify({ error: msg }), { status: 500, headers: { "Content-Type": "application/json" } });
   }
 }
