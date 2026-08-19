@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeftRight, Receipt, Shirt, Package, Wallet, Banknote, TrendingDown, Users } from "lucide-react";
+import { ArrowLeftRight, Receipt, Shirt, Package, Wallet, Banknote, TrendingDown, TrendingUp, Users } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import Transacciones from "./transacciones/page";
@@ -13,8 +13,9 @@ import Inventario from "./inventario/page";
 import Creditos from "./creditos/page";
 import Gastos from "./gastos/page";
 import Caja from "./caja/page";
+import Comparativo from "./comparativo/page";
 
-type TabKey = "transacciones" | "items" | "ventas" | "evaluaciones" | "inventario" | "creditos" | "gastos" | "caja";
+type TabKey = "transacciones" | "items" | "ventas" | "evaluaciones" | "inventario" | "creditos" | "gastos" | "caja" | "comparativo";
 
 const TABS: { key: TabKey; label: string; Icon: LucideIcon; Comp: React.ComponentType }[] = [
   { key: "transacciones", label: "Transacciones", Icon: ArrowLeftRight, Comp: Transacciones },
@@ -25,6 +26,7 @@ const TABS: { key: TabKey; label: string; Icon: LucideIcon; Comp: React.Componen
   { key: "creditos",      label: "Créditos",      Icon: Wallet,         Comp: Creditos },
   { key: "gastos",        label: "Gastos",        Icon: TrendingDown,   Comp: Gastos },
   { key: "caja",          label: "Caja",          Icon: Banknote,       Comp: Caja },
+  { key: "comparativo",   label: "Comparar períodos", Icon: TrendingUp, Comp: Comparativo },
 ];
 
 export default function ExplorarHubPage() {
