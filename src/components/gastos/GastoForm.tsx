@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createGasto, updateGasto } from "@/lib/gastos/actions";
 import MontoInput from "@/components/ui/MontoInput";
 import type { Gasto, GastoInput } from "@/lib/gastos/actions";
 import { hoyAsuncionYmd } from "@/lib/fecha/asuncion";
+import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 
 const fLabel = "block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1";
 const fInput =
@@ -21,6 +22,16 @@ export default function GastoForm({ gasto, onSuccess }: Props) {
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [sucursales, setSucursales] = useState<{ id: string; nombre: string }[]>([]);
+  useEffect(() => {
+    let cancel = false;
+    fetchWithSupabaseSession("/api/sucursales", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => { if (!cancel) setSucursales((j?.data?.sucursales ?? j?.sucursales ?? []) as { id: string; nombre: string }[]); })
+      .catch(() => {});
+    return () => { cancel = true; };
+  }, []);
+
   const [form, setForm] = useState<GastoInput>({
     categoria: gasto?.categoria ?? "",
     descripcion: gasto?.descripcion ?? "",
@@ -29,6 +40,7 @@ export default function GastoForm({ gasto, onSuccess }: Props) {
     recurrente: gasto?.recurrente ?? false,
     frecuencia: gasto?.frecuencia ?? "",
     fecha: gasto?.fecha ?? hoyAsuncionYmd(),
+    sucursal_id: gasto?.sucursal_id ?? "",
   });
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) {
@@ -163,6 +175,20 @@ export default function GastoForm({ gasto, onSuccess }: Props) {
               required
             />
           </div>
+          {sucursales.length > 0 && (
+            <div>
+              <label className={fLabel}>Sucursal</label>
+              <select
+                name="sucursal_id"
+                value={form.sucursal_id ?? ""}
+                onChange={(e) => setForm((prev) => ({ ...prev, sucursal_id: e.target.value }))}
+                className={fInput}
+              >
+                <option value="">— General (sin sucursal) —</option>
+                {sucursales.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+              </select>
+            </div>
+          )}
         </div>
       </div>
 

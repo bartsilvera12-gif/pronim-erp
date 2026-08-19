@@ -13,6 +13,7 @@ export type Gasto = {
   recurrente: boolean;
   frecuencia?: string;
   fecha: string;
+  sucursal_id?: string | null;
   created_at: string;
 };
 
@@ -24,6 +25,7 @@ export type GastoInput = {
   recurrente: boolean;
   frecuencia?: string;
   fecha: string;
+  sucursal_id?: string | null;
 };
 
 function mapRow(r: Record<string, unknown>): Gasto {
@@ -37,6 +39,7 @@ function mapRow(r: Record<string, unknown>): Gasto {
     recurrente: Boolean(r.recurrente),
     frecuencia: r.frecuencia as string | undefined,
     fecha: (r.fecha as string) ?? "",
+    sucursal_id: (r.sucursal_id as string | null) ?? null,
     created_at: (r.created_at as string) ?? "",
   };
 }
@@ -98,6 +101,7 @@ export async function createGasto(input: GastoInput): Promise<Gasto> {
       recurrente: input.recurrente,
       frecuencia: input.frecuencia?.trim() || null,
       fecha: input.fecha,
+      ...(input.sucursal_id !== undefined ? { sucursal_id: input.sucursal_id || null } : {}),
     })
     .select()
     .single();
@@ -118,6 +122,7 @@ export async function updateGasto(id: string, input: Partial<GastoInput>): Promi
   if (input.recurrente !== undefined) update.recurrente = input.recurrente;
   if (input.frecuencia !== undefined) update.frecuencia = input.frecuencia?.trim() || null;
   if (input.fecha !== undefined) update.fecha = input.fecha;
+  if (input.sucursal_id !== undefined) update.sucursal_id = input.sucursal_id || null;
 
   const { data, error } = await supabase
     .from("gastos")
