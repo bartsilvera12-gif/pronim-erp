@@ -6,6 +6,7 @@ import { ArrowLeftRight, Receipt, Users, Shirt, Package, Wallet, Banknote, type 
 const SECCIONES: { href: string; titulo: string; desc: string; Icon: LucideIcon; tint: string }[] = [
   { href: "/explorar/transacciones", titulo: "Transacciones (todo)",   desc: "Ventas, compras y cambios en un solo listado con signo: valor, stock, pagos por método, markup, descuento, cashback.", Icon: ArrowLeftRight, tint: "text-[#3F8E91] bg-[#4FAEB2]/10" },
   { href: "/explorar/ventas",        titulo: "Ventas",                 desc: "Cada venta: fecha, tienda, cliente, valor, forma de pago, descuento, cantidad.", Icon: Receipt, tint: "text-emerald-600 bg-emerald-50" },
+  { href: "/explorar/items",         titulo: "Ítems (prendas)",        desc: "Cada prenda vendida o comprada: rango de precio, categoría, sucursal. Qué se vende/compra más.", Icon: Shirt, tint: "text-fuchsia-600 bg-fuchsia-50" },
   { href: "/clientes/segmentos",     titulo: "Clientes",               desc: "Cartera completa: última compra, total comprado, crédito, cashback, VIP.", Icon: Users, tint: "text-violet-600 bg-violet-50" },
   { href: "/explorar/evaluaciones",  titulo: "Compras / Evaluaciones", desc: "Prendas evaluadas por cliente: sucursal, evaluadora, total pagado, estado.", Icon: Shirt, tint: "text-sky-600 bg-sky-50" },
   { href: "/explorar/inventario",    titulo: "Inventario",             desc: "Productos: stock, valor, costo, precio, categoría, tipo, bajo/sin stock.", Icon: Package, tint: "text-amber-600 bg-amber-50" },
