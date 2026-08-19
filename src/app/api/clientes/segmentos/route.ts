@@ -123,6 +123,7 @@ export async function GET(request: NextRequest) {
       actividad AS (
         SELECT v.cliente_id,
                MAX(${ventasFechaCol})           AS ultima_venta_at,
+               MIN(${ventasFechaCol})           AS primera_venta_at,
                COALESCE(SUM(v.total),0)::numeric AS total_comprado,
                COUNT(*)                          AS cnt_ventas,
                COUNT(*) FILTER (WHERE ${ventasFechaCol} >= now() - interval '90 days') AS cnt_90d,
@@ -133,20 +134,25 @@ export async function GET(request: NextRequest) {
            AND v.cliente_id IS NOT NULL
          GROUP BY v.cliente_id
       )
-    ` : `actividad AS (SELECT NULL::uuid AS cliente_id, NULL::timestamptz AS ultima_venta_at, 0::numeric AS total_comprado, 0 AS cnt_ventas, 0 AS cnt_90d, 0 AS cnt_prev_90d WHERE false)`;
+    ` : `actividad AS (SELECT NULL::uuid AS cliente_id, NULL::timestamptz AS ultima_venta_at, NULL::timestamptz AS primera_venta_at, 0::numeric AS total_comprado, 0 AS cnt_ventas, 0 AS cnt_90d, 0 AS cnt_prev_90d WHERE false)`;
 
+    // Cashback vencido (emitido con vencimiento ya pasado) — solo si hay columna.
+    const cashVencidoExpr = credHasVenc
+      ? `COALESCE(SUM(CASE WHEN tipo='ENTRADA' AND origen='cashback' AND m.vencimiento_at IS NOT NULL AND m.vencimiento_at < now() THEN monto ELSE 0 END),0)`
+      : "0";
     const creditosCTE = hasCred ? `
       creditos AS (
         SELECT m.cliente_id,
                COALESCE(SUM(CASE WHEN tipo IN ('ENTRADA','AJUSTE') THEN monto ELSE -monto END),0)::numeric AS saldo_credito,
                GREATEST(0, COALESCE(SUM(CASE WHEN tipo='ENTRADA' AND origen='cashback' ${cashVigente} THEN monto
                                  WHEN tipo='SALIDA' AND origen='cashback' THEN -monto
-                                 ELSE 0 END),0))::numeric AS saldo_cashback
+                                 ELSE 0 END),0))::numeric AS saldo_cashback,
+               ${cashVencidoExpr}::numeric AS cashback_vencido
           FROM ${credT} m
          WHERE m.empresa_id = $1
          GROUP BY m.cliente_id
       )
-    ` : `creditos AS (SELECT NULL::uuid AS cliente_id, 0::numeric AS saldo_credito, 0::numeric AS saldo_cashback WHERE false)`;
+    ` : `creditos AS (SELECT NULL::uuid AS cliente_id, 0::numeric AS saldo_credito, 0::numeric AS saldo_cashback, 0::numeric AS cashback_vencido WHERE false)`;
 
     // Recepciones (lo que el cliente NOS vende) — total vendido + count + última.
     const recepCTE = hasRecep ? `
@@ -238,6 +244,7 @@ export async function GET(request: NextRequest) {
       ${cliCols.has("ruc") ? "c.ruc" : "NULL::text"}  AS ruc,
       ${hasEsVip ? "COALESCE(c.es_vip,false)" : "false"} AS es_vip,
       a.ultima_venta_at                             AS ultima_venta_at,
+      a.primera_venta_at                            AS primera_venta_at,
       COALESCE(a.total_comprado,0)::text            AS total_comprado,
       COALESCE(a.cnt_ventas,0)                      AS cnt_ventas,
       COALESCE(recact.total_vendido,0)::text        AS total_vendido,
@@ -245,6 +252,7 @@ export async function GET(request: NextRequest) {
       (COALESCE(a.cnt_ventas,0) + COALESCE(recact.cnt_recep,0)) AS cnt_transacciones,
       COALESCE(cr.saldo_credito,0)::text            AS saldo_credito,
       COALESCE(cr.saldo_cashback,0)::text           AS saldo_cashback,
+      COALESCE(cr.cashback_vencido,0)::text         AS cashback_vencido,
       cbexp.expira                                  AS cashback_expira,
       -- Status: vip > nuevo > dormido > frecuente > activo
       CASE

@@ -26,6 +26,7 @@ type ClienteSeg = {
   es_vip: boolean;
   status: string | null;
   ultima_venta_at: string | null;
+  primera_venta_at: string | null;
   total_comprado: string;
   total_vendido: string;
   cnt_ventas: number;
@@ -33,6 +34,7 @@ type ClienteSeg = {
   cnt_transacciones: number;
   saldo_credito: string;
   saldo_cashback: string;
+  cashback_vencido: string;
   cashback_expira: string | null;
   ultima_tx_tipo: string | null;
   ultima_tx_fecha: string | null;
@@ -142,12 +144,14 @@ export default function ClientesSegmentosPage() {
       enumOptions: [{ value: "Venta", label: "Venta" }, { value: "Compra", label: "Compra" }, { value: "Cambio", label: "Cambio" }] },
     { key: "ult_fecha", label: "Últ. fecha", type: "date", get: (c) => c.ultima_tx_fecha },
     { key: "ult_monto", label: "Últ. monto", type: "money", get: (c) => Number(c.ultima_tx_monto) || 0 },
+    { key: "primera", label: "Primera compra", type: "date", get: (c) => c.primera_venta_at, defaultVisible: false },
     { key: "cnt_tx", label: "Total transacciones", type: "number", get: (c) => c.cnt_transacciones, total: "sum" },
     { key: "total_comprado", label: "Total comprado", type: "money", get: (c) => Number(c.total_comprado) || 0, total: "sum" },
     { key: "total_vendido", label: "Total vendido", type: "money", get: (c) => Number(c.total_vendido) || 0, total: "sum" },
     { key: "credito", label: "Crédito disponible", type: "money", required: true, get: (c) => Number(c.saldo_credito) || 0, total: "sum" },
     { key: "cashback", label: "Cashback disponible", type: "money", required: true, get: (c) => Number(c.saldo_cashback) || 0, total: "sum" },
     { key: "expira", label: "Cashback expira", type: "date", get: (c) => c.cashback_expira, defaultVisible: false },
+    { key: "cb_vencido", label: "Cashback vencido", type: "money", get: (c) => Number(c.cashback_vencido) || 0, total: "sum", defaultVisible: false },
     { key: "email", label: "Email", type: "text", get: (c) => c.email ?? "", defaultVisible: false },
   // eslint-disable-next-line react-hooks/exhaustive-deps
   ], [clientes]);
