@@ -527,90 +527,74 @@ export default function VentasPage() {
         </div>
 
         {/* Filtros */}
-        <div className="flex flex-wrap items-center gap-3 mb-5 pb-5 border-b border-gray-100">
-          <input
-            type="text"
-            placeholder={t("Buscar por número, producto o SKU...")}
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
-            className={`${inputFilterClass} min-w-0 flex-1 sm:min-w-64`}
-          />
-          <FancySelect
-            value={filtroTipo}
-            onChange={(v) => setFiltroTipo(v as TipoVenta | "")}
-            ariaLabel={t("Filtrar por tipo de venta")}
-            className="w-44"
-            size="sm"
-            options={[
-              { value: "", label: t("Todos los tipos") },
-              { value: "CONTADO", label: t("Contado") },
-              { value: "CREDITO", label: t("Crédito") },
-            ]}
-          />
-          <FancySelect
-            value={filtroIva}
-            onChange={(v) => setFiltroIva(v as TipoIvaVenta | "")}
-            ariaLabel={t("Filtrar por IVA")}
-            className="w-44"
-            size="sm"
-            options={[
-              { value: "", label: t("Todos los IVA") },
-              { value: "EXENTA", label: t("Exenta") },
-              { value: "5%", label: "IVA 5%" },
-              { value: "10%", label: "IVA 10%" },
-            ]}
-          />
-          {puedeAnular && sucursales.length > 1 && (
-            <FancySelect
-              value={filtroSucursal}
-              onChange={(v) => setFiltroSucursal(v as string)}
-              ariaLabel={t("Filtrar por sucursal")}
-              className="w-52"
-              size="sm"
-              options={[
-                { value: "", label: t("Todas las sucursales") },
-                ...sucursales.map((s) => ({ value: s.id, label: s.nombre })),
-              ]}
+        <div className="mb-5 rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+          {/* Buscador full-width */}
+          <div className="relative mb-3">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400">
+              <path fillRule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 3.6 9.66l3.37 3.37a.75.75 0 1 0 1.06-1.06l-3.37-3.37A5.5 5.5 0 0 0 9 3.5ZM5 9a4 4 0 1 1 8 0 4 4 0 0 1-8 0Z" clipRule="evenodd" />
+            </svg>
+            <input
+              type="text"
+              placeholder={t("Buscar por número, producto o SKU...")}
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              className="w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]/40 focus:border-[#4FAEB2]"
             />
-          )}
-          <FancySelect
-            value={filtroPago}
-            onChange={(v) => setFiltroPago(v as typeof filtroPago)}
-            ariaLabel={t("Filtrar por forma de pago")}
-            className="w-44"
-            size="sm"
-            options={[
-              { value: "", label: t("Todas formas de pago") },
-              ...formasPago.map((f) => ({ value: f.codigo, label: t(f.label) })),
-            ]}
-          />
-          <FancySelect
-            value={filtroEstado}
-            onChange={(v) => setFiltroEstado(v as typeof filtroEstado)}
-            ariaLabel={t("Filtrar por estado")}
-            className="w-40"
-            size="sm"
-            options={[
-              { value: "", label: t("Todas") },
-              { value: "completada", label: t("Completadas") },
-              { value: "anulada", label: t("Anuladas") },
-            ]}
-          />
-          {(hayFiltros || filtroPago || filtroEstado || segmento) && (
-            <button
-              onClick={() => { setBusqueda(""); setFiltroTipo(""); setFiltroIva(""); setFiltroSucursal(""); setFiltroPago(""); setFiltroEstado(""); setSegmento(""); }}
-              className="text-sm text-gray-400 hover:text-gray-600 transition-colors px-2"
-            >
-              {t("Limpiar filtros")}
-            </button>
-          )}
-          <span className="ml-auto text-sm text-gray-400 flex items-center gap-2">
-            {sucursalNombreActiva && (
-              <span className="rounded-full bg-[#4FAEB2]/10 px-2 py-0.5 text-[11px] font-semibold text-[#3F8E91]">
-                {sucursalNombreActiva}
-              </span>
+          </div>
+          {/* Selects con etiqueta, en grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{t("Tipo de venta")}</label>
+              <FancySelect value={filtroTipo} onChange={(v) => setFiltroTipo(v as TipoVenta | "")}
+                ariaLabel={t("Filtrar por tipo de venta")} className="w-full" size="sm"
+                options={[{ value: "", label: t("Todos los tipos") }, { value: "CONTADO", label: t("Contado") }, { value: "CREDITO", label: t("Crédito") }]} />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">IVA</label>
+              <FancySelect value={filtroIva} onChange={(v) => setFiltroIva(v as TipoIvaVenta | "")}
+                ariaLabel={t("Filtrar por IVA")} className="w-full" size="sm"
+                options={[{ value: "", label: t("Todos los IVA") }, { value: "EXENTA", label: t("Exenta") }, { value: "5%", label: "IVA 5%" }, { value: "10%", label: "IVA 10%" }]} />
+            </div>
+            {puedeAnular && sucursales.length > 1 && (
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{t("Sucursal")}</label>
+                <FancySelect value={filtroSucursal} onChange={(v) => setFiltroSucursal(v as string)}
+                  ariaLabel={t("Filtrar por sucursal")} className="w-full" size="sm"
+                  options={[{ value: "", label: t("Todas las sucursales") }, ...sucursales.map((s) => ({ value: s.id, label: s.nombre }))]} />
+              </div>
             )}
-            <span>{filtradas.length} {t("de")} {alcance.length} {t("ventas")}</span>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{t("Forma de pago")}</label>
+              <FancySelect value={filtroPago} onChange={(v) => setFiltroPago(v as typeof filtroPago)}
+                ariaLabel={t("Filtrar por forma de pago")} className="w-full" size="sm"
+                options={[{ value: "", label: t("Todas formas de pago") }, ...formasPago.map((f) => ({ value: f.codigo, label: t(f.label) }))]} />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{t("Estado")}</label>
+              <FancySelect value={filtroEstado} onChange={(v) => setFiltroEstado(v as typeof filtroEstado)}
+                ariaLabel={t("Filtrar por estado")} className="w-full" size="sm"
+                options={[{ value: "", label: t("Todas") }, { value: "completada", label: t("Completadas") }, { value: "anulada", label: t("Anuladas") }]} />
+            </div>
+          </div>
+          {(hayFiltros || filtroPago || filtroEstado || segmento) && (
+            <div className="mt-3 flex items-center gap-2">
+              <button
+                onClick={() => { setBusqueda(""); setFiltroTipo(""); setFiltroIva(""); setFiltroSucursal(""); setFiltroPago(""); setFiltroEstado(""); setSegmento(""); }}
+                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-50 transition-colors"
+              >
+                ✕ {t("Limpiar filtros")}
+              </button>
+              {sucursalNombreActiva && (
+                <span className="rounded-full bg-[#4FAEB2]/10 px-2 py-0.5 text-[11px] font-semibold text-[#3F8E91]">
+                  {sucursalNombreActiva}
+                </span>
+              )}
+            </div>
+          )}
+          <div className="mt-3 flex items-center justify-end gap-2 border-t border-slate-200 pt-3">
+            <span className="text-xs text-slate-500">
+              <strong className="text-slate-700">{filtradas.length}</strong> {t("de")} {alcance.length} {t("ventas")}
+            </span>
             <ColumnasDropdown<VentaColKey>
               abierto={colsOpen}
               onToggle={() => setColsOpen((v) => !v)}
@@ -620,7 +604,7 @@ export default function VentasPage() {
               onMover={colMover}
               onReset={colReset}
             />
-          </span>
+          </div>
         </div>
 
         <ModalGuardarSegmento
