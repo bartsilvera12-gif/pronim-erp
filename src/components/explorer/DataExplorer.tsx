@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useMemo, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 // xlsx se carga dinámicamente al exportar (chunk aparte) para no inflar el
 // bundle de cada página de explorador ni la memoria del build.
 
@@ -86,6 +86,22 @@ export function DataExplorer<T>(props: {
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [groupKey, setGroupKey] = useState<string>(""); // "" = sin agrupar
+
+  // Cerrar los dropdowns (Columnas / Filtros) al hacer click fuera o con Escape.
+  const colPickerRef = useRef<HTMLDivElement>(null);
+  const filtrosRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!colPickerOpen && !filtrosOpen) return;
+    function onDown(e: MouseEvent) {
+      const t = e.target as Node;
+      if (colPickerOpen && colPickerRef.current && !colPickerRef.current.contains(t)) setColPickerOpen(false);
+      if (filtrosOpen && filtrosRef.current && !filtrosRef.current.contains(t)) setFiltrosOpen(false);
+    }
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape") { setColPickerOpen(false); setFiltrosOpen(false); } }
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
+  }, [colPickerOpen, filtrosOpen]);
 
   const colsVis = useMemo(() => columns.filter((c) => visibles.has(c.key)), [columns, visibles]);
   // Columnas por las que tiene sentido agrupar (texto / enum / fecha).
@@ -359,7 +375,7 @@ export function DataExplorer<T>(props: {
           </div>
         )}
 
-        <div className="relative">
+        <div className="relative" ref={colPickerRef}>
           <button type="button" onClick={() => { setColPickerOpen((v) => !v); setFiltrosOpen(false); }}
             className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
             Columnas ({colsVis.length})
@@ -376,7 +392,7 @@ export function DataExplorer<T>(props: {
           )}
         </div>
 
-        <div className="relative">
+        <div className="relative" ref={filtrosRef}>
           <button type="button" onClick={() => { setFiltrosOpen((v) => !v); setColPickerOpen(false); }}
             className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold ${filtrosActivos.length > 0 ? "border-[#4FAEB2] bg-[#4FAEB2]/10 text-[#3F8E91]" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"}`}>
             Filtros{filtrosActivos.length > 0 ? ` (${filtrosActivos.length})` : ""}

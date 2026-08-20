@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 
 export type ReporteVista = {
@@ -32,6 +32,15 @@ export function VistasGuardadasBar(props: {
   const [open, setOpen] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [activaId, setActivaId] = useState<string | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    function onDown(e: MouseEvent) { if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false); }
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape") setOpen(false); }
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
+  }, [open]);
 
   async function cargar() {
     try {
@@ -82,7 +91,7 @@ export function VistasGuardadasBar(props: {
   }
 
   return (
-    <div className="inline-flex items-center gap-2 print:hidden relative">
+    <div ref={rootRef} className="inline-flex items-center gap-2 print:hidden relative">
       <button type="button" onClick={() => setOpen((v) => !v)}
         className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
         ⭐ Vistas ({vistas.length})
