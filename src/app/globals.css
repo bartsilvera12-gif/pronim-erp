@@ -125,6 +125,63 @@ body {
 }
 
 /**
+ * Impresión GENERAL (cualquier "Imprimir / PDF" con window.print()).
+ * El AppShell usa h-svh + overflow hidden, así que sin esto la hoja sale como
+ * una "captura" con sidebar/header y contenido recortado. Acá ocultamos el
+ * chrome y dejamos que SOLO el contenido fluya a lo largo de las páginas.
+ */
+@media print {
+  @page { margin: 12mm; }
+
+  html, body {
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+
+  /* Chrome de la app: fuera al imprimir. */
+  #neura-sidebar,
+  #neura-header {
+    display: none !important;
+  }
+
+  /* Contenedores del shell: que fluyan en vez de scrollear. */
+  #neura-app-shell,
+  #neura-main-column,
+  #neura-main-content {
+    display: block !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+  #neura-main-content { padding: 0 !important; }
+
+  /* Utilidad Tailwind print:hidden ya oculta toolbars/botones; reforzamos
+     los flotantes y overlays comunes. */
+  .mobile-bottom-nav,
+  [data-floating],
+  .print\:hidden {
+    display: none !important;
+  }
+
+  /* Sombras y colores de fondo saturados no se imprimen bien. */
+  * {
+    box-shadow: none !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Tablas largas: repetir encabezado y no cortar filas por la mitad. */
+  table { width: 100% !important; }
+  thead { display: table-header-group; }
+  tr, td, th { page-break-inside: avoid; }
+  .overflow-x-auto { overflow: visible !important; }
+}
+
+/**
  * Mobile fix — zoom involuntario en iOS Safari.
  * iOS Safari hace zoom automático cuando el usuario toca un input/textarea/select
  * con font-size < 16px. Forzamos un mínimo de 16px SOLO en mobile (<768px), sin
