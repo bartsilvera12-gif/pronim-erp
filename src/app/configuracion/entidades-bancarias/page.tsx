@@ -6,9 +6,11 @@ import {
   getEntidadesBancarias,
   createEntidadBancaria,
   updateEntidadBancaria,
+  deleteEntidadBancaria,
   type EntidadBancaria,
   type TipoEntidad,
 } from "@/lib/entidades/storage";
+import { alert, confirm } from "@/components/ui/dialog";
 
 const inputClass =
   "w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#4FAEB2] outline-none";
@@ -80,6 +82,25 @@ export default function EntidadesBancariasPage() {
     const res = await updateEntidadBancaria(en.id, { activo: !en.activo });
     if (!res.ok) setError(res.error); else await reload();
   }
+  async function handleBorrar(en: EntidadBancaria) {
+    setError(null);
+    const ok = await confirm({
+      title: "Borrar entidad",
+      message: `¿Borrar "${en.nombre}"? Si tiene cobros asociados se desactivará en lugar de eliminarse.`,
+      confirmText: "Borrar",
+      variant: "danger",
+    });
+    if (!ok) return;
+    const res = await deleteEntidadBancaria(en.id);
+    if (!res.ok) { setError(res.error); return; }
+    if (res.data.mode === "soft") {
+      void alert({
+        message: `"${en.nombre}" tiene cobros asociados, así que se desactivó (no se puede borrar del todo para conservar el historial).`,
+        variant: "warning",
+      });
+    }
+    await reload();
+  }
 
   return (
     <div className="mx-auto w-full max-w-4xl space-y-8 px-4 pb-10 sm:px-6 lg:px-8">
@@ -148,18 +169,35 @@ export default function EntidadesBancariasPage() {
                 </td>
                 <td className="py-3 pr-4">
                   <button type="button" onClick={() => toggleActivo(en)}
-                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${en.activo ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
-                    {en.activo ? "Sí" : "No"}
+                    title={en.activo ? "Click para desactivar" : "Click para activar"}
+                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold transition-colors active:scale-95 ${en.activo ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 ring-1 ring-emerald-200" : "bg-slate-100 text-slate-500 hover:bg-slate-200 ring-1 ring-slate-200"}`}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${en.activo ? "bg-emerald-500" : "bg-slate-400"}`} />
+                    {en.activo ? "Activo" : "Inactivo"}
                   </button>
                 </td>
                 <td className="py-3">
                   {editId === en.id ? (
-                    <div className="flex gap-2">
-                      <button type="button" onClick={() => void saveEdit()} className="text-sky-600 font-medium hover:underline">Guardar</button>
-                      <button type="button" onClick={() => setEditId(null)} className="text-slate-500 hover:underline">Cancelar</button>
+                    <div className="flex flex-wrap gap-2">
+                      <button type="button" onClick={() => void saveEdit()}
+                        className="inline-flex items-center gap-1 rounded-lg bg-[#4FAEB2] px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#3F8E91] active:scale-95">
+                        ✓ Guardar
+                      </button>
+                      <button type="button" onClick={() => setEditId(null)}
+                        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 active:scale-95">
+                        Cancelar
+                      </button>
                     </div>
                   ) : (
-                    <button type="button" onClick={() => startEdit(en)} className="text-sky-600 font-medium hover:underline">Editar</button>
+                    <div className="flex flex-wrap gap-2">
+                      <button type="button" onClick={() => startEdit(en)}
+                        className="inline-flex items-center gap-1 rounded-lg border border-[#4FAEB2]/40 bg-[#4FAEB2]/10 px-3 py-1.5 text-xs font-semibold text-[#3F8E91] transition-colors hover:bg-[#4FAEB2]/20 active:scale-95">
+                        ✏️ Editar
+                      </button>
+                      <button type="button" onClick={() => void handleBorrar(en)}
+                        className="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-600 transition-colors hover:bg-rose-100 active:scale-95">
+                        🗑 Borrar
+                      </button>
+                    </div>
                   )}
                 </td>
               </tr>

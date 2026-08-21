@@ -86,6 +86,7 @@ export function DataExplorer<T>(props: {
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [groupKey, setGroupKey] = useState<string>(""); // "" = sin agrupar
+  const [printOrient, setPrintOrient] = useState<"portrait" | "landscape">("landscape");
 
   // Cerrar los dropdowns (Columnas / Filtros) al hacer click fuera o con Escape.
   const colPickerRef = useRef<HTMLDivElement>(null);
@@ -350,7 +351,14 @@ export function DataExplorer<T>(props: {
   }
 
   return (
-    <div className="max-w-full space-y-4">
+    <div className="dx-print-root max-w-full space-y-4">
+      {/* Orientación y ajuste de hoja al imprimir (el usuario elige Horizontal/Vertical). */}
+      <style>{`@media print {
+        @page { size: A4 ${printOrient}; margin: 8mm; }
+        .dx-print-root table { font-size: 8.5px !important; width: 100% !important; table-layout: auto; }
+        .dx-print-root th, .dx-print-root td { padding: 2px 4px !important; white-space: normal !important; word-break: break-word; }
+        .dx-print-root .overflow-x-auto { overflow: visible !important; }
+      }`}</style>
       <div>
         <h1 className="text-2xl font-bold text-slate-900">{titulo}</h1>
         {descripcion && <p className="text-sm text-slate-500 mt-0.5 print:hidden">{descripcion}</p>}
@@ -481,10 +489,18 @@ export function DataExplorer<T>(props: {
           title="Descargar en CSV">
           CSV
         </button>
-        <button type="button" onClick={() => window.print()}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
-          Imprimir / PDF
-        </button>
+        <div className="inline-flex items-center overflow-hidden rounded-lg border border-slate-200">
+          <select value={printOrient} onChange={(e) => setPrintOrient(e.target.value as "portrait" | "landscape")}
+            title="Orientación de la hoja al imprimir / guardar PDF"
+            className="border-0 bg-slate-50 px-2 py-1.5 text-xs font-medium text-slate-600 focus:outline-none">
+            <option value="landscape">Horizontal</option>
+            <option value="portrait">Vertical</option>
+          </select>
+          <button type="button" onClick={() => window.print()}
+            className="border-l border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+            Imprimir / PDF
+          </button>
+        </div>
 
         <span className="ml-auto text-sm text-slate-800">
           <strong className="text-lg tabular-nums">{ordenadas.length}</strong>

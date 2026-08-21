@@ -67,3 +67,21 @@ export async function updateEntidadBancaria(
     return { ok: false, error: e instanceof Error ? e.message : "Error de red" };
   }
 }
+
+/**
+ * Borra una entidad. Devuelve `mode`: "hard" (eliminada) o "soft" (desactivada
+ * porque tiene cobros asociados). El caller usa `mode` para el mensaje al usuario.
+ */
+export async function deleteEntidadBancaria(id: string): Promise<Res<{ id: string; mode: "hard" | "soft" }>> {
+  try {
+    const r = await fetch(`/api/entidades-bancarias?id=${encodeURIComponent(id)}`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j?.success) return { ok: false, error: j?.error ?? `Error ${r.status}` };
+    return { ok: true, data: { id, mode: (j.data?.mode ?? "hard") as "hard" | "soft" } };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Error de red" };
+  }
+}

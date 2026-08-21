@@ -158,7 +158,7 @@ export default function ClientesSegmentosPage() {
 
   return (
     <div className="max-w-full space-y-4">
-      <div className="flex items-start justify-between flex-wrap gap-3">
+      <div className="flex items-start justify-between flex-wrap gap-3 print:hidden">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Clientes</h1>
           <p className="text-sm text-slate-500 mt-0.5">

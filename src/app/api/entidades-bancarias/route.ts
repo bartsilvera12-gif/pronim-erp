@@ -7,6 +7,7 @@ import {
   listEntidadesBancarias,
   insertEntidadBancaria,
   updateEntidadBancaria,
+  deleteEntidadBancaria,
   type TipoEntidad,
 } from "@/lib/ventas/server/pago-detalle-pg";
 
@@ -100,7 +101,11 @@ export async function PATCH(request: NextRequest) {
   }
 }
 
-/** DELETE /api/entidades-bancarias?id=... — soft delete (activo=false). */
+/**
+ * DELETE /api/entidades-bancarias?id=... — borra la entidad. Si está referenciada
+ * por cobros la desactiva (soft-delete) para preservar el historial. El campo
+ * `mode` indica qué pasó: "hard" (borrada) o "soft" (desactivada).
+ */
 export async function DELETE(request: NextRequest) {
   try {
     const auth = await getAuthWithRol(request);
@@ -108,9 +113,9 @@ export async function DELETE(request: NextRequest) {
     const schema = await fetchDataSchemaForEmpresaId(auth.empresa_id);
     const id = request.nextUrl.searchParams.get("id") ?? "";
     if (!id) return NextResponse.json(errorResponse("Falta el id de la entidad."), { status: 400 });
-    const entidad = await updateEntidadBancaria(schema, auth.empresa_id, id, { activo: false });
-    if (!entidad) return NextResponse.json(errorResponse("Entidad no encontrada."), { status: 404 });
-    return NextResponse.json(successResponse({ entidad }));
+    const res = await deleteEntidadBancaria(schema, auth.empresa_id, id);
+    if (!res) return NextResponse.json(errorResponse("Entidad no encontrada."), { status: 404 });
+    return NextResponse.json(successResponse({ id, mode: res.mode }));
   } catch (err) {
     console.error("[/api/entidades-bancarias DELETE]", err instanceof Error ? err.message : err);
     return NextResponse.json(errorResponse("No se pudo eliminar la entidad."), { status: 500 });

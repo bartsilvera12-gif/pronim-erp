@@ -85,6 +85,7 @@
     "tsx": "^4.21.0",
     "tus-js-client": "^4.3.1",
     "xlsx": "^0.18.5",
+    "xlsx-js-style": "^1.2.0",
     "xml-crypto": "^6.1.2"
   },
   "devDependencies": {

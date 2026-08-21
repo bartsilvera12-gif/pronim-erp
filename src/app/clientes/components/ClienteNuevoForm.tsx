@@ -38,7 +38,7 @@ export type ClienteNuevoFormProps = {
 // ── Estilos ────────────────────────────────────────────────────────────────────
 
 const inputClass =
-  "w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm transition-colors hover:border-[#4FAEB2]/60 focus:border-[#4FAEB2] focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]/20";
+  "w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm transition-colors hover:border-[#4FAEB2]/60 focus:border-[#4FAEB2] focus:bg-sky-50 focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]/20";
 const labelClass = "block text-xs font-medium uppercase tracking-wide text-slate-500 mb-1.5";
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
@@ -311,7 +311,9 @@ function ClienteNuevoFormInner({ variant = "page", onCreated, onCancel }: Client
       ruc: form.ruc.trim() || undefined,
       documento: form.documento.trim() || undefined,
       telefono: form.telefono.trim() || undefined,
+      telefono_secundario: form.telefono_secundario.trim() || undefined,
       email: form.email.trim() || undefined,
+      email_secundario: form.email_secundario.trim() || undefined,
       direccion: form.direccion.trim() || undefined,
       ciudad: form.ciudad.trim().toUpperCase() || undefined,
       pais: form.pais.trim().toUpperCase() || undefined,

@@ -118,6 +118,40 @@ export async function updateEntidadBancaria(
 }
 
 /**
+ * Borra una entidad. Intenta un DELETE real; si está referenciada por cobros
+ * (FK 23503) hace un soft-delete (activo=false) para no romper el historial.
+ * Devuelve { mode: "hard" | "soft" } o null si no existe / no es de la empresa.
+ */
+export async function deleteEntidadBancaria(
+  schemaRaw: string,
+  empresaId: string,
+  id: string
+): Promise<{ mode: "hard" | "soft" } | null> {
+  const schema = assertAllowedChatDataSchema(schemaRaw);
+  const t = quoteSchemaTable(schema, "entidades_bancarias");
+  try {
+    const { rows } = await pool().query<{ id: string }>(
+      `DELETE FROM ${t} WHERE id=$1::uuid AND empresa_id=$2::uuid RETURNING id`,
+      [id, empresaId]
+    );
+    if (rows.length === 0) return null;
+    return { mode: "hard" };
+  } catch (e) {
+    const code = (e as { code?: string })?.code;
+    if (code === "23503") {
+      // Referenciada por cobros → soft-delete.
+      const { rows } = await pool().query<{ id: string }>(
+        `UPDATE ${t} SET activo=false, updated_at=now() WHERE id=$1::uuid AND empresa_id=$2::uuid RETURNING id`,
+        [id, empresaId]
+      );
+      if (rows.length === 0) return null;
+      return { mode: "soft" };
+    }
+    throw e;
+  }
+}
+
+/**
  * Inserta 1 detalle de cobro para una venta. Devuelve el id, o null si falla
  * (best-effort: el caller ignora el error para no romper la venta).
  */
