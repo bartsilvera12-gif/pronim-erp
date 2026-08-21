@@ -39,7 +39,7 @@ const SIMPLE_CLIENTE =
 // ── Estilos ────────────────────────────────────────────────────────────────────
 
 const inputClass =
-  "w-full border border-slate-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-[#4FAEB2] focus:outline-none bg-white text-sm";
+  "w-full border border-slate-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-[#4FAEB2] focus:border-[#4FAEB2] focus:bg-sky-50 focus:outline-none bg-white text-sm transition-colors";
 const labelClass = "block text-sm font-medium text-slate-700 mb-1.5";
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
@@ -323,7 +323,9 @@ function NuevoClienteForm() {
       ruc: form.ruc.trim() || undefined,
       documento: form.documento.trim() || undefined,
       telefono: form.telefono.trim() || undefined,
+      telefono_secundario: form.telefono_secundario.trim() || undefined,
       email: form.email.trim() || undefined,
+      email_secundario: form.email_secundario.trim() || undefined,
       direccion: form.direccion.trim() || undefined,
       ciudad: form.ciudad.trim().toUpperCase() || undefined,
       pais: form.pais.trim().toUpperCase() || undefined,
