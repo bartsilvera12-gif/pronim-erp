@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { getProveedores } from "@/lib/proveedores/storage";
+import { getProveedores, deleteProveedor } from "@/lib/proveedores/storage";
 import ExportExcelButton from "@/components/ui/ExportExcelButton";
 import ImportExcelButton from "@/components/ui/ImportExcelButton";
 import { useIsAdmin } from "@/lib/auth/use-is-admin";
+import { alert, confirm } from "@/components/ui/dialog";
 import type { Proveedor } from "@/lib/proveedores/types";
 
 export default function ProveedoresPage() {
@@ -28,6 +29,25 @@ export default function ProveedoresPage() {
       cancel = true;
     };
   }, [refreshKey]);
+
+  async function handleBorrar(p: Proveedor) {
+    const ok = await confirm({
+      title: "Borrar proveedor",
+      message: `¿Borrar "${p.nombre}"? Si tiene compras asociadas se desactivará en lugar de eliminarse.`,
+      confirmText: "Borrar",
+      variant: "danger",
+    });
+    if (!ok) return;
+    const res = await deleteProveedor(p.id);
+    if (!res.ok) { void alert({ message: res.error, variant: "warning" }); return; }
+    if (res.mode === "soft") {
+      void alert({
+        message: `"${p.nombre}" tiene compras asociadas, así que se desactivó (no se puede borrar del todo para conservar el historial).`,
+        variant: "warning",
+      });
+    }
+    setRefreshKey((k) => k + 1);
+  }
 
   const filtradas = useMemo(() => {
     const t = busqueda.trim().toLowerCase();
@@ -101,7 +121,7 @@ export default function ProveedoresPage() {
                 <th className="py-3 pr-4 font-semibold">Contacto</th>
                 <th className="py-3 pr-4 font-semibold">Categorías</th>
                 <th className="py-3 pr-4 font-semibold">Estado</th>
-                <th className="py-3 font-semibold w-24" />
+                <th className="py-3 font-semibold w-44 text-right pr-1">Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -165,12 +185,21 @@ export default function ProveedoresPage() {
                       </span>
                     </td>
                     <td className="py-3">
-                      <Link
-                        href={`/proveedores/${p.id}/editar`}
-                        className="text-sm font-medium text-sky-600 hover:underline"
-                      >
-                        Editar
-                      </Link>
+                      <div className="flex items-center gap-1.5">
+                        <Link
+                          href={`/proveedores/${p.id}/editar`}
+                          className="inline-flex items-center gap-1 rounded-lg border border-[#4FAEB2]/40 bg-[#4FAEB2]/10 px-2.5 py-1.5 text-xs font-semibold text-[#3F8E91] transition-colors hover:bg-[#4FAEB2]/20 active:scale-95"
+                        >
+                          ✏️ Editar
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={() => void handleBorrar(p)}
+                          className="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-600 transition-colors hover:bg-rose-100 active:scale-95"
+                        >
+                          🗑 Borrar
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))

@@ -276,13 +276,15 @@ export function DataExplorer<T>(props: {
 
   async function exportarXlsx() {
     // Interop CJS: el import dinámico puede envolver el módulo en .default.
-    const mod = await import("xlsx");
+    // Usamos xlsx-js-style (fork con estilos) para que la tabla salga con
+    // encabezado de color, filas alternadas, bordes y autofiltro.
+    const mod = await import("xlsx-js-style");
     const XLSX = ((mod as unknown as { default?: typeof mod }).default ?? mod) as typeof mod;
     const aoa: (string | number | Date)[][] = [];
     aoa.push(colsVis.map((c) => c.label));
     ordenadas.forEach((r) => aoa.push(colsVis.map((c) => valorXlsx(c, r))));
+    const totalRowIdx = hayTotales ? aoa.length : -1;
     if (hayTotales) {
-      aoa.push([]);
       aoa.push(colsVis.map((c, i) => {
         if (c.total === "sum") return Math.round(totales[c.key]);
         if (i === 0) return "TOTAL";
@@ -303,14 +305,55 @@ export function DataExplorer<T>(props: {
         else if (c.type === "date" && cell.v instanceof Date) { cell.t = "d"; cell.z = "dd/mm/yyyy"; }
       }
     });
+    // ── Estilos (mismo look que el export del servidor) ──────────────────────
+    const border = {
+      top: { style: "thin", color: { rgb: "D8E3E3" } },
+      bottom: { style: "thin", color: { rgb: "D8E3E3" } },
+      left: { style: "thin", color: { rgb: "D8E3E3" } },
+      right: { style: "thin", color: { rgb: "D8E3E3" } },
+    };
+    for (let ci = 0; ci < colsVis.length; ci++) {
+      const numeric = colsVis[ci].type === "money" || colsVis[ci].type === "number";
+      for (let ri = 0; ri < nRows; ri++) {
+        const cell = ws[XLSX.utils.encode_cell({ r: ri, c: ci })];
+        if (!cell) continue;
+        if (ri === 0) {
+          cell.s = {
+            font: { bold: true, sz: 11, color: { rgb: "FFFFFF" } },
+            fill: { patternType: "solid", fgColor: { rgb: "4FAEB2" } },
+            alignment: { horizontal: "center", vertical: "center", wrapText: true },
+            border,
+          };
+        } else if (ri === totalRowIdx) {
+          cell.s = {
+            font: { bold: true, sz: 10, color: { rgb: "FFFFFF" } },
+            fill: { patternType: "solid", fgColor: { rgb: "0B3A3D" } },
+            alignment: { horizontal: numeric ? "right" : "left", vertical: "center" },
+            border,
+          };
+        } else {
+          cell.s = {
+            font: { sz: 10, color: { rgb: "1F2937" } },
+            ...(ri % 2 === 1 ? { fill: { patternType: "solid", fgColor: { rgb: "EAF6F6" } } } : {}),
+            alignment: { horizontal: numeric ? "right" : "left", vertical: "center" },
+            border,
+          };
+        }
+      }
+    }
+    ws["!rows"] = [{ hpt: 22 }];
+    if (colsVis.length > 0) {
+      ws["!autofilter"] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: Math.max(0, ordenadas.length), c: colsVis.length - 1 } }) };
+    }
+    ws["!freeze"] = { xSplit: 0, ySplit: 1, topLeftCell: "A2", activePane: "bottomLeft", state: "frozen" };
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Datos");
     // writeFile en el browser dispara la descarga. Algunos navegadores/entornos
     // bloquean writeFile; en ese caso generamos el blob y descargamos a mano.
     try {
-      XLSX.writeFile(wb, `${csvName}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+      XLSX.writeFile(wb, `${csvName}_${new Date().toISOString().slice(0, 10)}.xlsx`, { cellStyles: true });
     } catch {
-      const out = XLSX.write(wb, { type: "array", bookType: "xlsx" }) as ArrayBuffer;
+      const out = XLSX.write(wb, { type: "array", bookType: "xlsx", cellStyles: true }) as ArrayBuffer;
       const blob = new Blob([out], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -352,9 +395,11 @@ export function DataExplorer<T>(props: {
 
   return (
     <div className="dx-print-root max-w-full space-y-4">
-      {/* Orientación y ajuste de hoja al imprimir (el usuario elige Horizontal/Vertical). */}
+      {/* Orientación y ajuste de hoja al imprimir (el usuario elige Horizontal/Vertical).
+          margin:0 en @page + padding propio → Chrome no dibuja el pie con la URL/fecha. */}
       <style>{`@media print {
-        @page { size: A4 ${printOrient}; margin: 8mm; }
+        @page { size: A4 ${printOrient}; margin: 0; }
+        .dx-print-root { padding: 10mm !important; }
         .dx-print-root table { font-size: 8.5px !important; width: 100% !important; table-layout: auto; }
         .dx-print-root th, .dx-print-root td { padding: 2px 4px !important; white-space: normal !important; word-break: break-word; }
         .dx-print-root .overflow-x-auto { overflow: visible !important; }

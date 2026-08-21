@@ -93,6 +93,25 @@ export async function updateProveedor(
   }
 }
 
+/**
+ * Borra un proveedor. `mode`: "hard" (eliminado) o "soft" (desactivado porque
+ * tiene compras asociadas). El caller usa `mode` para el mensaje al usuario.
+ */
+export async function deleteProveedor(
+  id: string
+): Promise<{ ok: true; mode: "hard" | "soft" } | { ok: false; error: string }> {
+  try {
+    const res = await fetchWithSupabaseSession(`/api/proveedores/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    });
+    const json = (await res.json()) as { success?: boolean; data?: { mode?: "hard" | "soft" }; error?: string };
+    if (!res.ok || !json.success) return { ok: false, error: json.error ?? `Error ${res.status}` };
+    return { ok: true, mode: json.data?.mode ?? "hard" };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Error de red." };
+  }
+}
+
 export async function getCategoriasProveedor(options?: { todas?: boolean }): Promise<ProveedorCategoria[]> {
   const q = options?.todas ? "?todas=1" : "";
   try {
