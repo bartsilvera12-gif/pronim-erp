@@ -59,6 +59,28 @@ export async function getCompras(): Promise<Compra[]> {
   }
 }
 
+/**
+ * Borra una compra por numero_control y revierte el stock que había ingresado.
+ * Devuelve cuántas líneas se borraron o un error legible.
+ */
+export async function deleteCompra(
+  numeroControl: string
+): Promise<{ ok: true; deleted: number } | { ok: false; error: string }> {
+  try {
+    const r = await fetch(`/api/compras?numero_control=${encodeURIComponent(numeroControl)}`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j?.success) {
+      return { ok: false, error: (j as { error?: string })?.error ?? `Error ${r.status}` };
+    }
+    return { ok: true, deleted: (j.data as { deleted?: number })?.deleted ?? 0 };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Error de red." };
+  }
+}
+
 export interface SaveCompraResult {
   success: true;
   compra: Compra;

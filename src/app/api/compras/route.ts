@@ -3,7 +3,7 @@ import { getTenantSupabaseFromAuth, getTenantSupabaseFromAuthWithRol } from "@/l
 import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
-import { insertCompraConImpacto } from "@/lib/compras/server/compras-pg";
+import { insertCompraConImpacto, deleteCompraByNumeroControl } from "@/lib/compras/server/compras-pg";
 import { resolveSucursalIdForUserPg } from "@/lib/sucursales/server";
 import { enforceSucursalForOperation } from "@/lib/sucursales/enforce";
 import { createServiceRoleClientWithDbSchema } from "@/lib/supabase/empresa-data-schema";
@@ -250,5 +250,39 @@ export async function POST(request: NextRequest) {
   } catch (err) {
     console.error("[/api/compras POST] outer", err instanceof Error ? err.message : err);
     return NextResponse.json(errorResponse("No se pudo guardar la compra."), { status: 500 });
+  }
+}
+
+/**
+ * DELETE /api/compras?numero_control=COMP-000123 — borra la compra y descuenta
+ * del stock las unidades que había ingresado (revierte el inventario). El stock
+ * se descuenta en la sucursal del usuario (misma resolución que la carga).
+ */
+export async function DELETE(request: NextRequest) {
+  try {
+    const ctx = await getTenantSupabaseFromAuthWithRol(request);
+    if (!ctx) return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
+    const empresaId = ctx.auth.empresa_id;
+    const schema = await fetchDataSchemaForEmpresaId(empresaId);
+
+    const numeroControl = (request.nextUrl.searchParams.get("numero_control") ?? "").trim();
+    if (!numeroControl) {
+      return NextResponse.json(errorResponse("Falta el número de control de la compra."), { status: 400 });
+    }
+
+    // Misma resolución de sucursal que la carga: fija del usuario, o Principal.
+    let sucursalId: string | null = ctx.auth.sucursal_id ?? null;
+    if (!sucursalId) {
+      sucursalId = await resolveSucursalIdForUserPg(schema, empresaId, null);
+    }
+
+    const res = await deleteCompraByNumeroControl(schema, empresaId, numeroControl, sucursalId);
+    if (res.deleted === 0) {
+      return NextResponse.json(errorResponse("Compra no encontrada."), { status: 404 });
+    }
+    return NextResponse.json(successResponse({ numero_control: numeroControl, ...res }));
+  } catch (err) {
+    console.error("[/api/compras DELETE]", err instanceof Error ? err.message : err);
+    return NextResponse.json(errorResponse("No se pudo borrar la compra."), { status: 500 });
   }
 }

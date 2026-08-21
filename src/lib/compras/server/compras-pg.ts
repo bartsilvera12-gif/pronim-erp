@@ -90,6 +90,82 @@ export async function listCompras(
   return rows;
 }
 
+/**
+ * Borra una compra (todas las filas que comparten `numero_control`) y REVIERTE
+ * el stock que había ingresado, en una transacción:
+ *   1) descuenta la cantidad de cada línea del stock de la sucursal indicada
+ *      (producto_stock_sucursal; el trigger resincroniza productos.stock_actual),
+ *   2) elimina los movimientos de inventario ENTRADA de esa compra,
+ *   3) elimina las filas de la compra.
+ * NO recalcula costo_promedio hacia atrás (el promedio ponderado no es reversible
+ * exactamente; se corrige solo en la próxima compra del producto).
+ * Devuelve cuántas filas de compra se borraron.
+ */
+export async function deleteCompraByNumeroControl(
+  schemaRaw: string,
+  empresaId: string,
+  numeroControl: string,
+  sucursalId: string | null,
+): Promise<{ deleted: number; movimientos: number }> {
+  const schema = assertAllowedChatDataSchema(schemaRaw);
+  const tC = quoteSchemaTable(schema, "compras");
+  const tM = quoteSchemaTable(schema, "movimientos_inventario");
+  const tP = quoteSchemaTable(schema, "productos");
+  const tSS = quoteSchemaTable(schema, "producto_stock_sucursal");
+
+  const client = await pool().connect();
+  try {
+    await client.query("BEGIN");
+
+    // Líneas de la compra (no anuladas) que vamos a revertir.
+    const { rows: lineas } = await client.query<{ producto_id: string; cantidad: string | number }>(
+      `SELECT producto_id, cantidad FROM ${tC}
+        WHERE empresa_id = $1::uuid AND numero_control = $2 AND COALESCE(estado, '') <> 'anulada'`,
+      [empresaId, numeroControl],
+    );
+
+    // Revertir stock línea por línea (simétrico a la carga).
+    for (const l of lineas) {
+      const cant = Number(l.cantidad) || 0;
+      if (cant === 0 || !l.producto_id) continue;
+      if (sucursalId) {
+        await client.query(
+          `UPDATE ${tSS} SET stock_actual = stock_actual - $1::numeric, updated_at = now()
+            WHERE producto_id = $2::uuid AND sucursal_id = $3::uuid`,
+          [cant, l.producto_id, sucursalId],
+        );
+      } else {
+        await client.query(
+          `UPDATE ${tP} SET stock_actual = stock_actual - $1::numeric, updated_at = now()
+            WHERE id = $2::uuid AND empresa_id = $3::uuid`,
+          [cant, l.producto_id, empresaId],
+        );
+      }
+    }
+
+    // Borrar movimientos de inventario de esta compra (referencia = numero_control).
+    const { rowCount: movCount } = await client.query(
+      `DELETE FROM ${tM}
+        WHERE empresa_id = $1::uuid AND referencia = $2 AND origen = 'compra'`,
+      [empresaId, numeroControl],
+    );
+
+    // Borrar las filas de la compra.
+    const { rowCount: compraCount } = await client.query(
+      `DELETE FROM ${tC} WHERE empresa_id = $1::uuid AND numero_control = $2`,
+      [empresaId, numeroControl],
+    );
+
+    await client.query("COMMIT");
+    return { deleted: compraCount ?? 0, movimientos: movCount ?? 0 };
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => null);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 /** Genera proximo COMP-XXXXXX leyendo el maximo existente. */
 async function nextNumeroControl(
   client: import("pg").PoolClient,

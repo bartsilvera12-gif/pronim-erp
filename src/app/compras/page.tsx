@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { getCompras } from "@/lib/compras/storage";
+import { getCompras, deleteCompra } from "@/lib/compras/storage";
 import ExportExcelButton from "@/components/ui/ExportExcelButton";
 import EdgeScrollArea from "@/components/ui/EdgeScrollArea";
 import { FancySelect } from "@/components/ui/FancySelect";
 import MobileFab from "@/components/ui/MobileFab";
+import { alert, confirm } from "@/components/ui/dialog";
 import type { Compra, TipoPago } from "@/lib/compras/types";
 import { useT } from "@/lib/i18n/context";
 import { fmtActive } from "@/lib/i18n/currency";
@@ -88,6 +89,8 @@ export default function ComprasPage() {
   const [filtroTipoPago, setFiltroTipoPago] = useState<TipoPago | "">("");
   const [expandidos, setExpandidos] = useState<Set<string>>(new Set());
   const [cargandoLista, setCargandoLista] = useState(true);
+  const [borrando, setBorrando] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     let cancel = false;
@@ -99,7 +102,23 @@ export default function ComprasPage() {
       if (!cancel) setCargandoLista(false);
     });
     return () => { cancel = true; };
-  }, []);
+  }, [refreshKey]);
+
+  async function handleBorrar(g: GrupoCompra, e: React.MouseEvent) {
+    e.stopPropagation();
+    const ok = await confirm({
+      title: "Borrar compra",
+      message: `¿Borrar la compra ${g.numero_control} de ${g.proveedor_nombre}? Se descontará del stock lo que había ingresado (${g.items.reduce((s, i) => s + Number(i.cantidad || 0), 0)} u. en ${g.items.length} ${g.items.length === 1 ? "producto" : "productos"}). Esta acción no se puede deshacer.`,
+      confirmText: "Borrar",
+      variant: "danger",
+    });
+    if (!ok) return;
+    setBorrando(g.numero_control);
+    const res = await deleteCompra(g.numero_control);
+    setBorrando(null);
+    if (!res.ok) { void alert({ message: res.error, variant: "warning" }); return; }
+    setRefreshKey((k) => k + 1);
+  }
 
   const grupos = useMemo(() => agrupar(todas), [todas]);
 
@@ -187,13 +206,14 @@ export default function ComprasPage() {
                 <th className="py-3 pr-4 font-medium text-right">Ítems</th>
                 <th className="py-3 pr-4 font-medium text-right">Total</th>
                 <th className="hidden py-3 pr-4 font-medium lg:table-cell">Pago</th>
-                <th className="py-3 font-medium">Fecha</th>
+                <th className="py-3 pr-4 font-medium">Fecha</th>
+                <th className="py-3 font-medium text-right">Acciones</th>
               </tr>
             </thead>
             <tbody>
               {cargandoLista ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-sm text-slate-400">
+                  <td colSpan={8} className="py-12 text-center text-sm text-slate-400">
                     <div className="inline-flex items-center gap-2">
                       <svg className="h-4 w-4 animate-spin text-[#4FAEB2]" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
                         <circle cx="12" cy="12" r="10" stroke="currentColor" strokeOpacity="0.25" strokeWidth="3" />
@@ -205,7 +225,7 @@ export default function ComprasPage() {
                 </tr>
               ) : filtrados.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-gray-400">
+                  <td colSpan={8} className="py-12 text-center text-gray-400">
                     {grupos.length === 0 ? "No hay compras registradas" : "Ninguna compra coincide con los filtros"}
                   </td>
                 </tr>
@@ -245,7 +265,17 @@ export default function ComprasPage() {
                             {g.tipo_pago === "contado" ? "Contado" : g.tipo_pago === "credito" ? `Crédito ${g.plazo_dias ?? ""}d` : "—"}
                           </span>
                         </td>
-                        <td className="py-4 text-gray-500 text-xs tabular-nums">{formatFecha(g.fecha)}</td>
+                        <td className="py-4 pr-4 text-gray-500 text-xs tabular-nums">{formatFecha(g.fecha)}</td>
+                        <td className="py-4 text-right">
+                          <button
+                            type="button"
+                            onClick={(e) => void handleBorrar(g, e)}
+                            disabled={borrando === g.numero_control}
+                            className="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-600 transition-colors hover:bg-rose-100 active:scale-95 disabled:opacity-50"
+                          >
+                            {borrando === g.numero_control ? "Borrando…" : "🗑 Borrar"}
+                          </button>
+                        </td>
                       </tr>
 
                       {abierto && multi && g.items.map((it) => (
@@ -259,6 +289,7 @@ export default function ComprasPage() {
                           <td className="py-2 pr-4 text-right tabular-nums text-gray-600">{it.cantidad}</td>
                           <td className="py-2 pr-4 text-right tabular-nums text-gray-700">{formatGs(it.total)}</td>
                           <td className="hidden lg:table-cell" />
+                          <td />
                           <td />
                         </tr>
                       ))}
