@@ -399,7 +399,6 @@ export function DataExplorer<T>(props: {
           margin:0 en @page + padding propio → Chrome no dibuja el pie con la URL/fecha. */}
       <style>{`@media print {
         @page { size: A4 ${printOrient}; margin: 0; }
-        .dx-print-root { padding: 10mm !important; }
         .dx-print-root table { font-size: 8.5px !important; width: 100% !important; table-layout: auto; }
         .dx-print-root th, .dx-print-root td { padding: 2px 4px !important; white-space: normal !important; word-break: break-word; }
         .dx-print-root .overflow-x-auto { overflow: visible !important; }

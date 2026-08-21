@@ -131,7 +131,9 @@ body {
  * chrome y dejamos que SOLO el contenido fluya a lo largo de las páginas.
  */
 @media print {
-  @page { margin: 12mm; }
+  /* margin:0 en la hoja → el navegador NO dibuja el pie con la URL/fecha.
+     El "margen" visual lo damos con padding en el contenido. */
+  @page { margin: 0; }
 
   html, body {
     height: auto !important;
@@ -157,7 +159,8 @@ body {
     overflow: visible !important;
     background: #fff !important;
   }
-  #neura-main-content { padding: 0 !important; }
+  /* Padding propio = margen visual sin activar el pie del navegador. */
+  #neura-main-content { padding: 10mm !important; }
 
   /* Utilidad Tailwind print:hidden ya oculta toolbars/botones; reforzamos
      los flotantes y overlays comunes. */
