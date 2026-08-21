@@ -234,6 +234,7 @@ export default function NuevaCompraPage() {
       { subtotal: 0, iva: 0, total: 0 }
     );
   }, [lineas]);
+  const totalPrendas = useMemo(() => lineas.reduce((acc, l) => acc + l.cantidad, 0), [lineas]);
 
   // ── Agregar / quitar línea ──────────────────────────────────────────────────
   function handleAgregarLinea() {
@@ -433,7 +434,7 @@ export default function NuevaCompraPage() {
         <p className="text-gray-600">Una compra puede tener varios productos del mismo proveedor. Impacta el inventario al guardar.</p>
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6 max-w-3xl">
+      <div className={`bg-white border border-slate-200 rounded-xl shadow-sm p-6 ${isFranjaMode ? "max-w-5xl" : "max-w-3xl"}`}>
         <form className="space-y-8" onSubmit={handleSubmit}>
 
           {/* ── Cabecera ─────────────────────────────────────────────────────── */}
@@ -604,35 +605,57 @@ export default function NuevaCompraPage() {
 
             {/* Grilla de franjas (modelo Pronim) */}
             {isFranjaMode && (
-              <div className="rounded-xl border border-slate-200 bg-white p-4">
-                <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-600">
-                  Cargá cantidad recibida y costo unitario por categoría
-                </p>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              <div className="rounded-2xl border border-slate-200 bg-gradient-to-b from-slate-50/70 to-white p-5">
+                {/* Encabezado con resumen en vivo */}
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <span className="grid h-9 w-9 place-items-center rounded-xl bg-[#4FAEB2]/12 text-lg text-[#3F8E91]">🏷️</span>
+                    <div>
+                      <p className="text-sm font-semibold text-slate-800">Cantidad y costo por categoría</p>
+                      <p className="text-xs text-slate-500">Cargá lo recibido en cada franja de precio.</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600">
+                      <span className="font-semibold tabular-nums text-slate-800">{totalPrendas}</span> prendas
+                    </span>
+                    <span className="inline-flex items-center rounded-lg bg-[#4FAEB2] px-3 py-1.5 text-xs font-semibold tabular-nums text-white shadow-sm">
+                      {formatGs(totales.total)}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                   {franjas.map((f) => {
                     const st = franjaEditor[f.id] ?? { cantidad: "", costo: "" };
                     const cant = parseFloat(st.cantidad) || 0;
                     const costo = parseFloat(st.costo) || 0;
                     const tc = cab.moneda === "USD" ? parseFloat(cab.tipo_cambio) || 0 : 1;
                     const subtotal = cant * costo * tc;
+                    const activo = cant > 0;
+                    const stock = Number(f.stock_actual ?? 0);
                     return (
                       <div
                         key={f.id}
-                        className={`rounded-lg border p-3 ${
-                          cant > 0 ? "border-[#4FAEB2] bg-[#4FAEB2]/[0.05]" : "border-slate-200 bg-white"
+                        className={`rounded-xl border p-3.5 transition-all ${
+                          activo
+                            ? "border-[#4FAEB2] bg-[#4FAEB2]/[0.06] shadow-sm ring-1 ring-[#4FAEB2]/25"
+                            : "border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm"
                         }`}
                       >
-                        <div className="flex items-baseline justify-between">
-                          <span className="text-base font-bold tabular-nums text-slate-900">
+                        {/* Precio de la franja + stock */}
+                        <div className="mb-3 flex items-center justify-between">
+                          <span className="inline-flex items-center rounded-lg bg-slate-900/[0.05] px-2.5 py-1 text-sm font-bold tabular-nums text-slate-900">
                             {formatGs(Number(f.precio_venta) || 0)}
                           </span>
-                          <span className="text-[10px] text-slate-500">
-                            stock {Number(f.stock_actual ?? 0)}
+                          <span className={`text-[10px] font-medium tabular-nums ${stock > 0 ? "text-slate-500" : "text-slate-300"}`}>
+                            stock {stock}
                           </span>
                         </div>
-                        <div className="mt-2 grid grid-cols-2 gap-2">
+
+                        <div className="grid grid-cols-2 gap-2.5">
                           <div>
-                            <label className="text-[10px] font-medium uppercase tracking-wide text-slate-500">
+                            <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">
                               Cantidad
                             </label>
                             <input
@@ -641,12 +664,12 @@ export default function NuevaCompraPage() {
                               value={st.cantidad}
                               onChange={(e) => upsertFranjaLinea(f, e.target.value, st.costo)}
                               placeholder="0"
-                              className="mt-1 w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]/40"
+                              className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-center text-sm font-semibold tabular-nums text-slate-800 focus:border-[#4FAEB2] focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]/30"
                             />
                           </div>
                           <div>
-                            <label className="text-[10px] font-medium uppercase tracking-wide text-slate-500">
-                              Costo unit. ({cab.moneda})
+                            <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                              Costo ({cab.moneda})
                             </label>
                             <input
                               type="number"
@@ -655,12 +678,16 @@ export default function NuevaCompraPage() {
                               value={st.costo}
                               onChange={(e) => upsertFranjaLinea(f, st.cantidad, e.target.value)}
                               placeholder="0"
-                              className="mt-1 w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]/40"
+                              className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-right text-sm tabular-nums text-slate-800 focus:border-[#4FAEB2] focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]/30"
                             />
                           </div>
                         </div>
-                        <div className={`mt-2 text-right text-xs tabular-nums ${cant > 0 ? "text-slate-800 font-semibold" : "text-slate-400"}`}>
-                          Subtotal: {cant > 0 ? formatGs(subtotal) : "—"}
+
+                        <div className={`mt-2.5 flex items-center justify-between border-t pt-2 text-xs tabular-nums ${activo ? "border-[#4FAEB2]/20" : "border-slate-100"}`}>
+                          <span className="text-slate-400">Subtotal</span>
+                          <span className={activo ? "font-bold text-[#3F8E91]" : "text-slate-300"}>
+                            {activo ? formatGs(subtotal) : "—"}
+                          </span>
                         </div>
                       </div>
                     );

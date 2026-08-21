@@ -88,6 +88,17 @@ export default function MovimientosPage() {
     return coincideTexto && coincideTipo && coincideOrigen && coincideDesde && coincideHasta;
   }), [todos, busqueda, filtroTipo, filtroOrigen, fechaDesde, fechaHasta]);
 
+  // Resumen por tipo del universo filtrado (chips de color en el encabezado).
+  const resumen = useMemo(() => {
+    let entradas = 0, salidas = 0, ajustes = 0;
+    for (const m of filtrados) {
+      if (m.tipo === "ENTRADA") entradas++;
+      else if (m.tipo === "SALIDA") salidas++;
+      else ajustes++;
+    }
+    return { entradas, salidas, ajustes };
+  }, [filtrados]);
+
   // Cuando cambia el universo filtrado, volvemos a la página 0 para que el
   // usuario no quede en una página vacía.
   useEffect(() => {
@@ -110,82 +121,112 @@ export default function MovimientosPage() {
         <p className="text-gray-600">{t("Registro de entradas, salidas y ajustes de stock")}</p>
       </div>
 
-      <div className="bg-white rounded-xl shadow p-6">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
 
         {/* Header */}
-        <div className="flex justify-between items-center mb-5">
+        <div className="flex flex-wrap justify-between items-center gap-3 mb-4">
           <div className="flex items-center gap-3">
-            <h2 className="text-xl font-semibold">{t("Historial")}</h2>
-            <Link
-              href="/inventario/movimientos/nuevo"
-              className="text-sm text-gray-600 hover:text-gray-900 underline"
-            >
-              {t("Nuevo movimiento")}
-            </Link>
+            <h2 className="text-xl font-semibold text-slate-800">{t("Historial")}</h2>
             <span className="text-sm text-gray-400">
               {filtrados.length === todos.length
                 ? `${todos.length} ${todos.length === 1 ? t("registro") : t("registros")}`
                 : `${filtrados.length} ${t("de")} ${todos.length} (${t("filtrado")})`}
             </span>
           </div>
-          <p className="text-xs text-gray-400">
-            {t("Los movimientos se generan automáticamente desde")} <span className="font-medium text-gray-500">{t("Compras")}</span>
-          </p>
+          <Link
+            href="/inventario/movimientos/nuevo"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-[#4FAEB2] px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#3F8E91]"
+          >
+            + {t("Nuevo movimiento")}
+          </Link>
         </div>
 
-        {/* Filtros */}
-        <div className="flex flex-wrap gap-3 mb-5 pb-5 border-b border-gray-100">
-          {/* Fila 1: búsqueda + tipo + origen */}
-          <input
-            type="text"
-            placeholder={t("Buscar por producto o SKU...")}
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
-            className={`${inputFilterClass} min-w-56`}
-          />
-          <select
-            value={filtroTipo}
-            onChange={(e) => setFiltroTipo(e.target.value as TipoMovimiento | "")}
-            className={inputFilterClass}
-          >
-            <option value="">{t("Todos los tipos")}</option>
-            <option value="ENTRADA">ENTRADA</option>
-            <option value="SALIDA">SALIDA</option>
-            <option value="AJUSTE">AJUSTE</option>
-          </select>
-          <select
-            value={filtroOrigen}
-            onChange={(e) => setFiltroOrigen(e.target.value as OrigenMovimiento | "")}
-            className={inputFilterClass}
-          >
-            <option value="">{t("Todos los orígenes")}</option>
-            <option value="compra">{t("Compra")}</option>
-            <option value="venta">{t("Venta")}</option>
-            <option value="ajuste_manual">{t("Ajuste manual")}</option>
-          </select>
+        {/* Resumen por tipo (chips de color) */}
+        <div className="mb-5 grid grid-cols-3 gap-3">
+          <div className="rounded-xl border border-green-100 bg-green-50/70 px-3 py-2.5">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-green-700/80">{t("Entradas")}</p>
+            <p className="text-lg font-bold tabular-nums text-green-700">{resumen.entradas}</p>
+          </div>
+          <div className="rounded-xl border border-red-100 bg-red-50/70 px-3 py-2.5">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-red-700/80">{t("Salidas")}</p>
+            <p className="text-lg font-bold tabular-nums text-red-700">{resumen.salidas}</p>
+          </div>
+          <div className="rounded-xl border border-amber-100 bg-amber-50/70 px-3 py-2.5">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-amber-700/80">{t("Ajustes")}</p>
+            <p className="text-lg font-bold tabular-nums text-amber-700">{resumen.ajustes}</p>
+          </div>
+        </div>
 
-          {/* Separador visual entre grupos */}
-          <div className="w-full flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2">
-              <label className="text-xs text-gray-400 whitespace-nowrap">{t("Desde")}</label>
+        {/* Filtros — panel gris con campos etiquetados */}
+        <div className="mb-5 rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {/* Búsqueda con ícono */}
+            <div className="lg:col-span-2">
+              <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">{t("Buscar")}</label>
+              <div className="relative">
+                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                </span>
+                <input
+                  type="text"
+                  placeholder={t("Producto o SKU...")}
+                  value={busqueda}
+                  onChange={(e) => setBusqueda(e.target.value)}
+                  className={`${inputFilterClass} w-full pl-9`}
+                />
+              </div>
+            </div>
+            <div>
+              <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">{t("Tipo")}</label>
+              <select
+                value={filtroTipo}
+                onChange={(e) => setFiltroTipo(e.target.value as TipoMovimiento | "")}
+                className={`${inputFilterClass} w-full`}
+              >
+                <option value="">{t("Todos los tipos")}</option>
+                <option value="ENTRADA">ENTRADA</option>
+                <option value="SALIDA">SALIDA</option>
+                <option value="AJUSTE">AJUSTE</option>
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">{t("Origen")}</label>
+              <select
+                value={filtroOrigen}
+                onChange={(e) => setFiltroOrigen(e.target.value as OrigenMovimiento | "")}
+                className={`${inputFilterClass} w-full`}
+              >
+                <option value="">{t("Todos los orígenes")}</option>
+                <option value="compra">{t("Compra")}</option>
+                <option value="venta">{t("Venta")}</option>
+                <option value="ajuste_manual">{t("Ajuste manual")}</option>
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">{t("Desde")}</label>
               <input
                 type="date"
                 value={fechaDesde}
                 onChange={(e) => setFechaDesde(e.target.value)}
                 max={fechaHasta || undefined}
-                className={inputFilterClass}
+                className={`${inputFilterClass} w-full`}
               />
             </div>
-            <div className="flex items-center gap-2">
-              <label className="text-xs text-gray-400 whitespace-nowrap">{t("Hasta")}</label>
+            <div>
+              <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">{t("Hasta")}</label>
               <input
                 type="date"
                 value={fechaHasta}
                 onChange={(e) => setFechaHasta(e.target.value)}
                 min={fechaDesde || undefined}
-                className={inputFilterClass}
+                className={`${inputFilterClass} w-full`}
               />
             </div>
+          </div>
+          <div className="mt-3 flex items-center justify-between">
+            <p className="text-[11px] text-slate-400">
+              {t("Los movimientos se generan automáticamente desde")} <span className="font-medium text-slate-500">{t("Compras")}</span>
+            </p>
             {(busqueda || filtroTipo || filtroOrigen || fechaDesde || fechaHasta) && (
               <button
                 onClick={() => {
@@ -195,7 +236,7 @@ export default function MovimientosPage() {
                   setFechaDesde("");
                   setFechaHasta("");
                 }}
-                className="text-sm text-gray-400 hover:text-gray-600 transition-colors px-2"
+                className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50"
               >
                 {t("Limpiar filtros")}
               </button>
@@ -222,7 +263,7 @@ export default function MovimientosPage() {
         <div className="overflow-x-auto">
           <table className="w-full min-w-[860px] sm:min-w-0 text-left text-sm">
             <thead>
-              <tr className="border-b text-gray-500">
+              <tr className="border-b border-slate-200 bg-slate-50/70 text-xs uppercase tracking-wide text-slate-500">
                 <th className="py-3 pr-4 font-medium">{t("Producto")}</th>
                 <th className="py-3 pr-4 font-medium hidden md:table-cell">SKU</th>
                 <th className="py-3 pr-4 font-medium">{t("Tipo")}</th>
@@ -266,7 +307,7 @@ export default function MovimientosPage() {
                       : "text-yellow-600";
 
                   return (
-                    <tr key={m.id} className="border-b last:border-0 hover:bg-gray-50">
+                    <tr key={m.id} className="border-b border-slate-100 last:border-0 even:bg-slate-50/40 hover:bg-[#4FAEB2]/[0.04] transition-colors">
                       <td className="py-4 pr-4 font-medium text-gray-800">{m.producto_nombre}</td>
                       <td className="py-4 pr-4 text-gray-500 font-mono hidden md:table-cell">{m.producto_sku}</td>
                       <td className="py-4 pr-4">
