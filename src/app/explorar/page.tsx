@@ -35,7 +35,7 @@ export default function ExplorarHubPage() {
 
   return (
     <div className="max-w-full space-y-4">
-      <div className="flex items-start justify-between gap-3 flex-wrap">
+      <div className="flex items-start justify-between gap-3 flex-wrap print:hidden">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Explorar información del ERP</h1>
           <p className="text-sm text-slate-500 mt-0.5">
@@ -49,7 +49,7 @@ export default function ExplorarHubPage() {
       </div>
 
       {/* Pestañas */}
-      <div className="flex flex-wrap gap-1.5 border-b border-slate-200 pb-2">
+      <div className="flex flex-wrap gap-1.5 border-b border-slate-200 pb-2 print:hidden">
         {TABS.map((t) => {
           const activo = t.key === tab;
           return (
