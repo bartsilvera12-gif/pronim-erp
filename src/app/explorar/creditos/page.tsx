@@ -12,6 +12,14 @@ type Mov = {
   observaciones: string | null; usuario_nombre: string | null;
 };
 
+/**
+ * SALIDA = el cliente consumió su crédito. ENTRADA / AJUSTE lo aumentan.
+ * (AJUSTE se cuenta como entrada, igual que en el cálculo de saldos del ledger.)
+ */
+function esSalida(tipo: string): boolean {
+  return (tipo ?? "").toUpperCase() === "SALIDA";
+}
+
 export default function ExplorarCreditosPage() {
   const [rows, setRows] = useState<Mov[]>([]);
   const [cargando, setCargando] = useState(true);
@@ -43,7 +51,24 @@ export default function ExplorarCreditosPage() {
       { key: "referencia", label: "Referencia", type: "text", get: (r) => [r.referencia_tipo, r.referencia_numero].filter(Boolean).join(" "), defaultVisible: false },
       { key: "observaciones", label: "Observaciones", type: "text", get: (r) => r.observaciones ?? "", defaultVisible: false },
       { key: "usuario", label: "Usuario", type: "text", get: (r) => r.usuario_nombre ?? "", defaultVisible: false },
-      { key: "monto", label: "Monto", type: "money", required: true, get: (r) => r.monto, total: "sum" },
+      // ENTRADA (crédito que le generamos) y SALIDA (crédito que usó) van en
+      // direcciones opuestas: sumarlas en una sola columna daba un total sin
+      // sentido. Se separan en tres columnas para que cada total signifique algo.
+      {
+        key: "entrada", label: "Generado (entrada)", type: "money", required: true,
+        get: (r) => (esSalida(r.tipo) ? 0 : r.monto), total: "sum",
+      },
+      {
+        key: "salida", label: "Usado (salida)", type: "money", required: true,
+        get: (r) => (esSalida(r.tipo) ? r.monto : 0), total: "sum",
+      },
+      {
+        key: "neto", label: "Neto", type: "money", required: true,
+        get: (r) => (esSalida(r.tipo) ? -r.monto : r.monto), total: "sum",
+      },
+      // Se conserva el monto "crudo" del movimiento, pero SIN total: sumarlo
+      // mezclaría entradas con salidas.
+      { key: "monto", label: "Monto del movimiento", type: "money", get: (r) => r.monto, defaultVisible: false },
     ];
   }, [rows]);
 
