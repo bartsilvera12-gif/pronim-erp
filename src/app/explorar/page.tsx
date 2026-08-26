@@ -13,9 +13,10 @@ import Inventario from "./inventario/page";
 import Creditos from "./creditos/page";
 import Gastos from "./gastos/page";
 import Caja from "./caja/page";
+import CajaMovimientos from "./caja-movimientos/page";
 import Comparativo from "./comparativo/page";
 
-type TabKey = "transacciones" | "items" | "ventas" | "evaluaciones" | "inventario" | "creditos" | "gastos" | "caja" | "comparativo";
+type TabKey = "transacciones" | "items" | "ventas" | "evaluaciones" | "inventario" | "creditos" | "gastos" | "caja_movs" | "caja" | "comparativo";
 
 const TABS: { key: TabKey; label: string; Icon: LucideIcon; Comp: React.ComponentType }[] = [
   { key: "transacciones", label: "Transacciones", Icon: ArrowLeftRight, Comp: Transacciones },
@@ -25,7 +26,8 @@ const TABS: { key: TabKey; label: string; Icon: LucideIcon; Comp: React.Componen
   { key: "inventario",    label: "Inventario",    Icon: Package,        Comp: Inventario },
   { key: "creditos",      label: "Créditos",      Icon: Wallet,         Comp: Creditos },
   { key: "gastos",        label: "Gastos",        Icon: TrendingDown,   Comp: Gastos },
-  { key: "caja",          label: "Caja",          Icon: Banknote,       Comp: Caja },
+  { key: "caja_movs",     label: "Movimientos de caja", Icon: Banknote, Comp: CajaMovimientos },
+  { key: "caja",          label: "Cierres de caja", Icon: Banknote,     Comp: Caja },
   { key: "comparativo",   label: "Comparar períodos", Icon: TrendingUp, Comp: Comparativo },
 ];
 
