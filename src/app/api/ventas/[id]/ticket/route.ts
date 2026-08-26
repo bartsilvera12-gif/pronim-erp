@@ -107,6 +107,38 @@ function formatFecha(iso: string): string {
   }
 }
 
+/**
+ * Nombre corto para el ticket. Las franjas de precio se llaman
+ * "Prenda - Categoría Gs. 6.000"; en un papel de 58/80mm ese prefijo ocupa dos
+ * líneas y es redundante con la columna de importe. Se recorta solo si aparece.
+ */
+function nombreCorto(nombre: string): string {
+  return (nombre || "")
+    .replace(/^\s*prenda\s*[-–]\s*categor[íi]a\s*/i, "")
+    .trim() || nombre;
+}
+
+/**
+ * Agrupa líneas idénticas (mismo producto y mismo precio unitario) sumando
+ * cantidades e importes, para que el ticket muestre "cuántas prendas de cada
+ * monto" en una sola línea en vez de repetir la misma franja varias veces.
+ */
+function agruparItems(items: EnrichedItem[]): EnrichedItem[] {
+  const map = new Map<string, EnrichedItem>();
+  for (const it of items) {
+    const key = `${it.producto_id}|${Number(it.precio_venta)}`;
+    const prev = map.get(key);
+    if (!prev) {
+      map.set(key, { ...it, cantidad: Number(it.cantidad), total_linea: Number(it.total_linea) });
+    } else {
+      prev.cantidad = Number(prev.cantidad) + Number(it.cantidad);
+      prev.total_linea = Number(prev.total_linea) + Number(it.total_linea);
+    }
+  }
+  // Más caras primero: es como la clienta lee el ticket.
+  return [...map.values()].sort((a, b) => Number(b.precio_venta) - Number(a.precio_venta));
+}
+
 function modalidadLabel(m: string | null | undefined): string {
   if (m === "local") return "Local";
   if (m === "delivery") return "Delivery";
@@ -169,10 +201,15 @@ function renderCopia(opts: {
   isLast: boolean;
   negocio: string;
 }): string {
-  const { tipo, venta, items, brief, fontPx, isLast } = opts;
+  const { tipo, venta, brief, fontPx, isLast } = opts;
   const showPrices = tipo === "cliente";
   const sectorBadge = tipo === "pizzeria" ? "COMANDA PIZZERÍA" : tipo === "plancha" ? "COMANDA PLANCHA" : "";
   const modalidad = modalidadLabel(brief?.modalidad);
+
+  // Se agrupan las líneas repetidas del mismo producto/precio para que quede
+  // "N prendas de tal monto" en una sola línea.
+  const items = agruparItems(opts.items);
+  const totalUnidades = items.reduce((s, it) => s + Number(it.cantidad), 0);
 
   // Filas de ítems: en cliente todas; en cocina todas también, pero las del propio sector destacadas.
   const itemsHtml = items
@@ -187,10 +224,10 @@ function renderCopia(opts: {
       const main = showPrices
         ? `<tr class="${cls}">
              <td class="qty"><strong>${cant}×</strong></td>
-             <td class="name">${escapeHtml(it.producto_nombre)}</td>
+             <td class="name">${escapeHtml(nombreCorto(it.producto_nombre))}</td>
              <td class="amt">${formatGs(sub)}</td>
            </tr>
-           <tr class="sub"><td></td><td colspan="2">${cant} × ${formatGs(punit)}</td></tr>`
+           <tr class="sub"><td></td><td colspan="2">${cant} × ${formatGs(punit)} c/u</td></tr>`
         : `<tr class="${cls}">
              <td class="qty"><strong>${cant}×</strong></td>
              <td class="name" colspan="2"><strong>${escapeHtml(it.producto_nombre)}</strong></td>
@@ -198,6 +235,12 @@ function renderCopia(opts: {
       return main;
     })
     .join("");
+
+  // Si la venta no tiene líneas cargadas, se dice explícitamente en vez de
+  // imprimir un ticket con un hueco en blanco.
+  const detalleHtml = items.length > 0
+    ? `<table><tbody>${itemsHtml}</tbody></table>`
+    : `<div class="sin-items">Sin detalle de prendas cargado.</div>`;
 
   const subtotal = Number(venta.subtotal);
   const ivaTotal = Number(venta.monto_iva);
@@ -221,6 +264,9 @@ function renderCopia(opts: {
     ? `<hr>
        <table class="totales">
          <tbody>
+           ${totalUnidades > 0
+             ? `<tr><td class="lbl">Prendas</td><td class="val">${totalUnidades}</td></tr>`
+             : ""}
            <tr><td class="lbl">Subtotal</td><td class="val">${formatGs(subtotal)}</td></tr>
            ${ivaTotal > 0 ? `<tr><td class="lbl">IVA</td><td class="val">${formatGs(ivaTotal)}</td></tr>` : ""}
            <tr class="total-row"><td class="lbl">TOTAL</td><td class="val">${formatGs(total)}</td></tr>
@@ -244,9 +290,7 @@ function renderCopia(opts: {
     </div>
     ${datosPedido.length > 0 ? `<hr><div class="pedido">${datosPedido.join("")}</div>` : ""}
     <hr>
-    <table>
-      <tbody>${itemsHtml}</tbody>
-    </table>
+    ${detalleHtml}
     ${totalesHtml}
     ${obs ? `<hr><div class="obs"><strong>Obs:</strong> ${escapeHtml(obs)}</div>` : ""}
     ${footerHtml}
@@ -536,6 +580,7 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
   .totales .lbl { text-align: left; }
   .totales .val { text-align: right; white-space: nowrap; }
   .total-row { font-weight: bold; font-size: ${fontPx + 2}px; border-top: 1px solid #000; }
+  .sin-items { font-size: ${fontPx - 1}px; text-align: center; font-style: italic; padding: 2mm 0; }
   .obs { font-size: ${fontPx - 1}px; margin: 2mm 0; }
   .footer { font-size: ${fontPx - 2}px; text-align: center; margin-top: 3mm; font-style: italic; }
   .footer-cocina { font-size: ${fontPx - 2}px; text-align: center; margin-top: 3mm; font-weight: bold; }
