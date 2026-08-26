@@ -191,7 +191,195 @@ export default function AdminPromocionesPage() {
         Las que requieren código se aplican al escribir el cupón en el bloque de balance.
       </div>
 
+      {/* Seguimiento de promos exclusivas: a quién se la dimos y si la usó. */}
+      <PromosAsignadas />
+
       {modalOpen && <NuevaPromocionModal onClose={() => setModalOpen(false)} onCreated={() => { setModalOpen(false); cargar(); setOk("Promoción creada."); setTimeout(() => setOk(null), 3000); }} />}
+    </div>
+  );
+}
+
+// ── Promociones exclusivas por cliente ──────────────────────────────────────
+
+type PromoAsignada = {
+  id: string;
+  cliente_id: string | null;
+  cliente_nombre: string | null;
+  cliente_telefono: string | null;
+  promo_nombre: string;
+  tipo: string;
+  valor: number;
+  cupon_codigo: string | null;
+  fecha_asignada: string;
+  fecha_desde: string | null;
+  fecha_hasta: string | null;
+  activo: boolean;
+  usos: number;
+  usada_at: string | null;
+  descuento_aplicado: number | null;
+  venta_numero: string | null;
+  estado: "usada" | "pendiente" | "vencida" | "programada" | "inactiva" | string;
+};
+
+const ESTADO_BADGE: Record<string, string> = {
+  usada: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+  pendiente: "bg-sky-50 text-sky-700 ring-sky-200",
+  vencida: "bg-rose-50 text-rose-700 ring-rose-200",
+  programada: "bg-violet-50 text-violet-700 ring-violet-200",
+  inactiva: "bg-slate-100 text-slate-500 ring-slate-200",
+};
+const ESTADO_LABEL: Record<string, string> = {
+  usada: "Usada",
+  pendiente: "Sin usar",
+  vencida: "Venció sin usar",
+  programada: "Programada",
+  inactiva: "Pausada",
+};
+
+function fFecha(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso.slice(0, 10);
+  return d.toLocaleDateString("es-PY", { day: "2-digit", month: "2-digit", year: "numeric" });
+}
+
+function PromosAsignadas() {
+  const [filas, setFilas] = useState<PromoAsignada[]>([]);
+  const [cargando, setCargando] = useState(true);
+  const [filtro, setFiltro] = useState<"" | "usada" | "pendiente" | "vencida">("");
+  const [q, setQ] = useState("");
+
+  useEffect(() => {
+    let cancel = false;
+    fetchWithSupabaseSession("/api/promociones/asignadas", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => { if (!cancel) setFilas((j?.data?.asignadas ?? []) as PromoAsignada[]); })
+      .catch(() => {})
+      .finally(() => { if (!cancel) setCargando(false); });
+    return () => { cancel = true; };
+  }, []);
+
+  const visibles = filas.filter((f) => {
+    if (filtro && f.estado !== filtro) return false;
+    const t = q.trim().toLowerCase();
+    if (!t) return true;
+    return (f.cliente_nombre ?? "").toLowerCase().includes(t)
+      || f.promo_nombre.toLowerCase().includes(t)
+      || (f.cupon_codigo ?? "").toLowerCase().includes(t);
+  });
+
+  const cuenta = (e: string) => filas.filter((f) => f.estado === e).length;
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3 px-4 pt-4 pb-3">
+        <div>
+          <h2 className="text-base font-semibold text-slate-800">Promos exclusivas por cliente</h2>
+          <p className="text-xs text-slate-500 mt-0.5">
+            A quién le asignamos una promo, desde cuándo, hasta cuándo y si ya la usó.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {([
+            ["", `Todas (${filas.length})`],
+            ["pendiente", `Sin usar (${cuenta("pendiente")})`],
+            ["usada", `Usadas (${cuenta("usada")})`],
+            ["vencida", `Vencidas (${cuenta("vencida")})`],
+          ] as const).map(([val, label]) => (
+            <button
+              key={val || "todas"}
+              type="button"
+              onClick={() => setFiltro(val as typeof filtro)}
+              className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                filtro === val
+                  ? "bg-[#4FAEB2] text-white shadow-sm"
+                  : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+          <input
+            type="text"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Buscar cliente o promo…"
+            className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]/30"
+          />
+        </div>
+      </div>
+
+      <div className="overflow-x-auto border-t border-slate-100">
+        {cargando ? (
+          <p className="py-12 text-center text-sm text-gray-400 animate-pulse">Cargando…</p>
+        ) : visibles.length === 0 ? (
+          <p className="py-12 text-center text-sm text-gray-400">
+            {filas.length === 0
+              ? "Todavía no asignaste promociones a un cliente puntual. Creá una con ámbito “Cliente específico”."
+              : "Ninguna promo coincide con el filtro."}
+          </p>
+        ) : (
+          <table className="w-full min-w-[820px] text-sm">
+            <thead className="bg-slate-50 border-b border-slate-200">
+              <tr>
+                <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3 uppercase tracking-wide">Cliente</th>
+                <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3 uppercase tracking-wide">Asignada</th>
+                <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3 uppercase tracking-wide">Promoción</th>
+                <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3 uppercase tracking-wide">Validez</th>
+                <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3 uppercase tracking-wide">Utilizada</th>
+                <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3 uppercase tracking-wide">Estado</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {visibles.map((f) => (
+                <tr key={f.id} className="hover:bg-[#4FAEB2]/[0.04] transition-colors">
+                  <td className="px-4 py-3">
+                    {f.cliente_id ? (
+                      <Link href={`/clientes/${f.cliente_id}`} className="font-medium text-slate-800 hover:text-[#3F8E91] hover:underline">
+                        {f.cliente_nombre ?? "Cliente"}
+                      </Link>
+                    ) : (
+                      <span className="font-medium text-slate-800">{f.cliente_nombre ?? "—"}</span>
+                    )}
+                    {f.cliente_telefono && <div className="text-xs text-slate-400">{f.cliente_telefono}</div>}
+                  </td>
+                  <td className="px-4 py-3 text-xs tabular-nums text-slate-600">{fFecha(f.fecha_asignada)}</td>
+                  <td className="px-4 py-3">
+                    <div className="text-slate-800">{f.promo_nombre}</div>
+                    <div className="text-xs text-slate-400">
+                      {f.tipo === "descuento_pct" ? `${f.valor}% de descuento`
+                        : f.tipo === "cashback" ? `${f.valor}% cashback`
+                        : `Gs. ${Math.round(f.valor).toLocaleString("es-PY")}`}
+                      {f.cupon_codigo && <span className="ml-1 font-mono">· {f.cupon_codigo}</span>}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-xs tabular-nums text-slate-600">
+                    {f.fecha_desde || f.fecha_hasta
+                      ? `${fFecha(f.fecha_desde)} → ${fFecha(f.fecha_hasta)}`
+                      : <span className="text-slate-400">Sin límite</span>}
+                  </td>
+                  <td className="px-4 py-3 text-xs tabular-nums">
+                    {f.usada_at ? (
+                      <>
+                        <div className="font-semibold text-emerald-700">{fFecha(f.usada_at)}</div>
+                        {f.venta_numero && <div className="font-mono text-[11px] text-slate-400">{f.venta_numero}</div>}
+                        {f.usos > 1 && <div className="text-[11px] text-slate-400">{f.usos} usos</div>}
+                      </>
+                    ) : (
+                      <span className="text-slate-300">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ${ESTADO_BADGE[f.estado] ?? "bg-slate-100 text-slate-600 ring-slate-200"}`}>
+                      {ESTADO_LABEL[f.estado] ?? f.estado}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
     </div>
   );
 }
