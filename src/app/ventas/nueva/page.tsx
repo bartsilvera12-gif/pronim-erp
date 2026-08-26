@@ -1653,29 +1653,34 @@ function NuevoClienteRapidoModal({
   onClose: () => void;
   onCreated: (c: NuevoClienteResult) => void;
 }) {
-  const [tipo, setTipo] = useState<"empresa" | "persona">("empresa");
+  // Siempre persona: no se distingue empresa/persona.
   const [razonSocial, setRazonSocial] = useState("");
   const [ruc, setRuc] = useState("");
   const [telefono, setTelefono] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const puedeGuardar = razonSocial.trim().length > 0 && !saving;
+  // Nombre y teléfono obligatorios.
+  const puedeGuardar = razonSocial.trim().length > 0 && telefono.trim().length > 0 && !saving;
 
   async function submit() {
     setError(null);
     if (!razonSocial.trim()) {
-      setError(tipo === "empresa" ? "La razón social es obligatoria." : "El nombre es obligatorio.");
+      setError("El nombre es obligatorio.");
+      return;
+    }
+    if (!telefono.trim()) {
+      setError("El teléfono es obligatorio.");
       return;
     }
     setSaving(true);
     try {
       const payload: Record<string, unknown> = {
-        tipo_cliente: tipo,
+        tipo_cliente: "persona",
         nombre_contacto: razonSocial.trim().toUpperCase(),
-        empresa: tipo === "empresa" ? razonSocial.trim().toUpperCase() : null,
+        empresa: null,
         ruc: ruc.trim() || null,
-        telefono: telefono.trim() || null,
+        telefono: telefono.trim(),
         estado: "activo",
       };
       const res = await fetch("/api/clientes", {
@@ -1715,8 +1720,8 @@ function NuevoClienteRapidoModal({
     }
   }
 
-  const nombreLabel = tipo === "empresa" ? "Razón social" : "Nombre completo";
-  const nombrePlaceholder = tipo === "empresa" ? "Ej: TALLER VIDAL S.A." : "Ej: MARÍA PÉREZ";
+  const nombreLabel = "Nombre completo";
+  const nombrePlaceholder = "Ej: MARÍA PÉREZ";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
@@ -1743,23 +1748,6 @@ function NuevoClienteRapidoModal({
           </button>
         </div>
 
-        <div className="mt-4 grid grid-cols-2 gap-2 rounded-lg bg-slate-50 p-1">
-          {(["empresa", "persona"] as const).map((t) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => setTipo(t)}
-              className={`rounded-md py-1.5 text-sm font-medium transition-colors ${
-                tipo === t
-                  ? "bg-white text-slate-900 shadow-sm ring-1 ring-[#4FAEB2]/40"
-                  : "text-slate-500 hover:text-slate-800"
-              }`}
-            >
-              {t === "empresa" ? "Empresa" : "Persona"}
-            </button>
-          ))}
-        </div>
-
         <div className="mt-4 space-y-3">
           <div>
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -1776,7 +1764,7 @@ function NuevoClienteRapidoModal({
           </div>
           <div>
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-              {tipo === "empresa" ? "RUC" : "RUC / CI (opcional)"}
+              RUC / CI <span className="font-normal text-slate-400">(opcional)</span>
             </label>
             <input
               type="text"
@@ -1788,10 +1776,11 @@ function NuevoClienteRapidoModal({
           </div>
           <div>
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Teléfono <span className="font-normal text-slate-400">(opcional)</span>
+              Teléfono <span className="text-red-500">*</span>
             </label>
             <input
               type="text"
+              required
               value={telefono}
               onChange={(e) => setTelefono(e.target.value)}
               placeholder="Ej: 0991 234 567"

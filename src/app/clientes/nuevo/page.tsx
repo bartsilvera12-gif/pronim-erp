@@ -65,7 +65,7 @@ function NuevoClienteForm() {
   const [usuariosEmpresaError, setUsuariosEmpresaError] = useState<string | null>(null);
 
   const [form, setForm] = useState({
-    tipo_cliente:        "empresa" as TipoCliente,
+    tipo_cliente:        "persona" as TipoCliente,
     empresa:             "",
     nombre_contacto:     "",
     ruc:                 "",
@@ -193,7 +193,7 @@ function NuevoClienteForm() {
       setCrmBanner(`Prospecto ${prospecto.numero_control} — ${prospecto.empresa}`);
       setForm((prev) => ({
         ...prev,
-        tipo_cliente:    "empresa",
+        tipo_cliente:    "persona",
         empresa:         prospecto.empresa,
         nombre_contacto: prospecto.contacto,
         telefono:        prospecto.telefono ?? "",
@@ -224,8 +224,8 @@ function NuevoClienteForm() {
     e.preventDefault();
     setError(null);
 
-    if (!form.nombre_contacto.trim())                              return setError("El nombre de contacto es obligatorio.");
-    if (form.tipo_cliente === "empresa" && !form.empresa.trim())   return setError("La razón social es obligatoria para empresas.");
+    if (!form.nombre_contacto.trim())                              return setError("El nombre es obligatorio.");
+    if (!form.telefono.trim())                                     return setError("El teléfono es obligatorio.");
 
     if (form.condicion_pago === "MENSUAL" && form.estado === "activo") {
       const dur = parseInt(formSusc.duracion_meses, 10) || 0;
@@ -429,43 +429,6 @@ function NuevoClienteForm() {
           <section className="space-y-4">
             <SectionTitle>Identificación</SectionTitle>
 
-            {/* Tipo de cliente */}
-            <div>
-              <label className={labelClass}>Tipo de cliente</label>
-              <div className="flex rounded-lg border border-slate-200 overflow-hidden w-fit">
-                {(["empresa", "persona"] as TipoCliente[]).map((t) => (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() => setForm((prev) => ({ ...prev, tipo_cliente: t }))}
-                    className={`px-5 py-2.5 text-sm font-medium transition-colors ${
-                      form.tipo_cliente === t
-                        ? "bg-[#4FAEB2] text-white"
-                        : "bg-white text-slate-600 hover:bg-slate-50"
-                    }`}
-                  >
-                    {t === "empresa" ? "Empresa" : "Persona"}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {form.tipo_cliente === "empresa" && (
-              <div>
-                <label className={labelClass}>
-                  Razón social <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  name="empresa"
-                  value={form.empresa}
-                  onChange={handleChange}
-                  placeholder="Nombre de la empresa"
-                  className={`${inputClass} uppercase`}
-                />
-              </div>
-            )}
-
             {!SIMPLE_CLIENTE && (
             <div>
               <label className={labelClass}>Tipo de servicio</label>
@@ -488,8 +451,7 @@ function NuevoClienteForm() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label className={labelClass}>
-                  {form.tipo_cliente === "empresa" ? "Persona de contacto" : "Nombre completo"}{" "}
-                  <span className="text-red-500">*</span>
+                  Nombre completo <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
@@ -502,28 +464,15 @@ function NuevoClienteForm() {
                 />
               </div>
               <div>
-                <label className={labelClass}>
-                  {form.tipo_cliente === "empresa" ? "RUC" : "CI / Documento"}
-                </label>
-                {form.tipo_cliente === "empresa" ? (
-                  <input
-                    type="text"
-                    name="ruc"
-                    value={form.ruc}
-                    onChange={handleChange}
-                    placeholder="00000000-0"
-                    className={inputClass}
-                  />
-                ) : (
-                  <input
-                    type="text"
-                    name="documento"
-                    value={form.documento}
-                    onChange={handleChange}
-                    placeholder="CI sin puntos"
-                    className={inputClass}
-                  />
-                )}
+                <label className={labelClass}>CI / RUC</label>
+                <input
+                  type="text"
+                  name="documento"
+                  value={form.documento}
+                  onChange={handleChange}
+                  placeholder="CI sin puntos"
+                  className={inputClass}
+                />
               </div>
             </div>
           </section>
@@ -534,7 +483,9 @@ function NuevoClienteForm() {
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
-                <label className={labelClass}>Teléfono principal</label>
+                <label className={labelClass}>
+                  Teléfono principal <span className="text-red-500">*</span>
+                </label>
                 <input
                   type="text"
                   name="telefono"
@@ -542,6 +493,7 @@ function NuevoClienteForm() {
                   onChange={handleChange}
                   placeholder="021-000000"
                   className={inputClass}
+                  required
                 />
               </div>
               <div>

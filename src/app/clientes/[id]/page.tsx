@@ -206,7 +206,7 @@ export default function ClienteDetailPage() {
 
   // Estados del formulario de información
   const [form, setForm] = useState({
-    tipo_cliente:        "empresa" as Cliente["tipo_cliente"],
+    tipo_cliente:        "persona" as Cliente["tipo_cliente"],
     empresa:             "",
     nombre_contacto:     "",
     ruc:                 "",
@@ -566,7 +566,7 @@ export default function ClienteDetailPage() {
     e.preventDefault();
     setFormError(null);
     if (!form.nombre_contacto.trim())                             return setFormError("El contacto es obligatorio.");
-    if (form.tipo_cliente === "empresa" && !form.empresa.trim())  return setFormError("La razón social es obligatoria para empresas.");
+    if (!form.telefono.trim())                                    return setFormError("El teléfono es obligatorio.");
 
     // Solo validar creación de suscripción cuando: MENSUAL + activo + NO tiene suscripciones
     if (form.condicion_pago === "MENSUAL" && form.estado === "activo" && suscripciones.length === 0) {
@@ -1553,24 +1553,6 @@ export default function ClienteDetailPage() {
               <section className="space-y-4">
                 <SectionTitle>Datos de identificación</SectionTitle>
 
-                <div>
-                  <label className={labelClass}>Tipo de cliente</label>
-                  <div className="flex rounded-lg border border-slate-200 overflow-hidden w-fit">
-                    {(["empresa", "persona"] as Cliente["tipo_cliente"][]).map((t) => (
-                      <button
-                        key={t}
-                        type="button"
-                        onClick={() => setForm((prev) => ({ ...prev, tipo_cliente: t }))}
-                        className={`px-4 py-2 text-sm font-medium transition-colors ${
-                          form.tipo_cliente === t ? "bg-[#4FAEB2] text-white" : "bg-white text-slate-600 hover:bg-slate-50"
-                        }`}
-                      >
-                        {t === "empresa" ? "Empresa" : "Persona"}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
                 {!SIMPLE_CLIENTE && (
                 <div>
                   <label className={labelClass}>Tipo de servicio</label>
@@ -1591,25 +1573,14 @@ export default function ClienteDetailPage() {
                 </div>
                 )}
 
-                {form.tipo_cliente === "empresa" && (
-                  <div>
-                    <label className={labelClass}>Razón social</label>
-                    <input type="text" name="empresa" value={form.empresa} onChange={handleChange} className={`${inputClass} uppercase`} />
-                  </div>
-                )}
-
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className={labelClass}>{form.tipo_cliente === "empresa" ? "Persona de contacto" : "Nombre completo"}</label>
+                    <label className={labelClass}>Nombre completo <span className="text-red-500">*</span></label>
                     <input type="text" name="nombre_contacto" value={form.nombre_contacto} onChange={handleChange} className={`${inputClass} uppercase`} required />
                   </div>
                   <div>
-                    <label className={labelClass}>{form.tipo_cliente === "empresa" ? "RUC" : "CI / Documento"}</label>
-                    {form.tipo_cliente === "empresa" ? (
-                      <input type="text" name="ruc" value={form.ruc} onChange={handleChange} className={inputClass} />
-                    ) : (
-                      <input type="text" name="documento" value={form.documento} onChange={handleChange} className={inputClass} />
-                    )}
+                    <label className={labelClass}>CI / RUC</label>
+                    <input type="text" name="documento" value={form.documento} onChange={handleChange} className={inputClass} />
                   </div>
                 </div>
               </section>
@@ -1620,8 +1591,8 @@ export default function ClienteDetailPage() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className={labelClass}>Teléfono principal</label>
-                    <input type="text" name="telefono" value={form.telefono} onChange={handleChange} className={inputClass} />
+                    <label className={labelClass}>Teléfono principal <span className="text-red-500">*</span></label>
+                    <input type="text" name="telefono" value={form.telefono} onChange={handleChange} className={inputClass} required />
                   </div>
                   <div>
                     <label className={labelClass}>Teléfono secundario</label>
