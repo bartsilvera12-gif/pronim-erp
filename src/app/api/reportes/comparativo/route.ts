@@ -26,14 +26,36 @@ export async function GET(request: NextRequest) {
     if (!ok(desde) || !ok(hasta)) {
       return NextResponse.json(errorResponse("desde y hasta (YYYY-MM-DD) son obligatorios."), { status: 400 });
     }
-    // Período anterior de igual duración, terminando el día antes de `desde`.
     const dA = new Date(desde + "T00:00:00Z");
     const hA = new Date(hasta + "T00:00:00Z");
     const dias = Math.round((hA.getTime() - dA.getTime()) / 86400000) + 1;
-    const hB = new Date(dA.getTime() - 86400000);
-    const dB = new Date(hB.getTime() - (dias - 1) * 86400000);
     const iso = (d: Date) => d.toISOString().slice(0, 10);
-    const desdeB = iso(dB), hastaB = iso(hB);
+
+    // El período de comparación puede venir explícito (prev_desde/prev_hasta),
+    // para poder comparar, por ejemplo, diciembre de este año contra diciembre
+    // del año pasado. Si no viene, se usa el inmediato anterior de igual
+    // duración, terminando el día antes de `desde` (comportamiento histórico).
+    const prevDesde = sp.get("prev_desde");
+    const prevHasta = sp.get("prev_hasta");
+    const manual = ok(prevDesde) && ok(prevHasta);
+    let desdeB: string, hastaB: string;
+    if (manual) {
+      desdeB = prevDesde!;
+      hastaB = prevHasta!;
+      if (new Date(hastaB + "T00:00:00Z") < new Date(desdeB + "T00:00:00Z")) {
+        return NextResponse.json(
+          errorResponse("El período de comparación termina antes de empezar."),
+          { status: 400 },
+        );
+      }
+    } else {
+      const hB = new Date(dA.getTime() - 86400000);
+      const dB = new Date(hB.getTime() - (dias - 1) * 86400000);
+      desdeB = iso(dB); hastaB = iso(hB);
+    }
+    const diasB = Math.round(
+      (new Date(hastaB + "T00:00:00Z").getTime() - new Date(desdeB + "T00:00:00Z").getTime()) / 86400000,
+    ) + 1;
 
     const schema = assertAllowedChatDataSchema(await fetchDataSchemaForEmpresaId(auth.empresa_id));
     const pool = getChatPostgresPool();
@@ -128,6 +150,10 @@ export async function GET(request: NextRequest) {
       periodo_actual: { desde, hasta },
       periodo_anterior: { desde: desdeB, hasta: hastaB },
       dias,
+      /** Días del período de comparación (puede diferir si se eligió a mano). */
+      dias_anterior: diasB,
+      /** true si el período de comparación lo eligió el usuario. */
+      comparacion_manual: manual,
       sucursales,
       total: {
         actual: totA, anterior: totB,

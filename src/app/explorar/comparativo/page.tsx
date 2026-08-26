@@ -16,6 +16,8 @@ type Data = {
   periodo_actual: { desde: string; hasta: string };
   periodo_anterior: { desde: string; hasta: string };
   dias: number;
+  dias_anterior?: number;
+  comparacion_manual?: boolean;
   sucursales: Suc[];
   total: { actual: Metricas; anterior: Metricas; delta_facturacion: number; delta_facturacion_pct: number };
 };
@@ -32,17 +34,57 @@ export default function ExplorarComparativoPage() {
   const [desde, setDesde] = useState<string>(() => { const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10); });
   const [hasta, setHasta] = useState<string>(() => new Date().toISOString().slice(0, 10));
 
+  // Período de comparación elegido a mano (ej: diciembre de este año contra
+  // diciembre del año pasado). Si `manual` es false, lo calcula el backend.
+  const [manual, setManual] = useState(false);
+  const [prevDesde, setPrevDesde] = useState("");
+  const [prevHasta, setPrevHasta] = useState("");
+
+  /** Corre la fecha `iso` (YYYY-MM-DD) N años hacia atrás. */
+  function menosAnios(iso: string, n: number): string {
+    const d = new Date(iso + "T12:00:00");
+    d.setFullYear(d.getFullYear() - n);
+    return d.toISOString().slice(0, 10);
+  }
+
+  function activarManual() {
+    // Se arranca desde lo que ya venía calculado, así el usuario ajusta en vez
+    // de completar de cero.
+    setPrevDesde(data?.periodo_anterior.desde ?? menosAnios(desde, 1));
+    setPrevHasta(data?.periodo_anterior.hasta ?? menosAnios(hasta, 1));
+    setManual(true);
+  }
+
+  function mismoPeriodoAnioPasado() {
+    setPrevDesde(menosAnios(desde, 1));
+    setPrevHasta(menosAnios(hasta, 1));
+  }
+
+  function mesAnterior() {
+    const d = new Date(desde + "T12:00:00");
+    const ini = new Date(d.getFullYear(), d.getMonth() - 1, 1);
+    const fin = new Date(d.getFullYear(), d.getMonth(), 0);
+    const iso = (x: Date) =>
+      `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`;
+    setPrevDesde(iso(ini));
+    setPrevHasta(iso(fin));
+  }
+
   useEffect(() => {
     let cancel = false;
     setCargando(true);
     const qs = new URLSearchParams({ desde, hasta });
+    if (manual && prevDesde && prevHasta) {
+      qs.set("prev_desde", prevDesde);
+      qs.set("prev_hasta", prevHasta);
+    }
     fetchWithSupabaseSession(`/api/reportes/comparativo?${qs}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((j) => { if (!cancel && j?.success) setData(j.data as Data); })
       .catch(() => {})
       .finally(() => { if (!cancel) setCargando(false); });
     return () => { cancel = true; };
-  }, [desde, hasta]);
+  }, [desde, hasta, manual, prevDesde, prevHasta]);
 
   function DeltaPct({ v }: { v: number }) {
     const cls = v > 0 ? "text-emerald-700 bg-emerald-50" : v < 0 ? "text-rose-700 bg-rose-50" : "text-slate-500 bg-slate-50";
@@ -61,15 +103,68 @@ export default function ExplorarComparativoPage() {
 
   return (
     <div className="max-w-full space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm font-semibold text-slate-700">Comparar período:</span>
-        <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm" />
-        <span className="text-slate-400 text-xs">→</span>
-        <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm" />
-        {data && (
-          <span className="text-xs text-slate-500">
-            vs período anterior de {data.dias} día(s): <strong>{fmtFecha(data.periodo_anterior.desde)}</strong> → <strong>{fmtFecha(data.periodo_anterior.hasta)}</strong>
-          </span>
+      <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 space-y-2.5">
+        {/* Período A — el que se analiza */}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="w-24 shrink-0 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Período</span>
+          <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)}
+            className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm" />
+          <span className="text-slate-400 text-xs">→</span>
+          <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)}
+            className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm" />
+          {data && <span className="text-[11px] text-slate-500">{data.dias} día(s)</span>}
+        </div>
+
+        {/* Período B — contra qué se compara */}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="w-24 shrink-0 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Comparar con</span>
+          {manual ? (
+            <>
+              <input type="date" value={prevDesde} onChange={(e) => setPrevDesde(e.target.value)}
+                className="rounded-lg border border-[#4FAEB2] bg-white px-2 py-1.5 text-sm" />
+              <span className="text-slate-400 text-xs">→</span>
+              <input type="date" value={prevHasta} onChange={(e) => setPrevHasta(e.target.value)}
+                className="rounded-lg border border-[#4FAEB2] bg-white px-2 py-1.5 text-sm" />
+              {data && <span className="text-[11px] text-slate-500">{data.dias_anterior ?? "—"} día(s)</span>}
+              <button type="button" onClick={() => setManual(false)}
+                className="text-[11px] text-slate-500 underline hover:text-slate-700">
+                Volver al automático
+              </button>
+            </>
+          ) : (
+            <>
+              <span className="text-sm text-slate-600">
+                {data
+                  ? <>Período anterior: <strong>{fmtFecha(data.periodo_anterior.desde)}</strong> → <strong>{fmtFecha(data.periodo_anterior.hasta)}</strong></>
+                  : "Período anterior (automático)"}
+              </span>
+              <button type="button" onClick={activarManual}
+                className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-50">
+                Elegir otro período
+              </button>
+            </>
+          )}
+        </div>
+
+        {/* Atajos frecuentes */}
+        {manual && (
+          <div className="flex flex-wrap items-center gap-1.5 pl-0 sm:pl-[6.5rem]">
+            <span className="text-[10px] uppercase tracking-wide text-slate-400">Atajos</span>
+            <button type="button" onClick={mismoPeriodoAnioPasado}
+              className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-100">
+              Mismo período del año pasado
+            </button>
+            <button type="button" onClick={mesAnterior}
+              className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-100">
+              Mes anterior completo
+            </button>
+          </div>
+        )}
+
+        {manual && data && data.dias !== (data.dias_anterior ?? data.dias) && (
+          <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5">
+            Los períodos tienen distinta duración ({data.dias} vs {data.dias_anterior} días): las variaciones pueden no ser comparables.
+          </p>
         )}
       </div>
 
