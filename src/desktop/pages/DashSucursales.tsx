@@ -66,7 +66,8 @@ type Payload = {
     ventas: number; operaciones: number; ticket_promedio: number;
     clientes_atendidos: number; prendas_vendidas: number; prendas_recibidas: number;
     stock: number; cajas_abiertas: number; cajas_cerradas: number;
-    meta_diaria: number | null; vendido_periodo: number; dias_periodo: number;
+    meta_diaria: number | null; meta_mensual?: number | null; meta_periodo?: number | null;
+    vendido_periodo: number; dias_periodo: number;
     pct_meta: number | null; ventas_prev: number; operaciones_prev: number;
     var_ventas_pct: number | null;
     visitas: number; recurrentes: number;
@@ -978,6 +979,14 @@ function SucursalCard({ s }: {
   // abiertas/cerradas), "Sin actividad" caso contrario.
   const activa = s.operaciones > 0 || s.cajas_abiertas > 0 || s.cajas_cerradas > 0;
   const pctMeta = s.pct_meta ?? 0;
+  // Fallback para payloads viejos (deploy en curso): si el backend todavía no
+  // manda meta_periodo, se calcula como antes (diaria × días del rango).
+  const metaPeriodo =
+    s.meta_periodo != null
+      ? s.meta_periodo
+      : s.meta_diaria != null
+        ? s.meta_diaria * s.dias_periodo
+        : null;
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5 hover:shadow-md transition shadow-sm">
@@ -1071,14 +1080,17 @@ function SucursalCard({ s }: {
         </SucSeccion>
       )}
 
-      {/* Meta del período — barra naranja */}
-      {s.meta_diaria != null && (
+      {/* Meta del período — barra naranja.
+          `meta_periodo` la resuelve el backend: si hay meta MENSUAL cargada la
+          usa (prorrateada por los días del rango); si no, cae a diaria × días. */}
+      {metaPeriodo != null && metaPeriodo > 0 && (
         <div className="pt-3 mt-1 border-t border-slate-100">
           <div className="flex items-baseline justify-between mb-1.5">
             <span className="text-[11px] text-slate-500">
               Meta del período
               <span className="text-slate-400 ml-1">
-                (meta {fmt(s.meta_diaria * s.dias_periodo)})
+                (meta {fmt(metaPeriodo)}
+                {s.meta_mensual != null && s.meta_mensual > 0 ? " · mensual" : ""})
               </span>
             </span>
             <span className={`text-xs font-bold tabular-nums ${

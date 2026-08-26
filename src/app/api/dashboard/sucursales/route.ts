@@ -76,6 +76,19 @@ export async function GET(request: NextRequest) {
     const client = await pool.connect();
     try {
       const args: unknown[] = [auth.empresa_id, desde, hasta];
+
+      // `monto_meta_mensual` no existe en todos los schemas (se agregó después
+      // de metas_sucursal). Si falta, caemos a meta diaria × días del período.
+      let hayMetaMensual = false;
+      try {
+        const colQ = await client.query<{ n: string }>(
+          `SELECT COUNT(*)::text AS n FROM information_schema.columns
+            WHERE table_schema = $1 AND table_name = 'metas_sucursal'
+              AND column_name = 'monto_meta_mensual'`,
+          [schema],
+        );
+        hayMetaMensual = Number(colQ.rows[0]?.n ?? 0) > 0;
+      } catch { /* tolerar: queda en false */ }
       // Si viene sucursal_id, se aplica en las CTEs de visitas y en la tabla por sucursal.
       const sucCondV = sucursalFiltro ? "AND v.sucursal_id = $4" : "";
       const sucCondR = sucursalFiltro ? "AND r.sucursal_id = $4" : "";
@@ -486,14 +499,19 @@ export async function GET(request: NextRequest) {
         clientes_atendidos: string; prendas_vendidas: string;
         prendas_recibidas: string; stock: string;
         cajas_abiertas: string; cajas_cerradas: string;
-        meta_diaria: string | null; vendido_periodo: string; dias_periodo: string;
+        meta_diaria: string | null; meta_mensual: string | null;
+        vendido_periodo: string; dias_periodo: string; dias_mes: string;
         ventas_prev: string; operaciones_prev: string;
         visitas_suc: string; recurrentes_suc: string;
         credito_gen_suc: string; credito_usado_suc: string;
       }>(
         `WITH periodo AS (
            SELECT $2::date AS desde, $3::date AS hasta,
-                  ($3::date - $2::date + 1) AS dias
+                  ($3::date - $2::date + 1) AS dias,
+                  -- Días del mes calendario que contiene la fecha "desde".
+                  -- Se usa para prorratear la meta MENSUAL cargada por el admin.
+                  EXTRACT(DAY FROM (date_trunc('month', $2::date)
+                                    + interval '1 month - 1 day'))::int AS dias_mes
          ),
          prev AS (
            SELECT (desde - dias)::date AS desde, (desde - 1)::date AS hasta
@@ -580,8 +598,15 @@ export async function GET(request: NextRequest) {
                AND vigente_desde <= (SELECT hasta FROM periodo)
              ORDER BY vigente_desde DESC LIMIT 1
            ), '')::text AS meta_diaria,
+           ${hayMetaMensual ? `NULLIF((
+             SELECT monto_meta_mensual::text FROM ${metasT}
+             WHERE empresa_id = $1 AND sucursal_id = s.id AND activo = true
+               AND vigente_desde <= (SELECT hasta FROM periodo)
+             ORDER BY vigente_desde DESC LIMIT 1
+           ), '')::text` : `NULL::text`} AS meta_mensual,
            COALESCE((SELECT SUM(total) FROM ventas_periodo WHERE sucursal_id = s.id), 0)::text AS vendido_periodo,
            (SELECT dias FROM periodo)::text AS dias_periodo,
+           (SELECT dias_mes FROM periodo)::text AS dias_mes,
            COALESCE((SELECT SUM(total) FROM ventas_prev WHERE sucursal_id = s.id), 0)::text AS ventas_prev,
            COALESCE((SELECT COUNT(*) FROM ventas_prev WHERE sucursal_id = s.id), 0)::text AS operaciones_prev,
            COALESCE((SELECT n FROM visitas_por_suc WHERE sucursal_id = s.id), 0)::text AS visitas_suc,
@@ -662,7 +687,25 @@ export async function GET(request: NextRequest) {
       await client.query(`DROP TABLE IF EXISTS _visitas`).catch(() => null);
 
       // ═════ Serialización ═════
-      const sucursales = rowsQ.rows.map((r) => ({
+      const sucursales = rowsQ.rows.map((r) => {
+        // ── Meta del período ────────────────────────────────────────────
+        // Prioridad 1: la META MENSUAL cargada por el admin, prorrateada por
+        //   los días del rango (rango = mes completo ⇒ da exactamente la meta
+        //   mensual configurada).
+        // Prioridad 2 (fallback, sin meta mensual cargada): meta diaria ×
+        //   días del rango, que es el comportamiento histórico.
+        const metaDiariaN = r.meta_diaria ? Number(r.meta_diaria) : null;
+        const metaMensualN = r.meta_mensual ? Number(r.meta_mensual) : null;
+        const diasPeriodoN = Number(r.dias_periodo) || 0;
+        const diasMesN = Number(r.dias_mes) || 30;
+        const metaPeriodo =
+          metaMensualN && metaMensualN > 0
+            ? Math.round((metaMensualN / diasMesN) * diasPeriodoN)
+            : metaDiariaN && metaDiariaN > 0
+              ? metaDiariaN * diasPeriodoN
+              : null;
+
+        return {
         sucursal_id: r.sucursal_id,
         nombre: r.nombre,
         moneda: (r as { moneda?: string }).moneda ?? "PYG",
@@ -675,11 +718,14 @@ export async function GET(request: NextRequest) {
         stock: Number(r.stock),
         cajas_abiertas: Number(r.cajas_abiertas),
         cajas_cerradas: Number(r.cajas_cerradas),
-        meta_diaria: r.meta_diaria ? Number(r.meta_diaria) : null,
+        meta_diaria: metaDiariaN,
+        meta_mensual: metaMensualN,
+        /** Meta que corresponde al rango consultado (ya resuelta server-side). */
+        meta_periodo: metaPeriodo,
         vendido_periodo: Number(r.vendido_periodo),
-        dias_periodo: Number(r.dias_periodo),
-        pct_meta: r.meta_diaria && Number(r.meta_diaria) > 0
-          ? Math.round((Number(r.vendido_periodo) / (Number(r.meta_diaria) * Number(r.dias_periodo))) * 100)
+        dias_periodo: diasPeriodoN,
+        pct_meta: metaPeriodo && metaPeriodo > 0
+          ? Math.round((Number(r.vendido_periodo) / metaPeriodo) * 100)
           : null,
         ventas_prev: Number(r.ventas_prev),
         operaciones_prev: Number(r.operaciones_prev),
@@ -693,7 +739,8 @@ export async function GET(request: NextRequest) {
         conversion_pct: Number(r.visitas_suc) > 0
           ? Math.round((Number(r.operaciones) / Number(r.visitas_suc)) * 100)
           : null,
-      }));
+        };
+      });
 
       const totales = {
         ventas: sucursales.reduce((s, x) => s + x.ventas, 0),
