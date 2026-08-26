@@ -48,6 +48,11 @@ export default function TransferenciasStockPage() {
   const [buscando, setBuscando] = useState(false);
   const [resultados, setResultados] = useState<Producto[]>([]);
   const [items, setItems] = useState<ItemBorrador[]>([]);
+  // Stock de la sucursal ORIGEN (producto_id → cantidad). `productos.stock_actual`
+  // es el total de la empresa (suma de todas las sucursales), así que no sirve
+  // para decidir qué se puede mover desde una sucursal puntual.
+  const [stockOrigen, setStockOrigen] = useState<Record<string, number>>({});
+  const [cargandoStock, setCargandoStock] = useState(false);
 
   const [historia, setHistoria] = useState<TransferenciaRow[]>([]);
   const [historiaItems, setHistoriaItems] = useState<TransferenciaItem[]>([]);
@@ -56,7 +61,11 @@ export default function TransferenciasStockPage() {
   const [success, setSuccess] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
 
-  const puedeEnviar = origen && destino && origen !== destino && items.length > 0 && !enviando;
+  // Ninguna línea puede pedir más de lo que hay en la sucursal de origen (el
+  // backend además lo revalida al confirmar).
+  const hayExceso = items.some((it) => Number(it.cantidad) > (stockOrigen[it.producto_id] ?? 0));
+  const puedeEnviar =
+    origen && destino && origen !== destino && items.length > 0 && !enviando && !hayExceso;
 
   async function cargarSucursales() {
     try {
@@ -108,6 +117,24 @@ export default function TransferenciasStockPage() {
       .finally(() => { if (!cancel) setBuscando(false); });
     return () => { cancel = true; };
   }, []);
+
+  // Al elegir/cambiar la sucursal de origen, recargar su stock real.
+  useEffect(() => {
+    if (!origen) { setStockOrigen({}); return; }
+    let cancel = false;
+    setCargandoStock(true);
+    fetchWithSupabaseSession(
+      `/api/inventario/stock-por-sucursal?sucursal_id=${encodeURIComponent(origen)}`,
+      { cache: "no-store" },
+    )
+      .then((r) => r.json())
+      .then((j) => { if (!cancel) setStockOrigen((j?.data?.stocks ?? {}) as Record<string, number>); })
+      .catch(() => { if (!cancel) setStockOrigen({}); })
+      .finally(() => { if (!cancel) setCargandoStock(false); });
+    return () => { cancel = true; };
+  }, [origen]);
+
+  const stockDe = (productoId: string) => stockOrigen[productoId] ?? 0;
 
   const resultadosFiltrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
@@ -259,7 +286,15 @@ export default function TransferenciasStockPage() {
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">{t("Elegí producto o franja")}</label>
+          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+            {t("Elegí producto o franja")}
+            {origen && (
+              <span className="ml-2 normal-case tracking-normal font-medium text-[#3F8E91]">
+                — stock disponible en {sucursales.find((s) => s.id === origen)?.nombre ?? "la sucursal de origen"}
+                {cargandoStock && <span className="text-slate-400"> (actualizando…)</span>}
+              </span>
+            )}
+          </label>
           <input
             type="text"
             value={busqueda}
@@ -273,21 +308,33 @@ export default function TransferenciasStockPage() {
             <p className="text-xs text-gray-400 mt-2">Sin resultados. Verificá el filtro o que existan franjas/productos activos.</p>
           ) : (
             <ul className="mt-2 border border-slate-200 rounded-lg divide-y divide-slate-100 max-h-64 overflow-y-auto">
-              {resultadosFiltrados.map((p) => (
-                <li key={p.id}>
-                  <button
-                    type="button"
-                    onClick={() => agregarProducto(p)}
-                    className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center justify-between gap-2"
-                  >
-                    <span>
-                      <span className="font-medium text-slate-800">{p.nombre}</span>
-                      {p.sku && <span className="text-xs text-slate-400 ml-2">{p.sku}</span>}
-                    </span>
-                    <span className="text-xs text-slate-500">Stock: {p.stock_actual ?? 0}</span>
-                  </button>
-                </li>
-              ))}
+              {resultadosFiltrados.map((p) => {
+                const disp = stockDe(p.id);
+                const sinStock = !!origen && disp <= 0;
+                return (
+                  <li key={p.id}>
+                    <button
+                      type="button"
+                      onClick={() => agregarProducto(p)}
+                      disabled={sinStock}
+                      title={sinStock ? "Sin stock en la sucursal de origen" : undefined}
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center justify-between gap-2 disabled:opacity-45 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                    >
+                      <span>
+                        <span className="font-medium text-slate-800">{p.nombre}</span>
+                        {p.sku && <span className="text-xs text-slate-400 ml-2">{p.sku}</span>}
+                      </span>
+                      {!origen ? (
+                        <span className="text-xs text-slate-400 whitespace-nowrap">Elegí origen</span>
+                      ) : (
+                        <span className={`text-xs whitespace-nowrap font-semibold ${sinStock ? "text-slate-400" : "text-emerald-700"}`}>
+                          {disp} disp.
+                        </span>
+                      )}
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>
@@ -298,23 +345,36 @@ export default function TransferenciasStockPage() {
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
                   <th className="text-left text-xs font-semibold text-gray-500 px-3 py-2 uppercase tracking-wide">Producto</th>
+                  <th className="text-left text-xs font-semibold text-gray-500 px-3 py-2 uppercase tracking-wide w-28">Disponible</th>
                   <th className="text-left text-xs font-semibold text-gray-500 px-3 py-2 uppercase tracking-wide w-40">Cantidad</th>
                   <th className="w-12"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {items.map((it) => (
+                {items.map((it) => {
+                  const disp = stockDe(it.producto_id);
+                  const excede = Number(it.cantidad) > disp;
+                  return (
                   <tr key={it.producto_id}>
                     <td className="px-3 py-2 text-slate-800">{it.producto_nombre}</td>
+                    <td className="px-3 py-2 text-slate-600 tabular-nums">{disp}</td>
                     <td className="px-3 py-2">
                       <input
                         type="number"
                         min={0}
+                        max={disp}
                         step="0.001"
                         value={it.cantidad}
                         onChange={(e) => actualizarCantidad(it.producto_id, e.target.value)}
-                        className="w-32 px-2 py-1 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
+                        className={`w-32 px-2 py-1 text-sm border rounded-md focus:outline-none focus:ring-2 ${
+                          excede
+                            ? "border-rose-300 bg-rose-50 text-rose-700 focus:ring-rose-300"
+                            : "border-slate-200 focus:ring-[#4FAEB2]"
+                        }`}
                       />
+                      {excede && (
+                        <p className="mt-1 text-[11px] text-rose-600">Solo hay {disp} en la sucursal de origen.</p>
+                      )}
                     </td>
                     <td className="px-3 py-2 text-right">
                       <button
@@ -325,7 +385,8 @@ export default function TransferenciasStockPage() {
                       >×</button>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
