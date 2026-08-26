@@ -5,7 +5,7 @@ import {
   useSegmentosGuardados, SegmentosGuardadosBar, ModalGuardarSegmento,
   useColumnasPersistidas, ColumnasDropdown, type ColumnaDef,
 } from "@/components/tabla/segmentos-guardados";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import EdgeScrollArea from "@/components/ui/EdgeScrollArea";
 import { FancySelect } from "@/components/ui/FancySelect";
@@ -210,6 +210,9 @@ export default function VentasPage() {
     return () => { cancel = true; };
   }, []);
   const [filtroEstado,   setFiltroEstado]   = useState<"" | "completada" | "anulada">("");
+  // Rango de fechas (YYYY-MM-DD). Vacío = sin límite por ese extremo.
+  const [fechaDesde,     setFechaDesde]     = useState("");
+  const [fechaHasta,     setFechaHasta]     = useState("");
   const [segmento,       setSegmento]       = useState<"" | "hoy" | "semana" | "mes" | "con_descuento" | "anuladas">("");
   // Ordenamiento por columna (fase 2 tanda 3.b)
   type VentaSortKey = "numero_control" | "cant_items" | "cant_total" | "total" | "tipo_venta" | "metodo_pago" | "sucursal" | "fecha";
@@ -223,8 +226,10 @@ export default function VentasPage() {
 
   // Fase 2 tanda 15: columnas configurables + segmentos guardados
   type VentaColKey = "numero_control" | "productos" | "items_count" | "cant_total" | "iva" | "total" | "tipo" | "pago" | "sucursal" | "fecha" | "acciones";
+  // Orden del reporte: la FECHA primero (es como se lee el historial) y el
+  // número de operación al final, por ser un dato de referencia.
   const VENTAS_COLUMNAS_ALL: ColumnaDef<VentaColKey>[] = [
-    { key: "numero_control", label: "Número", required: true },
+    { key: "fecha", label: "Fecha" },
     { key: "productos", label: "Cliente / Productos" },
     { key: "items_count", label: "Ítems" },
     { key: "cant_total", label: "Cant. total" },
@@ -233,12 +238,15 @@ export default function VentasPage() {
     { key: "tipo", label: "Tipo" },
     { key: "pago", label: "Pago" },
     { key: "sucursal", label: "Sucursal" },
-    { key: "fecha", label: "Fecha" },
+    { key: "numero_control", label: "Número", required: true },
     { key: "acciones", label: "Acciones (Imprimir / Anular)", required: true },
   ];
-  const VENTAS_COL_DEFAULTS: VentaColKey[] = ["numero_control", "productos", "items_count", "cant_total", "iva", "total", "tipo", "pago", "sucursal", "fecha", "acciones"];
+  const VENTAS_COL_DEFAULTS: VentaColKey[] = ["fecha", "productos", "items_count", "cant_total", "iva", "total", "tipo", "pago", "sucursal", "numero_control", "acciones"];
+  // v2: se cambió el orden por defecto (fecha primero, número al final). Subir
+  // la versión de la clave hace que el nuevo orden se aplique aunque el usuario
+  // ya tuviera un orden guardado de antes.
   const { visibles: colVis, toggle: colToggle, mover: colMover, reset: colReset } =
-    useColumnasPersistidas<VentaColKey>("neura.erp.ventas.columnas.v1", VENTAS_COLUMNAS_ALL, VENTAS_COL_DEFAULTS);
+    useColumnasPersistidas<VentaColKey>("neura.erp.ventas.columnas.v2", VENTAS_COLUMNAS_ALL, VENTAS_COL_DEFAULTS);
   const [colsOpen, setColsOpen] = useState(false);
 
   type VentaSegData = {
@@ -364,6 +372,30 @@ export default function VentasPage() {
     ? (sucursales.find((s) => s.id === filtroSucursal)?.nombre ?? null)
     : null;
 
+  // Atajos de período: rellenan Desde/Hasta con rangos habituales. Se calculan
+  // en hora local (no UTC) para que "Hoy" sea el día del local, no el del server.
+  const atajosPeriodo = useMemo(() => {
+    const ymd = (d: Date) => {
+      const x = new Date(d);
+      return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`;
+    };
+    const hoy = new Date();
+    const inicioSemana = new Date(hoy);
+    inicioSemana.setDate(hoy.getDate() - ((hoy.getDay() + 6) % 7)); // lunes
+    const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+    const inicioMesPrev = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
+    const finMesPrev = new Date(hoy.getFullYear(), hoy.getMonth(), 0);
+    const hace30 = new Date(hoy);
+    hace30.setDate(hoy.getDate() - 29);
+    return [
+      { label: "Hoy", desde: ymd(hoy), hasta: ymd(hoy) },
+      { label: "Esta semana", desde: ymd(inicioSemana), hasta: ymd(hoy) },
+      { label: "Este mes", desde: ymd(inicioMes), hasta: ymd(hoy) },
+      { label: "Mes pasado", desde: ymd(inicioMesPrev), hasta: ymd(finMesPrev) },
+      { label: "Últimos 30 días", desde: ymd(hace30), hasta: ymd(hoy) },
+    ];
+  }, []);
+
   const filtradas = alcance.filter((v) => {
     // Búsqueda global: número de control, nombre o SKU de cualquier ítem
     if (busqueda.trim() !== "") {
@@ -388,6 +420,14 @@ export default function VentasPage() {
     // Estado (completada / anulada) — si no se filtra, mostramos todo salvo
     // que el segmento "anuladas" lo pida explícitamente
     if (filtroEstado !== "" && (v.estado ?? "completada") !== filtroEstado) return false;
+    // Rango de fechas. Se compara por día (YYYY-MM-DD) para que "hasta" sea
+    // inclusivo sin pelear con la hora ni con la zona horaria.
+    if (fechaDesde !== "" || fechaHasta !== "") {
+      const dia = (v.fecha ?? "").slice(0, 10);
+      if (!dia) return false;
+      if (fechaDesde !== "" && dia < fechaDesde) return false;
+      if (fechaHasta !== "" && dia > fechaHasta) return false;
+    }
     // Segmento rápido
     if (segmento) {
       const f = Date.parse(v.fecha);
@@ -575,11 +615,68 @@ export default function VentasPage() {
                 ariaLabel={t("Filtrar por estado")} className="w-full" size="sm"
                 options={[{ value: "", label: t("Todas") }, { value: "completada", label: t("Completadas") }, { value: "anulada", label: t("Anuladas") }]} />
             </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{t("Desde")}</label>
+              <input
+                type="date"
+                value={fechaDesde}
+                max={fechaHasta || undefined}
+                onChange={(e) => { setFechaDesde(e.target.value); setSegmento(""); }}
+                aria-label={t("Filtrar desde la fecha")}
+                className={`w-full rounded-lg border bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]/40 ${
+                  fechaDesde ? "border-[#4FAEB2] text-[#3F8E91] font-semibold" : "border-slate-200"
+                }`}
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{t("Hasta")}</label>
+              <input
+                type="date"
+                value={fechaHasta}
+                min={fechaDesde || undefined}
+                onChange={(e) => { setFechaHasta(e.target.value); setSegmento(""); }}
+                aria-label={t("Filtrar hasta la fecha")}
+                className={`w-full rounded-lg border bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]/40 ${
+                  fechaHasta ? "border-[#4FAEB2] text-[#3F8E91] font-semibold" : "border-slate-200"
+                }`}
+              />
+            </div>
           </div>
-          {(hayFiltros || filtroPago || filtroEstado || segmento) && (
+
+          {/* Atajos de período — rellenan Desde/Hasta */}
+          <div className="mt-3 flex flex-wrap items-center gap-1.5">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mr-1">{t("Período")}</span>
+            {atajosPeriodo.map((a) => {
+              const activo = fechaDesde === a.desde && fechaHasta === a.hasta;
+              return (
+                <button
+                  key={a.label}
+                  type="button"
+                  onClick={() => { setFechaDesde(a.desde); setFechaHasta(a.hasta); setSegmento(""); }}
+                  className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                    activo
+                      ? "bg-[#4FAEB2] text-white shadow-sm"
+                      : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
+                  }`}
+                >
+                  {t(a.label)}
+                </button>
+              );
+            })}
+            {(fechaDesde || fechaHasta) && (
+              <button
+                type="button"
+                onClick={() => { setFechaDesde(""); setFechaHasta(""); }}
+                className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-500 hover:bg-slate-50"
+              >
+                ✕ {t("Quitar fechas")}
+              </button>
+            )}
+          </div>
+          {(hayFiltros || filtroPago || filtroEstado || segmento || fechaDesde || fechaHasta) && (
             <div className="mt-3 flex items-center gap-2">
               <button
-                onClick={() => { setBusqueda(""); setFiltroTipo(""); setFiltroIva(""); setFiltroSucursal(""); setFiltroPago(""); setFiltroEstado(""); setSegmento(""); }}
+                onClick={() => { setBusqueda(""); setFiltroTipo(""); setFiltroIva(""); setFiltroSucursal(""); setFiltroPago(""); setFiltroEstado(""); setSegmento(""); setFechaDesde(""); setFechaHasta(""); }}
                 className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-50 transition-colors"
               >
                 ✕ {t("Limpiar filtros")}
