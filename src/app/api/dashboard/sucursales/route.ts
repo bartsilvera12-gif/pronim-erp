@@ -500,7 +500,8 @@ export async function GET(request: NextRequest) {
         prendas_recibidas: string; stock: string;
         cajas_abiertas: string; cajas_cerradas: string;
         meta_diaria: string | null; meta_mensual: string | null;
-        vendido_periodo: string; dias_periodo: string; dias_mes: string;
+        vendido_periodo: string; dias_periodo: string;
+        dias_habiles: string; dias_habiles_mes: string;
         ventas_prev: string; operaciones_prev: string;
         visitas_suc: string; recurrentes_suc: string;
         credito_gen_suc: string; credito_usado_suc: string;
@@ -508,10 +509,16 @@ export async function GET(request: NextRequest) {
         `WITH periodo AS (
            SELECT $2::date AS desde, $3::date AS hasta,
                   ($3::date - $2::date + 1) AS dias,
-                  -- Días del mes calendario que contiene la fecha "desde".
-                  -- Se usa para prorratear la meta MENSUAL cargada por el admin.
-                  EXTRACT(DAY FROM (date_trunc('month', $2::date)
-                                    + interval '1 month - 1 day'))::int AS dias_mes
+                  -- Días HÁBILES (la tienda cierra los domingos). Las metas se
+                  -- prorratean por días de venta, no por días calendario.
+                  (SELECT COUNT(*) FROM generate_series($2::date, $3::date, interval '1 day') d
+                     WHERE EXTRACT(DOW FROM d) <> 0)::int AS dias_habiles,
+                  -- Días hábiles del mes calendario que contiene "desde".
+                  (SELECT COUNT(*) FROM generate_series(
+                            date_trunc('month', $2::date)::date,
+                            (date_trunc('month', $2::date) + interval '1 month - 1 day')::date,
+                            interval '1 day') d
+                     WHERE EXTRACT(DOW FROM d) <> 0)::int AS dias_habiles_mes
          ),
          prev AS (
            SELECT (desde - dias)::date AS desde, (desde - 1)::date AS hasta
@@ -606,7 +613,8 @@ export async function GET(request: NextRequest) {
            ), '')::text` : `NULL::text`} AS meta_mensual,
            COALESCE((SELECT SUM(total) FROM ventas_periodo WHERE sucursal_id = s.id), 0)::text AS vendido_periodo,
            (SELECT dias FROM periodo)::text AS dias_periodo,
-           (SELECT dias_mes FROM periodo)::text AS dias_mes,
+           (SELECT dias_habiles FROM periodo)::text AS dias_habiles,
+           (SELECT dias_habiles_mes FROM periodo)::text AS dias_habiles_mes,
            COALESCE((SELECT SUM(total) FROM ventas_prev WHERE sucursal_id = s.id), 0)::text AS ventas_prev,
            COALESCE((SELECT COUNT(*) FROM ventas_prev WHERE sucursal_id = s.id), 0)::text AS operaciones_prev,
            COALESCE((SELECT n FROM visitas_por_suc WHERE sucursal_id = s.id), 0)::text AS visitas_suc,
@@ -689,20 +697,22 @@ export async function GET(request: NextRequest) {
       // ═════ Serialización ═════
       const sucursales = rowsQ.rows.map((r) => {
         // ── Meta del período ────────────────────────────────────────────
+        // Se prorratea por días HÁBILES (la tienda cierra domingos): los días
+        // cerrados no aportan venta, así que tampoco deben sumar meta.
         // Prioridad 1: la META MENSUAL cargada por el admin, prorrateada por
-        //   los días del rango (rango = mes completo ⇒ da exactamente la meta
-        //   mensual configurada).
-        // Prioridad 2 (fallback, sin meta mensual cargada): meta diaria ×
-        //   días del rango, que es el comportamiento histórico.
+        //   los días hábiles del rango (rango = mes completo ⇒ da exactamente
+        //   la meta mensual configurada).
+        // Prioridad 2 (sin meta mensual): meta diaria × días hábiles del rango.
         const metaDiariaN = r.meta_diaria ? Number(r.meta_diaria) : null;
         const metaMensualN = r.meta_mensual ? Number(r.meta_mensual) : null;
         const diasPeriodoN = Number(r.dias_periodo) || 0;
-        const diasMesN = Number(r.dias_mes) || 30;
+        const diasHabilesN = Number(r.dias_habiles) || 0;
+        const diasHabilesMesN = Number(r.dias_habiles_mes) || 26;
         const metaPeriodo =
           metaMensualN && metaMensualN > 0
-            ? Math.round((metaMensualN / diasMesN) * diasPeriodoN)
+            ? Math.round((metaMensualN / diasHabilesMesN) * diasHabilesN)
             : metaDiariaN && metaDiariaN > 0
-              ? metaDiariaN * diasPeriodoN
+              ? metaDiariaN * diasHabilesN
               : null;
 
         return {

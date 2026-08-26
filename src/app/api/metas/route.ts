@@ -5,6 +5,9 @@ import { getChatPostgresPool, quoteSchemaTable } from "@/lib/supabase/chat-pg-po
 import { assertAllowedChatDataSchema } from "@/lib/supabase/chat-data-schema";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
+import {
+  DIAS_HABILES_POR_SEMANA, diasHabilesEnRango, diasHabilesDelMes,
+} from "@/lib/metas/dias-habiles";
 
 export const dynamic = "force-dynamic";
 
@@ -184,6 +187,9 @@ export async function GET(request: NextRequest) {
     // porque muchas tiendas trabajan sáb+dom; el admin ajusta la meta
     // diaria si aplica.
     const diasTranscurridos = diffLun + 1;
+    // Días de VENTA (hábiles) ya transcurridos en la semana y totales del mes.
+    const diasHabilesTranscurridosSemana = diasHabilesEnRango(lunes, hoy);
+    const diasHabilesMes = diasHabilesDelMes(hoy);
 
     const metas = sucRes.rows.map((r) => {
       const metaDia = Number(r.monto_meta_diaria ?? 0);
@@ -193,9 +199,11 @@ export async function GET(request: NextRequest) {
       const bonoTkMin = Number(r.bono_ticket_prom_min ?? 0);
       const bonoTkPct = Number(r.bono_ticket_prom_pct ?? 0);
       const kpi = kpisBySuc.get(r.id) ?? { dia: 0, semana: 0, mes: 0, tickets: 0 };
-      const metaSem = Number(r.monto_meta_semanal ?? 0) || metaDia * 7;
-      const metaMes = Number(r.monto_meta_mensual ?? 0) || metaDia * 26;
-      const metaSemProrrateada = metaDia * diasTranscurridos;
+      // La tienda abre 6 días por semana (cierra domingos): las metas se
+      // derivan de días HÁBILES, no de días calendario.
+      const metaSem = Number(r.monto_meta_semanal ?? 0) || metaDia * DIAS_HABILES_POR_SEMANA;
+      const metaMes = Number(r.monto_meta_mensual ?? 0) || metaDia * diasHabilesMes;
+      const metaSemProrrateada = metaDia * diasHabilesTranscurridosSemana;
       const pctDia = metaDia > 0 ? Math.round((kpi.dia / metaDia) * 100) : 0;
       const pctSem = metaSem > 0 ? Math.round((kpi.semana / metaSem) * 100) : 0;
       const pctMes = metaMes > 0 ? Math.round((kpi.mes / metaMes) * 100) : 0;

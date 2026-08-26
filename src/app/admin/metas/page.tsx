@@ -143,7 +143,7 @@ export default function AdminMetasPage() {
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Metas de venta por sucursal</h1>
         <p className="text-sm text-slate-500 mt-0.5">
-          Configurá la meta diaria de cada sucursal y el % de comisión semanal. La meta semanal se calcula como 7× la diaria.
+          Configurá la meta diaria de cada sucursal y el % de comisión semanal. La meta semanal se calcula como 6× la diaria (la tienda cierra los domingos) y la mensual, por los días hábiles del mes.
         </p>
       </div>
 
@@ -247,7 +247,7 @@ export default function AdminMetasPage() {
                     <p className="text-[11px] uppercase font-semibold text-slate-500 mt-4 mb-2">Meta mensual y bonos</p>
                     <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                       <div>
-                        <label className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1" title="Si vacío se estima como diaria × 26">Meta mensual ({monedaLabel})</label>
+                        <label className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1" title="Si vacío se estima como diaria × días hábiles del mes (sin domingos)">Meta mensual ({monedaLabel})</label>
                         <MontoInput
                           value={d.metaMes}
                           decimals={false}
