@@ -9,12 +9,40 @@ import { useIsAdmin } from "@/lib/auth/use-is-admin";
 import { alert, confirm } from "@/components/ui/dialog";
 import type { Proveedor } from "@/lib/proveedores/types";
 
+function fmtGs(v: number): string {
+  return `Gs. ${Math.round(v).toLocaleString("es-PY")}`;
+}
+function fmtFecha(iso: string): string {
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso.slice(0, 10);
+    return d.toLocaleDateString("es-PY", { day: "2-digit", month: "2-digit", year: "numeric" });
+  } catch {
+    return iso;
+  }
+}
+
 export default function ProveedoresPage() {
   const { isAdmin } = useIsAdmin();
   const [lista, setLista] = useState<Proveedor[]>([]);
   const [busqueda, setBusqueda] = useState("");
   const [cargando, setCargando] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
+
+  type ProvStats = {
+    evaluaciones: number; total_pagado: number; total_ingresado: number;
+    markup_medio: number | null; ultima_evaluacion: string | null;
+  };
+  const [stats, setStats] = useState<Record<string, ProvStats>>({});
+
+  useEffect(() => {
+    let cancel = false;
+    fetch("/api/proveedores/estadisticas", { credentials: "include", cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => { if (!cancel) setStats((j?.data?.stats ?? {}) as Record<string, ProvStats>); })
+      .catch(() => {});
+    return () => { cancel = true; };
+  }, [refreshKey]);
 
   useEffect(() => {
     let cancel = false;
@@ -116,10 +144,11 @@ export default function ProveedoresPage() {
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-slate-100 text-slate-600">
-                <th className="py-3 pr-4 font-semibold">Proveedor</th>
-                <th className="py-3 pr-4 font-semibold">RUC</th>
-                <th className="py-3 pr-4 font-semibold">Contacto</th>
-                <th className="py-3 pr-4 font-semibold">Categorías</th>
+                <th className="py-3 pr-4 font-semibold">Nombre / Contacto</th>
+                <th className="py-3 pr-4 font-semibold text-right">Evaluaciones</th>
+                <th className="py-3 pr-4 font-semibold text-right">Total evaluaciones</th>
+                <th className="py-3 pr-4 font-semibold">Última evaluación</th>
+                <th className="py-3 pr-4 font-semibold text-right">Markup medio</th>
                 <th className="py-3 pr-4 font-semibold">Estado</th>
                 <th className="py-3 font-semibold w-44 text-right pr-1">Acciones</th>
               </tr>
@@ -144,34 +173,38 @@ export default function ProveedoresPage() {
                   </td>
                 </tr>
               ) : (
-                filtradas.map((p) => (
+                filtradas.map((p) => {
+                  const st = stats[p.id];
+                  return (
                   <tr key={p.id} className="border-b border-slate-50 last:border-0 hover:bg-[#4FAEB2]/[0.04] transition-colors">
                     <td className="py-3 pr-4">
                       <div className="font-medium text-slate-800">{p.nombre}</div>
-                      {p.nombre_comercial && (
-                        <div className="text-xs text-slate-500">{p.nombre_comercial}</div>
-                      )}
-                    </td>
-                    <td className="py-3 pr-4 font-mono text-xs text-slate-600">{p.ruc ?? "—"}</td>
-                    <td className="py-3 pr-4 text-slate-600">
-                      <div>{p.contacto ?? "—"}</div>
-                      <div className="text-xs text-slate-400">{p.telefono ?? ""}</div>
-                    </td>
-                    <td className="py-3 pr-4">
-                      <div className="flex flex-wrap gap-1">
-                        {(p.categorias ?? []).length === 0 ? (
-                          <span className="text-xs text-slate-400">—</span>
-                        ) : (
-                          p.categorias!.map((c) => (
-                            <span
-                              key={c.id}
-                              className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600"
-                            >
-                              {c.nombre}
-                            </span>
-                          ))
-                        )}
+                      <div className="text-xs text-slate-500">
+                        {p.contacto || p.nombre_comercial || "—"}
+                        {p.telefono ? ` · ${p.telefono}` : ""}
                       </div>
+                    </td>
+                    <td className="py-3 pr-4 text-right tabular-nums text-slate-700">
+                      {st ? st.evaluaciones : <span className="text-slate-300">0</span>}
+                    </td>
+                    <td className="py-3 pr-4 text-right tabular-nums font-semibold text-slate-800">
+                      {st && st.total_pagado > 0 ? fmtGs(st.total_pagado) : <span className="font-normal text-slate-300">—</span>}
+                    </td>
+                    <td className="py-3 pr-4 text-xs tabular-nums text-slate-600">
+                      {st?.ultima_evaluacion ? fmtFecha(st.ultima_evaluacion) : <span className="text-slate-300">—</span>}
+                    </td>
+                    <td className="py-3 pr-4 text-right tabular-nums">
+                      {st?.markup_medio != null ? (
+                        <span className={`font-semibold ${
+                          st.markup_medio >= 100 ? "text-emerald-700"
+                          : st.markup_medio >= 50 ? "text-amber-700"
+                          : "text-rose-700"
+                        }`}>
+                          {st.markup_medio.toFixed(0)}%
+                        </span>
+                      ) : (
+                        <span className="text-slate-300">—</span>
+                      )}
                     </td>
                     <td className="py-3 pr-4">
                       <span
@@ -202,7 +235,8 @@ export default function ProveedoresPage() {
                       </div>
                     </td>
                   </tr>
-                ))
+                  );
+                })
               )}
             </tbody>
           </table>

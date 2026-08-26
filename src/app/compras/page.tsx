@@ -45,8 +45,30 @@ type GrupoCompra = {
   tipo_pago: TipoPago;
   plazo_dias?: number;
   items: Compra[];
+  /** Lo que se le pagó al cliente/proveedor por las prendas (costo). */
   total: number;
+  /** Valor de venta de lo que entró: SUM(cantidad × precio_venta). */
+  totalIngresado: number;
   comprobante: boolean;
+};
+
+/** Markup % = cuánto se le suma al costo para llegar al precio de venta. */
+function markupPct(pagado: number, ingresado: number): number | null {
+  if (!(pagado > 0) || !(ingresado > 0)) return null;
+  return ((ingresado - pagado) / pagado) * 100;
+}
+
+const metodoLabel: Record<string, string> = {
+  efectivo: "Efectivo",
+  transferencia: "Transferencia",
+  credito: "Crédito en productos",
+  consignacion: "Consignación",
+};
+const metodoBadge: Record<string, string> = {
+  efectivo: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+  transferencia: "bg-sky-50 text-sky-700 ring-sky-200",
+  credito: "bg-violet-50 text-violet-700 ring-violet-200",
+  consignacion: "bg-amber-50 text-amber-700 ring-amber-200",
 };
 
 function agrupar(rows: Compra[]): GrupoCompra[] {
@@ -63,12 +85,14 @@ function agrupar(rows: Compra[]): GrupoCompra[] {
         plazo_dias: c.plazo_dias,
         items: [],
         total: 0,
+        totalIngresado: 0,
         comprobante: false,
       };
       map.set(key, g);
     }
     g.items.push(c);
     g.total += Number(c.total) || 0;
+    g.totalIngresado += (Number(c.cantidad) || 0) * (Number(c.precio_venta) || 0);
     if (c.comprobante_storage_path) g.comprobante = true;
   }
   return [...map.values()].sort(
@@ -91,6 +115,18 @@ export default function ComprasPage() {
   const [cargandoLista, setCargandoLista] = useState(true);
   const [borrando, setBorrando] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  // Método real de pago por N° de control (efectivo / transferencia / crédito
+  // en productos / consignación). Vive en la recepción, no en `compras`.
+  const [metodosPago, setMetodosPago] = useState<Record<string, string[]>>({});
+
+  useEffect(() => {
+    let cancel = false;
+    fetch("/api/compras/metodos-pago", { credentials: "include", cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => { if (!cancel) setMetodosPago((j?.data?.metodos ?? {}) as Record<string, string[]>); })
+      .catch(() => {});
+    return () => { cancel = true; };
+  }, [refreshKey]);
 
   useEffect(() => {
     let cancel = false;
@@ -200,20 +236,21 @@ export default function ComprasPage() {
           <table className="w-full min-w-[760px] lg:min-w-0 text-left text-sm">
             <thead>
               <tr className="border-b text-gray-500">
-                <th className="py-3 pr-4 font-medium">N° Control</th>
-                <th className="py-3 pr-4 font-medium">Proveedor</th>
-                <th className="py-3 pr-4 font-medium">Productos</th>
-                <th className="py-3 pr-4 font-medium text-right">Ítems</th>
-                <th className="py-3 pr-4 font-medium text-right">Total</th>
-                <th className="hidden py-3 pr-4 font-medium lg:table-cell">Pago</th>
                 <th className="py-3 pr-4 font-medium">Fecha</th>
+                <th className="py-3 pr-4 font-medium">Nombre</th>
+                <th className="py-3 pr-4 font-medium text-right">Ítems</th>
+                <th className="py-3 pr-4 font-medium text-right">Total pagado</th>
+                <th className="py-3 pr-4 font-medium text-right">Total ingresado</th>
+                <th className="py-3 pr-4 font-medium text-right">Markup</th>
+                <th className="py-3 pr-4 font-medium">Pago</th>
+                <th className="py-3 pr-4 font-medium">N° Control</th>
                 <th className="py-3 font-medium text-right">Acciones</th>
               </tr>
             </thead>
             <tbody>
               {cargandoLista ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-sm text-slate-400">
+                  <td colSpan={9} className="py-12 text-center text-sm text-slate-400">
                     <div className="inline-flex items-center gap-2">
                       <svg className="h-4 w-4 animate-spin text-[#4FAEB2]" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
                         <circle cx="12" cy="12" r="10" stroke="currentColor" strokeOpacity="0.25" strokeWidth="3" />
@@ -225,7 +262,7 @@ export default function ComprasPage() {
                 </tr>
               ) : filtrados.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-gray-400">
+                  <td colSpan={9} className="py-12 text-center text-gray-400">
                     {grupos.length === 0 ? "No hay compras registradas" : "Ninguna compra coincide con los filtros"}
                   </td>
                 </tr>
@@ -239,13 +276,13 @@ export default function ComprasPage() {
                         className={`border-b border-slate-200 transition-colors hover:bg-[#4FAEB2]/[0.04] ${multi ? "cursor-pointer" : ""}`}
                         onClick={() => multi && toggle(g.numero_control)}
                       >
-                        <td className="py-4 pr-4 font-mono text-xs text-gray-500">
+                        <td className="py-4 pr-4 text-gray-600 text-xs tabular-nums whitespace-nowrap">
                           {multi && <span className="mr-1 inline-block text-gray-400">{abierto ? "▾" : "▸"}</span>}
-                          {g.numero_control}
+                          {formatFecha(g.fecha)}
                         </td>
-                        <td className="py-4 pr-4 font-medium text-gray-800">{g.proveedor_nombre}</td>
-                        <td className="py-4 pr-4 text-gray-600">
-                          <div>{resumenProductos(g.items)}</div>
+                        <td className="py-4 pr-4">
+                          <div className="font-medium text-gray-800">{g.proveedor_nombre}</div>
+                          <div className="text-xs text-gray-500">{resumenProductos(g.items)}</div>
                           {g.comprobante && (
                             <a
                               href={`/api/compras/comprobante?numero_control=${encodeURIComponent(g.numero_control)}`}
@@ -260,12 +297,43 @@ export default function ComprasPage() {
                         </td>
                         <td className="py-4 pr-4 text-right tabular-nums text-gray-700">{g.items.length}</td>
                         <td className="py-4 pr-4 text-right tabular-nums font-semibold text-gray-800">{formatGs(g.total)}</td>
-                        <td className="hidden py-4 pr-4 lg:table-cell">
-                          <span className={`px-2 py-1 rounded-full text-xs font-semibold ${g.tipo_pago ? tipoPagoBadge[g.tipo_pago] : "bg-gray-100 text-gray-500"}`}>
-                            {g.tipo_pago === "contado" ? "Contado" : g.tipo_pago === "credito" ? `Crédito ${g.plazo_dias ?? ""}d` : "—"}
-                          </span>
+                        <td className="py-4 pr-4 text-right tabular-nums text-gray-700">
+                          {g.totalIngresado > 0 ? formatGs(g.totalIngresado) : "—"}
                         </td>
-                        <td className="py-4 pr-4 text-gray-500 text-xs tabular-nums">{formatFecha(g.fecha)}</td>
+                        <td className="py-4 pr-4 text-right tabular-nums">
+                          {(() => {
+                            const mk = markupPct(g.total, g.totalIngresado);
+                            if (mk == null) return <span className="text-gray-400">—</span>;
+                            return (
+                              <span className={`font-semibold ${mk >= 100 ? "text-emerald-700" : mk >= 50 ? "text-amber-700" : "text-rose-700"}`}>
+                                {mk.toFixed(0)}%
+                              </span>
+                            );
+                          })()}
+                        </td>
+                        <td className="py-4 pr-4">
+                          {(() => {
+                            const ms = metodosPago[g.numero_control];
+                            if (ms && ms.length > 0) {
+                              return (
+                                <div className="flex flex-wrap gap-1">
+                                  {ms.map((m) => (
+                                    <span key={m} className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ${metodoBadge[m] ?? "bg-gray-100 text-gray-600 ring-gray-200"}`}>
+                                      {metodoLabel[m] ?? m}
+                                    </span>
+                                  ))}
+                                </div>
+                              );
+                            }
+                            // Sin recepción vinculada: mostramos el tipo de pago de la compra.
+                            return (
+                              <span className={`px-2 py-1 rounded-full text-xs font-semibold ${g.tipo_pago ? tipoPagoBadge[g.tipo_pago] : "bg-gray-100 text-gray-500"}`}>
+                                {g.tipo_pago === "contado" ? "Contado" : g.tipo_pago === "credito" ? `Crédito ${g.plazo_dias ?? ""}d` : "—"}
+                              </span>
+                            );
+                          })()}
+                        </td>
+                        <td className="py-4 pr-4 font-mono text-xs text-gray-500 whitespace-nowrap">{g.numero_control}</td>
                         <td className="py-4 text-right">
                           <button
                             type="button"
@@ -281,15 +349,18 @@ export default function ComprasPage() {
                       {abierto && multi && g.items.map((it) => (
                         <tr key={it.id} className="border-b border-slate-100 bg-slate-50/50 text-xs">
                           <td className="py-2 pr-4" />
-                          <td className="py-2 pr-4" />
                           <td className="py-2 pr-4 text-gray-700">
                             <span className="font-medium">{it.producto_nombre}</span>
                             <span className="ml-2 font-mono text-gray-400">{formatGs(it.costo_unitario)}/u</span>
                           </td>
                           <td className="py-2 pr-4 text-right tabular-nums text-gray-600">{it.cantidad}</td>
                           <td className="py-2 pr-4 text-right tabular-nums text-gray-700">{formatGs(it.total)}</td>
-                          <td className="hidden lg:table-cell" />
-                          <td />
+                          <td className="py-2 pr-4 text-right tabular-nums text-gray-600">
+                            {formatGs((Number(it.cantidad) || 0) * (Number(it.precio_venta) || 0))}
+                          </td>
+                          <td className="py-2 pr-4" />
+                          <td className="py-2 pr-4" />
+                          <td className="py-2 pr-4" />
                           <td />
                         </tr>
                       ))}
