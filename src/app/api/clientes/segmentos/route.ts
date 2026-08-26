@@ -29,8 +29,8 @@ const SEGMENTOS: { slug: SegmentoSlug; label: string; descripcion: string; emoji
   { slug: "vip",           label: "VIP",                 descripcion: "Marcados manualmente como VIP.",                    emoji: "⭐" },
   { slug: "con_credito",   label: "Con crédito a favor", descripcion: "Saldo de crédito disponible mayor a cero.",        emoji: "💰" },
   { slug: "con_cashback",  label: "Con cashback",        descripcion: "Cashback acreditado pendiente de usar.",            emoji: "🎁" },
-  { slug: "inactivos_90d", label: "Inactivos +90 días",  descripcion: "Última compra hace 90 días o más (o sin compra).", emoji: "📅" },
-  { slug: "nuevos_mes",    label: "Nuevos este mes",     descripcion: "Alta dentro del mes calendario en curso.",          emoji: "🆕" },
+  { slug: "inactivos_90d", label: "Inactivos +90 días",  descripcion: "Ya operaron alguna vez, pero hace 90 días o más que no vuelven.", emoji: "📅" },
+  { slug: "nuevos_mes",    label: "Nuevos este mes",     descripcion: "Hicieron su primera compra o evaluación este mes.", emoji: "🆕" },
   { slug: "en_riesgo",     label: "En riesgo",           descripcion: "Antes venían seguido y hace ≥45 días no vuelven.",  emoji: "📉" },
 ];
 
@@ -160,7 +160,11 @@ export async function GET(request: NextRequest) {
         SELECT r.cliente_id,
                COALESCE(SUM(${recTotalCol}),0)::numeric AS total_vendido,
                COUNT(*) AS cnt_recep,
-               MAX(r.fecha) AS ultima_recep_at
+               MAX(r.fecha) AS ultima_recep_at,
+               MIN(r.fecha) AS primera_recep_at,
+               COUNT(*) FILTER (WHERE r.fecha >= now() - interval '90 days') AS rec_90d,
+               COUNT(*) FILTER (WHERE r.fecha >= now() - interval '180 days'
+                                  AND r.fecha <  now() - interval '90 days') AS rec_prev_90d
           FROM ${recepT} r
          WHERE r.empresa_id = $1 AND (r.estado IS NULL OR r.estado <> 'anulada') AND r.cliente_id IS NOT NULL
          GROUP BY r.cliente_id
@@ -174,7 +178,7 @@ export async function GET(request: NextRequest) {
          ORDER BY r.cliente_id, r.fecha DESC
       )
     ` : `
-      recact AS (SELECT NULL::uuid AS cliente_id, 0::numeric AS total_vendido, 0 AS cnt_recep, NULL::timestamptz AS ultima_recep_at WHERE false),
+      recact AS (SELECT NULL::uuid AS cliente_id, 0::numeric AS total_vendido, 0 AS cnt_recep, NULL::timestamptz AS ultima_recep_at, NULL::timestamptz AS primera_recep_at, 0 AS rec_90d, 0 AS rec_prev_90d WHERE false),
       ur AS (SELECT NULL::uuid AS cliente_id, NULL::timestamptz AS ur_fecha, 0::numeric AS ur_monto, false AS ur_cambio WHERE false)
     `;
 
@@ -201,14 +205,32 @@ export async function GET(request: NextRequest) {
       )
     ` : `cbexp AS (SELECT NULL::uuid AS cliente_id, NULL::timestamptz AS expira WHERE false)`;
 
+    // Una "transacción" del cliente es tanto comprar (venta) como traer prendas
+    // (recepción): las dos son visitas y las dos lo mantienen activo. Los
+    // segmentos se calculan sobre esa actividad combinada, no solo ventas.
+    const ultimaTx = `NULLIF(GREATEST(
+      COALESCE(a.ultima_venta_at, '-infinity'::timestamptz),
+      COALESCE(recact.ultima_recep_at, '-infinity'::timestamptz)
+    ), '-infinity'::timestamptz)`;
+    const primeraTx = `NULLIF(LEAST(
+      COALESCE(a.primera_venta_at, 'infinity'::timestamptz),
+      COALESCE(recact.primera_recep_at, 'infinity'::timestamptz)
+    ), 'infinity'::timestamptz)`;
+    const txPrev90 = `(COALESCE(a.cnt_prev_90d,0) + COALESCE(recact.rec_prev_90d,0))`;
+
     // Expresiones booleanas por segmento (reutilizables en filtros y counts)
     const expr: Record<SegmentoSlug, string> = {
       vip:            `${hasEsVip ? "COALESCE(c.es_vip,false)" : "false"} = true`,
       con_credito:    `COALESCE(cr.saldo_credito,0)  > 0`,
       con_cashback:   `COALESCE(cr.saldo_cashback,0) > 0`,
-      inactivos_90d:  `(a.ultima_venta_at IS NULL OR a.ultima_venta_at < now() - interval '90 days')`,
-      nuevos_mes:     `c.created_at >= date_trunc('month', now())`,
-      en_riesgo:      `COALESCE(a.cnt_prev_90d,0) >= 2 AND (a.ultima_venta_at IS NULL OR a.ultima_venta_at < now() - interval '45 days')`,
+      // Inactivo = YA fue cliente y hace 90+ días que no vuelve. Un cliente
+      // recién cargado que nunca operó no está "inactivo": nunca estuvo activo.
+      inactivos_90d:  `${ultimaTx} IS NOT NULL AND ${ultimaTx} < now() - interval '90 days'`,
+      // Nuevo del mes = hizo su PRIMERA transacción este mes. Antes se usaba la
+      // fecha de alta, así que aparecían clientes cargados a mano que nunca
+      // compraron ni trajeron nada, y faltaban los que estrenaron este mes.
+      nuevos_mes:     `${primeraTx} >= date_trunc('month', now())`,
+      en_riesgo:      `${txPrev90} >= 2 AND (${ultimaTx} IS NULL OR ${ultimaTx} < now() - interval '45 days')`,
     };
 
     // Baseline counts (por segmento, sin considerar filtros de segmento)
@@ -220,12 +242,15 @@ export async function GET(request: NextRequest) {
     const countsParams: unknown[] = [auth.empresa_id];
     if (auth.scope_clientes && cliCols.has("scope_clientes")) countsParams.push(auth.scope_clientes);
     const countsQ = await pool.query<Record<SegmentoSlug | "total", string>>(
-      `WITH ${actividadCTE}, ${creditosCTE}
+      // recepCTE + su join hacen falta porque los segmentos miran la actividad
+      // combinada (ventas + recepciones), no solo ventas.
+      `WITH ${actividadCTE}, ${creditosCTE}, ${recepCTE}
        SELECT ${SEGMENTOS.map((s) => `COUNT(*) FILTER (WHERE ${expr[s.slug]})::text AS ${s.slug}`).join(",\n              ")},
               COUNT(*)::text AS total
          FROM ${cliT} c
          LEFT JOIN actividad a  ON a.cliente_id  = c.id
          LEFT JOIN creditos cr  ON cr.cliente_id = c.id
+         LEFT JOIN recact       ON recact.cliente_id = c.id
         WHERE c.empresa_id = $1 ${scopeFilter}`,
       countsParams,
     );
