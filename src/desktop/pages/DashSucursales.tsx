@@ -64,7 +64,8 @@ type Payload = {
   sucursales: {
     sucursal_id: string; nombre: string; moneda: string;
     ventas: number; operaciones: number; ticket_promedio: number;
-    clientes_atendidos: number; prendas_vendidas: number; prendas_recibidas: number;
+    clientes_atendidos: number; clientes_nuevos?: number; clientes_recurrentes?: number;
+    prendas_vendidas: number; prendas_recibidas: number;
     stock: number; cajas_abiertas: number; cajas_cerradas: number;
     meta_diaria: number | null; meta_mensual?: number | null; meta_periodo?: number | null;
     vendido_periodo: number; dias_periodo: number; dias_habiles?: number | null;
@@ -1062,13 +1063,16 @@ function SucursalCard({ s }: {
         border="border-violet-100"
         chipBg="bg-white/80"
       >
-        <SucMini label="Visitas" value={fmtN(s.visitas)} />
-        <SucMini label="Atendidos" value={fmtN(s.clientes_atendidos)} />
-        <SucMini label="Recurrent." value={fmtN(s.recurrentes)} />
+        {/* Nuevos + Recurrentes = Total. Antes eran Visitas/Atendidos/Recurrent.,
+            que medían cosas distintas y no sumaban entre sí. */}
+        <SucMini label="Nuevos" value={fmtN(s.clientes_nuevos ?? 0)} />
+        <SucMini label="Recurrentes" value={fmtN(s.clientes_recurrentes ?? 0)} />
+        <SucMini label="Total" value={fmtN(s.clientes_atendidos)} />
       </SucSeccion>
       {s.conversion_pct != null && (
         <p className="text-[10px] text-slate-500 -mt-2 mb-3 pl-1">
-          Conversión visita → venta:{" "}
+          <span className="tabular-nums">{fmtN(s.visitas)}</span> visita{s.visitas === 1 ? "" : "s"}
+          {" · conversión visita → venta: "}
           <span className="font-semibold text-slate-700 tabular-nums">{s.conversion_pct}%</span>
         </p>
       )}

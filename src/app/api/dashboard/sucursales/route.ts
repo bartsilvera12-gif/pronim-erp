@@ -496,7 +496,7 @@ export async function GET(request: NextRequest) {
       const rowsQ = await client.query<{
         sucursal_id: string; nombre: string;
         ventas: string; operaciones: string; ticket_promedio: string;
-        clientes_atendidos: string; prendas_vendidas: string;
+        clientes_atendidos: string; clientes_nuevos: string; prendas_vendidas: string;
         prendas_recibidas: string; stock: string;
         cajas_abiertas: string; cajas_cerradas: string;
         meta_diaria: string | null; meta_mensual: string | null;
@@ -542,6 +542,24 @@ export async function GET(request: NextRequest) {
            WHERE r.empresa_id = $1 AND r.estado <> 'anulada'
              AND r.fecha::date BETWEEN (SELECT desde FROM periodo) AND (SELECT hasta FROM periodo)
          ),
+         -- Primera transacción HISTÓRICA de cada cliente (venta o evaluación),
+         -- sin importar sucursal ni período. Sirve para saber si el cliente que
+         -- vino en el período estrenó ahora o ya era cliente de antes.
+         primera_tx AS (
+           SELECT cliente_id, MIN(f)::date AS primera
+           FROM (
+             SELECT v.cliente_id, v.fecha AS f
+               FROM ${ventasT} v
+              WHERE v.empresa_id = $1 AND v.estado IN ('pendiente','completada')
+                AND v.cliente_id IS NOT NULL
+             UNION ALL
+             SELECT r.cliente_id, r.fecha
+               FROM ${recepT} r
+              WHERE r.empresa_id = $1 AND r.estado <> 'anulada'
+                AND r.cliente_id IS NOT NULL
+           ) x
+           GROUP BY cliente_id
+         ),
          visitas_por_suc AS (
            SELECT sucursal_id, COUNT(*) AS n,
                   COUNT(*) FILTER (WHERE cliente_id IN (
@@ -581,6 +599,18 @@ export async function GET(request: NextRequest) {
                SELECT cliente_id FROM recep_periodo   WHERE sucursal_id = s.id
              ) u WHERE cliente_id IS NOT NULL
            ), 0)::text AS clientes_atendidos,
+           -- De los clientes atendidos en esta sucursal, cuántos estrenaron en
+           -- el período (su primera transacción histórica cae dentro del rango).
+           COALESCE((
+             SELECT COUNT(*) FROM (
+               SELECT cliente_id FROM ventas_periodo WHERE sucursal_id = s.id
+               UNION
+               SELECT cliente_id FROM recep_periodo   WHERE sucursal_id = s.id
+             ) u
+             JOIN primera_tx pt ON pt.cliente_id = u.cliente_id
+             WHERE u.cliente_id IS NOT NULL
+               AND pt.primera >= (SELECT desde FROM periodo)
+           ), 0)::text AS clientes_nuevos,
            COALESCE((
              SELECT SUM(vi.cantidad) FROM ${ventasItT} vi
              JOIN ventas_periodo v ON v.id = vi.venta_id AND v.sucursal_id = s.id
@@ -752,6 +782,10 @@ export async function GET(request: NextRequest) {
         operaciones: Number(r.operaciones),
         ticket_promedio: Math.round(Number(r.ticket_promedio)),
         clientes_atendidos: Number(r.clientes_atendidos),
+        /** Clientes distintos que estrenaron en el período. */
+        clientes_nuevos: Number(r.clientes_nuevos),
+        /** Los demás ya eran clientes: así nuevos + recurrentes = total. */
+        clientes_recurrentes: Math.max(0, Number(r.clientes_atendidos) - Number(r.clientes_nuevos)),
         prendas_vendidas: Number(r.prendas_vendidas),
         prendas_recibidas: Number(r.prendas_recibidas),
         stock: Number(r.stock),
