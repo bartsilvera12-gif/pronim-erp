@@ -370,7 +370,10 @@ export async function createVentaEnClientePg(
         total_linea: totalLinea,
         es_sin_cargo: esSinCargo,
         motivo_sin_cargo: esSinCargo ? (it.motivo_sin_cargo ?? "decant_obsequio") : null,
-        costo_unitario_snapshot: info.costo_promedio,
+        // Nunca negativo: la tabla tiene el check ventas_items_costo_snapshot_nonneg
+        // y un costo promedio negativo (dato heredado de un WACP mal calculado con
+        // stock negativo) no debe impedir facturar. Se registra como 0.
+        costo_unitario_snapshot: Math.max(0, Number(info.costo_promedio) || 0),
       });
     }
 
@@ -639,7 +642,7 @@ export async function createVentaEnClientePg(
          ) VALUES ($1,$2,$3,$4,'SALIDA',$5,$6,'venta',$7,now(),$8,$9,$10)`,
         [
           params.empresaId, prodId, inf.nombre, inf.sku, qty,
-          inf.costo_promedio, numeroControl, ventaId,
+          Math.max(0, Number(inf.costo_promedio) || 0), numeroControl, ventaId,
           params.createdBy ?? null, params.usuarioNombre ?? null,
         ],
       );

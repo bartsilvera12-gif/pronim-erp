@@ -821,10 +821,17 @@ async function ingresarRecepcionPgInternal(
     );
     const stockPrev = Number(prevQ.rows[0]?.stock_actual ?? 0);
     const costoPrev = Number(prevQ.rows[0]?.costo_promedio ?? 0);
-    const stockNew = stockPrev + qty;
-    const wacp = stockNew > 0
-      ? Math.round(((stockPrev * costoPrev) + (qty * costo)) / stockNew)
-      : costo;
+    // El stock puede estar NEGATIVO (franjas vendidas sin stock). Un stock
+    // negativo no representa mercadería en poder de la tienda, así que no
+    // aporta valuación: si lo dejáramos entrar a la fórmula, el término
+    // stockPrev*costoPrev arrastraría el promedio a negativo y después toda
+    // venta de esa franja violaría ventas_items_costo_snapshot_nonneg.
+    // Con stockPrev >= 0 el resultado es idéntico al WACP de siempre.
+    const stockPrevValuable = Math.max(0, stockPrev);
+    const baseNew = stockPrevValuable + qty;
+    const wacp = baseNew > 0
+      ? Math.max(0, Math.round(((stockPrevValuable * costoPrev) + (qty * costo)) / baseNew))
+      : Math.max(0, costo);
 
     await client.query(
       `UPDATE ${prodT}
