@@ -734,6 +734,8 @@ export async function GET(request: NextRequest) {
         meta_periodo: metaPeriodo,
         vendido_periodo: Number(r.vendido_periodo),
         dias_periodo: diasPeriodoN,
+        /** Días de venta del rango (sin domingos): es el multiplicador de la meta. */
+        dias_habiles: diasHabilesN,
         pct_meta: metaPeriodo && metaPeriodo > 0
           ? Math.round((Number(r.vendido_periodo) / metaPeriodo) * 100)
           : null,

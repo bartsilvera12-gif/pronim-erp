@@ -67,7 +67,7 @@ type Payload = {
     clientes_atendidos: number; prendas_vendidas: number; prendas_recibidas: number;
     stock: number; cajas_abiertas: number; cajas_cerradas: number;
     meta_diaria: number | null; meta_mensual?: number | null; meta_periodo?: number | null;
-    vendido_periodo: number; dias_periodo: number;
+    vendido_periodo: number; dias_periodo: number; dias_habiles?: number | null;
     pct_meta: number | null; ventas_prev: number; operaciones_prev: number;
     var_ventas_pct: number | null;
     visitas: number; recurrentes: number;
@@ -1086,11 +1086,18 @@ function SucursalCard({ s }: {
       {metaPeriodo != null && metaPeriodo > 0 && (
         <div className="pt-3 mt-1 border-t border-slate-100">
           <div className="flex items-baseline justify-between mb-1.5">
+            {/* Se muestra de dónde sale el número: la meta del período es la
+                acumulada del rango que estás mirando, no la diaria que cargaste.
+                Sin esto parecía que el sistema "duplicaba" la meta. */}
             <span className="text-[11px] text-slate-500">
               Meta del período
               <span className="text-slate-400 ml-1">
-                (meta {fmt(metaPeriodo)}
-                {s.meta_mensual != null && s.meta_mensual > 0 ? " · mensual" : ""})
+                ({fmt(metaPeriodo)}
+                {s.meta_mensual != null && s.meta_mensual > 0
+                  ? " · desde la meta mensual"
+                  : s.meta_diaria != null && s.dias_habiles != null
+                    ? ` = ${fmt(s.meta_diaria)} × ${s.dias_habiles} ${s.dias_habiles === 1 ? "día hábil" : "días hábiles"}`
+                    : ""})
               </span>
             </span>
             <span className={`text-xs font-bold tabular-nums ${
