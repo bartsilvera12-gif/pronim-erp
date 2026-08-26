@@ -2,9 +2,10 @@
 import { confirm } from "@/components/ui/dialog";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getGastos, deleteGasto } from "@/lib/gastos/actions";
+import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import type { Gasto } from "@/lib/gastos/actions";
 
 function formatGs(valor: number) {
@@ -34,6 +35,9 @@ export default function GastosPage() {
   const [gastos, setGastos] = useState<Gasto[]>([]);
   const [cargando, setCargando] = useState(true);
   const [eliminando, setEliminando] = useState<string | null>(null);
+  const [sucursales, setSucursales] = useState<{ id: string; nombre: string }[]>([]);
+  // "" = todas · "sin" = gastos generales (sin sucursal) · <uuid> = una sucursal
+  const [filtroSucursal, setFiltroSucursal] = useState("");
 
   useEffect(() => {
     getGastos()
@@ -41,6 +45,32 @@ export default function GastosPage() {
       .catch(() => setGastos([]))
       .finally(() => setCargando(false));
   }, []);
+
+  useEffect(() => {
+    let cancel = false;
+    fetchWithSupabaseSession("/api/sucursales", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        if (cancel) return;
+        setSucursales((j?.data?.sucursales ?? j?.sucursales ?? []) as { id: string; nombre: string }[]);
+      })
+      .catch(() => {});
+    return () => { cancel = true; };
+  }, []);
+
+  const nombreSucursal = (id?: string | null) =>
+    id ? (sucursales.find((s) => s.id === id)?.nombre ?? "—") : null;
+
+  const gastosFiltrados = useMemo(() => {
+    if (!filtroSucursal) return gastos;
+    if (filtroSucursal === "sin") return gastos.filter((g) => !g.sucursal_id);
+    return gastos.filter((g) => g.sucursal_id === filtroSucursal);
+  }, [gastos, filtroSucursal]);
+
+  const totalFiltrado = useMemo(
+    () => gastosFiltrados.reduce((s, g) => s + Number(g.monto || 0), 0),
+    [gastosFiltrados],
+  );
 
   async function handleEliminar(g: Gasto) {
     if (!(await confirm({ title: `¿Eliminar el gasto "${g.descripcion || g.categoria || "sin descripción"}"?`, message: "Esta acción no se puede deshacer.", variant: "danger", confirmText: "Eliminar" }))) return;
@@ -72,13 +102,38 @@ export default function GastosPage() {
           <h1 className="mt-1 text-lg font-semibold tracking-tight text-slate-900">Gastos operativos</h1>
           <p className="mt-0.5 text-xs text-slate-500">Registro de gastos de la empresa</p>
         </div>
-        <Link
-          href="/gastos/nuevo"
-          className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[#4FAEB2] px-3 py-1.5 text-xs font-semibold text-white shadow-sm shadow-[#4FAEB2]/25 transition-colors hover:bg-[#3F8E91] active:scale-95"
-        >
-          <span>+</span>
-          Nuevo gasto
-        </Link>
+        <div className="flex shrink-0 items-center gap-2">
+          {sucursales.length > 0 && (
+            <div className="flex items-center gap-1.5">
+              <label htmlFor="filtro-sucursal" className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                Sucursal
+              </label>
+              <select
+                id="filtro-sucursal"
+                value={filtroSucursal}
+                onChange={(e) => setFiltroSucursal(e.target.value)}
+                className={`rounded-lg border px-2.5 py-1.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]/30 ${
+                  filtroSucursal
+                    ? "border-[#4FAEB2] bg-[#4FAEB2]/10 text-[#3F8E91]"
+                    : "border-slate-200 bg-white text-slate-700"
+                }`}
+              >
+                <option value="">Todas las sucursales</option>
+                {sucursales.map((s) => (
+                  <option key={s.id} value={s.id}>{s.nombre}</option>
+                ))}
+                <option value="sin">— Generales (sin sucursal) —</option>
+              </select>
+            </div>
+          )}
+          <Link
+            href="/gastos/nuevo"
+            className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[#4FAEB2] px-3 py-1.5 text-xs font-semibold text-white shadow-sm shadow-[#4FAEB2]/25 transition-colors hover:bg-[#3F8E91] active:scale-95"
+          >
+            <span>+</span>
+            Nuevo gasto
+          </Link>
+        </div>
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm ring-1 ring-[#4FAEB2]/15">
@@ -103,6 +158,19 @@ export default function GastosPage() {
               Registrar primer gasto
             </Link>
           </div>
+        ) : gastosFiltrados.length === 0 ? (
+          <div className="py-16 text-center text-gray-400">
+            <p className="font-medium text-gray-600">
+              No hay gastos en {filtroSucursal === "sin" ? "gastos generales" : nombreSucursal(filtroSucursal)}
+            </p>
+            <button
+              type="button"
+              onClick={() => setFiltroSucursal("")}
+              className="mt-3 text-sm text-[#4FAEB2] hover:underline"
+            >
+              Ver todas las sucursales
+            </button>
+          </div>
         ) : (
           /* overflow-x-auto + min-w fuerza scroll horizontal en mobile;
               Categoria + Tipo se ocultan en pantallas chicas. */
@@ -113,18 +181,30 @@ export default function GastosPage() {
                 <th className="text-left text-sm font-semibold text-slate-600 px-5 py-3">Fecha</th>
                 <th className="text-left text-sm font-semibold text-slate-600 px-5 py-3 hidden md:table-cell">Categoría</th>
                 <th className="text-left text-sm font-semibold text-slate-600 px-5 py-3">Descripción</th>
+                <th className="text-left text-sm font-semibold text-slate-600 px-5 py-3">Sucursal</th>
                 <th className="text-left text-sm font-semibold text-slate-600 px-5 py-3">Monto</th>
                 <th className="text-left text-sm font-semibold text-slate-600 px-5 py-3 hidden md:table-cell">Tipo</th>
                 <th className="text-left text-sm font-semibold text-slate-600 px-5 py-3">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
-              {gastos.map((g) => (
+              {gastosFiltrados.map((g) => (
                 <tr key={g.id} className="hover:bg-[#4FAEB2]/[0.04] transition-colors">
                   <td className="px-5 py-3.5 text-sm text-gray-600">{formatFecha(g.fecha)}</td>
                   <td className="px-5 py-3.5 text-sm font-medium text-gray-800 hidden md:table-cell">{g.categoria || "—"}</td>
                   <td className="px-5 py-3.5 text-sm text-gray-600 max-w-[200px] truncate">
                     {g.descripcion || "—"}
+                  </td>
+                  <td className="px-5 py-3.5">
+                    {g.sucursal_id ? (
+                      <span className="inline-flex rounded-full bg-[#4FAEB2]/10 px-2 py-0.5 text-xs font-medium text-[#3F8E91] ring-1 ring-[#4FAEB2]/25">
+                        {nombreSucursal(g.sucursal_id)}
+                      </span>
+                    ) : (
+                      <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500">
+                        General
+                      </span>
+                    )}
                   </td>
                   <td className="px-5 py-3.5 text-sm font-semibold text-gray-800 tabular-nums">
                     {formatGs(g.monto)}
@@ -162,9 +242,17 @@ export default function GastosPage() {
         )}
       </div>
 
-      {gastos.length > 0 && (
+      {gastosFiltrados.length > 0 && (
         <p className="text-sm text-gray-500">
-          <span className="font-semibold text-gray-800">{gastos.length}</span> gastos
+          <span className="font-semibold text-gray-800">{gastosFiltrados.length}</span> gasto
+          {gastosFiltrados.length === 1 ? "" : "s"}
+          {filtroSucursal && (
+            <> en <span className="font-semibold text-[#3F8E91]">
+              {filtroSucursal === "sin" ? "gastos generales" : nombreSucursal(filtroSucursal)}
+            </span> (de {gastos.length})</>
+          )}
+          {" · Total: "}
+          <span className="font-semibold text-gray-800 tabular-nums">{formatGs(totalFiltrado)}</span>
         </p>
       )}
     </div>
