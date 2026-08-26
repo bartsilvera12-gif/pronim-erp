@@ -682,6 +682,35 @@ export async function GET(request: NextRequest) {
         args,
       );
 
+      // Espejo del anterior pero sobre VENTAS: qué franjas se venden más en
+      // cada sucursal. Mismo formato de salida para reusar el componente.
+      const franjasVendidasQ = await client.query<{
+        sucursal_id: string; sucursal_nombre: string;
+        tipo_id: string; tipo_nombre: string; cantidad: string;
+      }>(
+        `SELECT
+           s.id::text AS sucursal_id,
+           s.nombre AS sucursal_nombre,
+           COALESCE('franja:' || p.id::text, 'sin_producto') AS tipo_id,
+           COALESCE(
+             CASE WHEN p.nombre IS NOT NULL
+                  THEN 'Franja ' || regexp_replace(p.nombre, '^Prenda\\s*-\\s*Categor[ií]a\\s*', '', 'i')
+             END,
+             '(sin franja)'
+           ) AS tipo_nombre,
+           COALESCE(SUM(vi.cantidad), 0)::text AS cantidad
+         FROM ${ventasItT} vi
+         JOIN ${ventasT} v ON v.id = vi.venta_id
+         JOIN ${sucT} s ON s.id = v.sucursal_id
+         LEFT JOIN ${prodT} p ON p.id = vi.producto_id
+         WHERE v.empresa_id = $1 AND v.estado IN ('pendiente','completada')
+           AND v.fecha::date BETWEEN $2 AND $3
+           ${sucursalFiltro ? "AND v.sucursal_id = $4" : ""}
+         GROUP BY s.id, s.nombre, p.id, p.nombre
+         ORDER BY s.nombre, SUM(vi.cantidad) DESC NULLS LAST`,
+        args,
+      );
+
       // ═════ 10) Beneficios entregados (eventos) ═════
       const beneQ = await client.query<{ n: string }>(
         `SELECT COUNT(*)::text AS n FROM ${eventosT}
@@ -849,6 +878,13 @@ export async function GET(request: NextRequest) {
           tipo_id: t.tipo_id, tipo_nombre: t.tipo_nombre, cantidad: Number(t.cantidad),
         })),
         tipos_prenda_por_sucursal: tiposPorSucQ.rows.map(t => ({
+          sucursal_id: t.sucursal_id,
+          sucursal_nombre: t.sucursal_nombre,
+          tipo_id: t.tipo_id,
+          tipo_nombre: t.tipo_nombre,
+          cantidad: Number(t.cantidad),
+        })),
+        franjas_vendidas_por_sucursal: franjasVendidasQ.rows.map(t => ({
           sucursal_id: t.sucursal_id,
           sucursal_nombre: t.sucursal_nombre,
           tipo_id: t.tipo_id,

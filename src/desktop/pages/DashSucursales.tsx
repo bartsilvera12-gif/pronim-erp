@@ -81,6 +81,7 @@ type Payload = {
   };
   tipos_prenda: { tipo_id: string | null; tipo_nombre: string; cantidad: number }[];
   tipos_prenda_por_sucursal: { sucursal_id: string; sucursal_nombre: string; tipo_id: string; tipo_nombre: string; cantidad: number }[];
+  franjas_vendidas_por_sucursal?: { sucursal_id: string; sucursal_nombre: string; tipo_id: string; tipo_nombre: string; cantidad: number }[];
 };
 
 function fmtGs(n: number) { return "Gs. " + Math.round(n || 0).toLocaleString("es-PY"); }
@@ -117,6 +118,7 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
   const [vista, setVista] = useState<"resumen" | "diario">("resumen");
   const [abierto, setAbierto] = useState<Record<string, boolean>>({
     flujo: true, recepciones: false, credito: false, inventario: false, ventas: false, tipos: true,
+    franjasVendidas: true,
   });
 
   const cargar = useCallback(async () => {
@@ -492,6 +494,23 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
         />
       </Accordion>
 
+      {/* ═════ Franjas más VENDIDAS — por sucursal ═════
+          Espejo del anterior: aquel muestra lo que ENTRA (evaluaciones), este
+          lo que SALE (ventas). Juntos dicen si lo que se recibe es lo que se
+          vende en cada local. */}
+      <Accordion
+        titulo="Franjas más vendidas — por sucursal"
+        abierto={abierto.franjasVendidas}
+        onToggle={() => setAbierto(p => ({ ...p, franjasVendidas: !p.franjasVendidas }))}
+      >
+        <FranjasPorSucursal
+          filas={data.franjas_vendidas_por_sucursal ?? []}
+          sucursales={data.sucursales.map(s => ({ sucursal_id: s.sucursal_id, sucursal_nombre: s.nombre }))}
+          vacioLabel="Sin ventas en el período"
+          unidadLabel="vendidas"
+        />
+      </Accordion>
+
       {/* Secciones detalladas de totales removidas — Karen pidió ver todo
           dividido por sucursal (no un total agregado). Las mismas métricas
           viven ahora dentro de las SucursalCard: ventas, ops, ticket,
@@ -525,11 +544,17 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
 function FranjasPorSucursal({
   filas,
   sucursales: sucursalesTodas = [],
+  vacioLabel = "Sin recepciones en el período",
+  unidadLabel = "prendas",
 }: {
   filas: { sucursal_id: string; sucursal_nombre: string; tipo_id: string; tipo_nombre: string; cantidad: number }[];
   /** Todas las sucursales activas (para renderizar tambien las que no
    *  tienen recepciones aun en el periodo, con un "sin datos" adentro). */
   sucursales?: { sucursal_id: string; sucursal_nombre: string }[];
+  /** Texto cuando la sucursal no tiene datos (cambia entre recibidas/vendidas). */
+  vacioLabel?: string;
+  /** Sustantivo del total ("prendas" / "vendidas"). */
+  unidadLabel?: string;
 }) {
   // Seed del map con TODAS las sucursales activas → cada una tendrá su
   // card aunque no haya recibido nada aún. Después vamos rellenando los
@@ -559,12 +584,12 @@ function FranjasPorSucursal({
             <div className="flex items-baseline justify-between mb-3">
               <h4 className="text-sm font-bold text-slate-900">{s.nombre}</h4>
               <span className="text-[11px] text-slate-500 tabular-nums">
-                {fmtN(total)} prenda{total === 1 ? "" : "s"}
+                {fmtN(total)} {unidadLabel}
               </span>
             </div>
             {items.length === 0 ? (
               <p className="text-[11px] text-slate-400 italic py-3 text-center">
-                Sin recepciones en el período.
+                {vacioLabel}.
               </p>
             ) : (
               <ul className="space-y-1.5">
