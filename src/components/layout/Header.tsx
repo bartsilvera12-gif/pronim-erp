@@ -8,6 +8,7 @@ import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session"
 import { signOut } from "@/lib/auth";
 import { initNotifSounds, playNotifSound } from "@/lib/audio/notif-sounds";
 import { useT } from "@/lib/i18n/context";
+import SucursalActivaSelector from "./SucursalActivaSelector";
 
 type HeaderUsuario = {
   nombre: string | null;
@@ -203,6 +204,10 @@ export default function Header({ onOpenMobileSidebar }: HeaderProps = {}) {
       <span className="hidden md:block" />
 
       <div className="flex items-center gap-2">
+        {/* En qué sucursal está operando el admin (los usuarios con sucursal
+            fija no ven este selector: su sucursal la impone el backend). */}
+        <SucursalActivaSelector />
+
         {/* Asistente de ayuda (Neurita) — desactivado temporalmente. */}
 
         {/* Notificaciones — hoy solo muestran recepciones pendientes de

@@ -17,6 +17,7 @@ import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session"
 import MontoInput from "@/components/ui/MontoInput";
 import { useT, useMoney } from "@/lib/i18n/context";
 import { fmtGs, ResumenRow } from "./shared";
+import { getSucursalActivaId } from "@/lib/sucursales/activa";
 
 type CajaAbierta = {
   id: string;
@@ -55,7 +56,14 @@ export function useCajaState(): CajaState {
 
   const refrescar = useCallback(async () => {
     try {
-      const r = await fetchWithSupabaseSession("/api/caja/abierta", { cache: "no-store" });
+      // La caja es por sucursal. Si el admin eligió en cuál está operando
+      // (selector del header), pedimos solo las cajas de esa sucursal; si no,
+      // el backend devuelve las de todas como antes.
+      const suc = getSucursalActivaId();
+      const url = suc
+        ? `/api/caja/abierta?sucursal_id=${encodeURIComponent(suc)}`
+        : "/api/caja/abierta";
+      const r = await fetchWithSupabaseSession(url, { cache: "no-store" });
       const j = await r.json().catch(() => ({}));
       const cajas = (j?.data?.cajas as CajaAbierta[] | undefined) ?? [];
       const c0 = cajas[0] ?? (j?.data?.caja as CajaAbierta | null | undefined) ?? null;
@@ -105,7 +113,13 @@ export function CajaControlBanner({ state }: { state: CajaState }) {
   useEffect(() => {
     (async () => {
       try {
-        const r = await fetchWithSupabaseSession("/api/puntos-caja", { cache: "no-store" });
+        // Los puntos de caja son por sucursal: si el admin eligió dónde está
+        // operando, se listan los de esa sucursal (si no, todos, como antes).
+        const sucPuntos = getSucursalActivaId();
+        const r = await fetchWithSupabaseSession(
+          sucPuntos ? `/api/puntos-caja?sucursal_id=${encodeURIComponent(sucPuntos)}` : "/api/puntos-caja",
+          { cache: "no-store" },
+        );
         const j = await r.json().catch(() => ({}));
         const puntos = (j?.data?.puntos as { id: string; nombre?: string }[] | undefined) ?? [];
         setPuntoCajaId(puntos[0]?.id ?? null);
@@ -167,6 +181,8 @@ export function CajaControlBanner({ state }: { state: CajaState }) {
           monto_apertura: monto,
           observacion: aperturaObs.trim() || null,
           punto_caja_id: puntoCajaId,
+          // Admin: abre la caja en la sucursal donde está parado.
+          sucursal_id: getSucursalActivaId(),
         }),
       });
       const j = await r.json().catch(() => ({}));

@@ -13,6 +13,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
+import { getSucursalActivaId } from "@/lib/sucursales/activa";
 import { useT, useMoney } from "@/lib/i18n/context";
 import { MetaCelebrationModal, MetaCumplidaBadge } from "@/components/metas/MetaCelebrationModal";
 import MontoInput from "@/components/ui/MontoInput";
@@ -537,6 +538,9 @@ export default function NuevaVentaPage() {
         body: JSON.stringify({
           idempotency_key: key,
           caja_id: cajaIdFinal,
+          // Sucursal en la que está parado el admin (selector del header). Los
+          // usuarios con sucursal fija lo ignoran: el backend impone la suya.
+          sucursal_id: getSucursalActivaId(),
           cliente_id: cliente.id,
           observaciones: observaciones || null,
           trae: null,

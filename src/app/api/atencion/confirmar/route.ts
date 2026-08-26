@@ -3,6 +3,7 @@ import { getAuthWithRol } from "@/lib/middleware/auth";
 import { errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
 import { procesarConfirmarAtencion } from "@/lib/atencion/server/procesar-confirmar-atencion";
+import { enforceSucursalForOperation } from "@/lib/sucursales/enforce";
 
 /**
  * POST /api/atencion/confirmar
@@ -26,9 +27,23 @@ export async function POST(request: NextRequest) {
     try { body = (await request.json()) as Record<string, unknown>; }
     catch { return NextResponse.json(errorResponse("JSON inválido."), { status: 400 }); }
 
+    // Sucursal estricta: si el usuario tiene sucursal fija, esa manda y se
+    // ignora lo que venga del navegador. Si es admin global, puede indicar en
+    // qué sucursal está operando (`sucursal_id` del body, que envía el selector
+    // del header). Sin body sigue cayendo en la Principal, como antes.
+    const enforce = enforceSucursalForOperation({
+      authSucursalId: auth.sucursal_id ?? null,
+      rol: auth.rol ?? null,
+      bodySucursalId: typeof body.sucursal_id === "string" ? (body.sucursal_id as string) : null,
+      allowNullForAdmin: true,
+    });
+    if (!enforce.ok) {
+      return NextResponse.json(errorResponse(enforce.error), { status: enforce.status });
+    }
+
     const resp = await procesarConfirmarAtencion(body, {
       empresa_id: auth.empresa_id,
-      sucursal_id: auth.sucursal_id ?? null,
+      sucursal_id: enforce.sucursal_id,
       user_id: auth.user.id ?? null,
       nombre: auth.nombre ?? null,
     });
