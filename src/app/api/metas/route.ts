@@ -142,6 +142,28 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    // Venta por DÍA del mes en curso, por sucursal. La comisión se liquida día
+    // a día (1% si ese día llegó a la meta diaria, 0,5% si no), así que hace
+    // falta el detalle: con el acumulado del mes no se puede saber qué días
+    // llegaron y cuáles no.
+    const diarioRes = await pool.query<{ sucursal_id: string; dia: string; total: number | string }>(
+      `SELECT sucursal_id, fecha::date::text AS dia, COALESCE(SUM(total), 0)::float8 AS total
+         FROM ${tV}
+        WHERE empresa_id = $1::uuid
+          AND estado <> 'anulada'
+          AND fecha::date >= $2::date
+          AND sucursal_id IS NOT NULL
+        GROUP BY sucursal_id, fecha::date
+        ORDER BY sucursal_id, fecha::date`,
+      [auth.empresa_id, mesInicioStr],
+    );
+    const diasBySuc = new Map<string, { dia: string; total: number }[]>();
+    for (const r of diarioRes.rows) {
+      const arr = diasBySuc.get(r.sucursal_id) ?? [];
+      arr.push({ dia: r.dia, total: Number(r.total) });
+      diasBySuc.set(r.sucursal_id, arr);
+    }
+
     // Récords por sucursal.
     const recRes = await pool.query<{
       sucursal_id: string;
@@ -218,6 +240,29 @@ export async function GET(request: NextRequest) {
       let pctComision = alcanza ? comAlc : comNo;
       if (supera) pctComision += bonoSuperada;
       if (bonoTkMin > 0 && ticketProm >= bonoTkMin) pctComision += bonoTkPct;
+
+      // ── Comisión DIARIA acumulada ───────────────────────────────────────
+      // Regla real de Akakua'a: cada día se liquida por separado — 1% si ese
+      // día llegó a la meta diaria, 0,5% si no — y se van sumando. No se puede
+      // derivar del acumulado: un mes que llega a la meta global puede tener
+      // días flojos que pagan al 0,5%.
+      const diasSuc = diasBySuc.get(r.id) ?? [];
+      let comisionMes = 0;
+      let diasConMeta = 0;
+      const detalleDias = diasSuc.map((d) => {
+        const llego = metaDia > 0 && d.total >= metaDia;
+        if (llego) diasConMeta++;
+        let pct = llego ? comAlc : comNo;
+        // Los bonos por ticket alto son mensuales: se aplican parejo a todos
+        // los días una vez alcanzado el umbral del mes.
+        if (bonoTkMin > 0 && ticketProm >= bonoTkMin) pct += bonoTkPct;
+        const com = (d.total * pct) / 100;
+        comisionMes += com;
+        return { dia: d.dia, total: Math.round(d.total), llego_meta: llego, pct, comision: Math.round(com) };
+      });
+      // Comisión del día de hoy (para el widget de la sucursal).
+      const hoyDetalle = detalleDias.find((d) => d.dia === hoyStr) ?? null;
+      // Se mantiene la comisión semanal previa para no romper consumidores viejos.
       const comisionEstimada = (kpi.semana * pctComision) / 100;
 
       // Proyección de cierre del mes: extrapola el ritmo actual (mes / díaActual).
@@ -243,6 +288,17 @@ export async function GET(request: NextRequest) {
         meta_semanal_prorrateada: metaSemProrrateada,
         comision_alcanza_pct: comAlc,
         comision_no_alcanza_pct: comNo,
+        /** Comisión del mes acumulada día a día (la regla real). */
+        comision_mes_acumulada: Math.round(comisionMes),
+        /** Comisión generada hoy y si hoy llegó a la meta. */
+        comision_hoy: hoyDetalle?.comision ?? 0,
+        comision_hoy_pct: hoyDetalle?.pct ?? comNo,
+        hoy_llego_meta: hoyDetalle?.llego_meta ?? false,
+        /** Cuántos días del mes llegaron a la meta diaria. */
+        dias_con_meta: diasConMeta,
+        dias_con_venta: detalleDias.length,
+        /** Detalle por día, para poder auditar el cálculo. */
+        comision_por_dia: detalleDias,
         bono_meta_superada_pct: bonoSuperada,
         bono_ticket_prom_min: bonoTkMin,
         bono_ticket_prom_pct: bonoTkPct,

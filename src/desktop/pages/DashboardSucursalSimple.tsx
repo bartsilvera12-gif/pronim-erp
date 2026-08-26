@@ -74,6 +74,12 @@ type MetaSuc = {
   dias_restantes_mes?: number;
   ritmo?: "encima" | "dentro" | "debajo" | "sin_meta";
   comision_estimada?: number;
+  comision_mes_acumulada?: number;
+  comision_hoy?: number;
+  comision_hoy_pct?: number;
+  hoy_llego_meta?: boolean;
+  dias_con_meta?: number;
+  dias_con_venta?: number;
   comision_pct_actual?: number;
   ticket_promedio_mes?: number;
 };
@@ -125,6 +131,12 @@ export default function DashboardSucursalSimple() {
           ritmo: (first?.ritmo as MetaSuc["ritmo"]) ?? "sin_meta",
           comision_estimada: Number(first?.comision_estimada) || 0,
           comision_pct_actual: Number(first?.comision_pct_actual) || 0,
+          comision_mes_acumulada: Number(first?.comision_mes_acumulada) || 0,
+          comision_hoy: Number(first?.comision_hoy) || 0,
+          comision_hoy_pct: Number(first?.comision_hoy_pct) || 0,
+          hoy_llego_meta: Boolean(first?.hoy_llego_meta),
+          dias_con_meta: Number(first?.dias_con_meta) || 0,
+          dias_con_venta: Number(first?.dias_con_venta) || 0,
           ticket_promedio_mes: Number(first?.ticket_promedio_mes) || 0,
         });
       })
@@ -456,11 +468,22 @@ function ProyeccionCierre({ meta, fmt, t }: {
           <p className="text-slate-500">{t("Cierre proyectado")}</p>
           <p className={`font-bold tabular-nums ${proyMayor ? "text-emerald-700" : "text-slate-800"}`}>{fmt(meta.proyeccion_cierre_mes ?? 0)}</p>
         </div>
+        {/* La comisión se liquida DÍA A DÍA (1% si ese día llegó a la meta,
+            0,5% si no) y se acumula. Mostramos el acumulado del mes y, abajo,
+            cuánto generó hoy y con qué porcentaje. */}
         <div>
-          <p className="text-slate-500">{t("Comisión estimada")}</p>
+          <p className="text-slate-500">{t("Comisión del mes")}</p>
           <p className="font-bold text-slate-800 tabular-nums">
-            {fmt(meta.comision_estimada ?? 0)}
-            <span className="text-[10px] text-slate-500 font-normal ml-1">({(meta.comision_pct_actual ?? 0).toFixed(2)}%)</span>
+            {fmt(meta.comision_mes_acumulada ?? 0)}
+          </p>
+          <p className="text-[10px] text-slate-500 font-normal">
+            {t("Hoy")}: {fmt(meta.comision_hoy ?? 0)}
+            <span className={meta.hoy_llego_meta ? "text-emerald-700 font-semibold" : ""}>
+              {" "}({(meta.comision_hoy_pct ?? 0).toFixed(2)}%)
+            </span>
+            {(meta.dias_con_venta ?? 0) > 0 && (
+              <> · {meta.dias_con_meta}/{meta.dias_con_venta} {t("días con meta")}</>
+            )}
           </p>
         </div>
       </div>

@@ -143,7 +143,7 @@ export default function AdminMetasPage() {
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Metas de venta por sucursal</h1>
         <p className="text-sm text-slate-500 mt-0.5">
-          Configurá la meta diaria de cada sucursal y el % de comisión semanal. La meta semanal se calcula como 6× la diaria (la tienda cierra los domingos) y la mensual, por los días hábiles del mes.
+          Configurá la meta diaria de cada sucursal y los % de comisión. La comisión se liquida <strong>día a día</strong>: cada día que la sucursal llega a su meta paga el % “si alcanza”, y si no llega paga el % “si no alcanza”; se van sumando. La meta semanal se calcula como 6× la diaria (la tienda cierra los domingos) y la mensual, por los días hábiles del mes.
         </p>
       </div>
 
