@@ -341,7 +341,11 @@ export default function InventarioPage() {
     const conStock = productos.filter(
       (p) => !(p.controla_stock === false && p.es_insumo !== true && p.modo_receta !== "produccion_previa")
     );
-    const stockValorizado = conStock.reduce((s, p) => s + p.stock_actual * p.costo_promedio, 0);
+    // Valorizado a PRECIO DE VENTA: en Pronim las prendas entran por evaluación,
+    // así que el costo promedio de las franjas es 0 y valorizar a costo daba
+    // Gs. 0 en todo el inventario. Lo que interesa es cuánto vale lo que hay
+    // para vender.
+    const stockValorizado = conStock.reduce((s, p) => s + p.stock_actual * (p.precio_venta || 0), 0);
     const bajo = conStock.filter((p) => p.stock_actual <= p.stock_minimo).length;
     const disponibles = conStock.filter((p) => p.stock_actual > 0).length;
     return { total: productos.length, stockValorizado, bajo, disponibles, conStock: conStock.length };
@@ -409,7 +413,7 @@ export default function InventarioPage() {
         <StatCard compact label={t("Total productos")} value={String(resumen.total)} accent
           hint={tab === "reventa" ? t("Reventa") : tab === "menu" ? "Menú" : "Materia prima"} />
         <StatCard compact label={t("Stock valorizado")} value={formatGs(Math.round(resumen.stockValorizado))}
-          hint={t("stock × costo prom.")} />
+          hint={t("stock × precio venta")} />
         <StatCard compact label={t("Stock bajo")} value={String(resumen.bajo)}
           hint={t("≤ stock mínimo")} />
         <StatCard compact

@@ -42,7 +42,13 @@ export default function ExplorarInventarioPage() {
       { key: "stock_min", label: "Stock mín.", type: "number", get: (r) => r.stock_min, defaultVisible: false },
       { key: "costo", label: "Costo prom.", type: "money", get: (r) => r.costo, defaultVisible: false },
       { key: "precio", label: "Precio venta", type: "money", get: (r) => r.precio },
-      { key: "valor", label: "Valor stock", type: "money", get: (r) => r.stock * r.costo, total: "sum" },
+      // "Valor stock" = stock × PRECIO DE VENTA: cuánto vale la mercadería que
+      // hay en el local. Antes se calculaba contra el costo promedio, que en
+      // las franjas es 0 (las prendas entran por evaluación, no por compra),
+      // así que la columna daba Gs. 0 en todo el inventario.
+      { key: "valor", label: "Valor stock", type: "money", get: (r) => r.stock * r.precio, total: "sum" },
+      // El valor a costo sigue disponible para quien lo necesite (contable).
+      { key: "valor_costo", label: "Valor a costo", type: "money", get: (r) => r.stock * r.costo, total: "sum", defaultVisible: false },
     ];
   }, [rows]);
 
