@@ -1115,19 +1115,20 @@ function SucursalCard({ s }: {
       {metaPeriodo != null && metaPeriodo > 0 && (
         <div className="pt-3 mt-1 border-t border-slate-100">
           <div className="flex items-baseline justify-between mb-1.5">
-            {/* Se muestra de dónde sale el número: la meta del período es la
-                acumulada del rango que estás mirando, no la diaria que cargaste.
-                Sin esto parecía que el sistema "duplicaba" la meta. */}
-            <span className="text-[11px] text-slate-500">
-              Meta del período
-              <span className="text-slate-400 ml-1">
-                ({fmt(metaPeriodo)}
-                {s.meta_mensual != null && s.meta_mensual > 0
-                  ? " · desde la meta mensual"
+            {/* Simple arriba, detalle abajo: el título es solo "Meta del período"
+                y la explicación del cálculo vive en el tooltip, para no repetir
+                números en la misma línea. */}
+            <span
+              className="text-[11px] text-slate-500"
+              title={
+                s.meta_mensual != null && s.meta_mensual > 0
+                  ? "Sale de la meta mensual cargada, ajustada a los días del período."
                   : s.meta_diaria != null && s.dias_habiles != null
-                    ? ` = ${fmt(s.meta_diaria)} × ${s.dias_habiles} ${s.dias_habiles === 1 ? "día hábil" : "días hábiles"}`
-                    : ""})
-              </span>
+                    ? `${fmt(s.meta_diaria)} por día × ${s.dias_habiles} ${s.dias_habiles === 1 ? "día hábil" : "días hábiles"} del período.`
+                    : "Meta acumulada del período."
+              }
+            >
+              Meta del período
             </span>
             <span className={`text-xs font-bold tabular-nums ${
               pctMeta >= 100 ? "text-emerald-700" : "text-orange-700"
@@ -1145,6 +1146,13 @@ function SucursalCard({ s }: {
               style={{ width: `${Math.min(100, pctMeta)}%` }}
             />
           </div>
+          {/* Lo accionable: cuánto lleva, de cuánto, y cuánto falta. */}
+          <p className="mt-1 text-[10px] text-slate-500 tabular-nums">
+            {fmt(s.vendido_periodo)} de {fmt(metaPeriodo)}
+            {metaPeriodo - s.vendido_periodo > 0
+              ? <> · faltan <span className="font-semibold text-slate-700">{fmt(metaPeriodo - s.vendido_periodo)}</span></>
+              : <span className="font-semibold text-emerald-700"> · meta alcanzada</span>}
+          </p>
         </div>
       )}
     </div>
