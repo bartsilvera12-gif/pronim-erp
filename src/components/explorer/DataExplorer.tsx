@@ -574,24 +574,30 @@ export function DataExplorer<T>(props: {
       )}
 
       {/* Tabla */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-x-auto">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm ring-1 ring-slate-900/[0.03] overflow-auto max-h-[70vh] print:max-h-none print:overflow-visible">
         {cargando ? (
           <p className="py-12 text-center text-sm text-slate-400 animate-pulse">Cargando…</p>
         ) : ordenadas.length === 0 ? (
           <p className="py-12 text-center text-sm text-slate-400">Sin resultados con los filtros actuales.</p>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 border-b border-slate-200">
+          <table className="w-full text-sm border-separate border-spacing-0">
+            {/* Encabezado fijo: al scrollear tablas largas no se pierde de vista
+                qué columna es cada una. */}
+            <thead className="sticky top-0 z-10">
               <tr>
                 {colsVis.map((c) => (
                   <th key={c.key}
                     onClick={() => (c.sortable !== false) && toggleSort(c.key)}
-                    className={`px-3 py-2 text-[11px] uppercase font-semibold text-slate-600 whitespace-nowrap ${alignCls(c)} ${c.sortable !== false ? "cursor-pointer select-none hover:text-slate-900" : ""}`}>
+                    className={`bg-slate-50/95 backdrop-blur-sm border-b border-slate-200 px-3.5 py-2.5 text-[10px] uppercase tracking-wider font-bold whitespace-nowrap ${alignCls(c)} ${
+                      sortKey === c.key ? "text-[#3F8E91]" : "text-slate-500"
+                    } ${c.sortable !== false ? "cursor-pointer select-none hover:text-slate-800 transition-colors" : ""}`}>
                     {c.label}
-                    {sortKey === c.key && <span className="ml-1">{sortDir === "asc" ? "▲" : "▼"}</span>}
+                    <span className={`ml-1 text-[9px] ${sortKey === c.key ? "opacity-100" : "opacity-0"}`}>
+                      {sortDir === "asc" ? "▲" : "▼"}
+                    </span>
                   </th>
                 ))}
-                {detailHref && <th className="px-3 py-2 print:hidden" />}
+                {detailHref && <th className="bg-slate-50/95 backdrop-blur-sm border-b border-slate-200 px-3 py-2.5 print:hidden" />}
               </tr>
             </thead>
             {grupos ? (
@@ -605,7 +611,7 @@ export function DataExplorer<T>(props: {
                       </td>
                     </tr>
                     {g.rows.slice(0, 500).map((row, i) => (
-                      <tr key={i} className={`hover:bg-slate-50 ${detailHref ? "cursor-pointer" : ""}`}
+                      <tr key={i} className={`transition-colors even:bg-slate-50/40 hover:bg-[#4FAEB2]/[0.07] ${detailHref ? "cursor-pointer" : ""}`}
                         onClick={detailHref ? (e) => {
                           // No robamos el click de links/botones internos
                           // (ej. la estrella de VIP o el propio "Ver").
@@ -616,19 +622,25 @@ export function DataExplorer<T>(props: {
                         } : undefined}
                       >
                         {colsVis.map((c) => (
-                          <td key={c.key} className={`px-3 py-2 text-xs text-slate-700 ${alignCls(c)} ${(c.type === "number" || c.type === "money") ? "tabular-nums" : ""}`}>
+                          <td key={c.key} className={`border-b border-slate-100 px-3.5 py-2.5 text-xs text-slate-700 ${alignCls(c)} ${(c.type === "number" || c.type === "money") ? "tabular-nums font-medium" : ""}`}>
                             {celda(c, row)}
                           </td>
                         ))}
                         {detailHref && (
-                          <td className="px-3 py-2 print:hidden">
-                            <a href={detailHref(row)} className="text-[#3F8E91] hover:underline text-xs font-medium">Ver</a>
+                          <td className="border-b border-slate-100 px-3 py-2 text-center print:hidden">
+                            <a href={detailHref(row)} title="Ver detalle" aria-label="Ver detalle"
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-[#4FAEB2]/15 hover:text-[#3F8E91]">
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+                                <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+                                <circle cx="12" cy="12" r="3" />
+                              </svg>
+                            </a>
                           </td>
                         )}
                       </tr>
                     ))}
                     {sumCols.length > 0 && (
-                      <tr className="bg-slate-50 border-t border-slate-200 text-[11px]">
+                      <tr className="bg-slate-100/80 border-t-2 border-slate-300 text-[11px]">
                         {colsVis.map((c, i) => (
                           <td key={c.key} className={`px-3 py-1.5 font-semibold text-slate-700 ${alignCls(c)} ${(c.type === "number" || c.type === "money") ? "tabular-nums" : ""}`}>
                             {c.total === "sum"
@@ -645,7 +657,7 @@ export function DataExplorer<T>(props: {
             ) : (
               <tbody className="divide-y divide-slate-100">
                 {ordenadas.slice(0, 1000).map((row, i) => (
-                  <tr key={i} className={`hover:bg-slate-50 ${detailHref ? "cursor-pointer" : ""}`}
+                  <tr key={i} className={`transition-colors even:bg-slate-50/40 hover:bg-[#4FAEB2]/[0.07] ${detailHref ? "cursor-pointer" : ""}`}
                         onClick={detailHref ? (e) => {
                           // No robamos el click de links/botones internos
                           // (ej. la estrella de VIP o el propio "Ver").
@@ -656,13 +668,19 @@ export function DataExplorer<T>(props: {
                         } : undefined}
                       >
                     {colsVis.map((c) => (
-                      <td key={c.key} className={`px-3 py-2 text-xs text-slate-700 ${alignCls(c)} ${(c.type === "number" || c.type === "money") ? "tabular-nums" : ""}`}>
+                      <td key={c.key} className={`border-b border-slate-100 px-3.5 py-2.5 text-xs text-slate-700 ${alignCls(c)} ${(c.type === "number" || c.type === "money") ? "tabular-nums font-medium" : ""}`}>
                         {celda(c, row)}
                       </td>
                     ))}
                     {detailHref && (
-                      <td className="px-3 py-2 print:hidden">
-                        <a href={detailHref(row)} className="text-[#3F8E91] hover:underline text-xs font-medium">Ver</a>
+                      <td className="border-b border-slate-100 px-3 py-2 text-center print:hidden">
+                        <a href={detailHref(row)} title="Ver detalle" aria-label="Ver detalle"
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-[#4FAEB2]/15 hover:text-[#3F8E91]">
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+                                <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+                                <circle cx="12" cy="12" r="3" />
+                              </svg>
+                            </a>
                       </td>
                     )}
                   </tr>
@@ -670,10 +688,10 @@ export function DataExplorer<T>(props: {
               </tbody>
             )}
             {hayTotales && (
-              <tfoot className="border-t-2 border-slate-300 bg-slate-50">
+              <tfoot className="sticky bottom-0 z-10 border-t-2 border-slate-300 bg-slate-100/95 backdrop-blur-sm print:static">
                 <tr>
                   {colsVis.map((c, i) => (
-                    <td key={c.key} className={`px-3 py-2 text-xs font-bold text-slate-900 ${alignCls(c)} ${(c.type === "number" || c.type === "money") ? "tabular-nums" : ""}`}>
+                    <td key={c.key} className={`border-t border-slate-300 px-3.5 py-2.5 text-xs font-bold text-slate-900 ${alignCls(c)} ${(c.type === "number" || c.type === "money") ? "tabular-nums" : ""}`}>
                       {c.total === "sum"
                         ? <div><div>{c.type === "money" ? fmtMoneyGs(totales[c.key]) : totales[c.key]}</div><div className="text-[9px] font-normal text-slate-500">media {c.type === "money" ? fmtMoneyGs(ordenadas.length ? totales[c.key] / ordenadas.length : 0) : Math.round((ordenadas.length ? totales[c.key] / ordenadas.length : 0) * 10) / 10}</div></div>
                         : i === 0 ? `TOTAL GENERAL (${ordenadas.length})` : ""}
