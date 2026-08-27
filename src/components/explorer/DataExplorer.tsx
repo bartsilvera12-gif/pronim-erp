@@ -605,7 +605,16 @@ export function DataExplorer<T>(props: {
                       </td>
                     </tr>
                     {g.rows.slice(0, 500).map((row, i) => (
-                      <tr key={i} className="hover:bg-slate-50">
+                      <tr key={i} className={`hover:bg-slate-50 ${detailHref ? "cursor-pointer" : ""}`}
+                        onClick={detailHref ? (e) => {
+                          // No robamos el click de links/botones internos
+                          // (ej. la estrella de VIP o el propio "Ver").
+                          const t = e.target as HTMLElement;
+                          if (t.closest("a,button,input,select,label")) return;
+                          const href = detailHref(row);
+                          if (href && href !== "#") window.location.href = href;
+                        } : undefined}
+                      >
                         {colsVis.map((c) => (
                           <td key={c.key} className={`px-3 py-2 text-xs text-slate-700 ${alignCls(c)} ${(c.type === "number" || c.type === "money") ? "tabular-nums" : ""}`}>
                             {celda(c, row)}
@@ -636,7 +645,16 @@ export function DataExplorer<T>(props: {
             ) : (
               <tbody className="divide-y divide-slate-100">
                 {ordenadas.slice(0, 1000).map((row, i) => (
-                  <tr key={i} className="hover:bg-slate-50">
+                  <tr key={i} className={`hover:bg-slate-50 ${detailHref ? "cursor-pointer" : ""}`}
+                        onClick={detailHref ? (e) => {
+                          // No robamos el click de links/botones internos
+                          // (ej. la estrella de VIP o el propio "Ver").
+                          const t = e.target as HTMLElement;
+                          if (t.closest("a,button,input,select,label")) return;
+                          const href = detailHref(row);
+                          if (href && href !== "#") window.location.href = href;
+                        } : undefined}
+                      >
                     {colsVis.map((c) => (
                       <td key={c.key} className={`px-3 py-2 text-xs text-slate-700 ${alignCls(c)} ${(c.type === "number" || c.type === "money") ? "tabular-nums" : ""}`}>
                         {celda(c, row)}
