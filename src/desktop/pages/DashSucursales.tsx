@@ -1004,7 +1004,9 @@ function SucursalCard({ s }: {
   // Estado: "Activa" si tiene actividad en el período (ops o cajas
   // abiertas/cerradas), "Sin actividad" caso contrario.
   const activa = s.operaciones > 0 || s.cajas_abiertas > 0 || s.cajas_cerradas > 0;
-  const pctMeta = s.pct_meta ?? 0;
+  // El backend redondea: con Gs. 491K sobre Gs. 108M da 0,45% → "0%" y barra
+  // vacía, como si no se hubiera vendido nada. Recalculamos con decimal
+  // cuando el avance es chico para que se note el progreso real.
   // Fallback para payloads viejos (deploy en curso): si el backend todavía no
   // manda meta_periodo, se calcula como antes (diaria × días del rango).
   const metaPeriodo =
@@ -1013,6 +1015,14 @@ function SucursalCard({ s }: {
       : s.meta_diaria != null
         ? s.meta_diaria * s.dias_periodo
         : null;
+  const pctExacto = metaPeriodo && metaPeriodo > 0
+    ? (s.vendido_periodo / metaPeriodo) * 100
+    : 0;
+  const pctTexto = pctExacto > 0 && pctExacto < 10
+    ? pctExacto.toFixed(1).replace(".", ",")
+    : String(Math.round(pctExacto));
+  // Si hubo alguna venta, la barra muestra al menos un hilo visible.
+  const barraPct = pctExacto > 0 ? Math.max(1.5, Math.min(100, pctExacto)) : 0;
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5 hover:shadow-md transition shadow-sm">
@@ -1056,24 +1066,25 @@ function SucursalCard({ s }: {
       </SucSeccion>
 
       {/* CLIENTES — lavanda */}
+      {/* El total va en la cabecera: como es la suma de los otros dos, gastarle
+          un chip hacía parecer que eran tres datos distintos. */}
       <SucSeccion
         titulo="Clientes"
         icon="clientes"
         bg="bg-violet-50/70"
         border="border-violet-100"
         chipBg="bg-white/80"
+        cols={2}
+        extra={<span className="text-slate-600 font-semibold">{fmtN(s.clientes_atendidos)} en total</span>}
       >
-        {/* Nuevos + Recurrentes = Total. Antes eran Visitas/Atendidos/Recurrent.,
-            que medían cosas distintas y no sumaban entre sí. */}
         <SucMini label="Nuevos" value={fmtN(s.clientes_nuevos ?? 0)} />
         <SucMini label="Recurrentes" value={fmtN(s.clientes_recurrentes ?? 0)} />
-        <SucMini label="Total" value={fmtN(s.clientes_atendidos)} />
       </SucSeccion>
       {s.conversion_pct != null && (
         <p className="text-[10px] text-slate-500 -mt-2 mb-3 pl-1">
-          <span className="tabular-nums">{fmtN(s.visitas)}</span> visita{s.visitas === 1 ? "" : "s"}
-          {" · conversión visita → venta: "}
-          <span className="font-semibold text-slate-700 tabular-nums">{s.conversion_pct}%</span>
+          Entraron <span className="tabular-nums font-semibold text-slate-700">{fmtN(s.visitas)}</span> ve{s.visitas === 1 ? "z" : "ces"}
+          {" · "}
+          <span className="font-semibold text-slate-700 tabular-nums">{s.conversion_pct}%</span> terminó en venta
         </p>
       )}
 
@@ -1131,19 +1142,19 @@ function SucursalCard({ s }: {
               Meta del período
             </span>
             <span className={`text-xs font-bold tabular-nums ${
-              pctMeta >= 100 ? "text-emerald-700" : "text-orange-700"
+              pctExacto >= 100 ? "text-emerald-700" : "text-orange-700"
             }`}>
-              {pctMeta}%
+              {pctTexto}%
             </span>
           </div>
           <div className="h-2 bg-orange-100/60 rounded-full overflow-hidden">
             <div
               className={`h-full rounded-full transition-all ${
-                pctMeta >= 100
+                pctExacto >= 100
                   ? "bg-gradient-to-r from-emerald-400 to-emerald-500"
                   : "bg-gradient-to-r from-orange-400 to-orange-500"
               }`}
-              style={{ width: `${Math.min(100, pctMeta)}%` }}
+              style={{ width: `${barraPct}%` }}
             />
           </div>
           {/* Lo accionable: cuánto lleva, de cuánto, y cuánto falta. */}
@@ -1161,11 +1172,15 @@ function SucursalCard({ s }: {
 
 // Sección con fondo cálido + título con ícono. Chips internos van
 // sobre un fondo casi blanco para mantener legibilidad de los números.
-function SucSeccion({ titulo, icon, bg, border, chipBg, children }: {
+function SucSeccion({ titulo, icon, bg, border, chipBg, children, extra, cols = 3 }: {
   titulo: string;
   icon: "ventas" | "clientes" | "prendas" | "credito";
   bg: string; border: string; chipBg: string;
   children: React.ReactNode;
+  /** Dato de cabecera (ej. el total, para no gastarle un chip). */
+  extra?: React.ReactNode;
+  /** Cantidad de chips por fila (default 3). */
+  cols?: 2 | 3;
 }) {
   const iconColor = icon === "ventas" ? "text-rose-500"
     : icon === "clientes" ? "text-violet-500"
@@ -1198,8 +1213,9 @@ function SucSeccion({ titulo, icon, bg, border, chipBg, children }: {
       <p className={`flex items-center gap-1.5 text-[10px] uppercase tracking-wide font-bold mb-2 ${iconColor}`}>
         <Icon />
         {titulo}
+        {extra != null && <span className="ml-auto normal-case tracking-normal">{extra}</span>}
       </p>
-      <div className="grid grid-cols-3 gap-2" data-chip-bg={chipBg}>
+      <div className={`grid gap-2 ${cols === 2 ? "grid-cols-2" : "grid-cols-3"}`} data-chip-bg={chipBg}>
         {children}
       </div>
     </div>
