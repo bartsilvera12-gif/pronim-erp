@@ -136,16 +136,31 @@ export default function TransferenciasStockPage() {
 
   const stockDe = (productoId: string) => stockOrigen[productoId] ?? 0;
 
+  // Cada sucursal maneja su propio catalogo: mostrar TODAS las franjas de la
+  // empresa llenaba la lista de productos que ese local no tiene (todos en
+  // "0 disp."). Por defecto listamos solo lo que esa sucursal tiene en stock;
+  // "Ver todo el catalogo" permite igual mover algo puntual.
+  const [verTodo, setVerTodo] = useState(false);
+
   const resultadosFiltrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
-    if (!q) return resultados.slice(0, 30);
-    return resultados
+    const base = origen && !verTodo
+      ? resultados.filter((p) => (stockOrigen[p.id] ?? 0) > 0)
+      : resultados;
+    if (!q) return base.slice(0, 30);
+    return base
       .filter((p) => {
         const hay = [p.nombre, p.sku ?? ""].join(" ").toLowerCase();
         return hay.includes(q);
       })
       .slice(0, 30);
-  }, [busqueda, resultados]);
+  }, [busqueda, resultados, origen, verTodo, stockOrigen]);
+
+  /** Cuantas franjas tiene realmente esta sucursal (con stock > 0). */
+  const conStockEnOrigen = useMemo(
+    () => (origen ? resultados.filter((p) => (stockOrigen[p.id] ?? 0) > 0).length : 0),
+    [origen, resultados, stockOrigen],
+  );
 
   function agregarProducto(p: Producto) {
     setItems((prev) => {
@@ -294,6 +309,15 @@ export default function TransferenciasStockPage() {
                 {cargandoStock && <span className="text-slate-400"> (actualizando…)</span>}
               </span>
             )}
+            {origen && !cargandoStock && (
+              <button
+                type="button"
+                onClick={() => setVerTodo((v) => !v)}
+                className="ml-2 normal-case tracking-normal font-medium text-slate-500 underline hover:text-slate-700"
+              >
+                {verTodo ? "Ver solo lo que hay acá" : "Ver todo el catálogo"}
+              </button>
+            )}
           </label>
           <input
             type="text"
@@ -305,7 +329,11 @@ export default function TransferenciasStockPage() {
           {buscando ? (
             <p className="text-xs text-gray-400 mt-2 animate-pulse">Cargando catálogo…</p>
           ) : resultadosFiltrados.length === 0 ? (
-            <p className="text-xs text-gray-400 mt-2">Sin resultados. Verificá el filtro o que existan franjas/productos activos.</p>
+            <p className="text-xs text-gray-400 mt-2">
+              {origen && !verTodo && conStockEnOrigen === 0 && !busqueda.trim()
+                ? <>Esta sucursal no tiene stock cargado. <button type="button" onClick={() => setVerTodo(true)} className="underline text-slate-500 hover:text-slate-700">Ver todo el catálogo</button>.</>
+                : "Sin resultados. Verificá el filtro o que existan franjas/productos activos."}
+            </p>
           ) : (
             <ul className="mt-2 border border-slate-200 rounded-lg divide-y divide-slate-100 max-h-64 overflow-y-auto">
               {resultadosFiltrados.map((p) => {
