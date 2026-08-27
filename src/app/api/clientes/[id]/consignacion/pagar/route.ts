@@ -37,9 +37,16 @@ export async function POST(
     const metodo = String(body.metodo ?? "");
     const observacion = typeof body.observacion === "string" ? body.observacion.trim().slice(0, 300) : null;
     if (!(monto > 0)) return NextResponse.json(errorResponse("Monto inválido."), { status: 400 });
-    if (metodo !== "caja" && metodo !== "credito") {
-      return NextResponse.json(errorResponse("metodo debe ser 'caja' o 'credito'."), { status: 400 });
+    if (metodo !== "caja" && metodo !== "credito" && metodo !== "transferencia") {
+      return NextResponse.json(
+        errorResponse("metodo debe ser 'caja', 'transferencia' o 'credito'."),
+        { status: 400 },
+      );
     }
+    // Datos opcionales de la transferencia (banco + comprobante).
+    const b2 = body as { entidad_nombre?: unknown; referencia?: unknown };
+    const entidadNombre = typeof b2.entidad_nombre === "string" ? b2.entidad_nombre.trim().slice(0, 120) : null;
+    const referencia = typeof b2.referencia === "string" ? b2.referencia.trim().slice(0, 80) : null;
 
     const schema = assertAllowedChatDataSchema(await fetchDataSchemaForEmpresaId(auth.empresa_id));
     const pool = getChatPostgresPool();
@@ -91,8 +98,16 @@ export async function POST(
                    $4, $5, $6, $7)`,
         [
           auth.empresa_id, clienteId, monto,
-          metodo === "caja" ? "pago_caja" : "conversion_credito",
-          observacion ?? (metodo === "caja" ? "Pago de consignación en efectivo" : "Consignación convertida a crédito"),
+          metodo === "credito" ? "conversion_credito" : "pago_caja",
+          observacion ?? (
+            metodo === "caja"
+              ? "Pago de consignación en efectivo"
+              : metodo === "transferencia"
+                ? "Pago de consignación por transferencia"
+                  + (entidadNombre ? " — " + entidadNombre : "")
+                  + (referencia ? " (ref " + referencia + ")" : "")
+                : "Consignación convertida a crédito"
+          ),
           auth.user.id ?? null, auth.nombre ?? null,
         ],
       );
@@ -119,16 +134,20 @@ export async function POST(
       //    fuera de la tx del ledger). Si no hay caja abierta, avisamos pero el
       //    pago de consignación ya quedó registrado.
       let cajaAviso: string | null = null;
-      if (metodo === "caja") {
+      if (metodo === "caja" || metodo === "transferencia") {
         try {
           const caja = await getCajaAbiertaPg(schema, auth.empresa_id, auth.sucursal_id ?? null);
           if (!caja) {
-            cajaAviso = "No hay caja abierta: registrá el egreso de efectivo manualmente al abrir caja.";
+            cajaAviso = metodo === "transferencia"
+              ? null
+              : "No hay caja abierta: registrá el egreso de efectivo manualmente al abrir caja.";
           } else {
             await registrarMovimientoPg({
               schema, empresaId: auth.empresa_id, cajaId: caja.id,
               tipo: "egreso", concepto: "Pago de consignación a cliente",
-              monto, medioPago: "efectivo",
+              // medioPago define si entra o no al arqueo de efectivo: una
+              // transferencia sale del banco, no del cajón.
+              monto, medioPago: metodo === "transferencia" ? "transferencia" : "efectivo",
               observacion: observacion ?? `Consignación pagada · cliente ${clienteId}`,
               usuarioId: auth.user.id ?? null,
             });

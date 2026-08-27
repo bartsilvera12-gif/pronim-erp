@@ -2660,7 +2660,9 @@ function CarteraPanel({ clienteId }: { clienteId: string }) {
   const [ver, setVer] = useState<"credito" | "cashback" | "consignacion">("credito");
   const [pagarOpen, setPagarOpen] = useState(false);
   const [pagarMonto, setPagarMonto] = useState<string>("");
-  const [pagarMetodo, setPagarMetodo] = useState<"caja" | "credito">("caja");
+  const [pagarMetodo, setPagarMetodo] = useState<"caja" | "transferencia" | "credito">("caja");
+  const [pagarEntidad, setPagarEntidad] = useState("");
+  const [pagarRef, setPagarRef] = useState("");
   const [pagando, setPagando] = useState(false);
   const [pagarMsg, setPagarMsg] = useState<string | null>(null);
   const [pagarError, setPagarError] = useState<string | null>(null);
@@ -2695,12 +2697,20 @@ function CarteraPanel({ clienteId }: { clienteId: string }) {
       const r = await fetch(`/api/clientes/${clienteId}/consignacion/pagar`, {
         method: "POST", credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ monto, metodo: pagarMetodo }),
+        body: JSON.stringify({
+          monto,
+          metodo: pagarMetodo,
+          ...(pagarMetodo === "transferencia"
+            ? { entidad_nombre: pagarEntidad.trim() || null, referencia: pagarRef.trim() || null }
+            : {}),
+        }),
       });
       const j = await r.json();
       if (!r.ok || !j.success) throw new Error(j?.error ?? "Error");
       setPagarMsg(
-        (pagarMetodo === "caja" ? "Pagado en efectivo por caja." : "Convertido a crédito a favor.")
+        (pagarMetodo === "caja" ? "Pagado en efectivo por caja."
+          : pagarMetodo === "transferencia" ? "Pagado por transferencia."
+          : "Convertido a crédito a favor.")
         + (j.data?.caja_aviso ? ` ${j.data.caja_aviso}` : "")
       );
       setPagarMonto("");
@@ -2773,15 +2783,31 @@ function CarteraPanel({ clienteId }: { clienteId: string }) {
                   className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${pagarMetodo === "caja" ? "border-sky-500 bg-sky-100 text-sky-800" : "border-slate-200 bg-white text-slate-600"}`}>
                   💵 Pago por caja (efectivo)
                 </button>
+                <button type="button" onClick={() => setPagarMetodo("transferencia")}
+                  className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${pagarMetodo === "transferencia" ? "border-indigo-500 bg-indigo-100 text-indigo-800" : "border-slate-200 bg-white text-slate-600"}`}>
+                  🏦 Transferencia
+                </button>
                 <button type="button" onClick={() => setPagarMetodo("credito")}
                   className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${pagarMetodo === "credito" ? "border-emerald-500 bg-emerald-100 text-emerald-800" : "border-slate-200 bg-white text-slate-600"}`}>
                   💰 Usar como crédito
                 </button>
               </div>
+              {pagarMetodo === "transferencia" && (
+                <div className="grid grid-cols-2 gap-2">
+                  <input type="text" value={pagarEntidad} onChange={(e) => setPagarEntidad(e.target.value)}
+                    placeholder="Banco / entidad (opcional)"
+                    className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-sky-300" />
+                  <input type="text" value={pagarRef} onChange={(e) => setPagarRef(e.target.value)}
+                    placeholder="N° de comprobante (opcional)"
+                    className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-sky-300" />
+                </div>
+              )}
               <p className="text-[11px] text-slate-500">
                 {pagarMetodo === "caja"
                   ? "Se le paga al cliente en efectivo y se registra un egreso en la caja abierta."
-                  : "Se convierte en crédito a favor, usable en próximas compras."}
+                  : pagarMetodo === "transferencia"
+                    ? "Se le transfiere al cliente. Queda registrado como egreso por transferencia — no afecta el arqueo de efectivo."
+                    : "Se convierte en crédito a favor, usable en próximas compras."}
               </p>
               {pagarError && <p className="text-[11px] text-rose-600">{pagarError}</p>}
               {pagarMsg && <p className="text-[11px] text-emerald-700">{pagarMsg}</p>}
