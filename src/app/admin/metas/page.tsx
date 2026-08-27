@@ -25,6 +25,12 @@ type MetaSucursal = {
   alcanza_semana: boolean;
   comision_pct_actual: number;
   comision_estimada: number;
+  /** Comisión liquidada día a día y acumulada en el mes (la regla real). */
+  comision_mes_acumulada?: number;
+  comision_hoy?: number;
+  comision_hoy_pct?: number;
+  dias_con_meta?: number;
+  dias_con_venta?: number;
   records: {
     mejor_dia: { fecha: string; total: number } | null;
     mejor_semana: { desde: string; total: number } | null;
@@ -198,10 +204,17 @@ export default function AdminMetasPage() {
                 {/* Comisión */}
                 <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 flex flex-wrap justify-between items-center gap-2 text-sm">
                   <div>
-                    <p className="text-xs uppercase font-semibold text-slate-500">Comisión estimada de la semana</p>
-                    <p className="text-lg font-bold text-slate-800">{fmt(m.comision_estimada)}</p>
+                    {/* La comisión se liquida día a día: mostramos el acumulado
+                        del mes, no un porcentaje único sobre la semana. */}
+                    <p className="text-xs uppercase font-semibold text-slate-500">Comisión acumulada del mes</p>
+                    <p className="text-lg font-bold text-slate-800">{fmt(m.comision_mes_acumulada ?? 0)}</p>
                     <p className="text-[11px] text-slate-500 mt-0.5">
-                      {m.comision_pct_actual}% sobre lo vendido — {m.alcanza_semana ? `alcanza (${m.comision_alcanza_pct}%)` : `no alcanza (${m.comision_no_alcanza_pct}%)`}
+                      {(m.dias_con_venta ?? 0) > 0
+                        ? <>
+                            <strong className="text-slate-700">{m.dias_con_meta ?? 0}</strong> de {m.dias_con_venta} día(s) llegaron a la meta
+                            {" · "}hoy suma {fmt(m.comision_hoy ?? 0)} ({(m.comision_hoy_pct ?? 0)}%)
+                          </>
+                        : <>Todavía sin ventas este mes.</>}
                     </p>
                   </div>
                 </div>
