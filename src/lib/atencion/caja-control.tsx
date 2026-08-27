@@ -128,7 +128,78 @@ export function CajaControlBanner({ state }: { state: CajaState }) {
     })();
   }, []);
 
-  const [modal, setModal] = useState<null | "abrir" | "cerrar" | "mov">(null);
+  const [modal, setModal] = useState<null | "abrir" | "cerrar" | "mov" | "consig">(null);
+
+  // ── Pago de consignación desde la caja ────────────────────────────
+  // El cliente viene al mostrador a cobrar sus prendas consignadas: es más
+  // natural hacerlo acá que entrando a su ficha. Reusa el mismo endpoint.
+  type ClienteConsig = { id: string; nombre: string; telefono?: string | null };
+  const [consigQuery, setConsigQuery] = useState("");
+  const [consigClientes, setConsigClientes] = useState<ClienteConsig[]>([]);
+  const [consigCliente, setConsigCliente] = useState<ClienteConsig | null>(null);
+  const [consigSaldo, setConsigSaldo] = useState<number>(0);
+  const [consigMonto, setConsigMonto] = useState("");
+  const [consigMetodo, setConsigMetodo] = useState<"caja" | "transferencia">("caja");
+  const [consigError, setConsigError] = useState<string | null>(null);
+  const [consigMsg, setConsigMsg] = useState<string | null>(null);
+  const [consigEnviando, setConsigEnviando] = useState(false);
+
+  useEffect(() => {
+    if (modal !== "consig") return;
+    let cancel = false;
+    fetchWithSupabaseSession("/api/clientes", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        if (cancel) return;
+        const rows = Array.isArray(j?.data) ? (j.data as Record<string, unknown>[]) : [];
+        setConsigClientes(rows.map((r) => ({
+          id: String(r.id),
+          nombre: (typeof r.nombre_contacto === "string" && r.nombre_contacto.trim())
+            || (typeof r.nombre === "string" && r.nombre.trim())
+            || (typeof r.empresa === "string" && r.empresa.trim()) || "Cliente",
+          telefono: typeof r.telefono === "string" ? r.telefono : null,
+        })));
+      })
+      .catch(() => {});
+    return () => { cancel = true; };
+  }, [modal]);
+
+  async function cargarSaldoConsig(c: ClienteConsig) {
+    setConsigCliente(c); setConsigError(null); setConsigMsg(null); setConsigMonto("");
+    try {
+      const r = await fetchWithSupabaseSession(`/api/clientes/${c.id}/creditos`, { cache: "no-store" });
+      const j = await r.json();
+      const saldo = Number(j?.data?.saldo_consignacion ?? 0);
+      setConsigSaldo(Number.isFinite(saldo) ? saldo : 0);
+      if (!(saldo > 0)) setConsigError("Este cliente no tiene saldo de consignación.");
+    } catch { setConsigSaldo(0); }
+  }
+
+  async function pagarConsigDesdeCaja() {
+    if (!consigCliente) return;
+    const monto = Math.round(Number(consigMonto.replace(/[^d]/g, "")) || 0);
+    if (!(monto > 0)) { setConsigError("Ingresá un monto."); return; }
+    if (monto > consigSaldo) { setConsigError(`Máximo disponible: ${fmtGs(consigSaldo)}.`); return; }
+    setConsigEnviando(true); setConsigError(null);
+    try {
+      const r = await fetchWithSupabaseSession(`/api/clientes/${consigCliente.id}/consignacion/pagar`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ monto, metodo: consigMetodo }),
+      });
+      const j = await r.json();
+      if (!r.ok || !j?.success) throw new Error(j?.error ?? "No se pudo pagar.");
+      setConsigMsg(`Pagado ${fmtGs(monto)} a ${consigCliente.nombre}.`);
+      setConsigSaldo((x) => x - monto);
+      setConsigMonto("");
+      state.refrescar();
+      setTimeout(() => { setModal(null); setConsigCliente(null); setConsigMsg(null); }, 1400);
+    } catch (e) {
+      setConsigError(e instanceof Error ? e.message : "Error");
+    } finally {
+      setConsigEnviando(false);
+    }
+  }
 
   // Apertura
   const [aperturaMonto, setAperturaMonto] = useState("");
@@ -332,6 +403,11 @@ export function CajaControlBanner({ state }: { state: CajaState }) {
             <button type="button" onClick={() => { setMovError(null); setModal("mov"); }}
               className="rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-sm font-medium text-emerald-800 hover:bg-emerald-100">
               {t("Movimiento")}
+            </button>
+            <button type="button" onClick={() => { setConsigError(null); setConsigMsg(null); setConsigCliente(null); setConsigQuery(""); setModal("consig"); }}
+              title="Pagarle a un cliente sus prendas en consignación"
+              className="rounded-lg border border-sky-300 bg-white px-3 py-1.5 text-sm font-medium text-sky-800 hover:bg-sky-100">
+              Pagar consignación
             </button>
             <button type="button" onClick={() => { setCierreError(null); setCierreResumen(null); setModal("cerrar"); void cargarResumenCierre(); }}
               className="rounded-lg bg-rose-600 hover:bg-rose-700 text-white px-3 py-1.5 text-sm font-semibold">
@@ -540,6 +616,88 @@ export function CajaControlBanner({ state }: { state: CajaState }) {
                     className="rounded-lg bg-[#4FAEB2] hover:bg-[#3F8E91] disabled:opacity-50 text-white text-sm font-semibold px-4 py-2 shadow-sm">
                     {movEnviando ? "Registrando…" : "Registrar"}
                   </button>
+                </div>
+              </>
+            )}
+
+            {modal === "consig" && (
+              <>
+                <h3 className="text-base font-semibold text-slate-900">Pagar consignación</h3>
+                <p className="mt-1 text-xs text-slate-500">
+                  Le pagás al cliente sus prendas consignadas. Baja su saldo y sale de la caja.
+                </p>
+
+                {!consigCliente ? (
+                  <div className="mt-4">
+                    <input type="text" autoFocus value={consigQuery}
+                      onChange={(e) => setConsigQuery(e.target.value)}
+                      placeholder="Buscar cliente por nombre o teléfono…"
+                      className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-300" />
+                    <ul className="mt-2 max-h-56 overflow-y-auto divide-y divide-slate-100 rounded-lg border border-slate-200">
+                      {consigClientes
+                        .filter((c) => {
+                          const q = consigQuery.trim().toLowerCase();
+                          if (!q) return true;
+                          return c.nombre.toLowerCase().includes(q) || (c.telefono ?? "").toLowerCase().includes(q);
+                        })
+                        .slice(0, 40)
+                        .map((c) => (
+                          <li key={c.id}>
+                            <button type="button" onClick={() => void cargarSaldoConsig(c)}
+                              className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50">
+                              <span className="font-medium text-slate-800">{c.nombre}</span>
+                              {c.telefono && <span className="ml-2 text-xs text-slate-400">{c.telefono}</span>}
+                            </button>
+                          </li>
+                        ))}
+                      {consigClientes.length === 0 && (
+                        <li className="px-3 py-4 text-center text-xs text-slate-400">Cargando clientes…</li>
+                      )}
+                    </ul>
+                  </div>
+                ) : (
+                  <div className="mt-4 space-y-3">
+                    <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2">
+                      <p className="text-sm font-semibold text-sky-900">{consigCliente.nombre}</p>
+                      <p className="text-xs text-sky-800">Saldo de consignación: <strong>{fmtGs(consigSaldo)}</strong></p>
+                      <button type="button" onClick={() => { setConsigCliente(null); setConsigError(null); }}
+                        className="mt-1 text-[11px] text-sky-700 underline">Cambiar cliente</button>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Monto a pagar</label>
+                      <MontoInput value={consigMonto} onChange={(n) => setConsigMonto(String(n))}
+                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-300" />
+                      <button type="button" onClick={() => setConsigMonto(String(Math.round(consigSaldo)))}
+                        className="mt-1 text-[11px] text-sky-700 underline">Todo ({fmtGs(consigSaldo)})</button>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[11px] text-slate-600">Forma:</span>
+                      <button type="button" onClick={() => setConsigMetodo("caja")}
+                        className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${consigMetodo === "caja" ? "border-emerald-500 bg-emerald-100 text-emerald-800" : "border-slate-200 bg-white text-slate-600"}`}>
+                        💵 Efectivo
+                      </button>
+                      <button type="button" onClick={() => setConsigMetodo("transferencia")}
+                        className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${consigMetodo === "transferencia" ? "border-indigo-500 bg-indigo-100 text-indigo-800" : "border-slate-200 bg-white text-slate-600"}`}>
+                        🏦 Transferencia
+                      </button>
+                    </div>
+
+                    {consigError && <p className="text-[11px] text-rose-600">{consigError}</p>}
+                    {consigMsg && <p className="text-[11px] text-emerald-700">{consigMsg}</p>}
+                  </div>
+                )}
+
+                <div className="mt-5 flex gap-2 justify-end">
+                  <button type="button" onClick={() => setModal(null)} disabled={consigEnviando}
+                    className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50">Cancelar</button>
+                  {consigCliente && (
+                    <button type="button" onClick={pagarConsigDesdeCaja} disabled={consigEnviando || !(consigSaldo > 0)}
+                      className="rounded-lg bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white text-sm font-semibold px-4 py-2 shadow-sm">
+                      {consigEnviando ? "Pagando…" : "Confirmar pago"}
+                    </button>
+                  )}
                 </div>
               </>
             )}
