@@ -6,7 +6,7 @@ import { assertAllowedChatDataSchema } from "@/lib/supabase/chat-data-schema";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
 import {
-  DIAS_HABILES_POR_SEMANA, diasHabilesEnRango, diasHabilesDelMes,
+  diasHabilesPorSemana, diasHabilesEnRango, diasHabilesDelMes, normalizarDiasCerrados,
 } from "@/lib/metas/dias-habiles";
 
 export const dynamic = "force-dynamic";
@@ -57,11 +57,13 @@ export async function GET(request: NextRequest) {
       bono_meta_superada_pct?: number | string | null;
       bono_ticket_prom_min?: number | string | null;
       bono_ticket_prom_pct?: number | string | null;
+      dias_cerrados?: unknown;
     };
     // Query completa (con columnas de bonos). Si el schema aún no tiene las
     // columnas nuevas, cae al fallback → fallback → sin moneda.
     const sucRes = await pool.query<SucMetaRow>(
       `SELECT s.id, s.nombre, COALESCE(s.moneda, 'PYG') AS moneda,
+              s.dias_cerrados,
               m.monto_meta_diaria, m.comision_alcanza_pct, m.comision_no_alcanza_pct,
               m.monto_meta_semanal, m.monto_meta_mensual,
               m.bono_meta_superada_pct, m.bono_ticket_prom_min, m.bono_ticket_prom_pct
@@ -210,8 +212,8 @@ export async function GET(request: NextRequest) {
     // diaria si aplica.
     const diasTranscurridos = diffLun + 1;
     // Días de VENTA (hábiles) ya transcurridos en la semana y totales del mes.
-    const diasHabilesTranscurridosSemana = diasHabilesEnRango(lunes, hoy);
-    const diasHabilesMes = diasHabilesDelMes(hoy);
+    // Los dias habiles dependen de CADA sucursal (cierran dias distintos),
+    // asi que se calculan dentro del map, no una sola vez para todas.
 
     const metas = sucRes.rows.map((r) => {
       const metaDia = Number(r.monto_meta_diaria ?? 0);
@@ -223,7 +225,11 @@ export async function GET(request: NextRequest) {
       const kpi = kpisBySuc.get(r.id) ?? { dia: 0, semana: 0, mes: 0, tickets: 0 };
       // La tienda abre 6 días por semana (cierra domingos): las metas se
       // derivan de días HÁBILES, no de días calendario.
-      const metaSem = Number(r.monto_meta_semanal ?? 0) || metaDia * DIAS_HABILES_POR_SEMANA;
+      // Dias de cierre configurados para ESTA sucursal (default: domingos).
+      const diasCerrados = normalizarDiasCerrados((r as { dias_cerrados?: unknown }).dias_cerrados);
+      const diasHabilesMes = diasHabilesDelMes(hoy, diasCerrados);
+      const diasHabilesTranscurridosSemana = diasHabilesEnRango(lunes, hoy, diasCerrados);
+      const metaSem = Number(r.monto_meta_semanal ?? 0) || metaDia * diasHabilesPorSemana(diasCerrados);
       const metaMes = Number(r.monto_meta_mensual ?? 0) || metaDia * diasHabilesMes;
       const metaSemProrrateada = metaDia * diasHabilesTranscurridosSemana;
       const pctDia = metaDia > 0 ? Math.round((kpi.dia / metaDia) * 100) : 0;
@@ -288,6 +294,9 @@ export async function GET(request: NextRequest) {
         meta_semanal_prorrateada: metaSemProrrateada,
         comision_alcanza_pct: comAlc,
         comision_no_alcanza_pct: comNo,
+        /** Dias que la sucursal NO abre (0=dom … 6=sab). */
+        dias_cerrados: diasCerrados,
+        dias_habiles_mes: diasHabilesMes,
         /** Comisión del mes acumulada día a día (la regla real). */
         comision_mes_acumulada: Math.round(comisionMes),
         /** Comisión generada hoy y si hoy llegó a la meta. */
@@ -374,6 +383,8 @@ export async function PATCH(request: NextRequest) {
     bono_meta_superada_pct?: number | string;
     bono_ticket_prom_min?: number | string | null;
     bono_ticket_prom_pct?: number | string;
+    /** Dias que la sucursal NO abre (0=dom … 6=sab). */
+    dias_cerrados?: unknown;
   };
   try { body = await request.json(); } catch {
     return NextResponse.json(errorResponse("JSON inválido."), { status: 400 });
@@ -487,6 +498,29 @@ export async function PATCH(request: NextRequest) {
            VALUES ($1::uuid, $2::uuid, $3::numeric, COALESCE($4::numeric, 1), COALESCE($5::numeric, 0.5), $6, $7)`,
           [auth.empresa_id, sucId, monto, comAlc, comNo, auth.usuarioCatalogId ?? null, auth.nombre ?? auth.user?.email ?? null],
         );
+      }
+    }
+    // Dias de cierre de la sucursal (viven en `sucursales`, no en metas).
+    // Best-effort: si el schema aun no tiene la columna, no rompe el guardado
+    // de la meta — solo no persiste los dias.
+    if (Array.isArray(body.dias_cerrados)) {
+      const dias = body.dias_cerrados
+        .map((x) => Number(x))
+        .filter((n) => Number.isInteger(n) && n >= 0 && n <= 6);
+      if (dias.length >= 7) {
+        return NextResponse.json(
+          errorResponse("La sucursal no puede estar cerrada los 7 días."),
+          { status: 400 },
+        );
+      }
+      try {
+        await pool.query(
+          `UPDATE ${tS} SET dias_cerrados = $1::smallint[] WHERE id = $2::uuid AND empresa_id = $3::uuid`,
+          [dias, sucId, auth.empresa_id],
+        );
+      } catch (e) {
+        console.warn("[metas PATCH] dias_cerrados no persistido (falta migracion?)",
+          e instanceof Error ? e.message : e);
       }
     }
     return NextResponse.json(successResponse({ ok: true }));

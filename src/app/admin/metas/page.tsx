@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import MontoInput from "@/components/ui/MontoInput";
+import { NOMBRE_DIA } from "@/lib/metas/dias-habiles";
 
 type Moneda = "PYG" | "BRL" | "USD" | "ARS";
 
@@ -31,6 +32,8 @@ type MetaSucursal = {
   comision_hoy_pct?: number;
   dias_con_meta?: number;
   dias_con_venta?: number;
+  /** Dias que la sucursal NO abre (0=dom … 6=sab). */
+  dias_cerrados?: number[];
   records: {
     mejor_dia: { fecha: string; total: number } | null;
     mejor_semana: { desde: string; total: number } | null;
@@ -71,6 +74,7 @@ export default function AdminMetasPage() {
   const [drafts, setDrafts] = useState<Record<string, {
     meta: string; comAlc: string; comNo: string;
     metaMes: string; bonoSup: string; bonoTkMin: string; bonoTkPct: string;
+    diasCerrados: number[];
     saving: boolean;
   }>>({});
 
@@ -93,6 +97,7 @@ export default function AdminMetasPage() {
           bonoSup: m.bono_meta_superada_pct ? String(m.bono_meta_superada_pct) : "",
           bonoTkMin: m.bono_ticket_prom_min ? String(m.bono_ticket_prom_min) : "",
           bonoTkPct: m.bono_ticket_prom_pct ? String(m.bono_ticket_prom_pct) : "",
+          diasCerrados: Array.isArray(m.dias_cerrados) ? m.dias_cerrados : [0],
           saving: false,
         };
       }
@@ -124,6 +129,7 @@ export default function AdminMetasPage() {
           bono_meta_superada_pct: Number(d.bonoSup) || 0,
           bono_ticket_prom_min: d.bonoTkMin.trim() ? Number(d.bonoTkMin) : null,
           bono_ticket_prom_pct: Number(d.bonoTkPct) || 0,
+          dias_cerrados: d.diasCerrados ?? [0],
         }),
       });
       const j = await r.json().catch(() => ({}));
@@ -294,6 +300,42 @@ export default function AdminMetasPage() {
                           onChange={(e) => setDrafts((p) => ({ ...p, [m.sucursal_id]: { ...p[m.sucursal_id], bonoTkPct: e.target.value } }))}
                           className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
                         />
+                      </div>
+                    </div>
+
+                    {/* Dias que ABRE la sucursal. Define los dias habiles con
+                        los que se prorratean metas y comisiones. Cada local
+                        puede tener su propio descanso (PY / BR). */}
+                    <div className="mt-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1">
+                        Días que abre
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {NOMBRE_DIA.map((nom, idx) => {
+                          const cerrado = (d.diasCerrados ?? []).includes(idx);
+                          return (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => setDrafts((p) => {
+                                const act = p[m.sucursal_id].diasCerrados ?? [];
+                                const next = cerrado ? act.filter((x) => x !== idx) : [...act, idx];
+                                return { ...p, [m.sucursal_id]: { ...p[m.sucursal_id], diasCerrados: next } };
+                              })}
+                              title={cerrado ? "Cerrado — click para abrir" : "Abre — click para cerrar"}
+                              className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors ${
+                                cerrado
+                                  ? "border border-slate-200 bg-slate-100 text-slate-400 line-through"
+                                  : "border border-[#4FAEB2] bg-[#4FAEB2]/10 text-[#3F8E91]"
+                              }`}
+                            >
+                              {nom}
+                            </button>
+                          );
+                        })}
+                        <span className="self-center text-[11px] text-slate-500 ml-1">
+                          {7 - (d.diasCerrados ?? []).length} días hábiles por semana
+                        </span>
                       </div>
                     </div>
 

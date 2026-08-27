@@ -89,6 +89,22 @@ export async function GET(request: NextRequest) {
         );
         hayMetaMensual = Number(colQ.rows[0]?.n ?? 0) > 0;
       } catch { /* tolerar: queda en false */ }
+
+      // Dias de cierre por sucursal (migracion 20260927). Si la columna aun no
+      // existe, se usa el default historico: cierra domingos.
+      let haySucDiasCerrados = false;
+      try {
+        const colQ = await client.query<{ n: string }>(
+          `SELECT COUNT(*)::text AS n FROM information_schema.columns
+            WHERE table_schema = $1 AND table_name = 'sucursales'
+              AND column_name = 'dias_cerrados'`,
+          [schema],
+        );
+        haySucDiasCerrados = Number(colQ.rows[0]?.n ?? 0) > 0;
+      } catch { /* tolerar */ }
+      const sucDiasCerrados = haySucDiasCerrados
+        ? `COALESCE(s.dias_cerrados, '{0}'::smallint[])`
+        : `'{0}'::smallint[]`;
       // Si viene sucursal_id, se aplica en las CTEs de visitas y en la tabla por sucursal.
       const sucCondV = sucursalFiltro ? "AND v.sucursal_id = $4" : "";
       const sucCondR = sucursalFiltro ? "AND r.sucursal_id = $4" : "";
@@ -509,16 +525,9 @@ export async function GET(request: NextRequest) {
         `WITH periodo AS (
            SELECT $2::date AS desde, $3::date AS hasta,
                   ($3::date - $2::date + 1) AS dias,
-                  -- Días HÁBILES (la tienda cierra los domingos). Las metas se
-                  -- prorratean por días de venta, no por días calendario.
-                  (SELECT COUNT(*) FROM generate_series($2::date, $3::date, interval '1 day') d
-                     WHERE EXTRACT(DOW FROM d) <> 0)::int AS dias_habiles,
-                  -- Días hábiles del mes calendario que contiene "desde".
-                  (SELECT COUNT(*) FROM generate_series(
-                            date_trunc('month', $2::date)::date,
-                            (date_trunc('month', $2::date) + interval '1 month - 1 day')::date,
-                            interval '1 day') d
-                     WHERE EXTRACT(DOW FROM d) <> 0)::int AS dias_habiles_mes
+                  -- Los días hábiles dependen de CADA sucursal (cierran días
+                  -- distintos), así que se calculan por fila más abajo.
+                  0::int AS dias_habiles_placeholder
          ),
          prev AS (
            SELECT (desde - dias)::date AS desde, (desde - 1)::date AS hasta
@@ -643,8 +652,16 @@ export async function GET(request: NextRequest) {
            ), '')::text` : `NULL::text`} AS meta_mensual,
            COALESCE((SELECT SUM(total) FROM ventas_periodo WHERE sucursal_id = s.id), 0)::text AS vendido_periodo,
            (SELECT dias FROM periodo)::text AS dias_periodo,
-           (SELECT dias_habiles FROM periodo)::text AS dias_habiles,
-           (SELECT dias_habiles_mes FROM periodo)::text AS dias_habiles_mes,
+           -- Días hábiles según los días que ESTA sucursal abre. Si la columna
+           -- no existe todavía (migración pendiente), COALESCE deja el default
+           -- histórico: cierra domingos.
+           (SELECT COUNT(*) FROM generate_series($2::date, $3::date, interval '1 day') d
+              WHERE NOT (EXTRACT(DOW FROM d)::smallint = ANY(${sucDiasCerrados})))::text AS dias_habiles,
+           (SELECT COUNT(*) FROM generate_series(
+                     date_trunc('month', $2::date)::date,
+                     (date_trunc('month', $2::date) + interval '1 month - 1 day')::date,
+                     interval '1 day') d
+              WHERE NOT (EXTRACT(DOW FROM d)::smallint = ANY(${sucDiasCerrados})))::text AS dias_habiles_mes,
            COALESCE((SELECT SUM(total) FROM ventas_prev WHERE sucursal_id = s.id), 0)::text AS ventas_prev,
            COALESCE((SELECT COUNT(*) FROM ventas_prev WHERE sucursal_id = s.id), 0)::text AS operaciones_prev,
            COALESCE((SELECT n FROM visitas_por_suc WHERE sucursal_id = s.id), 0)::text AS visitas_suc,
