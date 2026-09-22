@@ -35,6 +35,23 @@ async function unwrap<T>(r: Response): Promise<T> {
   return (j?.data ?? j) as T;
 }
 
+/** Circulito numerado del paso: turquesa cuando esta activo/hecho, gris cuando falta. */
+function PasoNumero({ n, activo, hecho }: { n: number; activo: boolean; hecho: boolean }) {
+  return (
+    <span
+      className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ring-1 transition-colors ${
+        hecho
+          ? "bg-[#4FAEB2] text-white ring-[#4FAEB2]"
+          : activo
+            ? "bg-white text-[#3F8E91] ring-[#4FAEB2]"
+            : "bg-slate-100 text-slate-400 ring-slate-200"
+      }`}
+    >
+      {hecho ? "✓" : n}
+    </span>
+  );
+}
+
 export default function TransferenciasStockPage() {
   const t = useT();
   const { usuario, isLoading: cargandoUsuario } = useUsuarioActual();
@@ -61,11 +78,18 @@ export default function TransferenciasStockPage() {
   const [success, setSuccess] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
 
+  // Paso 1 completo = las dos sucursales elegidas y distintas. Hasta que eso
+  // pase no mostramos NADA de productos: sin origen el catalogo no significa
+  // nada, porque no sabemos de donde puede salir la mercaderia.
+  const rutaLista = Boolean(origen && destino && origen !== destino);
+
   // Ninguna línea puede pedir más de lo que hay en la sucursal de origen (el
   // backend además lo revalida al confirmar).
   const hayExceso = items.some((it) => Number(it.cantidad) > (stockOrigen[it.producto_id] ?? 0));
-  const puedeEnviar =
-    origen && destino && origen !== destino && items.length > 0 && !enviando && !hayExceso;
+  const puedeEnviar = rutaLista && items.length > 0 && !enviando && !hayExceso;
+
+  const nombreOrigen = sucursales.find((s) => s.id === origen)?.nombre ?? "";
+  const nombreDestino = sucursales.find((s) => s.id === destino)?.nombre ?? "";
 
   async function cargarSucursales() {
     try {
@@ -97,10 +121,12 @@ export default function TransferenciasStockPage() {
     cargarHistorial();
   }, []);
 
-  // Cargar catálogo completo al montar (Pronim usa franjas de precio, no
-  // SKUs individuales — traerlas todas de una y filtrar client-side es más
-  // usable que un buscador con mínimo 2 caracteres).
+  // El catálogo se trae recién cuando ya hay una ruta elegida. Antes de eso la
+  // pantalla no muestra productos, así que tampoco tiene sentido descargarlos.
+  const [catalogoPedido, setCatalogoPedido] = useState(false);
   useEffect(() => {
+    if (!rutaLista || catalogoPedido) return;
+    setCatalogoPedido(true);
     let cancel = false;
     setBuscando(true);
     Promise.all([
@@ -116,11 +142,13 @@ export default function TransferenciasStockPage() {
       })
       .finally(() => { if (!cancel) setBuscando(false); });
     return () => { cancel = true; };
-  }, []);
+  }, [rutaLista, catalogoPedido]);
 
-  // Al elegir/cambiar la sucursal de origen, recargar su stock real.
+  // Al elegir/cambiar la sucursal de origen, recargar su stock real y limpiar
+  // las líneas ya cargadas (venían de otro depósito).
   useEffect(() => {
     if (!origen) { setStockOrigen({}); return; }
+    setItems([]);
     let cancel = false;
     setCargandoStock(true);
     fetchWithSupabaseSession(
@@ -136,30 +164,28 @@ export default function TransferenciasStockPage() {
 
   const stockDe = (productoId: string) => stockOrigen[productoId] ?? 0;
 
-  // Cada sucursal maneja su propio catalogo: mostrar TODAS las franjas de la
+  // Cada sucursal maneja su propio catálogo: mostrar TODAS las franjas de la
   // empresa llenaba la lista de productos que ese local no tiene (todos en
-  // "0 disp."). Por defecto listamos solo lo que esa sucursal tiene en stock;
-  // "Ver todo el catalogo" permite igual mover algo puntual.
+  // "0 disp."). Por defecto listamos solo lo que esa sucursal tiene en stock.
   const [verTodo, setVerTodo] = useState(false);
+
+  const disponibles = useMemo(
+    () => resultados.filter((p) => (stockOrigen[p.id] ?? 0) > 0),
+    [resultados, stockOrigen],
+  );
 
   const resultadosFiltrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
-    const base = origen && !verTodo
-      ? resultados.filter((p) => (stockOrigen[p.id] ?? 0) > 0)
-      : resultados;
-    if (!q) return base.slice(0, 30);
+    const base = verTodo ? resultados : disponibles;
+    if (!q) return base.slice(0, 40);
     return base
-      .filter((p) => {
-        const hay = [p.nombre, p.sku ?? ""].join(" ").toLowerCase();
-        return hay.includes(q);
-      })
-      .slice(0, 30);
-  }, [busqueda, resultados, origen, verTodo, stockOrigen]);
+      .filter((p) => [p.nombre, p.sku ?? ""].join(" ").toLowerCase().includes(q))
+      .slice(0, 40);
+  }, [busqueda, resultados, disponibles, verTodo]);
 
-  /** Cuantas franjas tiene realmente esta sucursal (con stock > 0). */
-  const conStockEnOrigen = useMemo(
-    () => (origen ? resultados.filter((p) => (stockOrigen[p.id] ?? 0) > 0).length : 0),
-    [origen, resultados, stockOrigen],
+  const totalUnidades = useMemo(
+    () => items.reduce((acc, it) => acc + (Number(it.cantidad) || 0), 0),
+    [items],
   );
 
   function agregarProducto(p: Producto) {
@@ -176,6 +202,23 @@ export default function TransferenciasStockPage() {
 
   function quitar(id: string) {
     setItems((prev) => prev.filter((x) => x.producto_id !== id));
+  }
+
+  function invertirRuta() {
+    const o = origen;
+    setOrigen(destino);
+    setDestino(o);
+  }
+
+  function refrescarStockOrigen() {
+    if (!origen) return;
+    fetchWithSupabaseSession(
+      `/api/inventario/stock-por-sucursal?sucursal_id=${encodeURIComponent(origen)}`,
+      { cache: "no-store" },
+    )
+      .then((r) => r.json())
+      .then((j) => setStockOrigen((j?.data?.stocks ?? {}) as Record<string, number>))
+      .catch(() => { /* tolerar */ });
   }
 
   async function enviar(e: React.FormEvent) {
@@ -198,6 +241,7 @@ export default function TransferenciasStockPage() {
       setError("Cargá al menos un producto con cantidad > 0.");
       return;
     }
+    const resumen = `${totalUnidades} unidad${totalUnidades === 1 ? "" : "es"} de ${nombreOrigen} a ${nombreDestino}`;
     setEnviando(true);
     try {
       await unwrap(
@@ -207,11 +251,13 @@ export default function TransferenciasStockPage() {
           body: JSON.stringify(payload),
         }),
       );
-      setSuccess("Transferencia registrada correctamente.");
+      setSuccess(`Listo: se movieron ${resumen}.`);
       setItems([]);
       setObservacion("");
       cargarHistorial();
-      setTimeout(() => setSuccess(null), 4000);
+      // La mercadería ya salió: volver a leer el stock del origen.
+      refrescarStockOrigen();
+      setTimeout(() => setSuccess(null), 6000);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al registrar transferencia.");
     } finally {
@@ -261,185 +307,280 @@ export default function TransferenciasStockPage() {
       <div>
         <h1 className="text-2xl font-bold text-gray-900">{t("Transferencias entre sucursales")}</h1>
         <p className="text-sm text-gray-500 mt-0.5">
-          {t("Mueve productos de una sucursal a otra. El stock se actualiza en el momento.")}
+          Mové mercadería de un local a otro en tres pasos. El stock se descuenta del origen y se suma al destino en el momento.
         </p>
       </div>
 
       {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
-      {success && <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{success}</div>}
+      {success && <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">{success}</div>}
 
-      <form onSubmit={enviar} className="bg-white rounded-xl border border-slate-200 shadow-sm ring-1 ring-[#4FAEB2]/15 p-6 space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">{t("Desde (origen)")} *</label>
-            <select
-              value={origen}
-              onChange={(e) => setOrigen(e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#4FAEB2] bg-white"
-              required
-            >
-              <option value="">{t("Elegí sucursal…")}</option>
-              {sucursales.map((s) => (
-                <option key={s.id} value={s.id}>{s.nombre}{s.es_principal ? " (Principal)" : ""}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">{t("Hacia (destino)")} *</label>
-            <select
-              value={destino}
-              onChange={(e) => setDestino(e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#4FAEB2] bg-white"
-              required
-            >
-              <option value="">{t("Elegí sucursal…")}</option>
-              {sucursales.filter((s) => s.id !== origen).map((s) => (
-                <option key={s.id} value={s.id}>{s.nombre}{s.es_principal ? " (Principal)" : ""}</option>
-              ))}
-            </select>
-          </div>
-        </div>
+      <form onSubmit={enviar} className="space-y-4">
 
-        <div>
-          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
-            {t("Elegí producto o franja")}
-            {origen && (
-              <span className="ml-2 normal-case tracking-normal font-medium text-[#3F8E91]">
-                — stock disponible en {sucursales.find((s) => s.id === origen)?.nombre ?? "la sucursal de origen"}
-                {cargandoStock && <span className="text-slate-400"> (actualizando…)</span>}
-              </span>
-            )}
-            {origen && !cargandoStock && (
-              <button
-                type="button"
-                onClick={() => setVerTodo((v) => !v)}
-                className="ml-2 normal-case tracking-normal font-medium text-slate-500 underline hover:text-slate-700"
+        {/* PASO 1 — la ruta */}
+        <section className="bg-white rounded-xl border border-slate-200 shadow-sm ring-1 ring-[#4FAEB2]/15 p-6">
+          <div className="flex items-center gap-3 mb-5">
+            <PasoNumero n={1} activo hecho={rutaLista} />
+            <div>
+              <h2 className="text-sm font-bold text-slate-800">¿De dónde a dónde?</h2>
+              <p className="text-xs text-slate-500">Elegí el local que entrega y el que recibe.</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-3 md:gap-2 md:items-end">
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Sale de</label>
+              <select
+                value={origen}
+                onChange={(e) => setOrigen(e.target.value)}
+                className="w-full px-3 py-2.5 text-sm font-medium border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#4FAEB2] bg-white"
+                required
               >
-                {verTodo ? "Ver solo lo que hay acá" : "Ver todo el catálogo"}
-              </button>
-            )}
-          </label>
-          <input
-            type="text"
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
-            placeholder={t("Filtrar por nombre o SKU (ej: 19.000, FRJ-19000)…")}
-            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#4FAEB2] bg-white"
-          />
-          {buscando ? (
-            <p className="text-xs text-gray-400 mt-2 animate-pulse">Cargando catálogo…</p>
-          ) : resultadosFiltrados.length === 0 ? (
-            <p className="text-xs text-gray-400 mt-2">
-              {origen && !verTodo && conStockEnOrigen === 0 && !busqueda.trim()
-                ? <>Esta sucursal no tiene stock cargado. <button type="button" onClick={() => setVerTodo(true)} className="underline text-slate-500 hover:text-slate-700">Ver todo el catálogo</button>.</>
-                : "Sin resultados. Verificá el filtro o que existan franjas/productos activos."}
-            </p>
-          ) : (
-            <ul className="mt-2 border border-slate-200 rounded-lg divide-y divide-slate-100 max-h-64 overflow-y-auto">
-              {resultadosFiltrados.map((p) => {
-                const disp = stockDe(p.id);
-                const sinStock = !!origen && disp <= 0;
-                return (
-                  <li key={p.id}>
-                    <button
-                      type="button"
-                      onClick={() => agregarProducto(p)}
-                      disabled={sinStock}
-                      title={sinStock ? "Sin stock en la sucursal de origen" : undefined}
-                      className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center justify-between gap-2 disabled:opacity-45 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-                    >
-                      <span>
-                        <span className="font-medium text-slate-800">{p.nombre}</span>
-                        {p.sku && <span className="text-xs text-slate-400 ml-2">{p.sku}</span>}
-                      </span>
-                      {!origen ? (
-                        <span className="text-xs text-slate-400 whitespace-nowrap">Elegí origen</span>
-                      ) : (
-                        <span className={`text-xs whitespace-nowrap font-semibold ${sinStock ? "text-slate-400" : "text-emerald-700"}`}>
-                          {disp} disp.
-                        </span>
-                      )}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </div>
+                <option value="">Elegí la sucursal que entrega…</option>
+                {sucursales.map((s) => (
+                  <option key={s.id} value={s.id}>{s.nombre}{s.es_principal ? " (Principal)" : ""}</option>
+                ))}
+              </select>
+            </div>
 
-        {items.length > 0 && (
-          <div className="rounded-lg border border-slate-200 overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50 border-b border-slate-200">
-                <tr>
-                  <th className="text-left text-xs font-semibold text-gray-500 px-3 py-2 uppercase tracking-wide">Producto</th>
-                  <th className="text-left text-xs font-semibold text-gray-500 px-3 py-2 uppercase tracking-wide w-28">Disponible</th>
-                  <th className="text-left text-xs font-semibold text-gray-500 px-3 py-2 uppercase tracking-wide w-40">Cantidad</th>
-                  <th className="w-12"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {items.map((it) => {
-                  const disp = stockDe(it.producto_id);
-                  const excede = Number(it.cantidad) > disp;
-                  return (
-                  <tr key={it.producto_id}>
-                    <td className="px-3 py-2 text-slate-800">{it.producto_nombre}</td>
-                    <td className="px-3 py-2 text-slate-600 tabular-nums">{disp}</td>
-                    <td className="px-3 py-2">
-                      <input
-                        type="number"
-                        min={0}
-                        max={disp}
-                        step="0.001"
-                        value={it.cantidad}
-                        onChange={(e) => actualizarCantidad(it.producto_id, e.target.value)}
-                        className={`w-32 px-2 py-1 text-sm border rounded-md focus:outline-none focus:ring-2 ${
-                          excede
-                            ? "border-rose-300 bg-rose-50 text-rose-700 focus:ring-rose-300"
-                            : "border-slate-200 focus:ring-[#4FAEB2]"
-                        }`}
-                      />
-                      {excede && (
-                        <p className="mt-1 text-[11px] text-rose-600">Solo hay {disp} en la sucursal de origen.</p>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      <button
-                        type="button"
-                        onClick={() => quitar(it.producto_id)}
-                        title="Quitar"
-                        className="text-slate-400 hover:text-red-600 text-lg leading-none"
-                      >×</button>
-                    </td>
-                  </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <button
+              type="button"
+              onClick={invertirRuta}
+              disabled={!origen && !destino}
+              title="Invertir origen y destino"
+              className="hidden md:inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 text-slate-400 transition-colors hover:border-[#4FAEB2] hover:text-[#3F8E91] disabled:opacity-40"
+            >
+              ⇄
+            </button>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Llega a</label>
+              <select
+                value={destino}
+                onChange={(e) => setDestino(e.target.value)}
+                className="w-full px-3 py-2.5 text-sm font-medium border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#4FAEB2] bg-white"
+                required
+              >
+                <option value="">Elegí la sucursal que recibe…</option>
+                {sucursales.filter((s) => s.id !== origen).map((s) => (
+                  <option key={s.id} value={s.id}>{s.nombre}{s.es_principal ? " (Principal)" : ""}</option>
+                ))}
+              </select>
+            </div>
           </div>
-        )}
 
-        <div>
-          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">{t("Observación (opcional)")}</label>
+          {rutaLista && (
+            <p className="mt-4 inline-flex flex-wrap items-center gap-2 rounded-lg bg-[#4FAEB2]/10 px-3 py-2 text-sm text-[#2F6E71]">
+              <span className="font-semibold">{nombreOrigen}</span>
+              <span>→</span>
+              <span className="font-semibold">{nombreDestino}</span>
+              <span className="text-xs text-[#3F8E91]">
+                {cargandoStock || buscando
+                  ? `· leyendo el stock de ${nombreOrigen}…`
+                  : `· ${disponibles.length} franja${disponibles.length === 1 ? "" : "s"} con stock en ${nombreOrigen}`}
+              </span>
+            </p>
+          )}
+        </section>
+
+        {/* PASO 2 — qué se mueve (bloqueado hasta tener la ruta) */}
+        <section className={`rounded-xl border shadow-sm p-6 transition-colors ${
+          rutaLista ? "bg-white border-slate-200 ring-1 ring-[#4FAEB2]/15" : "bg-slate-50/60 border-dashed border-slate-300"
+        }`}>
+          <div className="flex items-center gap-3 mb-5">
+            <PasoNumero n={2} activo={rutaLista} hecho={rutaLista && items.length > 0} />
+            <div>
+              <h2 className={`text-sm font-bold ${rutaLista ? "text-slate-800" : "text-slate-400"}`}>¿Qué se mueve?</h2>
+              <p className="text-xs text-slate-500">
+                {rutaLista
+                  ? `Solo aparece lo que ${nombreOrigen} tiene hoy en stock.`
+                  : "Se habilita cuando elijas las dos sucursales."}
+              </p>
+            </div>
+          </div>
+
+          {!rutaLista ? (
+            <div className="rounded-lg border border-dashed border-slate-300 bg-white/60 px-6 py-10 text-center">
+              <p className="text-sm font-medium text-slate-500">
+                Primero decinos de qué sucursal sale y a cuál va.
+              </p>
+              <p className="mt-1 text-xs text-slate-400">
+                Recién ahí podemos mostrarte qué mercadería hay disponible para mover.
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <input
+                  type="text"
+                  value={busqueda}
+                  onChange={(e) => setBusqueda(e.target.value)}
+                  placeholder="Buscar franja o producto (ej: 19.000, FRJ-19000)…"
+                  className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#4FAEB2] bg-white"
+                />
+                <label className="inline-flex items-center gap-2 text-xs text-slate-500 whitespace-nowrap">
+                  <input
+                    type="checkbox"
+                    checked={verTodo}
+                    onChange={(e) => setVerTodo(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 accent-[#4FAEB2]"
+                  />
+                  Mostrar también lo que {nombreOrigen} no tiene
+                </label>
+              </div>
+
+              {buscando ? (
+                <p className="text-xs text-gray-400 mt-3 animate-pulse">Cargando catálogo…</p>
+              ) : resultadosFiltrados.length === 0 ? (
+                <div className="mt-3 rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+                  {busqueda.trim() ? (
+                    <>No hay coincidencias con «{busqueda.trim()}»{!verTodo && " entre lo que hay en stock"}.</>
+                  ) : (
+                    <>
+                      {nombreOrigen} no tiene stock cargado.{" "}
+                      <button type="button" onClick={() => setVerTodo(true)} className="underline font-medium text-slate-600 hover:text-slate-800">
+                        Ver todo el catálogo
+                      </button>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <ul className="mt-3 border border-slate-200 rounded-lg divide-y divide-slate-100 max-h-72 overflow-y-auto">
+                  {resultadosFiltrados.map((p) => {
+                    const disp = stockDe(p.id);
+                    const sinStock = disp <= 0;
+                    const yaEsta = items.some((x) => x.producto_id === p.id);
+                    return (
+                      <li key={p.id}>
+                        <button
+                          type="button"
+                          onClick={() => agregarProducto(p)}
+                          disabled={sinStock || yaEsta}
+                          title={sinStock ? `Sin stock en ${nombreOrigen}` : yaEsta ? "Ya está en la lista" : undefined}
+                          className="w-full text-left px-3 py-2.5 text-sm flex items-center justify-between gap-2 transition-colors hover:bg-[#4FAEB2]/[0.07] disabled:opacity-45 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                        >
+                          <span>
+                            <span className="font-medium text-slate-800">{p.nombre}</span>
+                            {p.sku && <span className="text-xs text-slate-400 ml-2">{p.sku}</span>}
+                          </span>
+                          {yaEsta ? (
+                            <span className="text-xs whitespace-nowrap font-semibold text-[#3F8E91]">ya agregado</span>
+                          ) : (
+                            <span className={`text-xs whitespace-nowrap font-semibold tabular-nums ${sinStock ? "text-slate-400" : "text-emerald-700"}`}>
+                              {disp} disp.
+                            </span>
+                          )}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+
+              {items.length > 0 && (
+                <div className="mt-5 rounded-lg border border-slate-200 overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-slate-50 border-b border-slate-200">
+                      <tr>
+                        <th className="text-left text-xs font-semibold text-gray-500 px-3 py-2 uppercase tracking-wide">Producto</th>
+                        <th className="text-left text-xs font-semibold text-gray-500 px-3 py-2 uppercase tracking-wide w-36">Hay en origen</th>
+                        <th className="text-left text-xs font-semibold text-gray-500 px-3 py-2 uppercase tracking-wide w-40">Mover</th>
+                        <th className="w-12"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {items.map((it) => {
+                        const disp = stockDe(it.producto_id);
+                        const excede = Number(it.cantidad) > disp;
+                        return (
+                          <tr key={it.producto_id}>
+                            <td className="px-3 py-2 text-slate-800">{it.producto_nombre}</td>
+                            <td className="px-3 py-2 text-slate-600 tabular-nums">{disp}</td>
+                            <td className="px-3 py-2">
+                              <input
+                                type="number"
+                                min={0}
+                                max={disp}
+                                step="0.001"
+                                value={it.cantidad}
+                                onChange={(e) => actualizarCantidad(it.producto_id, e.target.value)}
+                                className={`w-32 px-2 py-1 text-sm tabular-nums border rounded-md focus:outline-none focus:ring-2 ${
+                                  excede
+                                    ? "border-rose-300 bg-rose-50 text-rose-700 focus:ring-rose-300"
+                                    : "border-slate-200 focus:ring-[#4FAEB2]"
+                                }`}
+                              />
+                              {excede && (
+                                <p className="mt-1 text-[11px] text-rose-600">Solo hay {disp} en {nombreOrigen}.</p>
+                              )}
+                            </td>
+                            <td className="px-3 py-2 text-right">
+                              <button
+                                type="button"
+                                onClick={() => quitar(it.producto_id)}
+                                title="Quitar"
+                                className="text-slate-400 hover:text-red-600 text-lg leading-none"
+                              >×</button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          )}
+        </section>
+
+        {/* PASO 3 — confirmar */}
+        <section className={`rounded-xl border shadow-sm p-6 transition-colors ${
+          items.length > 0 ? "bg-white border-slate-200 ring-1 ring-[#4FAEB2]/15" : "bg-slate-50/60 border-dashed border-slate-300"
+        }`}>
+          <div className="flex items-center gap-3 mb-5">
+            <PasoNumero n={3} activo={items.length > 0} hecho={false} />
+            <div>
+              <h2 className={`text-sm font-bold ${items.length > 0 ? "text-slate-800" : "text-slate-400"}`}>Confirmar</h2>
+              <p className="text-xs text-slate-500">
+                {items.length > 0 ? "Revisá el resumen y registrá el movimiento." : "Se habilita cuando cargues al menos un producto."}
+              </p>
+            </div>
+          </div>
+
+          {items.length > 0 && (
+            <div className="mb-5 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+              Vas a mover <span className="font-bold tabular-nums">{totalUnidades}</span>{" "}
+              unidad{totalUnidades === 1 ? "" : "es"} en{" "}
+              <span className="font-bold tabular-nums">{items.length}</span>{" "}
+              línea{items.length === 1 ? "" : "s"} de <span className="font-semibold">{nombreOrigen}</span> a{" "}
+              <span className="font-semibold">{nombreDestino}</span>.
+            </div>
+          )}
+
+          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Observación (opcional)</label>
           <textarea
             value={observacion}
             onChange={(e) => setObservacion(e.target.value)}
             rows={2}
-            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#4FAEB2] bg-white"
-            placeholder={t("Motivo, referencia interna, etc.")}
+            disabled={items.length === 0}
+            className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#4FAEB2] bg-white disabled:bg-slate-100"
+            placeholder="Motivo, quién la lleva, referencia interna…"
           />
-        </div>
 
-        <div className="flex justify-end">
-          <button
-            type="submit"
-            disabled={!puedeEnviar}
-            className="rounded-lg bg-[#4FAEB2] hover:bg-[#3F8E91] disabled:bg-slate-200 disabled:text-slate-500 disabled:cursor-not-allowed text-white text-sm font-semibold px-6 py-2.5 transition-colors shadow-sm active:scale-95"
-          >
-            {enviando ? t("Registrando…") : t("Registrar transferencia")}
-          </button>
-        </div>
+          <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+            {hayExceso && (
+              <span className="text-xs font-medium text-rose-600 sm:mr-auto">
+                Hay líneas que piden más de lo que hay en {nombreOrigen}.
+              </span>
+            )}
+            <button
+              type="submit"
+              disabled={!puedeEnviar}
+              className="rounded-lg bg-[#4FAEB2] hover:bg-[#3F8E91] disabled:bg-slate-200 disabled:text-slate-500 disabled:cursor-not-allowed text-white text-sm font-semibold px-6 py-2.5 transition-colors shadow-sm active:scale-95"
+            >
+              {enviando ? "Registrando…" : "Registrar transferencia"}
+            </button>
+          </div>
+        </section>
       </form>
 
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm ring-1 ring-[#4FAEB2]/15 overflow-x-auto">
@@ -460,34 +601,34 @@ export default function TransferenciasStockPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {historia.map((t) => {
-                const its = itemsByTransferencia.get(t.id) ?? [];
+              {historia.map((h) => {
+                const its = itemsByTransferencia.get(h.id) ?? [];
                 return (
-                  <tr key={t.id} className="align-top">
-                    <td className="px-4 py-3 text-slate-700 whitespace-nowrap">{formatFechaHora(t.created_at)}</td>
+                  <tr key={h.id} className="align-top even:bg-slate-50/40">
+                    <td className="px-4 py-3 text-slate-700 whitespace-nowrap">{formatFechaHora(h.created_at)}</td>
                     <td className="px-4 py-3 text-slate-700">
-                      <span className="font-medium">{t.origen_nombre ?? "?"}</span>
+                      <span className="font-medium">{h.origen_nombre ?? "?"}</span>
                       <span className="mx-2 text-slate-400">→</span>
-                      <span className="font-medium">{t.destino_nombre ?? "?"}</span>
-                      {t.observacion && <p className="text-xs text-slate-400 mt-0.5">{t.observacion}</p>}
+                      <span className="font-medium">{h.destino_nombre ?? "?"}</span>
+                      {h.observacion && <p className="text-xs text-slate-400 mt-0.5">{h.observacion}</p>}
                     </td>
                     <td className="px-4 py-3">
                       <ul className="space-y-0.5">
                         {its.map((it) => (
                           <li key={it.id} className="text-xs text-slate-600">
-                            {it.producto_nombre ?? it.producto_id} — <span className="font-semibold">{Number(it.cantidad)}</span>
+                            {it.producto_nombre ?? it.producto_id} — <span className="font-semibold tabular-nums">{Number(it.cantidad)}</span>
                           </li>
                         ))}
                       </ul>
                     </td>
-                    <td className="px-4 py-3 text-xs text-slate-500">{t.created_by_nombre ?? "—"}</td>
+                    <td className="px-4 py-3 text-xs text-slate-500">{h.created_by_nombre ?? "—"}</td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${
-                        t.estado === "confirmada"
+                        h.estado === "confirmada"
                           ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
                           : "bg-slate-100 text-slate-500"
                       }`}>
-                        {t.estado}
+                        {h.estado}
                       </span>
                     </td>
                   </tr>
