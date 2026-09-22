@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { useT } from "@/lib/i18n/context";
 import { useUsuarioActual } from "@/shared/hooks/useUsuarioActual";
@@ -123,10 +123,13 @@ export default function TransferenciasStockPage() {
 
   // El catálogo se trae recién cuando ya hay una ruta elegida. Antes de eso la
   // pantalla no muestra productos, así que tampoco tiene sentido descargarlos.
-  const [catalogoPedido, setCatalogoPedido] = useState(false);
+  // Ref y no state: si fuera state, marcarlo dispararia un re-render que
+  // vuelve a correr este efecto y ejecuta su cleanup, cancelando el fetch
+  // que recien arranco (la pantalla quedaba en "Cargando catalogo...").
+  const catalogoPedido = useRef(false);
   useEffect(() => {
-    if (!rutaLista || catalogoPedido) return;
-    setCatalogoPedido(true);
+    if (!rutaLista || catalogoPedido.current) return;
+    catalogoPedido.current = true;
     let cancel = false;
     setBuscando(true);
     Promise.all([
@@ -140,9 +143,11 @@ export default function TransferenciasStockPage() {
           .filter((p) => !franjas.some((f) => f.id === p.id));
         setResultados([...franjas, ...otros]);
       })
-      .finally(() => { if (!cancel) setBuscando(false); });
+      // Siempre apagar el spinner, aunque el efecto se haya limpiado: si no,
+      // la lista queda cargando para siempre.
+      .finally(() => setBuscando(false));
     return () => { cancel = true; };
-  }, [rutaLista, catalogoPedido]);
+  }, [rutaLista]);
 
   // Al elegir/cambiar la sucursal de origen, recargar su stock real y limpiar
   // las líneas ya cargadas (venían de otro depósito).
