@@ -98,10 +98,6 @@ export async function POST(request: NextRequest) {
       );
     }
     const empresaId = ctx.auth.empresa_id;
-    // sucursal_id de la franja: si el usuario tiene sucursal fija, va esa
-    // (scoped). Si es super_admin sin sucursal, la franja queda global
-    // (sucursal_id = NULL) — visible para todas las sucursales.
-    const franjaSucursalId: string | null = auth?.sucursal_id ?? null;
 
     let body: Record<string, unknown>;
     try {
@@ -109,6 +105,16 @@ export async function POST(request: NextRequest) {
     } catch {
       return NextResponse.json(errorResponse("JSON inválido."), { status: 400 });
     }
+
+    // sucursal_id de la franja: si el usuario tiene sucursal fija, va esa
+    // (scoped). El admin global puede decir en qué sucursal la crea — el POS
+    // manda la sucursal activa. Sin eso, la franja queda global (NULL) y la
+    // ven todas las sucursales.
+    const bodySucursal =
+      typeof body.sucursal_id === "string" && body.sucursal_id.trim() !== ""
+        ? body.sucursal_id.trim()
+        : null;
+    const franjaSucursalId: string | null = auth?.sucursal_id ?? bodySucursal;
 
     const precio = Number(body.precio_venta);
     if (!Number.isFinite(precio) || precio <= 0) {

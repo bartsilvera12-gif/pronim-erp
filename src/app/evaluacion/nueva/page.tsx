@@ -13,7 +13,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
-import { getSucursalActivaId } from "@/lib/sucursales/activa";
+import { getSucursalActivaId, useSucursalActivaId } from "@/lib/sucursales/activa";
 import { useT, useMoney } from "@/lib/i18n/context";
 import { MetaCelebrationModal, MetaCumplidaBadge } from "@/components/metas/MetaCelebrationModal";
 import MontoInput from "@/components/ui/MontoInput";
@@ -81,13 +81,21 @@ export default function NuevaEvaluacionPage() {
   // ── Caja compartida ──────────────────────────────────────────────────
   const caja = useCajaState();
 
+  // ── Sucursal en la que estoy parado ──────────────────────────────────
+  const sucursalActivaId = useSucursalActivaId();
+  // El catálogo se pide para la sucursal activa: parado en PALMERAS tienen
+  // que salir las franjas de PALMERAS, no las de la Principal.
+  const urlFranjas = sucursalActivaId
+    ? `/api/franjas/publicas?sucursal_id=${encodeURIComponent(sucursalActivaId)}`
+    : "/api/franjas/publicas";
+
   // ── Efectos ──────────────────────────────────────────────────────────
   useEffect(() => {
     let cancel = false;
     (async () => {
       try {
         const [rf, rc, rt, re] = await Promise.all([
-          fetchWithSupabaseSession("/api/franjas/publicas", { cache: "no-store" }),
+          fetchWithSupabaseSession(urlFranjas, { cache: "no-store" }),
           fetchWithSupabaseSession("/api/clientes", { cache: "no-store" }),
           fetchWithSupabaseSession("/api/tipos-prenda?solo_activos=true", { cache: "no-store" }),
           fetchWithSupabaseSession("/api/entidades-bancarias", { cache: "no-store" }),
@@ -525,7 +533,7 @@ export default function NuevaEvaluacionPage() {
             const r = await fetchWithSupabaseSession("/api/franjas", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ precio_venta: precio }),
+              body: JSON.stringify({ precio_venta: precio, sucursal_id: getSucursalActivaId() }),
             });
             const j = await r.json();
             if (!r.ok || !j?.success) throw new Error(j?.error ?? "Error al crear franja.");

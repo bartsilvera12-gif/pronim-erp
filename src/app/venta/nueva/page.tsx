@@ -10,10 +10,10 @@
 // ═══════════════════════════════════════════════════════════════════════
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
-import { getSucursalActivaId } from "@/lib/sucursales/activa";
+import { getSucursalActivaId, useSucursalActivaId } from "@/lib/sucursales/activa";
 import { useT, useMoney } from "@/lib/i18n/context";
 import { MetaCelebrationModal, MetaCumplidaBadge } from "@/components/metas/MetaCelebrationModal";
 import MontoInput from "@/components/ui/MontoInput";
@@ -130,16 +130,24 @@ export default function NuevaVentaPage() {
   const [okMsg, setOkMsg] = useState<string | null>(null);
   const [idempotencyKey, setIdempotencyKey] = useState<string | null>(null);
 
+  // ── Sucursal en la que estoy parado ──────────────────────────────────
+  const sucursalActivaId = useSucursalActivaId();
+
   // ── Caja compartida ──────────────────────────────────────────────────
   const caja = useCajaState();
 
   // ── Efectos: catálogo + segmento + alertas + metas ──────────────────
+  // El catálogo se pide para la sucursal activa: parado en PALMERAS tienen
+  // que salir las franjas de PALMERAS, no las de la Principal.
+  const urlFranjas = sucursalActivaId
+    ? `/api/franjas/publicas?sucursal_id=${encodeURIComponent(sucursalActivaId)}`
+    : "/api/franjas/publicas";
   useEffect(() => {
     let cancel = false;
     (async () => {
       try {
         const [rf, rc] = await Promise.all([
-          fetchWithSupabaseSession("/api/franjas/publicas", { cache: "no-store" }),
+          fetchWithSupabaseSession(urlFranjas, { cache: "no-store" }),
           fetchWithSupabaseSession("/api/clientes", { cache: "no-store" }),
         ]);
         refrescarMetaDia();
@@ -164,7 +172,18 @@ export default function NuevaVentaPage() {
       finally { if (!cancel) setCargando(false); }
     })();
     return () => { cancel = true; };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlFranjas]);
+
+  // El catálogo es POR SUCURSAL: al cambiar de local hay que soltar lo que
+  // se había cargado del anterior (son productos de otro depósito).
+  const sucursalYaVista = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    if (sucursalYaVista.current === undefined) { sucursalYaVista.current = sucursalActivaId; return; }
+    if (sucursalYaVista.current === sucursalActivaId) return;
+    sucursalYaVista.current = sucursalActivaId;
+        setLleva([]);
+  }, [sucursalActivaId]);
 
   useEffect(() => {
     fetchWithSupabaseSession("/api/configuracion/atencion-alertas", { cache: "no-store" })
@@ -754,7 +773,7 @@ export default function NuevaVentaPage() {
             const r = await fetchWithSupabaseSession("/api/franjas", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ precio_venta: precio }),
+              body: JSON.stringify({ precio_venta: precio, sucursal_id: getSucursalActivaId() }),
             });
             const j = await r.json();
             if (!r.ok || !j?.success) throw new Error(j?.error ?? "Error al crear franja.");

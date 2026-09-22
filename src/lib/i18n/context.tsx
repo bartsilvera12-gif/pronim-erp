@@ -5,6 +5,7 @@ import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session"
 import { translate, type Lang } from "./dict";
 import { fmtMoneda, fmtMonedaCompact, monedaSymbol, setActiveCfg, type Moneda } from "./currency";
 import { createBrowserClient } from "@supabase/ssr";
+import { useSucursalActivaMoneda } from "@/lib/sucursales/activa";
 
 /**
  * Provider global que carga la config del usuario (lang + moneda de su
@@ -27,6 +28,10 @@ const Ctx = createContext<UserCfg>(DEFAULT);
 
 export function I18nProvider({ children }: { children: React.ReactNode }) {
   const [cfg, setCfg] = useState<UserCfg>(DEFAULT);
+  // El admin sin sucursal fija elige en que local esta parado. Si eligio una,
+  // manda la moneda DE ESA sucursal: parado en BETIM los precios van en R$,
+  // no en Gs. Para usuarios con sucursal fija esto es null y rige su config.
+  const monedaSucursal = useSucursalActivaMoneda();
 
   // Función reutilizable para refetchear la cfg. Se llama al montar,
   // en cambios de auth (login/logout/token refresh) y al recuperar foco.
@@ -92,9 +97,15 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("focus", onFocus);
   }, [loadCfg]);
 
+  const efectiva: UserCfg = useMemo(() => {
+    const m = monedaSucursal;
+    if (m === "BRL" || m === "USD" || m === "ARS" || m === "PYG") return { ...cfg, moneda: m };
+    return cfg;
+  }, [cfg, monedaSucursal]);
+
   // Publicar la config al registro global.
-  setActiveCfg(cfg.moneda, cfg.lang);
-  return <Ctx.Provider value={cfg}>{children}</Ctx.Provider>;
+  setActiveCfg(efectiva.moneda, efectiva.lang);
+  return <Ctx.Provider value={efectiva}>{children}</Ctx.Provider>;
 }
 
 /** Traducción — devuelve la clave si no hay entrada. */

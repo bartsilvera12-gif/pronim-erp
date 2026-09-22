@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { getSucursalActivaId, useSucursalActivaId } from "@/lib/sucursales/activa";
 import { useRouter } from "next/navigation";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { playCelebrationSound } from "@/lib/audio/notif-sounds";
@@ -534,13 +535,20 @@ export default function NuevaAtencionPage() {
     } catch { /* tolerar */ }
   }
 
+  // Sucursal en la que estoy parado: el catálogo y la operación son de ESE
+  // local, no de la Principal.
+  const sucursalActivaId = useSucursalActivaId();
+  const urlFranjas = sucursalActivaId
+    ? `/api/franjas/publicas?sucursal_id=${encodeURIComponent(sucursalActivaId)}`
+    : "/api/franjas/publicas";
+
   // Cargar franjas + clientes iniciales + estado de caja
   useEffect(() => {
     let cancel = false;
     (async () => {
       try {
         const [rf, rc, rt] = await Promise.all([
-          fetchWithSupabaseSession("/api/franjas/publicas", { cache: "no-store" }),
+          fetchWithSupabaseSession(urlFranjas, { cache: "no-store" }),
           fetchWithSupabaseSession("/api/clientes", { cache: "no-store" }),
           fetchWithSupabaseSession("/api/tipos-prenda?solo_activos=true", { cache: "no-store" }),
         ]);
@@ -1125,6 +1133,7 @@ export default function NuevaAtencionPage() {
           caja_id: cajaIdFinal,
           cliente_id: cliente.id,
           observaciones: observaciones || null,
+          sucursal_id: getSucursalActivaId(),
           trae: traePayload,
           lleva: llevaPayload,
           promocion: promoPayload,

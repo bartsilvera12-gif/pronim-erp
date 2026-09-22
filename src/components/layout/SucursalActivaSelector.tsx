@@ -4,6 +4,17 @@ import { useEffect, useRef, useState } from "react";
 import { MapPin, Check, ChevronDown } from "lucide-react";
 import { useSucursalActiva } from "@/lib/sucursales/activa";
 
+/** Simbolo corto para mostrar al lado del nombre. */
+function monedaSimbolo(m: string): string {
+  switch (m) {
+    case "BRL": return "R$";
+    case "USD": return "US$";
+    case "ARS": return "$";
+    case "PYG": return "Gs.";
+    default: return m;
+  }
+}
+
 /**
  * Selector "¿en qué sucursal estoy?" del header.
  *
@@ -72,6 +83,12 @@ export default function SucursalActivaSelector() {
                     <span className="truncate">
                       {s.nombre}
                       {s.es_principal && <span className="ml-1 text-[10px] font-normal text-slate-400">(Principal)</span>}
+                      {/* La moneda importa: parado en BETIM se cobra en R$, no en Gs. */}
+                      {s.moneda && (
+                        <span className="ml-1.5 text-[10px] font-semibold text-slate-400">
+                          {monedaSimbolo(s.moneda)}
+                        </span>
+                      )}
                     </span>
                     {activa && <Check className="h-4 w-4 shrink-0" />}
                   </button>
@@ -80,7 +97,8 @@ export default function SucursalActivaSelector() {
             })}
           </ul>
           <p className="mt-2 border-t border-slate-100 px-2 pt-2 text-[10px] leading-relaxed text-slate-500">
-            Las ventas, evaluaciones y la caja se registran en esta sucursal.
+            Las ventas, evaluaciones y la caja se registran en esta sucursal, con su
+            catálogo y su moneda.
             {sinElegir && " Sin elegir, se usa la Principal."}
           </p>
         </div>

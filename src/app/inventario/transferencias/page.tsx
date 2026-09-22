@@ -126,14 +126,18 @@ export default function TransferenciasStockPage() {
   // Ref y no state: si fuera state, marcarlo dispararia un re-render que
   // vuelve a correr este efecto y ejecuta su cleanup, cancelando el fetch
   // que recien arranco (la pantalla quedaba en "Cargando catalogo...").
-  const catalogoPedido = useRef(false);
+  //
+  // El catálogo es POR SUCURSAL: se pide el del ORIGEN. Pidiendo el genérico
+  // salían siempre las franjas de la Principal, que no son las que ese local
+  // tiene para entregar.
+  const catalogoPedidoPara = useRef<string | null>(null);
   useEffect(() => {
-    if (!rutaLista || catalogoPedido.current) return;
-    catalogoPedido.current = true;
+    if (!rutaLista || catalogoPedidoPara.current === origen) return;
+    catalogoPedidoPara.current = origen;
     let cancel = false;
     setBuscando(true);
     Promise.all([
-      fetchWithSupabaseSession(`/api/franjas/publicas`, { cache: "no-store" }).then((r) => r.json()).catch(() => ({})),
+      fetchWithSupabaseSession(`/api/franjas/publicas?sucursal_id=${encodeURIComponent(origen)}`, { cache: "no-store" }).then((r) => r.json()).catch(() => ({})),
       fetchWithSupabaseSession(`/api/productos`, { cache: "no-store" }).then((r) => r.json()).catch(() => ({})),
     ])
       .then(([jf, jp]) => {
@@ -147,7 +151,7 @@ export default function TransferenciasStockPage() {
       // la lista queda cargando para siempre.
       .finally(() => setBuscando(false));
     return () => { cancel = true; };
-  }, [rutaLista]);
+  }, [rutaLista, origen]);
 
   // Al elegir/cambiar la sucursal de origen, recargar su stock real y limpiar
   // las líneas ya cargadas (venían de otro depósito).
