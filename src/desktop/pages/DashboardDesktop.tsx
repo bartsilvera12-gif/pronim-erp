@@ -2031,24 +2031,6 @@ function DashInventario({
   const bajosStock     = productos.filter(p => p.stock_actual <= p.stock_minimo).length;
   const valorTotal     = productos.reduce((s, p) => s + p.stock_actual * p.costo_promedio, 0);
 
-  const cntSaludable = productos.filter(p => p.stock_actual > p.stock_minimo).length;
-  const cntBajo      = productos.filter(p => p.stock_actual > 0 && p.stock_actual <= p.stock_minimo).length;
-  const cntCritico   = productos.filter(p => p.stock_actual <= 0).length;
-
-  const proveedorMap = useMemo(() => {
-    const map: Record<string, string> = {};
-    compras.forEach(c => { if (c.producto_id) map[String(c.producto_id)] = c.proveedor_nombre; });
-    return map;
-  }, [compras]);
-
-  const criticos = useMemo(() =>
-    productos
-      .filter(p => p.stock_actual <= p.stock_minimo)
-      .sort((a, b) => a.stock_actual - b.stock_actual)
-      .slice(0, 10),
-    [productos]
-  );
-
   const topPorValor = useMemo(() =>
     [...productos]
       .map(p => ({ ...p, valor: p.stock_actual * p.costo_promedio }))
@@ -2112,117 +2094,6 @@ function DashInventario({
           variation={12}
           href="/inventario"
         />
-      </div>
-
-      {/* Donut + Críticos */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <motion.div whileHover={{ y: -2 }} className={invPanel}>
-          <div className="flex items-center gap-2">
-            {invBar}
-            <h3 className={invTitle}>
-              <span aria-hidden="true" className="inline-block h-1.5 w-1.5 rounded-full bg-[#4FAEB2]" />
-              Estado del stock
-            </h3>
-          </div>
-          <p className="mt-1 pl-3 text-[11px] text-slate-500">Distribución por nivel</p>
-          <div className="mt-5">
-            <DonutChart
-              segments={[
-                { label: "Saludable", value: cntSaludable, color: "#10B981" },
-                { label: "Bajo", value: cntBajo, color: "#F59E0B" },
-                { label: "Crítico", value: cntCritico, color: "#EF4444" },
-              ]}
-              centerLabel="productos"
-              legendDetail
-            />
-          </div>
-        </motion.div>
-
-        <motion.div whileHover={{ y: -2 }} className={`${invPanel} lg:col-span-2`}>
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              {invBar}
-              <h3 className={invTitle}>
-                <span aria-hidden="true" className="inline-block h-1.5 w-1.5 rounded-full bg-[#4FAEB2]" />
-                Productos críticos
-              </h3>
-            </div>
-            {criticos.length > 0 ? (
-              <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2.5 py-0.5 text-[11px] font-semibold text-rose-700">
-                {criticos.length} {criticos.length === 1 ? "ítem" : "ítems"}
-              </span>
-            ) : null}
-          </div>
-          <p className="mt-1 pl-3 text-[11px] text-slate-500">Stock por debajo del mínimo</p>
-
-          {criticos.length === 0 ? (
-            <div className="mt-5 flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3.5 text-sm text-emerald-700">
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700">
-                <Icon.CheckCircle className="h-4 w-4" />
-              </span>
-              <span className="font-medium">Todos los productos tienen stock suficiente.</span>
-            </div>
-          ) : (
-            <div className="mt-5 overflow-hidden rounded-xl border border-[#4FAEB2]/30">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-slate-50/80">
-                    <tr>
-                      {["Producto", "Stock actual", "Mínimo", "Estado", "Proveedor"].map((h) => (
-                        <th
-                          key={h}
-                          className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500"
-                        >
-                          {h}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {criticos.map((p) => {
-                      const critico = p.stock_actual <= 0;
-                      return (
-                        <tr key={p.id} className="transition-colors hover:bg-[#4FAEB2]/5">
-                          <td className="px-3 py-3 text-xs font-medium text-slate-800">{p.nombre}</td>
-                          <td className="px-3 py-3">
-                            <span
-                              className={`text-xs font-semibold tabular-nums ${
-                                critico ? "text-rose-600" : "text-amber-600"
-                              }`}
-                            >
-                              {p.stock_actual} {p.unidad_medida}
-                            </span>
-                          </td>
-                          <td className="px-3 py-3 text-xs tabular-nums text-slate-500">
-                            {p.stock_minimo} {p.unidad_medida}
-                          </td>
-                          <td className="px-3 py-3">
-                            <span
-                              className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
-                                critico
-                                  ? "border-rose-200 bg-rose-50 text-rose-700"
-                                  : "border-amber-200 bg-amber-50 text-amber-700"
-                              }`}
-                            >
-                              <span
-                                aria-hidden="true"
-                                className={`h-1.5 w-1.5 rounded-full ${critico ? "bg-rose-500" : "bg-amber-500"}`}
-                              />
-                              {critico ? "Crítico" : "Bajo"}
-                            </span>
-                          </td>
-                          <td className="px-3 py-3 text-xs text-slate-500">
-                            {proveedorMap[String(p.id)] ?? "—"}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </motion.div>
       </div>
 
       {/* Top por valor */}
@@ -2316,25 +2187,6 @@ function DashVentas({
   const ticketProm = ventasFilt.length > 0 ? ventasFilt.reduce((s, v) => s + v.total, 0) / ventasFilt.length : 0;
   const unidades   = ventasFilt.flatMap(v => v.lineas ?? []).reduce((s, l) => s + (l?.cantidad ?? 0), 0);
 
-  const prodMap = useMemo(() =>
-    Object.fromEntries(productos.map(p => [p.id, p])),
-    [productos]
-  );
-
-  const gananciaHoy = useMemo(() =>
-    ventasHoy.flatMap(v => v.lineas ?? []).reduce((s, l) => {
-      if (!l) return s;
-      const costo = prodMap[l.producto_id]?.costo_promedio ?? 0;
-      return s + (l.precio_venta - costo) * l.cantidad;
-    }, 0),
-    [ventasHoy, prodMap]
-  );
-
-  const totalHoyBruto = ventasHoy.flatMap(v => v.lineas ?? [])
-    .reduce((s, l) => s + (l ? l.precio_venta * l.cantidad : 0), 0);
-
-  const margenProm = totalHoyBruto > 0 ? (gananciaHoy / totalHoyBruto) * 100 : 0;
-
   const topProductos = useMemo(() => {
     const map: Record<string, number> = {};
     ventasFilt.flatMap(v => v.lineas ?? []).filter(Boolean).forEach(l => {
@@ -2418,81 +2270,6 @@ function DashVentas({
           color="text-slate-900"
           href="/ventas"
         />
-      </div>
-
-      {/* KPIs rentabilidad */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <motion.div whileHover={{ y: -2 }} className={vtaPanel}>
-          <div className="flex items-start justify-between gap-3">
-            <span
-              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border ${
-                gananciaHoy >= 0
-                  ? "border-emerald-200 bg-emerald-50 text-emerald-600"
-                  : "border-rose-200 bg-rose-50 text-rose-600"
-              }`}
-            >
-              <Icon.Wallet className="h-4 w-4" />
-            </span>
-            <span
-              className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
-                gananciaHoy >= 0
-                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                  : "border-rose-200 bg-rose-50 text-rose-700"
-              }`}
-            >
-              {gananciaHoy >= 0 ? "Positivo" : "Negativo"}
-            </span>
-          </div>
-          <p className="mt-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-            Ganancia del día
-          </p>
-          <p
-            className={`mt-1 text-3xl font-semibold tabular-nums tracking-tight ${
-              gananciaHoy >= 0 ? "text-emerald-600" : "text-rose-600"
-            }`}
-          >
-            Gs. {formatGsFull(gananciaHoy)}
-          </p>
-          <p className="mt-1 text-[11px] text-slate-500">precio venta − costo promedio × cant.</p>
-        </motion.div>
-
-        <motion.div whileHover={{ y: -2 }} className={vtaPanel}>
-          <div className="flex items-start justify-between gap-3">
-            <span
-              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border ${
-                margenProm >= 20
-                  ? "border-emerald-200 bg-emerald-50 text-emerald-600"
-                  : margenProm >= 10
-                    ? "border-amber-200 bg-amber-50 text-amber-600"
-                    : "border-rose-200 bg-rose-50 text-rose-600"
-              }`}
-            >
-              <Icon.TrendUp className="h-4 w-4" />
-            </span>
-            <span
-              className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
-                margenProm >= 20
-                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                  : margenProm >= 10
-                    ? "border-amber-200 bg-amber-50 text-amber-700"
-                    : "border-rose-200 bg-rose-50 text-rose-700"
-              }`}
-            >
-              {margenProm >= 20 ? "Excelente" : margenProm >= 10 ? "Aceptable" : "Bajo"}
-            </span>
-          </div>
-          <p className="mt-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-            Margen promedio (hoy)
-          </p>
-          <p
-            className={`mt-1 text-3xl font-semibold tabular-nums tracking-tight ${
-              margenProm >= 20 ? "text-emerald-600" : margenProm >= 10 ? "text-amber-600" : "text-rose-600"
-            }`}
-          >
-            {margenProm.toFixed(1)}%
-          </p>
-          <p className="mt-1 text-[11px] text-slate-500">ganancia / precio venta</p>
-        </motion.div>
       </div>
 
       {/* Productos más vendidos + Ventas por hora */}
