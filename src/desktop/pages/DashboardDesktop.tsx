@@ -2031,22 +2031,6 @@ function DashInventario({
   const bajosStock     = productos.filter(p => p.stock_actual <= p.stock_minimo).length;
   const valorTotal     = productos.reduce((s, p) => s + p.stock_actual * p.costo_promedio, 0);
 
-  const topPorValor = useMemo(() =>
-    [...productos]
-      .map(p => ({ ...p, valor: p.stock_actual * p.costo_promedio }))
-      .sort((a, b) => b.valor - a.valor)
-      .slice(0, 8),
-    [productos]
-  );
-
-  const invPanel =
-    "rounded-2xl border border-[#4FAEB2]/45 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-all duration-200 hover:shadow-md";
-  const invTitle =
-    "flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-600";
-  const invBar = (
-    <span aria-hidden="true" className="block h-5 w-1 rounded-full bg-[#4FAEB2]" />
-  );
-
   return (
     <div className="space-y-6">
       {/* Recepciones pendientes — al TOPE del dash de inventario. Es lo
@@ -2096,60 +2080,6 @@ function DashInventario({
         />
       </div>
 
-      {/* Top por valor */}
-      <motion.div whileHover={{ y: -2 }} className={invPanel}>
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            {invBar}
-            <h3 className={invTitle}>
-              <span aria-hidden="true" className="inline-block h-1.5 w-1.5 rounded-full bg-[#4FAEB2]" />
-              Top productos por valor de inventario
-            </h3>
-          </div>
-          <span className="inline-flex items-center gap-1 rounded-full border border-[#4FAEB2]/30 bg-[#4FAEB2]/10 px-2.5 py-0.5 text-[11px] font-semibold text-[#3F8E91]">
-            Top {topPorValor.length}
-          </span>
-        </div>
-        <p className="mt-1 pl-3 text-[11px] text-slate-500">Stock × costo promedio</p>
-
-        {topPorValor.length === 0 ? (
-          <p className="mt-5 py-6 text-center text-sm text-slate-400">Sin productos registrados.</p>
-        ) : (
-          <div className="mt-5 overflow-hidden rounded-xl border border-[#4FAEB2]/30">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50/80">
-                  <tr>
-                    {["Producto", "SKU", "Stock", "Costo promedio", "Valor inventario"].map((h) => (
-                      <th
-                        key={h}
-                        className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500"
-                      >
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {topPorValor.map((p) => (
-                    <tr key={p.id} className="transition-colors hover:bg-[#4FAEB2]/5">
-                      <td className="px-3 py-3 text-xs font-medium text-slate-800">{p.nombre}</td>
-                      <td className="px-3 py-3 font-mono text-xs text-slate-500">{p.sku}</td>
-                      <td className="px-3 py-3 text-xs tabular-nums text-slate-700">{p.stock_actual}</td>
-                      <td className="px-3 py-3 text-xs tabular-nums text-slate-500">
-                        Gs. {formatGs(p.costo_promedio)}
-                      </td>
-                      <td className="px-3 py-3 text-xs font-semibold tabular-nums text-[#3F8E91]">
-                        Gs. {formatGs(p.valor)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-      </motion.div>
     </div>
   );
 }
@@ -2186,48 +2116,6 @@ function DashVentas({
   const totalMes   = ventasMes.reduce((s, v) => s + v.total, 0);
   const ticketProm = ventasFilt.length > 0 ? ventasFilt.reduce((s, v) => s + v.total, 0) / ventasFilt.length : 0;
   const unidades   = ventasFilt.flatMap(v => v.lineas ?? []).reduce((s, l) => s + (l?.cantidad ?? 0), 0);
-
-  const topProductos = useMemo(() => {
-    const map: Record<string, number> = {};
-    ventasFilt.flatMap(v => v.lineas ?? []).filter(Boolean).forEach(l => {
-      map[l.producto_nombre] = (map[l.producto_nombre] ?? 0) + l.cantidad;
-    });
-    return Object.entries(map)
-      .map(([label, value]) => ({ label, value }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 8);
-  }, [ventasFilt]);
-
-  const ventasPorHora = useMemo(() => {
-    const horas = Array.from({ length: 24 }, (_, h) => ({
-      label: `${String(h).padStart(2, "0")}h`,
-      value: 0,
-    }));
-    ventasHoy.forEach(v => {
-      const h = new Date(v.fecha).getHours();
-      if (h >= 0 && h < 24) horas[h].value += v.total;
-    });
-    const ahora = new Date().getHours();
-    return horas.slice(0, ahora + 1);
-  }, [ventasHoy]);
-
-  const desglose = useMemo(() => {
-    const tipos = ["CONTADO", "CREDITO"] as const;
-    return tipos.map(tipo => {
-      const lst = ventasFilt.filter(v => v.tipo_venta === tipo);
-      const total = lst.reduce((s, v) => s + v.total, 0);
-      const unid  = lst.flatMap(v => v.lineas ?? []).reduce((s, l) => s + (l?.cantidad ?? 0), 0);
-      return { tipo, ventas: lst.length, total, ticket: lst.length ? total / lst.length : 0, unid };
-    });
-  }, [ventasFilt]);
-
-  const vtaPanel =
-    "rounded-2xl border border-[#4FAEB2]/45 bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-all duration-200 hover:shadow-md";
-  const vtaTitle =
-    "flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-600";
-  const vtaBar = (
-    <span aria-hidden="true" className="block h-5 w-1 rounded-full bg-[#4FAEB2]" />
-  );
 
   return (
     <div className="space-y-6">
@@ -2272,108 +2160,6 @@ function DashVentas({
         />
       </div>
 
-      {/* Productos más vendidos + Ventas por hora */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <motion.div whileHover={{ y: -2 }} className={vtaPanel}>
-          <div className="flex items-center gap-2">
-            {vtaBar}
-            <h3 className={vtaTitle}>
-              <span aria-hidden="true" className="inline-block h-1.5 w-1.5 rounded-full bg-[#4FAEB2]" />
-              Productos más vendidos
-            </h3>
-          </div>
-          <p className="mt-1 pl-3 text-[11px] text-slate-500">Ranking de unidades</p>
-          <div className="mt-5">
-            {topProductos.length === 0 ? (
-              <p className="py-8 text-center text-sm text-slate-400">Sin ventas en el periodo.</p>
-            ) : (
-              <HBarChart data={topProductos} color="bg-[#4FAEB2]" />
-            )}
-          </div>
-        </motion.div>
-
-        <motion.div whileHover={{ y: -2 }} className={vtaPanel}>
-          <div className="flex items-center gap-2">
-            {vtaBar}
-            <h3 className={vtaTitle}>
-              <span aria-hidden="true" className="inline-block h-1.5 w-1.5 rounded-full bg-[#4FAEB2]" />
-              Ventas por hora — hoy
-            </h3>
-          </div>
-          <p className="mt-1 pl-3 text-[11px] text-slate-500">Curva intradía acumulada · Todas las sucursales</p>
-          <div className="mt-5">
-            {ventasPorHora.every((h) => h.value === 0) ? (
-              <p className="py-8 text-center text-sm text-slate-400">Sin ventas registradas hoy.</p>
-            ) : (
-              <AreaChart data={ventasPorHora} color="#4FAEB2" />
-            )}
-          </div>
-        </motion.div>
-      </div>
-
-      {/* Desglose por tipo */}
-      <motion.div whileHover={{ y: -2 }} className={vtaPanel}>
-        <div className="flex items-center gap-2">
-          {vtaBar}
-          <h3 className={vtaTitle}>
-            <span aria-hidden="true" className="inline-block h-1.5 w-1.5 rounded-full bg-[#4FAEB2]" />
-            Desglose por tipo de venta
-          </h3>
-        </div>
-        <p className="mt-1 pl-3 text-[11px] text-slate-500">Contado vs. crédito en el período</p>
-
-        {ventasFilt.length === 0 ? (
-          <p className="mt-6 py-6 text-center text-sm text-slate-400">Sin ventas en el periodo seleccionado.</p>
-        ) : (
-          <div className="mt-5 overflow-hidden rounded-xl border border-[#4FAEB2]/30">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50/80">
-                  <tr>
-                    {["Tipo", "Cantidad", "Total", "Ticket promedio", "Unidades"].map((h) => (
-                      <th
-                        key={h}
-                        className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500"
-                      >
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {desglose.map((r) => (
-                    <tr key={r.tipo} className="transition-colors hover:bg-[#4FAEB2]/5">
-                      <td className="px-3 py-3">
-                        <span
-                          className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${
-                            r.tipo === "CONTADO"
-                              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                              : "border-[#4FAEB2]/30 bg-[#4FAEB2]/10 text-[#3F8E91]"
-                          }`}
-                        >
-                          <span
-                            aria-hidden="true"
-                            className={`h-1.5 w-1.5 rounded-full ${r.tipo === "CONTADO" ? "bg-emerald-500" : "bg-[#4FAEB2]"}`}
-                          />
-                          {r.tipo}
-                        </span>
-                      </td>
-                      <td className="px-3 py-3 text-xs tabular-nums text-slate-700">{r.ventas}</td>
-                      <td className="px-3 py-3 text-xs font-semibold tabular-nums text-slate-900">
-                        Gs. {formatGs(r.total)}
-                      </td>
-                      <td className="px-3 py-3 text-xs tabular-nums text-slate-500">
-                        Gs. {formatGs(Math.round(r.ticket))}
-                      </td>
-                      <td className="px-3 py-3 text-xs tabular-nums text-slate-500">{r.unid}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-      </motion.div>
     </div>
   );
 }
