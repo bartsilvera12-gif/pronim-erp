@@ -244,7 +244,7 @@ function formatGsM(n: number): string {
     const m = num / 1_000_000;
     return m % 1 === 0 ? `${m}M` : `${m.toFixed(1)}M`;
   }
-  if (num >= 1_000) return `${Math.round(num / 1_000)}K`;
+  if (num >= 1_000) return `${Math.round(num / 1_000)} mil`;
   return num.toLocaleString("es-PY");
 }
 

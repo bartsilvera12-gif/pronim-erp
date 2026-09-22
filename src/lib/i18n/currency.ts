@@ -75,7 +75,7 @@ export function fmtMonedaCompact(n: number, m: Moneda, lang: Lang): string {
   }
   if (abs >= 1_000) {
     const v = n / 1_000;
-    return `${sym} ${v.toLocaleString(locale, { maximumFractionDigits: 0 })}K`;
+    return `${sym} ${v.toLocaleString(locale, { maximumFractionDigits: 0 })} mil`;
   }
   return fmtMoneda(n, m, lang);
 }

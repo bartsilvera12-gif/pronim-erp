@@ -89,7 +89,7 @@ function fmtGs(n: number) { return "Gs. " + Math.round(n || 0).toLocaleString("e
 function fmtGsCompact(n: number) {
   const v = Math.round(n || 0);
   if (v >= 1_000_000) return "Gs. " + (v / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
-  if (v >= 1_000) return "Gs. " + (v / 1_000).toFixed(0) + "K";
+  if (v >= 1_000) return "Gs. " + (v / 1_000).toFixed(0) + " mil";
   return "Gs. " + v.toLocaleString("es-PY");
 }
 function fmtN(n: number) { return (n || 0).toLocaleString("es-PY"); }
@@ -995,7 +995,7 @@ function SucursalCard({ s }: {
     const sym = monedaSuc === "BRL" ? "R$" : monedaSuc === "USD" ? "US$" : monedaSuc === "ARS" ? "$" : "Gs.";
     const locale = monedaSuc === "BRL" ? "pt-BR" : "es-PY";
     if (abs >= 1_000_000) return `${sym} ${(n / 1_000_000).toLocaleString(locale, { minimumFractionDigits: abs >= 10_000_000 ? 0 : 1, maximumFractionDigits: 1 })}M`;
-    if (abs >= 1_000) return `${sym} ${(n / 1_000).toLocaleString(locale, { maximumFractionDigits: 0 })}K`;
+    if (abs >= 1_000) return `${sym} ${(n / 1_000).toLocaleString(locale, { maximumFractionDigits: 0 })} mil`;
     const decimals = monedaSuc === "PYG" || monedaSuc === "ARS" ? 0 : 2;
     return `${sym} ${n.toLocaleString(locale, { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
   };

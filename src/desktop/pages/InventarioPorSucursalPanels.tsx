@@ -52,7 +52,7 @@ function fmtCompact(n: number, moneda: Moneda = "PYG"): string {
   const sym = moneda === "BRL" ? "R$" : moneda === "USD" ? "US$" : moneda === "ARS" ? "$" : "Gs.";
   const locale = moneda === "BRL" ? "pt-BR" : "es-PY";
   if (abs >= 1_000_000) return `${sym} ${(n / 1_000_000).toFixed(abs >= 10_000_000 ? 0 : 1)}M`;
-  if (abs >= 1_000) return `${sym} ${(n / 1_000).toFixed(0)}K`;
+  if (abs >= 1_000) return `${sym} ${(n / 1_000).toFixed(0)} mil`;
   const decimals = moneda === "PYG" || moneda === "ARS" ? 0 : 2;
   return `${sym} ${n.toLocaleString(locale, { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
 }
