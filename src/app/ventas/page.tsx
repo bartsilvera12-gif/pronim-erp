@@ -9,13 +9,10 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import EdgeScrollArea from "@/components/ui/EdgeScrollArea";
 import { FancySelect } from "@/components/ui/FancySelect";
-import MobileFab from "@/components/ui/MobileFab";
 import { getVentas } from "@/lib/ventas/storage";
-import { useT, useMoney, useUserCfg } from "@/lib/i18n/context";
+import { useT } from "@/lib/i18n/context";
 import PedidosPendientesCaja from "./PedidosPendientesCaja";
 import CambioModal from "./CambioModal";
-import CajaControlPanel from "@/components/caja/CajaControlPanel";
-import { esMismoDiaAsuncion } from "@/lib/fecha/asuncion";
 import { useIsAdmin } from "@/lib/auth/use-is-admin";
 import type { Venta, TipoVenta, TipoIvaVenta } from "@/lib/ventas/types";
 
@@ -54,66 +51,6 @@ const ivaLabel: Record<TipoIvaVenta, string> = {
   "5%":   "IVA 5%",
   "10%":  "IVA 10%",
 };
-
-// ── Métricas del día ──────────────────────────────────────────────────────────
-
-function esDeHoy(iso: string): boolean {
-  // Compara por día calendario de Paraguay (America/Asuncion), no por el TZ del
-  // runtime: una venta hecha de noche PY se guarda con fecha UTC del día siguiente
-  // y con `getDate()` local se contaría/descartaría mal.
-  try {
-    return esMismoDiaAsuncion(iso);
-  } catch {
-    return false;
-  }
-}
-
-interface MetricasHoy {
-  facturacion:       number;
-  cantidadVentas:    number;
-  ticketPromedio:    number;
-  productosVendidos: number;  // suma de todas las cantidades en todos los ítems
-}
-
-function calcularMetricas(ventas: Venta[]): MetricasHoy {
-  const deHoy            = ventas.filter((v) => esDeHoy(v.fecha));
-  const facturacion      = deHoy.reduce((s, v) => s + v.total, 0);
-  const cantidadVentas   = deHoy.length;
-  const ticketPromedio   = cantidadVentas > 0 ? facturacion / cantidadVentas : 0;
-  const productosVendidos = deHoy.reduce(
-    (s, v) => s + v.items.reduce((si, i) => si + i.cantidad, 0),
-    0
-  );
-  return { facturacion, cantidadVentas, ticketPromedio, productosVendidos };
-}
-
-// ── Tarjeta métrica ───────────────────────────────────────────────────────────
-
-function MetricCard({
-  label, value, sub, accent,
-}: {
-  label: string; value: string; sub?: string; accent?: boolean;
-}) {
-  return (
-    <div className={`rounded-2xl border px-5 py-4 flex flex-col gap-1 shadow-sm ${
-      accent
-        ? "bg-[#4FAEB2] border-[#4FAEB2] ring-1 ring-[#4FAEB2]/25"
-        : "bg-white border-[#4FAEB2]/30 ring-1 ring-[#4FAEB2]/10"
-    }`}>
-      <span className={`text-[10px] font-semibold uppercase tracking-[0.14em] ${
-        accent ? "text-white/90" : "text-[#4FAEB2]"
-      }`}>
-        {label}
-      </span>
-      <span className={`text-2xl font-bold tabular-nums leading-tight ${
-        accent ? "text-white" : "text-[#3F8E91]"
-      }`}>
-        {value}
-      </span>
-      {sub && <span className={`text-xs ${accent ? "text-white/80" : "text-slate-500"}`}>{sub}</span>}
-    </div>
-  );
-}
 
 // ── Helpers de fila ───────────────────────────────────────────────────────────
 
@@ -174,11 +111,6 @@ function SortableTh<K extends string>({ sortKey, active, dir, onClick, className
 
 export default function VentasPage() {
   const t = useT();
-  const money = useMoney();
-  const { lang } = useUserCfg();
-  // Locale para toLocaleDateString y toLocaleTimeString. es-PY para
-  // sucursales de Paraguay, pt-BR para Brasil.
-  const dateLocale = lang === "pt-BR" ? "pt-BR" : "es-PY";
   // Karen: solo administrador puede anular ventas. Escondemos el botón
   // para cualquier otro rol (super_admin queda incluido por isAdmin).
   const { isAdmin: puedeAnular, loaded: rolLoaded } = useIsAdmin();
@@ -367,7 +299,6 @@ export default function VentasPage() {
   const alcance = filtroSucursal
     ? todas.filter((v) => (v.sucursal_id ?? "") === filtroSucursal)
     : todas;
-  const metricas = calcularMetricas(alcance);
   const sucursalNombreActiva = filtroSucursal
     ? (sucursales.find((s) => s.id === filtroSucursal)?.nombre ?? null)
     : null;
@@ -496,53 +427,14 @@ export default function VentasPage() {
             style={{ boxShadow: "0 0 0 3px rgba(79, 174, 178, 0.18)" }}
           />
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#4FAEB2]">
-            Zentra · Operaciones
+            Zentra · Ventas
           </p>
         </div>
-        <h1 className="mt-1 text-lg font-semibold tracking-tight text-slate-900">{t("Caja")}</h1>
-        <p className="mt-0.5 text-xs text-slate-500">{t("Cobro, facturación y cierre de pedidos")}</p>
+        <h1 className="mt-1 text-lg font-semibold tracking-tight text-slate-900">{t("Historial de ventas")}</h1>
+        <p className="mt-0.5 text-xs text-slate-500">{t("Todas las ventas registradas")}</p>
       </div>
-
-      <CajaControlPanel />
 
       <PedidosPendientesCaja />
-
-      {/* ── Métricas del día ──────────────────────────────────────────────────── */}
-      <div>
-        <p className="text-xs text-gray-400 uppercase tracking-wide font-medium mb-3">
-          {t("Resumen de hoy")} —{" "}
-          {new Date().toLocaleDateString(dateLocale, {
-            weekday: "long", day: "numeric", month: "long", year: "numeric",
-          })}
-        </p>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <MetricCard
-            label={t("Facturación de hoy")}
-            value={money.format(metricas.facturacion)}
-            sub={t("Total incl. IVA")}
-            accent
-          />
-          <MetricCard
-            label={t("Ventas de hoy")}
-            value={String(metricas.cantidadVentas)}
-            sub={metricas.cantidadVentas === 1 ? t("orden registrada") : t("órdenes registradas")}
-          />
-          <MetricCard
-            label={t("Ticket promedio")}
-            value={
-              metricas.ticketPromedio > 0
-                ? money.format(Math.round(metricas.ticketPromedio))
-                : "—"
-            }
-            sub={t("Por orden de venta")}
-          />
-          <MetricCard
-            label={t("Unidades vendidas")}
-            value={String(metricas.productosVendidos)}
-            sub={t("Unidades despachadas")}
-          />
-        </div>
-      </div>
 
       {/* ── Tabla de ventas ───────────────────────────────────────────────────── */}
       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm ring-1 ring-[#4FAEB2]/15 sm:p-5 lg:p-6">
@@ -556,12 +448,6 @@ export default function VentasPage() {
               title="Explorar ventas tipo Excel: columnas, filtros combinables, orden, export"
             >
               🔎 Explorar (Excel)
-            </Link>
-            <Link
-              href="/venta/nueva"
-              className="bg-[#4FAEB2] hover:bg-[#3F8E91] text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm"
-            >
-              + {t("Nueva venta")}
             </Link>
           </div>
         </div>
@@ -1043,8 +929,6 @@ export default function VentasPage() {
         </div>
       )}
 
-      {/* FAB mobile: acceso 1-tap a "+ Nueva venta" desde cualquier scroll position */}
-      <MobileFab href="/venta/nueva" label="Nueva venta" />
     </div>
   );
 }
