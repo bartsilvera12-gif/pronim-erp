@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  output: "standalone",
   // El VPS de Coolify mata el container durante "Running TypeScript ..." por
   // OOM (RAM acotada). El chequeo de tipos sigue siendo obligatorio en local
   // y en CI vía `tsc --noEmit` antes de pushear. En el build de producción
