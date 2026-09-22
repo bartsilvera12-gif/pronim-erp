@@ -177,6 +177,16 @@ export default function TransferenciasStockPage() {
   // empresa llenaba la lista de productos que ese local no tiene (todos en
   // "0 disp."). Por defecto listamos solo lo que esa sucursal tiene en stock.
   const [verTodo, setVerTodo] = useState(false);
+  /** El catálogo se elige en un popup, no inline. */
+  const [buscadorOpen, setBuscadorOpen] = useState(false);
+
+  // Escape cierra el popup del catálogo.
+  useEffect(() => {
+    if (!buscadorOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setBuscadorOpen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [buscadorOpen]);
 
   const disponibles = useMemo(
     () => resultados.filter((p) => (stockOrigen[p.id] ?? 0) > 0),
@@ -196,6 +206,11 @@ export default function TransferenciasStockPage() {
     () => items.reduce((acc, it) => acc + (Number(it.cantidad) || 0), 0),
     [items],
   );
+
+  function abrirBuscador() {
+    setBusqueda("");
+    setBuscadorOpen(true);
+  }
 
   function agregarProducto(p: Producto) {
     setItems((prev) => {
@@ -418,71 +433,28 @@ export default function TransferenciasStockPage() {
             </div>
           ) : (
             <>
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                <input
-                  type="text"
-                  value={busqueda}
-                  onChange={(e) => setBusqueda(e.target.value)}
-                  placeholder="Buscar franja o producto (ej: 19.000, FRJ-19000)…"
-                  className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#4FAEB2] bg-white"
-                />
-                <label className="inline-flex items-center gap-2 text-xs text-slate-500 whitespace-nowrap">
-                  <input
-                    type="checkbox"
-                    checked={verTodo}
-                    onChange={(e) => setVerTodo(e.target.checked)}
-                    className="h-4 w-4 rounded border-slate-300 accent-[#4FAEB2]"
-                  />
-                  Mostrar también lo que {nombreOrigen} no tiene
-                </label>
+              {/* El catálogo vive en un popup: la pantalla queda corta y se ve
+                  de un vistazo qué se está por mover. */}
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <button
+                  type="button"
+                  onClick={abrirBuscador}
+                  className="inline-flex items-center gap-2 rounded-lg bg-[#4FAEB2] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#3F8E91] active:scale-95"
+                >
+                  <span className="text-base leading-none">+</span>
+                  {items.length > 0 ? "Agregar más productos" : "Elegir productos"}
+                </button>
+                <p className="text-xs text-slate-500">
+                  {buscando
+                    ? "Cargando catálogo…"
+                    : `${disponibles.length} franja${disponibles.length === 1 ? "" : "s"} con stock en ${nombreOrigen}`}
+                </p>
               </div>
 
-              {buscando ? (
-                <p className="text-xs text-gray-400 mt-3 animate-pulse">Cargando catálogo…</p>
-              ) : resultadosFiltrados.length === 0 ? (
-                <div className="mt-3 rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
-                  {busqueda.trim() ? (
-                    <>No hay coincidencias con «{busqueda.trim()}»{!verTodo && " entre lo que hay en stock"}.</>
-                  ) : (
-                    <>
-                      {nombreOrigen} no tiene stock cargado.{" "}
-                      <button type="button" onClick={() => setVerTodo(true)} className="underline font-medium text-slate-600 hover:text-slate-800">
-                        Ver todo el catálogo
-                      </button>
-                    </>
-                  )}
+              {items.length === 0 && (
+                <div className="mt-4 rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center">
+                  <p className="text-sm text-slate-500">Todavía no cargaste nada para mover.</p>
                 </div>
-              ) : (
-                <ul className="mt-3 border border-slate-200 rounded-lg divide-y divide-slate-100 max-h-72 overflow-y-auto">
-                  {resultadosFiltrados.map((p) => {
-                    const disp = stockDe(p.id);
-                    const sinStock = disp <= 0;
-                    const yaEsta = items.some((x) => x.producto_id === p.id);
-                    return (
-                      <li key={p.id}>
-                        <button
-                          type="button"
-                          onClick={() => agregarProducto(p)}
-                          disabled={sinStock || yaEsta}
-                          title={sinStock ? `Sin stock en ${nombreOrigen}` : yaEsta ? "Ya está en la lista" : undefined}
-                          className="w-full text-left px-3 py-2.5 text-sm flex items-center justify-between gap-2 transition-colors hover:bg-[#4FAEB2]/[0.07] disabled:opacity-45 disabled:cursor-not-allowed disabled:hover:bg-transparent"
-                        >
-                          <span>
-                            <span className="font-medium text-slate-800">{p.nombre}</span>
-                            {p.sku && <span className="text-xs text-slate-400 ml-2">{p.sku}</span>}
-                          </span>
-                          {yaEsta ? (
-                            <span className="text-xs whitespace-nowrap font-semibold text-[#3F8E91]">ya agregado</span>
-                          ) : (
-                            <span className={`text-xs whitespace-nowrap font-semibold tabular-nums ${sinStock ? "text-slate-400" : "text-emerald-700"}`}>
-                              {disp} disp.
-                            </span>
-                          )}
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
               )}
 
               {items.length > 0 && (
@@ -647,6 +619,129 @@ export default function TransferenciasStockPage() {
           </table>
         )}
       </div>
+
+      {/* ── Popup del catálogo ──────────────────────────────────────────────
+          Fuera del <form> a propósito: así Enter en el buscador no dispara
+          el submit de la transferencia. */}
+      {buscadorOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-0 backdrop-blur-[2px] sm:items-center sm:p-6"
+          onClick={() => setBuscadorOpen(false)}
+          role="presentation"
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Elegir productos para transferir"
+            onClick={(e) => e.stopPropagation()}
+            className="flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl"
+          >
+            <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
+              <div>
+                <h3 className="text-base font-bold text-slate-900">¿Qué sale de {nombreOrigen}?</h3>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  Tocá un producto para agregarlo. Podés elegir varios.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setBuscadorOpen(false)}
+                aria-label="Cerrar"
+                className="-mr-1 -mt-1 rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-5 w-5">
+                  <path d="M18 6 6 18M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="flex flex-col gap-2 border-b border-slate-100 px-5 py-3 sm:flex-row sm:items-center">
+              <input
+                type="text"
+                autoFocus
+                value={busqueda}
+                onChange={(e) => setBusqueda(e.target.value)}
+                placeholder="Buscar franja o producto (ej: 19.000, FRJ-19000)…"
+                className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
+              />
+              <label className="inline-flex items-center gap-2 whitespace-nowrap text-xs text-slate-500">
+                <input
+                  type="checkbox"
+                  checked={verTodo}
+                  onChange={(e) => setVerTodo(e.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 accent-[#4FAEB2]"
+                />
+                Mostrar también lo que {nombreOrigen} no tiene
+              </label>
+            </div>
+
+            <div className="flex-1 overflow-y-auto">
+              {buscando ? (
+                <p className="animate-pulse px-5 py-10 text-center text-sm text-slate-400">Cargando catálogo…</p>
+              ) : resultadosFiltrados.length === 0 ? (
+                <div className="px-5 py-10 text-center text-sm text-slate-500">
+                  {busqueda.trim() ? (
+                    <>No hay coincidencias con «{busqueda.trim()}»{!verTodo && " entre lo que hay en stock"}.</>
+                  ) : (
+                    <>
+                      {nombreOrigen} no tiene stock cargado.{" "}
+                      <button type="button" onClick={() => setVerTodo(true)} className="font-medium text-slate-600 underline hover:text-slate-800">
+                        Ver todo el catálogo
+                      </button>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <ul className="divide-y divide-slate-100">
+                  {resultadosFiltrados.map((p) => {
+                    const disp = stockDe(p.id);
+                    const sinStock = disp <= 0;
+                    const yaEsta = items.some((x) => x.producto_id === p.id);
+                    return (
+                      <li key={p.id}>
+                        <button
+                          type="button"
+                          onClick={() => agregarProducto(p)}
+                          disabled={sinStock || yaEsta}
+                          title={sinStock ? `Sin stock en ${nombreOrigen}` : yaEsta ? "Ya está en la lista" : undefined}
+                          className="flex w-full items-center justify-between gap-2 px-5 py-3 text-left text-sm transition-colors hover:bg-[#4FAEB2]/[0.07] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-transparent"
+                        >
+                          <span>
+                            <span className="font-medium text-slate-800">{p.nombre}</span>
+                            {p.sku && <span className="ml-2 text-xs text-slate-400">{p.sku}</span>}
+                          </span>
+                          {yaEsta ? (
+                            <span className="whitespace-nowrap text-xs font-semibold text-[#3F8E91]">✓ agregado</span>
+                          ) : (
+                            <span className={`whitespace-nowrap text-xs font-semibold tabular-nums ${sinStock ? "text-slate-400" : "text-emerald-700"}`}>
+                              {disp} disp.
+                            </span>
+                          )}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-5 py-3">
+              <span className="text-xs text-slate-500">
+                {items.length === 0
+                  ? "Nada cargado todavía"
+                  : `${items.length} línea${items.length === 1 ? "" : "s"} cargada${items.length === 1 ? "" : "s"}`}
+              </span>
+              <button
+                type="button"
+                onClick={() => setBuscadorOpen(false)}
+                className="rounded-lg bg-[#4FAEB2] px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#3F8E91] active:scale-95"
+              >
+                Listo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
