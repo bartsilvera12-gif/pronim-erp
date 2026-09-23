@@ -96,12 +96,11 @@ export default function ReporteCajaMovimientosPage() {
   }, [desde, hasta, sucursalId]);
 
   const resumen = useMemo(() => {
-    let entra = 0, sale = 0, efectivo = 0;
+    let entra = 0, sale = 0;
     const porMetodo = new Map<string, { entra: number; sale: number }>();
     const porOrigen = new Map<string, { entra: number; sale: number; n: number }>();
     for (const r of rows) {
       if (r.neto >= 0) entra += r.neto; else sale += -r.neto;
-      if (r.afecta_efectivo) efectivo += r.neto;
 
       const km = r.metodo ?? "__sin__";
       const m = porMetodo.get(km) ?? { entra: 0, sale: 0 };
@@ -114,7 +113,7 @@ export default function ReporteCajaMovimientosPage() {
       porOrigen.set(r.origen, o);
     }
     return {
-      entra, sale, neto: entra - sale, efectivo,
+      entra, sale, neto: entra - sale,
       porMetodo: [...porMetodo.entries()].sort((a, b) => (b[1].entra + b[1].sale) - (a[1].entra + a[1].sale)),
       porOrigen: [...porOrigen.entries()].sort((a, b) => (b[1].entra + b[1].sale) - (a[1].entra + a[1].sale)),
     };
@@ -208,11 +207,10 @@ export default function ReporteCajaMovimientosPage() {
       {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
 
       {/* ── Totales ─────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <Tarjeta label="Neto del período" valor={fmtActive(resumen.neto)} tono={resumen.neto >= 0 ? "emerald" : "rose"} nota="entró − salió" />
         <Tarjeta label="Entró" valor={fmtActive(resumen.entra)} tono="emerald" nota={`${rows.length} movimiento${rows.length === 1 ? "" : "s"}`} />
         <Tarjeta label="Salió" valor={fmtActive(resumen.sale)} tono="rose" nota="pagos, gastos, retiros" />
-        <Tarjeta label="Neto del período" valor={fmtActive(resumen.neto)} tono={resumen.neto >= 0 ? "emerald" : "rose"} nota="entró − salió" />
-        <Tarjeta label="Efectivo en caja" valor={fmtActive(resumen.efectivo)} tono="teal" nota="solo lo declarado en efectivo" />
       </div>
 
       {/* ── Cortes ──────────────────────────────────────────────────────── */}
@@ -249,8 +247,8 @@ export default function ReporteCajaMovimientosPage() {
       {sinMetodo > 0 && (
         <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800 print:hidden">
           <strong>{sinMetodo}</strong> movimiento{sinMetodo === 1 ? "" : "s"} sin forma de pago registrada
-          (gastos y compras a proveedor no la guardan). Aparecen en el listado y en el neto, pero
-          <strong> no se cuentan en &ldquo;Efectivo en caja&rdquo;</strong> para no descuadrar el arqueo.
+          (gastos y compras a proveedor no la guardan). Cuentan en el neto, pero en el corte
+          <strong> por forma de pago</strong> caen en &ldquo;Sin forma de pago registrada&rdquo;.
         </p>
       )}
 
@@ -332,12 +330,9 @@ export default function ReporteCajaMovimientosPage() {
 
 function Tarjeta({ label, valor, nota, tono }: {
   label: string; valor: string; nota?: string;
-  tono: "emerald" | "rose" | "teal";
+  tono: "emerald" | "rose";
 }) {
-  const color =
-    tono === "emerald" ? "text-emerald-700"
-    : tono === "rose" ? "text-rose-600"
-    : "text-[#3F8E91]";
+  const color = tono === "emerald" ? "text-emerald-700" : "text-rose-600";
   return (
     <div className="rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-sm ring-1 ring-[#4FAEB2]/10">
       <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">{label}</p>
