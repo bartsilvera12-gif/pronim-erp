@@ -19,6 +19,15 @@ export const dynamic = "force-dynamic";
  *      queda marcado aparte para no ensuciar el arqueo de efectivo.
  *   3. Movimientos manuales    (caja_movimientos: ingreso/egreso/retiro/ajuste)
  *   4. Aperturas de caja       (monto inicial) → contexto del arqueo
+ *   5. Gastos                  (gastos) → SALE
+ *   6. Compras a proveedores   (compras al contado) → SALE. Se excluyen las
+ *      generadas desde una evaluación (recepcion_id IS NOT NULL): ya vienen
+ *      contadas en el punto 2 y si no se duplicarían.
+ *   7. Otros ingresos          (otros_ingresos) → ENTRA
+ *
+ * `gastos` y `compras` no guardan método de pago, así que entran con método
+ * vacío y afecta_efectivo=false: aparecen en el libro pero no ensucian el
+ * arqueo de efectivo, que solo cuenta lo que sí declara ser efectivo.
  *
  * `signo` (+1 entra / -1 sale) y `afecta_efectivo` permiten sumar bien:
  * el total en efectivo del día es SUM(monto × signo) donde afecta_efectivo.
@@ -54,6 +63,128 @@ export async function GET(request: NextRequest) {
     const args: unknown[] = [auth.empresa_id, desde, hasta];
     if (sucFiltro) args.push(sucFiltro);
     const sucCond = (col: string) => (sucFiltro ? `AND ${col} = $4::uuid` : "");
+
+    // Estas tres tablas no existen en todos los deploys: se consultan solo
+    // si están, para que el reporte no falle entero por una que falte.
+    const tablasQ = await pool.query<{ table_name: string }>(
+      `SELECT table_name FROM information_schema.tables
+        WHERE table_schema = $1
+          AND table_name IN ('gastos','compras','otros_ingresos')`,
+      [schema],
+    );
+    const hay = new Set(tablasQ.rows.map((x) => x.table_name));
+    const colsQ = await pool.query<{ table_name: string; column_name: string }>(
+      `SELECT table_name, column_name FROM information_schema.columns
+        WHERE table_schema = $1
+          AND table_name IN ('gastos','compras')
+          AND column_name IN ('sucursal_id','recepcion_id')`,
+      [schema],
+    );
+    const tieneCol = (t: string, c: string) =>
+      colsQ.rows.some((x) => x.table_name === t && x.column_name === c);
+
+    const extras: string[] = [];
+
+    if (hay.has("gastos")) {
+      const tG = quoteSchemaTable(schema, "gastos");
+      const sucJoin = tieneCol("gastos", "sucursal_id")
+        ? `LEFT JOIN ${tSuc} s ON s.id = g.sucursal_id`
+        : `LEFT JOIN ${tSuc} s ON false`;
+      const sucWhere = sucFiltro && tieneCol("gastos", "sucursal_id")
+        ? "AND g.sucursal_id = $4::uuid"
+        : "";
+      extras.push(`
+        SELECT g.fecha::text,
+               'gasto',
+               'Gasto',
+               COALESCE(NULLIF(TRIM(g.descripcion), ''), NULLIF(TRIM(g.categoria), ''), 'Gasto'),
+               NULL,            -- metodo: gastos no registra forma de pago
+               NULL,            -- entidad
+               g.categoria,     -- referencia: sirve de clasificación
+               NULL,            -- cliente
+               NULL,            -- numero
+               s.nombre,
+               NULL,
+               g.monto::text,
+               '-1',
+               false,
+               NULL
+          FROM ${tG} g
+          ${sucJoin}
+         WHERE g.empresa_id = $1::uuid
+           AND g.fecha BETWEEN $2::date AND $3::date
+           ${sucWhere}
+      `);
+    }
+
+    if (hay.has("compras")) {
+      const tC = quoteSchemaTable(schema, "compras");
+      // Una compra son N filas (una por producto): se agrupa por N° de
+      // control para que el libro muestre UNA salida por compra.
+      const sinRecepcion = tieneCol("compras", "recepcion_id")
+        ? "AND co.recepcion_id IS NULL"
+        : "";
+      const sucWhere = sucFiltro && tieneCol("compras", "sucursal_id")
+        ? "AND co.sucursal_id = $4::uuid"
+        : "";
+      const sucSel = tieneCol("compras", "sucursal_id") ? "co.sucursal_id" : "NULL::uuid";
+      extras.push(`
+        SELECT MIN(co.fecha)::text,
+               'compra',
+               'Compra a proveedor',
+               COALESCE(MIN(co.proveedor_nombre), 'Proveedor'),
+               NULL, NULL, NULL, NULL,
+               co.numero_control,
+               MIN(s.nombre),
+               NULL,
+               SUM(co.total)::text,
+               '-1',
+               false,
+               NULL
+          FROM ${tC} co
+          LEFT JOIN ${tSuc} s ON s.id = ${sucSel}
+         WHERE co.empresa_id = $1::uuid
+           AND co.estado <> 'anulada'
+           AND co.tipo_pago = 'contado'
+           ${sinRecepcion}
+           AND co.fecha::date BETWEEN $2::date AND $3::date
+           ${sucWhere}
+         GROUP BY co.numero_control
+      `);
+    }
+
+    if (hay.has("otros_ingresos")) {
+      const tOI = quoteSchemaTable(schema, "otros_ingresos");
+      const tEnt = quoteSchemaTable(schema, "entidades_bancarias");
+      const sucWhere = sucFiltro ? "AND oi.sucursal_id = $4::uuid" : "";
+      extras.push(`
+        SELECT oi.fecha::text,
+               'otro_ingreso',
+               'Otro ingreso',
+               oi.concepto,
+               oi.metodo_pago,
+               e.nombre,
+               oi.referencia,
+               NULL, NULL,
+               s.nombre,
+               NULL,
+               oi.monto::text,
+               '1',
+               (oi.metodo_pago = 'efectivo'),
+               oi.observaciones
+          FROM ${tOI} oi
+          LEFT JOIN ${tSuc} s ON s.id = oi.sucursal_id
+          LEFT JOIN ${tEnt} e ON e.id = oi.entidad_bancaria_id
+         WHERE oi.empresa_id = $1::uuid
+           AND oi.anulado_at IS NULL
+           AND oi.fecha BETWEEN $2::date AND $3::date
+           ${sucWhere}
+      `);
+    }
+
+    const ramasExtra = extras.length > 0
+      ? extras.map((x) => `UNION ALL${x}`).join("")
+      : "";
 
     const r = await pool.query<{
       fecha: string; origen: string; tipo: string; concepto: string;
@@ -163,6 +294,8 @@ export async function GET(request: NextRequest) {
        WHERE ca.empresa_id = $1::uuid
          AND ca.fecha_apertura::date BETWEEN $2::date AND $3::date
          ${sucCond("ca.sucursal_id")}
+
+      ${ramasExtra}
 
       ORDER BY fecha DESC
       LIMIT 5000
