@@ -1,7 +1,14 @@
-/** Formato Gs. para reportes (acepta null → "—"). */
+import { fmtActive } from "@/lib/i18n/currency";
+
+/**
+ * Formato de moneda para reportes (acepta null → "—").
+ *
+ * Usa la moneda ACTIVA: parada en un local de Brasil los cierres se leen en
+ * R$, no en Gs. El nombre quedó de cuando era solo guaraníes.
+ */
 export function formatGs(v: number | null | undefined): string {
   if (v == null) return "—";
-  return `Gs. ${Math.round(v).toLocaleString("es-PY")}`;
+  return fmtActive(v);
 }
 
 /** Fecha+hora corta es-PY (acepta null → "—"). */

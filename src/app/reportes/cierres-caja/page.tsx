@@ -71,8 +71,24 @@ export default function CierresCajaPage() {
     <div className="space-y-6">
       <div>
         <Link href="/reportes" className="text-xs text-[#4FAEB2] hover:underline">← Reportes</Link>
-        <h1 className="mt-1 text-lg font-semibold tracking-tight text-slate-900">Cierres de caja</h1>
-        <p className="mt-0.5 text-xs text-slate-500">Aperturas, cierres, movimientos y diferencias por turno.</p>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h1 className="mt-1 text-lg font-semibold tracking-tight text-slate-900">Cierres de caja</h1>
+            <p className="mt-0.5 text-xs text-slate-500">Aperturas, cierres, movimientos y diferencias por turno.</p>
+          </div>
+          <div className="flex items-center gap-2 print:hidden">
+            {/* El arqueo por turno y el libro de caja se leen juntos: uno dice
+                cuánto tendría que haber, el otro de dónde salió cada peso. */}
+            <Link href="/reportes/caja-movimientos"
+              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50">
+              Ver movimientos de caja →
+            </Link>
+            <button type="button" onClick={() => window.print()}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50">
+              🖨 Imprimir
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
@@ -190,8 +206,16 @@ export default function CierresCajaPage() {
                         {dif == null ? "—" : formatGs(dif)}
                       </td>
                       <td className="px-3 py-2.5 text-center">
-                        <Link href={`/reportes/cierres-caja/${c.caja.id}`} className="text-xs font-medium text-[#4FAEB2] hover:underline">
-                          Ver detalle
+                        <Link
+                          href={`/reportes/cierres-caja/${c.caja.id}`}
+                          title="Ver detalle"
+                          aria-label="Ver detalle"
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-[#4FAEB2]/15 hover:text-[#3F8E91]"
+                        >
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+                            <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+                            <circle cx="12" cy="12" r="3" />
+                          </svg>
                         </Link>
                       </td>
                     </tr>

@@ -197,6 +197,10 @@ export default function ReporteCajaMovimientosPage() {
               className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50">
               🔎 Explorar (Excel)
             </Link>
+            <Link href="/reportes/cierres-caja"
+              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50">
+              Cierres de caja →
+            </Link>
           </div>
         </div>
       </div>
