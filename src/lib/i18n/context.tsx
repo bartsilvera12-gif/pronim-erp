@@ -99,8 +99,13 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
 
   const efectiva: UserCfg = useMemo(() => {
     const m = monedaSucursal;
-    if (m === "BRL" || m === "USD" || m === "ARS" || m === "PYG") return { ...cfg, moneda: m };
-    return cfg;
+    const moneda: Moneda =
+      m === "BRL" || m === "USD" || m === "ARS" || m === "PYG" ? m : cfg.moneda;
+    // La moneda manda el idioma: si el local cobra en reales es de Brasil, así
+    // que la pantalla va en portugués sin importar cómo tenga configurado el
+    // idioma el usuario. Karen: "traducí todo lo que tenga como moneda real".
+    const lang: Lang = moneda === "BRL" ? "pt-BR" : cfg.lang;
+    return { lang, moneda };
   }, [cfg, monedaSucursal]);
 
   // Publicar la config al registro global.

@@ -15,6 +15,7 @@ import Link from "next/link";
 import { useState } from "react";
 import MontoInput from "@/components/ui/MontoInput";
 import { fmtActive, getActiveMoneda } from "@/lib/i18n/currency";
+import { useT } from "@/lib/i18n/context";
 import { PromptModal } from "@/components/ui/PromptModal";
 
 export type Franja = {
@@ -86,6 +87,7 @@ export function ColumnaAtencion(props: {
     onAgregar, onActualizar, onQuitar, permitirEditarPrecio, permitirDescuento,
     subtotalItems, accionesHeader, slotDebajo, tiposPrenda, onCrearFranjaManual,
   } = props;
+  const t = useT();
   // El guaraní no tiene centavos; el real sí. Los inputs de plata tienen que
   // seguir a la moneda de la sucursal en la que se está operando.
   const admiteCentavos = getActiveMoneda() !== "PYG" && getActiveMoneda() !== "ARS";
@@ -124,7 +126,7 @@ export function ColumnaAtencion(props: {
       </div>
 
       {cargando ? (
-        <p className="text-xs text-slate-400 py-4 text-center animate-pulse">Cargando categorías…</p>
+        <p className="text-xs text-slate-400 py-4 text-center animate-pulse">{t("Cargando categorías…")}</p>
       ) : franjas.length === 0 ? (
         <p className="text-xs text-amber-700 py-4 text-center">
           No hay franjas de precio configuradas. Un administrador debe crearlas en <Link href="/admin/franjas" className="underline">Categorías</Link>.
@@ -163,10 +165,10 @@ export function ColumnaAtencion(props: {
       )}
       <PromptModal
         open={modalManualOpen}
-        title="Franja con precio manual"
+        title={t("Franja con precio manual")}
         description="Escribí el precio exacto. Se crea la categoría al vuelo y se agrega al carrito."
         inputType="number"
-        placeholder="Ej: 27.500"
+        placeholder={t("Ej: 27.500")}
         confirmLabel={creandoManual ? "Creando…" : "Crear y agregar"}
         onCancel={() => setModalManualOpen(false)}
         onConfirm={async (v) => {
@@ -196,13 +198,13 @@ export function ColumnaAtencion(props: {
           <table className="w-full text-sm">
             <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
-                <th className="text-left text-[11px] font-semibold text-slate-500 px-3 py-2 uppercase tracking-wide">Categoría</th>
-                <th className="text-right text-[11px] font-semibold text-slate-500 px-3 py-2 uppercase tracking-wide w-20">Cant.</th>
-                <th className="text-right text-[11px] font-semibold text-slate-500 px-3 py-2 uppercase tracking-wide w-32">Precio unit.</th>
+                <th className="text-left text-[11px] font-semibold text-slate-500 px-3 py-2 uppercase tracking-wide">{t("Categoría")}</th>
+                <th className="text-right text-[11px] font-semibold text-slate-500 px-3 py-2 uppercase tracking-wide w-20">{t("Cant.")}</th>
+                <th className="text-right text-[11px] font-semibold text-slate-500 px-3 py-2 uppercase tracking-wide w-32">{t("Precio unit.")}</th>
                 {permitirDescuento && (
-                  <th className="text-right text-[11px] font-semibold text-slate-500 px-3 py-2 uppercase tracking-wide w-24" title="Descuento por unidad (se multiplica por la cantidad)">Desc. c/u</th>
+                  <th className="text-right text-[11px] font-semibold text-slate-500 px-3 py-2 uppercase tracking-wide w-24" title={t("Descuento por unidad (se multiplica por la cantidad)")}>{t("Desc. c/u")}</th>
                 )}
-                <th className="text-right text-[11px] font-semibold text-slate-500 px-3 py-2 uppercase tracking-wide w-28">Subtotal</th>
+                <th className="text-right text-[11px] font-semibold text-slate-500 px-3 py-2 uppercase tracking-wide w-28">{t("Subtotal")}</th>
                 <th className="w-8"></th>
               </tr>
             </thead>
@@ -217,7 +219,7 @@ export function ColumnaAtencion(props: {
                         onChange={(e) => onActualizar(idx, { tipo_prenda_id: e.target.value || null })}
                         className="ml-2 rounded border border-slate-200 bg-white px-1 py-0.5 text-[11px] text-slate-600 focus:outline-none focus:ring-1 focus:ring-emerald-400"
                         aria-label="Tipo de prenda"
-                        title="Tipo de prenda (opcional)"
+                        title={t("Tipo de prenda (opcional)")}
                       >
                         <option value="">— tipo —</option>
                         {tiposPrenda.map((t) => (
@@ -296,7 +298,7 @@ export function ColumnaAtencion(props: {
                     <button
                       type="button"
                       onClick={() => onQuitar(idx)}
-                      title="Quitar"
+                      title={t("Quitar")}
                       className="text-slate-400 hover:text-red-600 text-lg leading-none"
                     >×</button>
                   </td>
@@ -409,15 +411,16 @@ export function NuevoClienteRapidoModal({
     }
   }
 
-  const nombreLabel = "Nombre completo";
-  const nombrePlaceholder = "Ej: MARÍA PÉREZ";
+  const t = useT();
+  const nombreLabel = t("Nombre completo");
+  const nombrePlaceholder = t("Ej: MARÍA PÉREZ");
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
       <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
         <div className="mb-1 flex items-start justify-between gap-2">
           <div>
-            <h3 className="text-base font-semibold text-slate-900">Nuevo cliente</h3>
+            <h3 className="text-base font-semibold text-slate-900">{t("Nuevo cliente")}</h3>
             <p className="mt-1 text-xs text-slate-500">
               Solo los datos mínimos. Podés completar el resto desde la ficha del cliente.
             </p>
@@ -443,7 +446,7 @@ export function NuevoClienteRapidoModal({
               RUC / CI <span className="font-normal text-slate-400">(opcional)</span>
             </label>
             <input type="text" value={ruc} onChange={(e) => setRuc(e.target.value)}
-              placeholder="Ej: 80011405-1"
+              placeholder={t("Ej: 80011405-1")}
               className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]" />
           </div>
           <div>
@@ -451,7 +454,7 @@ export function NuevoClienteRapidoModal({
               Teléfono <span className="text-red-500">*</span>
             </label>
             <input type="text" value={telefono} onChange={(e) => setTelefono(e.target.value)}
-              placeholder="Ej: 0991 234 567" required
+              placeholder={t("Ej: 0991 234 567")} required
               className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]" />
           </div>
           <div>
@@ -459,7 +462,7 @@ export function NuevoClienteRapidoModal({
               ¿Cómo conoció la tienda? <span className="font-normal text-slate-400">(opcional)</span>
             </label>
             <input type="text" value={comoConocio} onChange={(e) => setComoConocio(e.target.value)}
-              placeholder="Ej: Instagram, referida por María…"
+              placeholder={t("Ej: Instagram, referida por María…")}
               className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]" />
           </div>
         </div>
