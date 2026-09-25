@@ -267,6 +267,7 @@ export async function GET(request: NextRequest) {
       c.telefono                                    AS telefono,
       c.email                                       AS email,
       ${cliCols.has("ruc") ? "c.ruc" : "NULL::text"}  AS ruc,
+      ${cliCols.has("scope_clientes") ? "c.scope_clientes" : "NULL::text"} AS scope_clientes,
       ${hasEsVip ? "COALESCE(c.es_vip,false)" : "false"} AS es_vip,
       a.ultima_venta_at                             AS ultima_venta_at,
       a.primera_venta_at                            AS primera_venta_at,

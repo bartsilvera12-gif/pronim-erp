@@ -23,6 +23,9 @@ type ClienteSeg = {
   telefono: string | null;
   email: string | null;
   ruc: string | null;
+  /** Cartera a la que pertenece el cliente (Lillo+Palmeras comparten, el
+   *  resto está aislado). El admin ve todas, así que necesita distinguirlas. */
+  scope_clientes: string | null;
   es_vip: boolean;
   status: string | null;
   ultima_venta_at: string | null;
@@ -43,6 +46,19 @@ type ClienteSeg = {
 
 const STATUS_LABEL: Record<string, string> = { vip: "VIP", frecuente: "Frecuente", dormido: "Dormido", nuevo: "Nuevo", activo: "Activo" };
 const TX_LABEL: Record<string, string> = { venta: "Venta", compra: "Compra", cambio: "Cambio" };
+
+/** Nombre legible de cada cartera. Lo que no esté mapeado se muestra tal cual. */
+const CARTERA_LABEL: Record<string, string> = {
+  lilo_palmeras: "Lillo + Palmeras",
+  betim: "Betim",
+  bh: "BH",
+  contagem: "Contagem",
+  el_dorado: "El Dorado",
+};
+function carteraLabel(v: string | null): string {
+  if (!v) return "Sin cartera";
+  return CARTERA_LABEL[v] ?? v;
+}
 
 const FLAGS_POS = ["vip","con_credito","con_cashback","inactivos_90d","nuevos_mes","en_riesgo"] as const;
 
@@ -122,10 +138,22 @@ export default function ClientesSegmentosPage() {
 
   const filtrosActivos = useMemo(() => segmentos.filter((s) => filtros.has(s.slug)), [segmentos, filtros]);
 
+  const carteraOptions = useMemo(() => {
+    const vistas = new Set(clientes.map((c) => carteraLabel(c.scope_clientes)));
+    return [...vistas].sort().map((v) => ({ value: v, label: v }));
+  }, [clientes]);
+
   const columns = useMemo<ColumnDef<ClienteSeg>[]>(() => [
     { key: "nombre", label: "Nombre", type: "text", required: true, get: (c) => c.nombre },
     { key: "telefono", label: "Teléfono", type: "text", get: (c) => c.telefono ?? "" },
     { key: "ruc", label: "RUC", type: "text", get: (c) => c.ruc ?? "" },
+    {
+      key: "cartera",
+      label: "Cartera",
+      type: "enum",
+      get: (c) => carteraLabel(c.scope_clientes),
+      enumOptions: carteraOptions,
+    },
     { key: "status", label: "Status", type: "enum", get: (c) => c.status ? (STATUS_LABEL[c.status] ?? c.status) : "",
       enumOptions: [{ value: "VIP", label: "VIP" }, { value: "Frecuente", label: "Frecuente" }, { value: "Dormido", label: "Dormido" }, { value: "Nuevo", label: "Nuevo" }, { value: "Activo", label: "Activo" }],
       render: (c) => {

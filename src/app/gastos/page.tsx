@@ -25,6 +25,9 @@ function formatFecha(fecha: string) {
   }
 }
 
+const botonPeriodo =
+  "rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50";
+
 const tipoBadge: Record<string, string> = {
   fijo: "bg-blue-50 text-blue-700",
   variable: "bg-slate-100 text-slate-700",
@@ -38,6 +41,9 @@ export default function GastosPage() {
   const [sucursales, setSucursales] = useState<{ id: string; nombre: string }[]>([]);
   // "" = todas · "sin" = gastos generales (sin sucursal) · <uuid> = una sucursal
   const [filtroSucursal, setFiltroSucursal] = useState("");
+  // Filtro por período. Vacío = sin límite por ese lado.
+  const [desde, setDesde] = useState("");
+  const [hasta, setHasta] = useState("");
 
   useEffect(() => {
     getGastos()
@@ -62,15 +68,34 @@ export default function GastosPage() {
     id ? (sucursales.find((s) => s.id === id)?.nombre ?? "—") : null;
 
   const gastosFiltrados = useMemo(() => {
-    if (!filtroSucursal) return gastos;
-    if (filtroSucursal === "sin") return gastos.filter((g) => !g.sucursal_id);
-    return gastos.filter((g) => g.sucursal_id === filtroSucursal);
-  }, [gastos, filtroSucursal]);
+    return gastos.filter((g) => {
+      if (filtroSucursal === "sin" && g.sucursal_id) return false;
+      if (filtroSucursal && filtroSucursal !== "sin" && g.sucursal_id !== filtroSucursal) return false;
+      // `fecha` es una fecha pura (YYYY-MM-DD): se compara como texto para
+      // no meter zonas horarias donde no hacen falta.
+      const f = String(g.fecha ?? "").slice(0, 10);
+      if (desde && f < desde) return false;
+      if (hasta && f > hasta) return false;
+      return true;
+    });
+  }, [gastos, filtroSucursal, desde, hasta]);
 
   const totalFiltrado = useMemo(
     () => gastosFiltrados.reduce((s, g) => s + Number(g.monto || 0), 0),
     [gastosFiltrados],
   );
+
+  /** Primer y último día de un mes, en YYYY-MM-DD local. */
+  function aplicarPreset(cual: "mes" | "mes_pasado") {
+    const hoy = new Date();
+    const mes = cual === "mes" ? hoy.getMonth() : hoy.getMonth() - 1;
+    const ini = new Date(hoy.getFullYear(), mes, 1);
+    const fin = new Date(hoy.getFullYear(), mes + 1, 0);
+    const ymd = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    setDesde(ymd(ini));
+    setHasta(ymd(fin));
+  }
 
   async function handleEliminar(g: Gasto) {
     if (!(await confirm({ title: `¿Eliminar el gasto "${g.descripcion || g.categoria || "sin descripción"}"?`, message: "Esta acción no se puede deshacer.", variant: "danger", confirmText: "Eliminar" }))) return;
@@ -102,7 +127,40 @@ export default function GastosPage() {
           <h1 className="mt-1 text-lg font-semibold tracking-tight text-slate-900">Gastos operativos</h1>
           <p className="mt-0.5 text-xs text-slate-500">Registro de gastos de la empresa</p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          <div className="flex items-center gap-1.5">
+            <label htmlFor="gastos-desde" className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              Desde
+            </label>
+            <input
+              id="gastos-desde"
+              type="date"
+              value={desde}
+              onChange={(e) => setDesde(e.target.value)}
+              className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]/30"
+            />
+            <label htmlFor="gastos-hasta" className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              Hasta
+            </label>
+            <input
+              id="gastos-hasta"
+              type="date"
+              value={hasta}
+              onChange={(e) => setHasta(e.target.value)}
+              className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]/30"
+            />
+          </div>
+
+          <div className="flex items-center gap-1">
+            <button type="button" onClick={() => aplicarPreset("mes")} className={botonPeriodo}>Este mes</button>
+            <button type="button" onClick={() => aplicarPreset("mes_pasado")} className={botonPeriodo}>Mes pasado</button>
+            {(desde || hasta) && (
+              <button type="button" onClick={() => { setDesde(""); setHasta(""); }} className="px-2 py-1.5 text-xs text-slate-400 hover:text-slate-600">
+                Limpiar
+              </button>
+            )}
+          </div>
+
           {sucursales.length > 0 && (
             <div className="flex items-center gap-1.5">
               <label htmlFor="filtro-sucursal" className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">

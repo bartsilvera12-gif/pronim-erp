@@ -264,6 +264,20 @@ function formatFecha(s: string): string {
 // getRango(periodo) leen desde acá sin necesidad de threading de props.
 const _customRango: { desde?: string; hasta?: string } = {};
 
+/**
+ * YYYY-MM-DD en hora LOCAL.
+ *
+ * No usar toISOString(): convierte a UTC y el fin de día local (23:59) cae
+ * en el día siguiente, así que el rango se iba un día para adelante. Con la
+ * meta del período eso se veía como días hábiles de más.
+ */
+function ymdLocal(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+}
+
 function getRango(
   periodo: Periodo,
   customDesde?: string,
@@ -296,18 +310,20 @@ function getRango(
     case "anteayer":
       return { desde: startOfDayOffset(-2), hasta: endOfDayOffset(-2) };
     case "7d": {
+      // 7 días CONTANDO hoy (hoy y los 6 anteriores). Con -7 eran 8.
       const hasta = new Date(ahora);
       hasta.setHours(23, 59, 59, 999);
       const desde = new Date(ahora);
-      desde.setDate(desde.getDate() - 7);
+      desde.setDate(desde.getDate() - 6);
       desde.setHours(0, 0, 0, 0);
       return { desde, hasta };
     }
     case "30d": {
+      // Igual que 7d: 30 días contando hoy.
       const hasta = new Date(ahora);
       hasta.setHours(23, 59, 59, 999);
       const desde = new Date(ahora);
-      desde.setDate(desde.getDate() - 30);
+      desde.setDate(desde.getDate() - 29);
       desde.setHours(0, 0, 0, 0);
       return { desde, hasta };
     }
@@ -2090,12 +2106,21 @@ function DashVentas({
   ventas,
   productos,
   periodo,
+  customDesde,
+  customHasta,
 }: {
   ventas:    VentaRaw[];
   productos: ProductoRaw[];
   periodo:   Periodo;
+  /** Rango libre. Va como prop (y no solo por la ref del módulo) para que el
+   *  memo se recalcule cuando el usuario cambia las fechas. */
+  customDesde?: string;
+  customHasta?: string;
 }) {
-  const { desde, hasta } = useMemo(() => getRango(periodo), [periodo]);
+  const { desde, hasta } = useMemo(
+    () => getRango(periodo, customDesde, customHasta),
+    [periodo, customDesde, customHasta],
+  );
 
   const ventasFilt = useMemo(() =>
     ventas.filter(v => enRango(v.fecha, desde, hasta)),
@@ -2197,17 +2222,18 @@ export default function DashboardPage() {
   const [periodo,  setPeriodo]  = useState<Periodo>("mes");
   // Fase 2 tanda 20: rango custom (fechas libres). Defaults: últimos 7d.
   const [customDesde, setCustomDesde] = useState<string>(() => {
-    const d = new Date(); d.setDate(d.getDate() - 7);
-    return d.toISOString().slice(0, 10);
+    const d = new Date(); d.setDate(d.getDate() - 6);
+    return ymdLocal(d);
   });
-  const [customHasta, setCustomHasta] = useState<string>(() => new Date().toISOString().slice(0, 10));
+  const [customHasta, setCustomHasta] = useState<string>(() => ymdLocal(new Date()));
 
   // Sincronizamos la ref del módulo para que sub-componentes que llaman
   // getRango(periodo) sin custom vean el rango custom actual.
-  useEffect(() => {
-    _customRango.desde = customDesde;
-    _customRango.hasta = customHasta;
-  }, [customDesde, customHasta]);
+  // OJO: se asigna en el cuerpo del render, no en un efecto. Un efecto corre
+  // después de que los hijos ya renderizaron con el valor anterior, y como
+  // nada los volvía a renderizar, el rango custom no se aplicaba nunca.
+  _customRango.desde = customDesde;
+  _customRango.hasta = customHasta;
   const [config,   setConfig]   = useState<ConfigGlobal | null>(null);
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [usuarioId, setUsuarioId] = useState<number | null>(null);
@@ -2496,7 +2522,7 @@ export default function DashboardPage() {
                 <span className="text-slate-400 text-xs">→</span>
                 <input type="date" value={customHasta}
                   min={customDesde || undefined}
-                  max={new Date().toISOString().slice(0, 10)}
+                  max={ymdLocal(new Date())}
                   onChange={(e) => setCustomHasta(e.target.value)}
                   className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
                   title="Hasta"
@@ -2542,15 +2568,15 @@ export default function DashboardPage() {
         // El slug se mantiene por compat de permisos; el label es "Sucursales".
         // El componente consume /api/dashboard/sucursales (server-side agg).
         <DashSucursales
-          desde={getRango(periodo).desde.toISOString().slice(0, 10)}
-          hasta={getRango(periodo).hasta.toISOString().slice(0, 10)}
+          desde={ymdLocal(getRango(periodo, customDesde, customHasta).desde)}
+          hasta={ymdLocal(getRango(periodo, customDesde, customHasta).hasta)}
         />
       )}
 
       {tab === "clientes" && (
         <DashClientes
-          desde={getRango(periodo).desde.toISOString().slice(0, 10)}
-          hasta={getRango(periodo).hasta.toISOString().slice(0, 10)}
+          desde={ymdLocal(getRango(periodo, customDesde, customHasta).desde)}
+          hasta={ymdLocal(getRango(periodo, customDesde, customHasta).hasta)}
         />
       )}
 
@@ -2566,6 +2592,8 @@ export default function DashboardPage() {
           ventas={ventas}
           productos={productos}
           periodo={periodo}
+          customDesde={customDesde}
+          customHasta={customHasta}
         />
       )}
 
