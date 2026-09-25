@@ -130,9 +130,11 @@ export function DataExplorer<T>(props: {
   const filtradas = useMemo(() => {
     const qLower = q.trim().toLowerCase();
     return rows.filter((row) => {
-      // Búsqueda global sobre todas las columnas visibles (texto).
+      // Búsqueda global sobre TODAS las columnas, visibles o no. Si dependiera
+      // de las visibles, prender o apagar una columna cambiaría las filas que
+      // se ven sin que el usuario haya tocado el buscador.
       if (qLower) {
-        const hit = colsVis.some((c) => {
+        const hit = columns.some((c) => {
           const v = c.get(row);
           return v != null && String(v).toLowerCase().includes(qLower);
         });
@@ -172,7 +174,7 @@ export function DataExplorer<T>(props: {
       }
       return true;
     });
-  }, [rows, columns, colsVis, filtros, q]);
+  }, [rows, columns, filtros, q]);
 
   // ── Ordenar ────────────────────────────────────────────────────────
   const ordenadas = useMemo(() => {
@@ -552,21 +554,49 @@ export function DataExplorer<T>(props: {
         </span>
       </div>
 
-      {/* Chips de filtros activos */}
-      {filtrosActivos.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 print:hidden">
+      {/* Chips de lo que está acotando la lista. Se muestran SIEMPRE, incluso
+          si la columna filtrada está oculta: de lo contrario faltaban filas
+          sin ninguna explicación a la vista. */}
+      {(filtrosActivos.length > 0 || q.trim()) && (
+        <div className="flex flex-wrap items-center gap-1.5 print:hidden">
+          {q.trim() && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
+              Buscando: “{q.trim()}”
+              <button type="button" onClick={() => setQ("")} title="Quitar la búsqueda" className="ml-1 text-slate-500 hover:text-slate-800">×</button>
+            </span>
+          )}
           {filtrosActivos.map(([key, f]) => {
             const col = columns.find((c) => c.key === key);
             if (!col) return null;
+            const oculta = !visibles.has(key);
             let txt = "";
             if (f.text) txt = `contiene "${f.text}"`;
             else if (f.numA !== undefined && f.numA !== "") txt = `${f.numOp ?? ">"} ${f.numA}${f.numOp === "between" && f.numB ? ` y ${f.numB}` : ""}`;
             else if (f.dateFrom || f.dateTo) txt = `${f.dateFrom || "…"} → ${f.dateTo || "…"}`;
             else if (f.enumSel && f.enumSel.size) txt = Array.from(f.enumSel).join(", ");
             return (
-              <span key={key} className="inline-flex items-center gap-1 rounded-full bg-[#4FAEB2]/10 border border-[#4FAEB2]/30 px-2 py-0.5 text-xs text-[#3F8E91] font-semibold">
+              <span key={key} className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold ${
+                oculta
+                  ? "border-amber-300 bg-amber-50 text-amber-800"
+                  : "border-[#4FAEB2]/30 bg-[#4FAEB2]/10 text-[#3F8E91]"
+              }`}>
                 {col.label}: {txt}
-                <button type="button" onClick={() => limpiarFiltro(key)} className="ml-1 text-[#3F8E91] hover:text-[#2a6a6d]">×</button>
+                {oculta && (
+                  <button
+                    type="button"
+                    onClick={() => toggleCol(key)}
+                    title="Esta columna está oculta pero sigue filtrando. Tocá para mostrarla."
+                    className="ml-1 underline decoration-dotted"
+                  >
+                    columna oculta
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => limpiarFiltro(key)}
+                  title="Quitar este filtro"
+                  className={`ml-1 ${oculta ? "text-amber-800 hover:text-amber-900" : "text-[#3F8E91] hover:text-[#2a6a6d]"}`}
+                >×</button>
               </span>
             );
           })}

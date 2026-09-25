@@ -51,7 +51,7 @@ export default function ExplorarTransaccionesPage() {
     { key: "valor", label: "Valor", type: "money", required: true, get: (r) => r.valor, total: "sum" },
     { key: "valor_stock", label: "Ingresó a stock", type: "money", get: (r) => r.valor_stock, total: "sum", defaultVisible: false },
     { key: "cantidad", label: "Cant. productos", type: "number", get: (r) => r.cantidad, total: "sum" },
-    { key: "markup", label: "% Markup", type: "number", defaultVisible: false,
+    { key: "markup", label: "% Markup", type: "number",
       get: (r) => r.markup ?? 0, render: (r) => r.markup == null ? "—" : `${r.markup}%` },
     { key: "tarjeta", label: "Tarjeta", type: "money", get: (r) => r.tarjeta, total: "sum", defaultVisible: false },
     { key: "efectivo", label: "Efectivo", type: "money", get: (r) => r.efectivo, total: "sum" },

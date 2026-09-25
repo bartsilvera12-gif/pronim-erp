@@ -46,7 +46,7 @@ export default function ExplorarEvaluacionesPage() {
       { key: "ajuste", label: "Ajuste", type: "money", get: (r) => r.ajuste, defaultVisible: false },
       { key: "total", label: "Total pagado", type: "money", required: true, get: (r) => r.total, total: "sum" },
       // Markup: cuánto se estima ganar sobre lo pagado = (valor venta − pagado) / pagado.
-      { key: "markup", label: "% Ganancia est.", type: "number", defaultVisible: false,
+      { key: "markup", label: "% Ganancia est.", type: "number",
         get: (r) => r.total > 0 ? Math.round(((r.subtotal - r.total) / r.total) * 1000) / 10 : 0,
         render: (r) => r.total > 0 ? `${Math.round(((r.subtotal - r.total) / r.total) * 1000) / 10}%` : "—" },
       { key: "estado", label: "Estado", type: "enum", get: (r) => r.estado ?? "", enumOptions: estados.map((e) => ({ value: e, label: e })) },
