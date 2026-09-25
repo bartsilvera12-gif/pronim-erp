@@ -14,7 +14,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import MontoInput from "@/components/ui/MontoInput";
-import { fmtActive } from "@/lib/i18n/currency";
+import { fmtActive, getActiveMoneda } from "@/lib/i18n/currency";
 import { PromptModal } from "@/components/ui/PromptModal";
 
 export type Franja = {
@@ -86,6 +86,9 @@ export function ColumnaAtencion(props: {
     onAgregar, onActualizar, onQuitar, permitirEditarPrecio, permitirDescuento,
     subtotalItems, accionesHeader, slotDebajo, tiposPrenda, onCrearFranjaManual,
   } = props;
+  // El guaraní no tiene centavos; el real sí. Los inputs de plata tienen que
+  // seguir a la moneda de la sucursal en la que se está operando.
+  const admiteCentavos = getActiveMoneda() !== "PYG" && getActiveMoneda() !== "ARS";
   const [modalManualOpen, setModalManualOpen] = useState(false);
   const [creandoManual, setCreandoManual] = useState(false);
   const [errorManual, setErrorManual] = useState<string | null>(null);
@@ -197,7 +200,7 @@ export function ColumnaAtencion(props: {
                 <th className="text-right text-[11px] font-semibold text-slate-500 px-3 py-2 uppercase tracking-wide w-20">Cant.</th>
                 <th className="text-right text-[11px] font-semibold text-slate-500 px-3 py-2 uppercase tracking-wide w-32">Precio unit.</th>
                 {permitirDescuento && (
-                  <th className="text-right text-[11px] font-semibold text-slate-500 px-3 py-2 uppercase tracking-wide w-24" title="Descuento por unidad">Desc.</th>
+                  <th className="text-right text-[11px] font-semibold text-slate-500 px-3 py-2 uppercase tracking-wide w-24" title="Descuento por unidad (se multiplica por la cantidad)">Desc. c/u</th>
                 )}
                 <th className="text-right text-[11px] font-semibold text-slate-500 px-3 py-2 uppercase tracking-wide w-28">Subtotal</th>
                 <th className="w-8"></th>
@@ -243,7 +246,9 @@ export function ColumnaAtencion(props: {
                       <MontoInput
                         value={l.precio_unitario}
                         onChange={(n) => onActualizar(idx, { precio_unitario: Math.max(0, n) })}
-                        decimals={false}
+                        /* En R$ hay centavos: con decimals={false} escribir 10,50
+                           se guardaba como 11. */
+                        decimals={admiteCentavos}
                         className="w-28 rounded-md border border-slate-200 px-2 py-1 text-right text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
                       />
                     ) : (
@@ -253,17 +258,19 @@ export function ColumnaAtencion(props: {
                   {permitirDescuento && (
                     <td className="px-3 py-2 text-right">
                       <MontoInput
-                        /* Input = descuento TOTAL de la línea (lump). Se guarda como
-                           descuento_unitario = lump / cantidad para preservar la
-                           semántica interna del resto del código. */
-                        value={(Number(l.descuento_unitario) || 0) * Math.max(1, l.cantidad)}
-                        onChange={(nTotal) => {
-                          const cant = Math.max(1, l.cantidad);
-                          const maxTotal = l.precio_unitario * cant;
-                          const clamped = Math.max(0, Math.min(nTotal, maxTotal));
-                          onActualizar(idx, { descuento_unitario: Math.floor(clamped / cant) });
+                        /* Descuento POR UNIDAD, que es como lo guarda el backend.
+                           Antes el input pedía el total de la línea y se guardaba
+                           dividido por la cantidad con Math.floor: el número que
+                           escribías volvía distinto (10.000 entre 3 volvía 9.999),
+                           y si después cambiabas la cantidad el total se
+                           multiplicaba solo. Pidiendo el valor por unidad no hay
+                           ida y vuelta que redondee ni que se recalcule. */
+                        value={Number(l.descuento_unitario) || 0}
+                        onChange={(n) => {
+                          const clamped = Math.max(0, Math.min(n, l.precio_unitario));
+                          onActualizar(idx, { descuento_unitario: admiteCentavos ? clamped : Math.round(clamped) });
                         }}
-                        decimals={false}
+                        decimals={admiteCentavos}
                         className="w-24 rounded-md border border-slate-200 px-2 py-1 text-right text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
                       />
                     </td>
@@ -276,7 +283,10 @@ export function ColumnaAtencion(props: {
                         <>
                           {fmtGs(sub)}
                           {desc > 0 && (
-                            <p className="text-[10px] text-emerald-700 mt-0.5">−{fmtGs(desc * l.cantidad)}</p>
+                            <p className="text-[10px] text-emerald-700 mt-0.5">
+                              −{fmtGs(desc * l.cantidad)}
+                              {l.cantidad > 1 && <span className="text-slate-400"> ({fmtGs(desc)} c/u)</span>}
+                            </p>
                           )}
                         </>
                       );
