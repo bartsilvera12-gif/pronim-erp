@@ -133,6 +133,28 @@ export default function NuevaVentaPage() {
   // ── Sucursal en la que estoy parado ──────────────────────────────────
   const sucursalActivaId = useSucursalActivaId();
 
+  // ── Comprobante a emitir ─────────────────────────────────────────────
+  // Solo las sucursales con timbrado cargado pueden facturar (las de Brasil
+  // no). Cuando puede, arranca en FACTURA: es lo que corresponde emitir.
+  const [sucursalFactura, setSucursalFactura] = useState(false);
+  const [comprobante, setComprobante] = useState<"ticket" | "factura">("ticket");
+  useEffect(() => {
+    let cancel = false;
+    const qs = sucursalActivaId
+      ? `?sucursal_id=${encodeURIComponent(sucursalActivaId)}`
+      : "";
+    fetchWithSupabaseSession(`/api/facturacion/sucursal-emite${qs}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        if (cancel) return;
+        const emite = j?.data?.emite === true;
+        setSucursalFactura(emite);
+        setComprobante(emite ? "factura" : "ticket");
+      })
+      .catch(() => { if (!cancel) setSucursalFactura(false); });
+    return () => { cancel = true; };
+  }, [sucursalActivaId]);
+
   // ── Caja compartida ──────────────────────────────────────────────────
   const caja = useCajaState();
 
@@ -574,6 +596,19 @@ export default function NuevaVentaPage() {
       await persistirBeneficios();
       setPreCierreOpen(false);
       setIdempotencyKey(null);
+
+      // Comprobante: se abre solo apenas se confirma. Con factura=1 el
+      // endpoint asigna el número correlativo del timbrado; sin eso sale el
+      // ticket interno de siempre.
+      const ventaId = (j?.data as { venta?: { id?: string } } | undefined)?.venta?.id;
+      if (ventaId) {
+        const emitirFactura = sucursalFactura && comprobante === "factura";
+        window.open(
+          `/api/ventas/${ventaId}/ticket?w=80${emitirFactura ? "&factura=1" : ""}`,
+          "_blank",
+          "noopener",
+        );
+      }
       setOkMsg(`Venta registrada por ${fmtGs(totalLleva)}${creditoRestante > 0 ? ` · crédito restante ${fmtGs(creditoRestante)}` : ""}.`);
       reset();
       refrescarMetaDia();
@@ -1137,6 +1172,41 @@ export default function NuevaVentaPage() {
                 </svg>
               </button>
             </div>
+
+            {/* Qué comprobante sale al confirmar. Solo aparece donde hay
+                timbrado cargado: en Brasil no hay nada que elegir. */}
+            {sucursalFactura && (
+              <div className="mb-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Comprobante</p>
+                <p className="mt-0.5 text-xs text-slate-400">Se imprime solo al confirmar.</p>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setComprobante("factura")}
+                    className={`rounded-lg border px-3 py-2.5 text-left transition-colors ${
+                      comprobante === "factura"
+                        ? "border-[#4FAEB2] bg-[#4FAEB2]/10 ring-1 ring-[#4FAEB2]"
+                        : "border-slate-200 bg-white hover:bg-slate-50"
+                    }`}
+                  >
+                    <span className="block text-sm font-semibold text-slate-800">Factura</span>
+                    <span className="mt-0.5 block text-[11px] text-slate-500">Con timbrado. Consume un número.</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setComprobante("ticket")}
+                    className={`rounded-lg border px-3 py-2.5 text-left transition-colors ${
+                      comprobante === "ticket"
+                        ? "border-[#4FAEB2] bg-[#4FAEB2]/10 ring-1 ring-[#4FAEB2]"
+                        : "border-slate-200 bg-white hover:bg-slate-50"
+                    }`}
+                  >
+                    <span className="block text-sm font-semibold text-slate-800">Ticket</span>
+                    <span className="mt-0.5 block text-[11px] text-slate-500">Comprobante interno, sin timbrado.</span>
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div className="mb-2">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Beneficios entregados</p>
