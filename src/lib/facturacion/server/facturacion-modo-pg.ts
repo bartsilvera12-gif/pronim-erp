@@ -272,25 +272,20 @@ export async function upsertAutoimpresor(
   return rows[0];
 }
 
-/** Valida configuracion minima de autoimpresor si activo=true. */
+/**
+ * Valida la configuración de autoimpresor a nivel EMPRESA (si activo=true).
+ *
+ * El establecimiento, el punto de expedición y el rango de numeración ya NO
+ * se validan acá: pasaron a ser por sucursal (una empresa puede tener un
+ * mismo timbrado cubriendo varios establecimientos, y cada uno numera por su
+ * cuenta). Los valida `validarConfigSucursal` en autoimpresor-sucursal-pg.
+ */
 export function validateAutoimpresor(d: AutoimpresorPatch & { activo?: boolean }): string[] {
   const errors: string[] = [];
   if (!d.activo) return errors;
   if (!d.timbrado_numero?.trim()) errors.push("Timbrado obligatorio.");
-  if (!d.establecimiento_codigo?.trim()) errors.push("Establecimiento obligatorio.");
-  if (!d.punto_expedicion_codigo?.trim()) errors.push("Punto de expedición obligatorio.");
-  if (d.numero_actual == null) errors.push("Número actual obligatorio.");
-  if (d.numero_inicial == null) errors.push("Número inicial obligatorio.");
-  if (d.numero_final == null) errors.push("Número final obligatorio.");
-  if (d.numero_inicial != null && d.numero_final != null && d.numero_inicial > d.numero_final) {
-    errors.push("Número inicial debe ser ≤ número final.");
-  }
-  if (d.numero_actual != null && d.numero_inicial != null && d.numero_actual < d.numero_inicial) {
-    errors.push("Número actual no puede ser menor al inicial.");
-  }
-  if (d.numero_actual != null && d.numero_final != null && d.numero_actual > d.numero_final) {
-    errors.push("Número actual no puede ser mayor al final.");
-  }
+  if (!d.ruc_emisor?.trim()) errors.push("RUC del emisor obligatorio.");
+  if (!d.razon_social_emisor?.trim()) errors.push("Razón social obligatoria.");
   if (!d.timbrado_fin_vigencia) errors.push("Fin de vigencia del timbrado obligatorio.");
   return errors;
 }

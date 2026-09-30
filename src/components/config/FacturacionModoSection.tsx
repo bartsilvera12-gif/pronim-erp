@@ -1,5 +1,7 @@
 "use client";
 
+import AutoimpresorSucursalesSection from "./AutoimpresorSucursalesSection";
+
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useAutoClearFlag } from "@/hooks/useAutoClearFlag";
@@ -242,6 +244,8 @@ export default function FacturacionModoSection() {
           <AutoimpresorForm value={auto} onSave={guardarAuto} saving={savingAuto} />
         </div>
       )}
+
+      {modo.modo === "autoimpresor" && <AutoimpresorSucursalesSection />}
     </div>
   );
 }
@@ -278,12 +282,11 @@ function AutoimpresorForm({
         <Field label="Timbrado N°"><input className={inputClass} value={f.timbrado_numero ?? ""} onChange={(e) => set("timbrado_numero", e.target.value || null)} /></Field>
         <Field label="Inicio vigencia"><input type="date" className={inputClass} value={f.timbrado_inicio_vigencia ?? ""} onChange={(e) => set("timbrado_inicio_vigencia", e.target.value || null)} /></Field>
         <Field label="Fin vigencia"><input type="date" className={inputClass} value={f.timbrado_fin_vigencia ?? ""} onChange={(e) => set("timbrado_fin_vigencia", e.target.value || null)} /></Field>
-        <Field label="Establecimiento"><input className={inputClass} placeholder="001" value={f.establecimiento_codigo ?? ""} onChange={(e) => set("establecimiento_codigo", e.target.value || null)} /></Field>
-        <Field label="Punto de expedición"><input className={inputClass} placeholder="001" value={f.punto_expedicion_codigo ?? ""} onChange={(e) => set("punto_expedicion_codigo", e.target.value || null)} /></Field>
-        <div />
-        <Field label="N° inicial"><input type="number" min={1} className={inputClass} value={f.numero_inicial ?? ""} onChange={(e) => set("numero_inicial", e.target.value ? parseInt(e.target.value, 10) : null)} /></Field>
-        <Field label="N° actual"><input type="number" min={1} className={inputClass} value={f.numero_actual ?? ""} onChange={(e) => set("numero_actual", e.target.value ? parseInt(e.target.value, 10) : null)} /></Field>
-        <Field label="N° final"><input type="number" min={1} className={inputClass} value={f.numero_final ?? ""} onChange={(e) => set("numero_final", e.target.value ? parseInt(e.target.value, 10) : null)} /></Field>
+        <p className="md:col-span-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+          El establecimiento, el punto de expedición y el rango de numeración se cargan
+          <strong> por sucursal</strong>, más abajo: un mismo timbrado puede cubrir varias
+          sucursales, pero cada establecimiento numera aparte.
+        </p>
       </div>
 
       <div className="border-t border-slate-100 pt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
