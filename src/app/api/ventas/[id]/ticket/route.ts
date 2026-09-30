@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTenantSupabaseFromAuth } from "@/lib/supabase/tenant-api";
 import { membreteA4, membreteTicket } from "@/lib/documentos/membrete";
+import {
+  asignarNumeroFactura,
+  leerDatosEmisor,
+  type AutoimpresorEmpresa,
+} from "@/lib/facturacion/server/autoimpresor-sucursal-pg";
+import { montoEnLetrasGs } from "@/lib/facturacion/monto-en-letras";
 
 /**
- * GET /api/ventas/[id]/ticket?w=58|80&mode=comandas&auto=1
+ * GET /api/ventas/[id]/ticket?w=58|80&mode=comandas&auto=1&factura=1
  *
  * HTML imprimible NO FISCAL. Soporta dos modos:
  *
@@ -15,7 +21,11 @@ import { membreteA4, membreteTicket } from "@/lib/documentos/membrete";
  *     · Si hay pizzas/lompizzas: copia COMANDA PIZZERÍA (sin precios).
  *     · Si hay hamburguesas/lomitos/lomitos árabes/panchos/papas/especiales: copia COMANDA PLANCHA.
  *
- * No toca SIFEN, no genera XML, no usa timbrado.
+ * Con `factura=1` imprime la FACTURA del autoimpresor: cabecera con RUC y
+ * timbrado, número correlativo del establecimiento, liquidación de IVA e
+ * importe en letras. Sin ese parámetro sigue siendo el comprobante interno.
+ *
+ * No toca SIFEN ni genera XML.
  */
 
 /**
@@ -91,6 +101,13 @@ function escapeHtml(s: string): string {
 
 function formatGs(v: number): string {
   return `Gs. ${Math.round(v).toLocaleString("es-PY")}`;
+}
+
+/** dd/mm/aaaa a partir de un YYYY-MM-DD, sin pasar por Date (no hay TZ que valga). */
+function fechaCorta(ymd: string | null | undefined): string {
+  if (!ymd) return "—";
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(ymd));
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : String(ymd);
 }
 
 function formatFecha(iso: string): string {
@@ -170,6 +187,20 @@ interface VentaRow {
   nota_remision_numero?: string | null;
 }
 
+/** Todo lo que la factura impresa necesita además de la venta. */
+interface DatosFactura {
+  numero: string;
+  emisor: AutoimpresorEmpresa;
+  cliente_nombre: string | null;
+  cliente_documento: string | null;
+  /** Acumulado por tasa, para la liquidación del IVA del pie. */
+  gravado5: number;
+  gravado10: number;
+  exentas: number;
+  iva5: number;
+  iva10: number;
+}
+
 interface ItemRow {
   producto_id: string;
   producto_nombre: string;
@@ -177,6 +208,10 @@ interface ItemRow {
   cantidad: number | string;
   precio_venta: number | string;
   total_linea: number | string;
+  /** EXENTA | 5% | 10%. Solo se usa para la liquidación de la factura. */
+  tipo_iva?: string | null;
+  subtotal?: number | string | null;
+  monto_iva?: number | string | null;
 }
 
 type EnrichedItem = ItemRow & { sector: Sector };
@@ -200,8 +235,11 @@ function renderCopia(opts: {
   fontPx: number;
   isLast: boolean;
   negocio: string;
+  /** Presente solo cuando se pidió ?factura=1 y la sucursal factura. */
+  factura?: DatosFactura | null;
 }): string {
   const { tipo, venta, brief, fontPx, isLast } = opts;
+  const factura = opts.factura ?? null;
   const showPrices = tipo === "cliente";
   const sectorBadge = tipo === "pizzeria" ? "COMANDA PIZZERÍA" : tipo === "plancha" ? "COMANDA PLANCHA" : "";
   const modalidad = modalidadLabel(brief?.modalidad);
@@ -274,7 +312,29 @@ function renderCopia(opts: {
          </tbody>
        </table>`
     : "";
-  const footerHtml = showPrices
+  // Liquidación del IVA + importe en letras: los dos son obligatorios en la
+  // factura impresa paraguaya.
+  const liquidacionHtml = factura
+    ? `<hr>
+       <table class="totales">
+         <tbody>
+           ${factura.exentas > 0 ? `<tr><td class="lbl">Exentas</td><td class="val">${formatGs(factura.exentas)}</td></tr>` : ""}
+           ${factura.gravado5 > 0 ? `<tr><td class="lbl">Gravado 5%</td><td class="val">${formatGs(factura.gravado5)}</td></tr>` : ""}
+           ${factura.gravado10 > 0 ? `<tr><td class="lbl">Gravado 10%</td><td class="val">${formatGs(factura.gravado10)}</td></tr>` : ""}
+           ${factura.iva5 > 0 ? `<tr><td class="lbl">IVA 5%</td><td class="val">${formatGs(factura.iva5)}</td></tr>` : ""}
+           ${factura.iva10 > 0 ? `<tr><td class="lbl">IVA 10%</td><td class="val">${formatGs(factura.iva10)}</td></tr>` : ""}
+           <tr><td class="lbl">Total IVA</td><td class="val">${formatGs(factura.iva5 + factura.iva10)}</td></tr>
+         </tbody>
+       </table>
+       <div class="letras">Son: ${escapeHtml(montoEnLetrasGs(total))}</div>`
+    : "";
+
+  const footerHtml = factura
+    ? `<hr>
+       <div class="footer">
+         ¡Gracias por tu compra!
+       </div>`
+    : showPrices
     ? `<hr>
        <div class="footer">
          ¡Gracias por tu compra!<br>
@@ -282,16 +342,43 @@ function renderCopia(opts: {
        </div>`
     : `<div class="footer-cocina">${formatFecha(venta.fecha)}</div>`;
 
+  // Cabecera fiscal: reemplaza al membrete común cuando es factura.
+  const e = factura?.emisor;
+  const cabeceraFiscal = factura && e
+    ? `<div class="fiscal-head">
+         <div class="razon">${escapeHtml(e.razon_social_emisor ?? opts.negocio)}</div>
+         ${e.nombre_fantasia ? `<div class="fantasia">${escapeHtml(e.nombre_fantasia)}</div>` : ""}
+         ${e.direccion_matriz ? `<div>${escapeHtml(e.direccion_matriz)}</div>` : ""}
+         ${e.telefono ? `<div>Tel: ${escapeHtml(e.telefono)}</div>` : ""}
+         <div>RUC: ${escapeHtml(e.ruc_emisor ?? "—")}</div>
+         <div class="timbrado">
+           Timbrado N° ${escapeHtml(e.timbrado_numero ?? "—")}<br>
+           Vigencia ${escapeHtml(fechaCorta(e.timbrado_inicio_vigencia))} al ${escapeHtml(fechaCorta(e.timbrado_fin_vigencia))}
+         </div>
+         <div class="doc-tipo">FACTURA</div>
+         <div class="doc-nro">${escapeHtml(factura.numero)}</div>
+       </div>
+       <hr>
+       <div class="fiscal-cliente">
+         <div>Fecha: ${formatFecha(venta.fecha)}</div>
+         <div>Cliente: ${escapeHtml(factura.cliente_nombre || "SIN NOMBRE")}</div>
+         <div>RUC/CI: ${escapeHtml(factura.cliente_documento || "X")}</div>
+         <div>Condición: CONTADO</div>
+       </div>`
+    : "";
+
   return `<section class="paper ${isLast ? "last" : ""}">
-    ${headerCocina || membreteTicket()}
-    <div class="meta">
+    ${cabeceraFiscal || headerCocina || membreteTicket()}
+    ${factura ? "" : `<div class="meta">
       ${escapeHtml(venta.numero_control)}<br>
       ${formatFecha(venta.fecha)}
-    </div>
+    </div>`}
     ${datosPedido.length > 0 ? `<hr><div class="pedido">${datosPedido.join("")}</div>` : ""}
     <hr>
     ${detalleHtml}
     ${totalesHtml}
+    ${liquidacionHtml}
+    ${factura ? `<div class="ref-interna">Ref. interna: ${escapeHtml(venta.numero_control)}</div>` : ""}
     ${obs ? `<hr><div class="obs"><strong>Obs:</strong> ${escapeHtml(obs)}</div>` : ""}
     ${footerHtml}
   </section>`;
@@ -389,6 +476,8 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
   const fontPx = widthMm === 58 ? 11 : 12;
   const modeComandas = url.searchParams.get("mode") === "comandas";
   const esRemision = url.searchParams.get("tipo") === "remision" || url.searchParams.get("mode") === "remision";
+  // ?factura=1 → FACTURA del autoimpresor (consume un número del rango).
+  const pidenFactura = url.searchParams.get("factura") === "1";
 
   const ctx = await getTenantSupabaseFromAuth(request);
   if (!ctx) return new NextResponse("No autorizado", { status: 401 });
@@ -422,7 +511,7 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
   // Items
   const iQ = await ctx.supabase
     .from("ventas_items")
-    .select("producto_id, producto_nombre, sku, cantidad, precio_venta, total_linea")
+    .select("producto_id, producto_nombre, sku, cantidad, precio_venta, total_linea, tipo_iva, subtotal, monto_iva")
     .eq("venta_id", id)
     .eq("empresa_id", empresaId);
   if (iQ.error) return new NextResponse(`Error items: ${iQ.error.message}`, { status: 500 });
@@ -547,9 +636,78 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
     if (hayPlancha) copias.push("plancha");
   }
 
+  // ── Factura del autoimpresor ─────────────────────────────────────────
+  // Solo si la pidieron explícitamente: asignar el número consume uno del
+  // rango autorizado, así que no pasa por accidente al ver el ticket.
+  let factura: DatosFactura | null = null;
+  if (pidenFactura) {
+    let asignado;
+    try {
+      asignado = await asignarNumeroFactura(empresaId, id);
+    } catch (e) {
+      // El caso típico: se agotó el rango autorizado.
+      return new NextResponse(e instanceof Error ? e.message : "No se pudo emitir la factura.", {
+        status: 409,
+        headers: { "Content-Type": "text/plain; charset=utf-8" },
+      });
+    }
+    if (!asignado) {
+      return new NextResponse(
+        "Esta sucursal no emite factura con timbrado. Revisá Configuración → Facturación.",
+        { status: 409, headers: { "Content-Type": "text/plain; charset=utf-8" } },
+      );
+    }
+    const emisor = await leerDatosEmisor(empresaId);
+    if (!emisor) {
+      return new NextResponse(
+        "Faltan los datos del emisor (RUC, razón social, timbrado). Cargalos en Configuración → Facturación.",
+        { status: 409, headers: { "Content-Type": "text/plain; charset=utf-8" } },
+      );
+    }
+
+    // Liquidación por tasa. Si la línea no trae el desglose (ventas viejas),
+    // se cae al total de la cabecera para no imprimir ceros.
+    let gravado5 = 0, gravado10 = 0, exentas = 0, iva5 = 0, iva10 = 0;
+    for (const it of itemsRaw) {
+      const base = Number(it.subtotal ?? 0) || 0;
+      const iva = Number(it.monto_iva ?? 0) || 0;
+      const tasa = String(it.tipo_iva ?? "").trim();
+      if (tasa === "5%") { gravado5 += base; iva5 += iva; }
+      else if (tasa === "10%") { gravado10 += base; iva10 += iva; }
+      else exentas += base || Number(it.total_linea) || 0;
+    }
+
+    // Datos del comprador. Sin cliente asociado va como consumidor final.
+    let clienteNombre: string | null = null;
+    let clienteDoc: string | null = null;
+    if (venta.cliente_id) {
+      try {
+        const cQ = await ctx.supabase
+          .from("clientes")
+          .select("nombre, nombre_contacto, empresa, ruc, documento")
+          .eq("id", venta.cliente_id)
+          .eq("empresa_id", empresaId)
+          .maybeSingle();
+        const c = cQ.data as Record<string, string | null> | null;
+        if (c) {
+          clienteNombre = (c.empresa || c.nombre_contacto || c.nombre || "").trim() || null;
+          clienteDoc = (c.ruc || c.documento || "").trim() || null;
+        }
+      } catch { /* sin datos del cliente: va como consumidor final */ }
+    }
+
+    factura = {
+      numero: asignado.numero,
+      emisor,
+      cliente_nombre: clienteNombre ?? "CONSUMIDOR FINAL",
+      cliente_documento: clienteDoc,
+      gravado5, gravado10, exentas, iva5, iva10,
+    };
+  }
+
   const seccionesHtml = copias
     .map((tipo, idx) =>
-      renderCopia({ tipo, venta, items, brief, fontPx, isLast: idx === copias.length - 1, negocio })
+      renderCopia({ tipo, venta, items, brief, fontPx, isLast: idx === copias.length - 1, negocio, factura })
     )
     .join("");
 
@@ -583,6 +741,15 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
   .sin-items { font-size: ${fontPx - 1}px; text-align: center; font-style: italic; padding: 2mm 0; }
   .obs { font-size: ${fontPx - 1}px; margin: 2mm 0; }
   .footer { font-size: ${fontPx - 2}px; text-align: center; margin-top: 3mm; font-style: italic; }
+  .fiscal-head { text-align: center; font-size: ${fontPx - 1}px; line-height: 1.35; }
+  .fiscal-head .razon { font-size: ${fontPx + 2}px; font-weight: 800; letter-spacing: 0.5px; }
+  .fiscal-head .fantasia { font-weight: 600; }
+  .fiscal-head .timbrado { margin-top: 1.5mm; }
+  .fiscal-head .doc-tipo { margin-top: 2mm; font-size: ${fontPx + 2}px; font-weight: 800; letter-spacing: 2px; border-top: 1px solid #000; border-bottom: 1px solid #000; padding: 1mm 0; }
+  .fiscal-head .doc-nro { font-size: ${fontPx + 3}px; font-weight: 800; letter-spacing: 1px; margin-top: 1mm; }
+  .fiscal-cliente { font-size: ${fontPx - 1}px; line-height: 1.4; }
+  .letras { font-size: ${fontPx - 2}px; margin-top: 2mm; text-transform: uppercase; }
+  .ref-interna { font-size: ${fontPx - 3}px; text-align: right; color: #555; margin-top: 2mm; }
   .footer-cocina { font-size: ${fontPx - 2}px; text-align: center; margin-top: 3mm; font-weight: bold; }
   .actions { max-width: ${widthMm}mm; margin: 8mm auto 0; text-align: center; }
   .actions button { padding: 8px 16px; font-size: 13px; cursor: pointer; border: 1px solid #333; background: #fff; border-radius: 6px; }

@@ -787,6 +787,25 @@ export default function VentasPage() {
                               >
                                 Imprimir
                               </a>
+                              {/* Factura del autoimpresor. Consume un número
+                                  del rango, por eso va aparte de "Imprimir" y
+                                  pide confirmación. Si la sucursal no factura,
+                                  el endpoint responde con el motivo. */}
+                              <a
+                                href={`/api/ventas/${v.id}/ticket?factura=1`}
+                                target="_blank" rel="noopener"
+                                onClick={(e) => {
+                                  if (!window.confirm(
+                                    "¿Emitir la factura con timbrado de esta venta?\n\n" +
+                                    "Se le asigna un número correlativo del rango autorizado. " +
+                                    "Reimprimirla después no consume otro número."
+                                  )) e.preventDefault();
+                                }}
+                                className="inline-flex items-center justify-center rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 transition-colors"
+                                title="Factura con timbrado (autoimpresor)"
+                              >
+                                Factura
+                              </a>
                               {v.genera_nota_remision && (
                                 <a
                                   href={`/api/ventas/${v.id}/ticket?tipo=remision`}
