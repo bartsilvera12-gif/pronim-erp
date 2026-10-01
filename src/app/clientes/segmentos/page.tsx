@@ -62,6 +62,95 @@ function carteraLabel(v: string | null): string {
 
 const FLAGS_POS = ["vip","con_credito","con_cashback","inactivos_90d","nuevos_mes","en_riesgo"] as const;
 
+/** Bloque de un dato suelto del panel. */
+function Dato({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{label}</p>
+      <p className="mt-0.5 text-sm text-slate-800">{children}</p>
+    </div>
+  );
+}
+
+function fmtGs(v: string | number | null): string {
+  const n = Number(v) || 0;
+  return "Gs. " + Math.round(n).toLocaleString("es-PY");
+}
+function fmtFecha(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("es-PY", { day: "2-digit", month: "2-digit", year: "numeric" });
+}
+
+/**
+ * Ficha corta que se abre debajo de la fila.
+ *
+ * Karen: al tocar un cliente la pantalla se iba a otro lado y se perdía el
+ * hilo de la lista. Esto resuelve lo que se consulta el 90% de las veces
+ * (teléfono, saldo, última compra) sin salir de acá; el botón de abajo
+ * sigue llevando a la ficha completa para lo demás.
+ */
+function ResumenCliente({ c }: { c: ClienteSeg }) {
+  const credito = Number(c.saldo_credito) || 0;
+  const cashback = Number(c.saldo_cashback) || 0;
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+        <Dato label="Teléfono">
+          {c.telefono
+            ? <a href={`tel:${c.telefono}`} className="text-[#3F8E91] hover:underline">{c.telefono}</a>
+            : <span className="text-slate-400">Sin teléfono</span>}
+        </Dato>
+        <Dato label="Email">{c.email || <span className="text-slate-400">—</span>}</Dato>
+        <Dato label="RUC / CI">{c.ruc || <span className="text-slate-400">—</span>}</Dato>
+        <Dato label="Cliente desde">{fmtFecha(c.primera_venta_at)}</Dato>
+        <Dato label="Cartera">{carteraLabel(c.scope_clientes)}</Dato>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+        <Dato label="Última transacción">
+          {c.ultima_tx_fecha ? (
+            <>
+              {fmtFecha(c.ultima_tx_fecha)}
+              <span className="ml-1 text-xs text-slate-500">
+                ({c.ultima_tx_tipo ? (TX_LABEL[c.ultima_tx_tipo] ?? c.ultima_tx_tipo) : "—"}
+                {c.ultima_tx_monto ? ` · ${fmtGs(c.ultima_tx_monto)}` : ""})
+              </span>
+            </>
+          ) : <span className="text-slate-400">Nunca</span>}
+        </Dato>
+        <Dato label="Transacciones">{c.cnt_transacciones}</Dato>
+        <Dato label="Total comprado">{fmtGs(c.total_comprado)}</Dato>
+        <Dato label="Total vendido (trae)">{fmtGs(c.total_vendido)}</Dato>
+        <Dato label="A favor">
+          {credito + cashback > 0 ? (
+            <span className="font-semibold text-emerald-700">
+              {fmtGs(credito + cashback)}
+              <span className="ml-1 text-xs font-normal text-slate-500">
+                ({fmtGs(credito)} crédito{cashback > 0 ? ` + ${fmtGs(cashback)} cashback` : ""})
+              </span>
+            </span>
+          ) : <span className="text-slate-400">Sin saldo</span>}
+        </Dato>
+      </div>
+
+      <div className="flex flex-wrap gap-2 pt-1">
+        <Link href={`/clientes/${c.id}`}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-[#4FAEB2] px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[#3F8E91]">
+          Ver ficha completa →
+        </Link>
+        {c.telefono && (
+          <a href={`https://wa.me/${c.telefono.replace(/\D/g, "")}`} target="_blank" rel="noopener"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50">
+            WhatsApp
+          </a>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function ClientesSegmentosPage() {
   const [segmentos, setSegmentos] = useState<Segmento[]>([]);
   const [totalClientes, setTotalClientes] = useState(0);
@@ -265,6 +354,8 @@ export default function ClientesSegmentosPage() {
         cargando={cargando}
         csvName="clientes"
         detailHref={(c) => `/clientes/${c.id}`}
+        rowKey={(c) => c.id}
+        expandir={(c) => <ResumenCliente c={c} />}
       />
     </div>
   );

@@ -2058,44 +2058,6 @@ function DashInventario({
           el dash de Sucursales — Karen prefiere consultarlo dividido acá,
           en el contexto de inventario. */}
       <InventarioPorSucursalPanels />
-      {/* KPIs */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiCard
-          icon={<Icon.Box className="h-4 w-4" />}
-          label="Productos totales"
-          value={String(totalProductos)}
-          color="text-slate-900"
-          variation={4}
-          href="/inventario"
-        />
-        <KpiCard
-          icon={<Icon.Hash className="h-4 w-4" />}
-          label="Stock total (unidades)"
-          value={formatGs(totalUnidades)}
-          color="text-slate-900"
-          href="/inventario"
-        />
-        <KpiCard
-          icon={<Icon.Alert className="h-4 w-4" />}
-          label="Bajo stock mínimo"
-          value={String(bajosStock)}
-          sub={bajosStock > 0 ? "Requieren reposición" : "Todo en orden"}
-          color={bajosStock > 0 ? "text-rose-600" : "text-emerald-600"}
-          accent={bajosStock > 0 ? "danger" : "neutral"}
-          variation={bajosStock > 0 ? -2 : undefined}
-          href="/inventario?stock=bajo"
-        />
-        <KpiCard
-          icon={<Icon.Diamond className="h-4 w-4" />}
-          label="Valor del inventario"
-          value={`Gs. ${formatGsFull(valorTotal)}`}
-          color="text-[#3F8E91]"
-          accent="featured"
-          variation={12}
-          href="/inventario"
-        />
-      </div>
-
     </div>
   );
 }
@@ -2147,43 +2109,6 @@ function DashVentas({
       {/* Desglose de ventas POR SUCURSAL — reemplaza la sección global
           'Ventas — detalle' que Karen tenía en el dash de sucursales. */}
       <VentasPorSucursalPanel />
-
-      {/* KPIs principales */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiCard
-          icon={<Icon.Calendar className="h-4 w-4" />}
-          label="Ventas del día"
-          value={`Gs. ${formatGsFull(totalHoy)}`}
-          sub={`${ventasHoy.length} transacciones`}
-          color="text-slate-900"
-          href="/ventas?segmento=hoy"
-        />
-        <KpiCard
-          icon={<Icon.Calendar className="h-4 w-4" />}
-          label="Ventas del mes"
-          value={`Gs. ${formatGsFull(totalMes)}`}
-          sub={`${ventasMes.length} transacciones`}
-          color="text-[#3F8E91]"
-          accent="featured"
-          href="/ventas?segmento=mes"
-        />
-        <KpiCard
-          icon={<Icon.Ticket className="h-4 w-4" />}
-          label="Ticket promedio"
-          value={`Gs. ${formatGsFull(ticketProm)}`}
-          sub={`Periodo: ${periodo}`}
-          color="text-slate-900"
-          href="/ventas"
-        />
-        <KpiCard
-          icon={<Icon.Box className="h-4 w-4" />}
-          label="Unidades vendidas"
-          value={formatGs(unidades)}
-          sub="En el periodo"
-          color="text-slate-900"
-          href="/ventas"
-        />
-      </div>
 
     </div>
   );
