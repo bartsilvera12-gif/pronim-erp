@@ -19,7 +19,9 @@
 DROP TABLE IF EXISTS pronimerp.import_palmeras;
 
 CREATE TABLE pronimerp.import_palmeras (
-  fila_excel        integer,   -- fila real en la planilla, para poder volver a buscarla
+  -- PRIMARY KEY: sin ella el Table Editor de Supabase no puede dibujar la
+  -- grilla y la pantalla se queda cargando para siempre.
+  fila_excel        integer PRIMARY KEY,   -- fila real en la planilla
   controle          integer,
   fecha             date,
   tipo              text,      -- venta | evaluacion | devolucion | ajuste_stock | otro
