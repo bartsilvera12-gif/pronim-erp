@@ -7,6 +7,7 @@ import {
   type AutoimpresorEmpresa,
 } from "@/lib/facturacion/server/autoimpresor-sucursal-pg";
 import { montoEnLetrasGs } from "@/lib/facturacion/monto-en-letras";
+import { qrComprobanteDataUri } from "@/lib/documentos/qr";
 
 /**
  * GET /api/ventas/[id]/ticket?w=58|80&mode=comandas&auto=1&factura=1
@@ -251,6 +252,8 @@ function renderCopia(opts: {
   logoUrl?: string | null;
   /** Dirección y teléfono DEL LOCAL donde se vendió. */
   contacto?: { direccion?: string | null; telefono?: string | null };
+  /** QR de la tienda (data URI), al pie de la factura. */
+  qrDataUri?: string | null;
 }): string {
   const { tipo, venta, brief, fontPx, isLast } = opts;
   const factura = opts.factura ?? null;
@@ -343,8 +346,15 @@ function renderCopia(opts: {
        <div class="letras">Son: ${escapeHtml(montoEnLetrasGs(total))}</div>`
     : "";
 
+  // El QR va arriba del saludo y debajo de todo lo fiscal, para no
+  // meterse entre los datos que la factura tiene que llevar sí o sí.
+  const qrHtml = opts.qrDataUri
+    ? `<div class="qr"><img src="${opts.qrDataUri}" alt="" /></div>`
+    : "";
+
   const footerHtml = factura
     ? `<hr>
+       ${qrHtml}
        <div class="footer">
          ¡Gracias por tu compra!
        </div>`
@@ -778,12 +788,15 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
     }
   }
 
+  // Solo en la factura: el ticket interno sigue como estaba.
+  const qrDataUri = factura ? await qrComprobanteDataUri() : null;
+
   const seccionesHtml = copias
     .map((tipo, idx) =>
       renderCopia({
         tipo, venta, items, brief, fontPx,
         isLast: idx === copias.length - 1,
-        negocio, factura, logoUrl,
+        negocio, factura, logoUrl, qrDataUri,
         contacto: { direccion: dirSucursal, telefono: telSucursal },
       })
     )
@@ -828,6 +841,10 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
   .fiscal-head .doc-nro { font-size: ${fontPx + 3}px; font-weight: 800; letter-spacing: 1px; margin-top: 1mm; }
   .fiscal-cliente { font-size: ${fontPx - 1}px; line-height: 1.4; }
   .letras { font-size: ${fontPx - 2}px; margin-top: 2mm; text-transform: uppercase; }
+  /* image-rendering: pixelated para que la termica no interpole los
+     modulos del QR y quede ilegible al escanear. */
+  .qr { text-align: center; margin: 2mm 0 1mm; }
+  .qr img { display: block; margin: 0 auto; width: 22mm; height: 22mm; image-rendering: pixelated; }
   .ref-interna { font-size: ${fontPx - 3}px; text-align: right; color: #555; margin-top: 2mm; }
   .footer-cocina { font-size: ${fontPx - 2}px; text-align: center; margin-top: 3mm; font-weight: bold; }
   .actions { max-width: ${widthMm}mm; margin: 8mm auto 0; text-align: center; }
