@@ -26,6 +26,8 @@ import {
 } from "@/lib/atencion/server/errors";
 
 export interface HandlerAuth {
+  /** true = sucursal impuesta por el usuario; false = la eligió un admin. */
+  usuario_fijo?: boolean;
   empresa_id: string;
   sucursal_id: string | null;
   user_id: string | null;
@@ -293,7 +295,17 @@ async function runProcesar(
       if (!cajaRow.sucursal_id) return err(400, "La caja no tiene sucursal asignada.", "CAJA_SIN_SUCURSAL");
       if (auth.sucursal_id) {
         if (cajaRow.sucursal_id !== auth.sucursal_id) {
-          return err(400, "Tu usuario está asignado a una sucursal distinta a la de la caja.", "CAJA_SUCURSAL_MISMATCH");
+          // El mensaje depende de POR QUÉ no coincide. Para un admin que
+          // cambió de sucursal en el selector, decirle que su usuario está
+          // asignado a otra sucursal es falso y no le dice qué hacer: lo
+          // que pasa es que la caja abierta es de otro local.
+          return err(
+            400,
+            auth.usuario_fijo === false
+              ? "La caja abierta es de otra sucursal. Abrí la caja de la sucursal en la que estás operando, o cambiá de sucursal arriba."
+              : "Tu usuario está asignado a una sucursal distinta a la de la caja.",
+            "CAJA_SUCURSAL_MISMATCH",
+          );
         }
         sucursalId = auth.sucursal_id;
       } else {

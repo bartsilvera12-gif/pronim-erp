@@ -44,6 +44,9 @@ export async function POST(request: NextRequest) {
     const resp = await procesarConfirmarAtencion(body, {
       empresa_id: auth.empresa_id,
       sucursal_id: enforce.sucursal_id,
+      // true = el usuario tiene sucursal fija; false = es admin y la eligió
+      // en el selector. Cambia el mensaje de error si no coincide con la caja.
+      usuario_fijo: enforce.usuarioFijo,
       user_id: auth.user.id ?? null,
       nombre: auth.nombre ?? null,
     });
