@@ -553,37 +553,37 @@ export default function VentasPage() {
                 }`}
               />
             </div>
-          </div>
-
-          {/* Atajos de período — rellenan Desde/Hasta */}
-          <div className="mt-3 flex flex-wrap items-center gap-1.5">
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mr-1">{t("Período")}</span>
-            {atajosPeriodo.map((a) => {
-              const activo = fechaDesde === a.desde && fechaHasta === a.hasta;
-              return (
+            {/* Los atajos van en la misma fila que las fechas: ocupan las
+                columnas que quedaban libres y evitan una fila extra. */}
+            <div className="col-span-2 sm:col-span-3 lg:col-span-3 flex flex-wrap items-center gap-1.5 self-end pb-0.5">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mr-1">{t("Período")}</span>
+              {atajosPeriodo.map((a) => {
+                const activo = fechaDesde === a.desde && fechaHasta === a.hasta;
+                return (
+                  <button
+                    key={a.label}
+                    type="button"
+                    onClick={() => { setFechaDesde(a.desde); setFechaHasta(a.hasta); setSegmento(""); }}
+                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                      activo
+                        ? "bg-[#4FAEB2] text-white shadow-sm"
+                        : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
+                    }`}
+                  >
+                    {t(a.label)}
+                  </button>
+                );
+              })}
+              {(fechaDesde || fechaHasta) && (
                 <button
-                  key={a.label}
                   type="button"
-                  onClick={() => { setFechaDesde(a.desde); setFechaHasta(a.hasta); setSegmento(""); }}
-                  className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors ${
-                    activo
-                      ? "bg-[#4FAEB2] text-white shadow-sm"
-                      : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
-                  }`}
+                  onClick={() => { setFechaDesde(""); setFechaHasta(""); }}
+                  className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-500 hover:bg-slate-50"
                 >
-                  {t(a.label)}
+                  ✕ {t("Quitar fechas")}
                 </button>
-              );
-            })}
-            {(fechaDesde || fechaHasta) && (
-              <button
-                type="button"
-                onClick={() => { setFechaDesde(""); setFechaHasta(""); }}
-                className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-500 hover:bg-slate-50"
-              >
-                ✕ {t("Quitar fechas")}
-              </button>
-            )}
+              )}
+            </div>
           </div>
           {(hayFiltros || filtroPago || filtroEstado || segmento || fechaDesde || fechaHasta) && (
             <div className="mt-3 flex items-center gap-2">
@@ -600,8 +600,8 @@ export default function VentasPage() {
               )}
             </div>
           )}
-          <div className="mt-3 flex items-center justify-end gap-2 border-t border-slate-200 pt-3">
-            <span className="text-xs text-slate-500">
+          <div className="mt-3 flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 pt-3">
+            <span className="mr-auto text-xs text-slate-500">
               <strong className="text-slate-700">{filtradas.length}</strong> {t("de")} {alcance.length} {t("ventas")}
             </span>
             <ColumnasDropdown<VentaColKey>

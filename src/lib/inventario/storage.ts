@@ -168,15 +168,27 @@ function rowToMovimiento(row: MovimientoRow): MovimientoInventario {
 
 // ─── Productos ─────────────────────────────────────────────────────────────────
 
-/** Lista productos via API server-side (PG directo, soporta tenants erp_* no expuestos). */
-export async function getProductos(): Promise<Producto[]> {
+/**
+ * Lista productos via API server-side (PG directo, soporta tenants erp_* no
+ * expuestos).
+ *
+ * `sucursalId` acota el catálogo a esa sucursal. Importa para el admin, que
+ * no tiene sucursal fija: sin acotar ve la MISMA franja repetida una vez por
+ * local, porque cada una es una fila distinta de `productos`. Las pantallas
+ * operativas (comprar, vender, mover stock) mandan la sucursal activa; el
+ * listado de inventario no manda nada, porque ahí sí se quiere ver todo.
+ */
+export async function getProductos(sucursalId?: string | null): Promise<Producto[]> {
   try {
     // Usar fetchWithSupabaseSession para que adjunte Authorization: Bearer <jwt>
     // del localStorage del browser. El endpoint /api/productos hace
     // getTenantSupabaseFromAuth → resolveApiAuthContext, que prefiere el
     // bearer del header sobre las cookies (cookies pueden no estar disponibles
     // server-side en cross-domain / Supabase self-hosted con SameSite).
-    const r = await fetchWithSupabaseSession("/api/productos", { cache: "no-store" });
+    const url = sucursalId
+      ? `/api/productos?sucursal_id=${encodeURIComponent(sucursalId)}`
+      : "/api/productos";
+    const r = await fetchWithSupabaseSession(url, { cache: "no-store" });
     const j = await r.json().catch(() => ({}));
     if (!r.ok || !j?.success) {
       console.error("[inventario] getProductos:", (j as { error?: string })?.error ?? r.status);

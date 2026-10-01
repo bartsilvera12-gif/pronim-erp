@@ -55,6 +55,7 @@ export default function ExplorarEvaluacionesPage() {
 
   return (
     <DataExplorer<Ev>
+      volverA={{ href: "/evaluacion/nueva", label: "Evaluaciones" }}
       titulo="Explorar compras / evaluaciones"
       descripcion="Prendas evaluadas por cliente. Filtrá, ordená y exportá como en Excel."
       rows={rows} columns={columns} cargando={cargando} csvName="evaluaciones"

@@ -11,6 +11,7 @@ import { getProductos } from "@/lib/inventario/storage";
 import { generarYAbrirRecibo } from "@/lib/recibos/client";
 import type { TipoIvaVenta, TipoVenta, MonedaVenta, LineaVenta, MetodoPago, TipoPrecioVenta } from "@/lib/ventas/types";
 import type { Producto } from "@/lib/inventario/types";
+import { getSucursalActivaId } from "@/lib/sucursales/activa";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -289,7 +290,7 @@ export default function NuevaVentaPage() {
 
   useEffect(() => {
     let cancelled = false;
-    getProductos().then((data) => {
+    getProductos(getSucursalActivaId()).then((data) => {
       if (!cancelled) setProductos(data);
     });
     return () => { cancelled = true; };

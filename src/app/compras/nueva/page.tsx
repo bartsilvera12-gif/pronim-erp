@@ -10,6 +10,7 @@ import { getProductos, productoExiste, saveProducto } from "@/lib/inventario/sto
 import type { TipoIva, TipoPago, Moneda } from "@/lib/compras/types";
 import type { Proveedor } from "@/lib/proveedores/types";
 import type { MetodoValuacion, Producto } from "@/lib/inventario/types";
+import { getSucursalActivaId } from "@/lib/sucursales/activa";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -149,7 +150,7 @@ export default function NuevaCompraPage() {
     const data = await getProveedores();
     setProveedores(data.filter((p) => p.estado === "activo"));
   }
-  function recargarProductos() { getProductos().then(setProductos); }
+  function recargarProductos() { getProductos(getSucursalActivaId()).then(setProductos); }
   useEffect(() => { recargarProveedores(); recargarProductos(); }, []);
 
   // ── Modo Franjas (Pronim) ───────────────────────────────────────────────

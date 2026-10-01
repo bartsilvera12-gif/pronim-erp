@@ -74,6 +74,7 @@ export default function ExplorarCreditosPage() {
 
   return (
     <DataExplorer<Mov>
+      volverA={{ href: "/clientes/segmentos", label: "Clientes" }}
       titulo="Explorar créditos y cashback"
       descripcion="Movimientos de cartera. Filtrá por categoría/tipo/monto, ordená y exportá a Excel."
       rows={rows} columns={columns} cargando={cargando} csvName="creditos"

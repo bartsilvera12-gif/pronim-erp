@@ -55,6 +55,7 @@ export default function ExplorarGastosPage() {
 
   return (
     <DataExplorer<Gasto>
+      volverA={{ href: "/gastos", label: "Gastos" }}
       titulo="Explorar gastos"
       descripcion="Gastos por categoría, tipo y período. Agrupá por Categoría para ver en qué se gasta más; filtrá Recurrente para los fijos."
       rows={rows} columns={columns} cargando={cargando} csvName="gastos"

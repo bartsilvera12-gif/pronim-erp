@@ -76,8 +76,20 @@ export async function GET(request: NextRequest) {
     // veía las franjas que Sucursal 2 acababa de cargar. Admin/super_admin
     // sin sucursal_id fija ve todo (uso admin puro).
     const authRol = await getAuthWithRol(request);
-    if (authRol?.sucursal_id && !isSuperAdmin(authRol)) {
-      qs.set("or", `(sucursal_id.eq.${authRol.sucursal_id},sucursal_id.is.null)`);
+    // Sucursal efectiva del listado:
+    //   · usuario con sucursal fija → la suya, siempre
+    //   · admin → la que pida por ?sucursal_id (el selector del header)
+    //   · admin sin parámetro → todo el catálogo (uso admin puro)
+    //
+    // Sin esto, el admin veía la MISMA franja repetida una vez por sucursal:
+    // son filas distintas de `productos`, una por local.
+    const sucursalQuery = new URL(request.url).searchParams.get("sucursal_id");
+    const sucursalScope =
+      authRol?.sucursal_id && !isSuperAdmin(authRol)
+        ? authRol.sucursal_id
+        : (sucursalQuery && sucursalQuery.length >= 32 ? sucursalQuery : null);
+    if (sucursalScope) {
+      qs.set("or", `(sucursal_id.eq.${sucursalScope},sucursal_id.is.null)`);
     }
     const r = await postgrestGet<Record<string, unknown>>("productos", qs.toString(), {
       role: "jwt",
@@ -104,7 +116,7 @@ export async function GET(request: NextRequest) {
     // con la lista de sucursales donde está cargado, para mostrar la columna
     // "Ubicación" en la lista de inventario.
     let productos = r.rows;
-    if (!ctx.auth.sucursal_id && productos.length) {
+    if (!sucursalScope && productos.length) {
       try {
         const ids = productos.map((p) => String((p as { id?: string }).id ?? "")).filter(Boolean);
         const qss = new URLSearchParams();
@@ -133,12 +145,12 @@ export async function GET(request: NextRequest) {
         }
       } catch { /* schema sin sucursales: dejar sin campo */ }
     }
-    if (ctx.auth.sucursal_id && productos.length) {
+    if (sucursalScope && productos.length) {
       try {
         const ids = productos.map((p) => String((p as { id?: string }).id ?? "")).filter(Boolean);
         const qss = new URLSearchParams();
         qss.set("select", "producto_id,stock_actual,stock_minimo");
-        qss.set("sucursal_id", `eq.${ctx.auth.sucursal_id}`);
+        qss.set("sucursal_id", `eq.${sucursalScope}`);
         qss.set("producto_id", `in.(${ids.join(",")})`);
         const rs = await postgrestGet<{ producto_id: string; stock_actual: number | string; stock_minimo: number | string | null }>(
           "producto_stock_sucursal",

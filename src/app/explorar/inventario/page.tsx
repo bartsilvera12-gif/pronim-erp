@@ -54,6 +54,7 @@ export default function ExplorarInventarioPage() {
 
   return (
     <DataExplorer<Prod>
+      volverA={{ href: "/inventario", label: "Inventario" }}
       titulo="Explorar inventario"
       descripcion="Productos, stock y valor. Filtrá (ej. Stock < 5), ordená y exportá a Excel."
       rows={rows} columns={columns} cargando={cargando} csvName="inventario"

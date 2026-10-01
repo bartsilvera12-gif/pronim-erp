@@ -81,6 +81,7 @@ export default function ExplorarVentasPage() {
 
   return (
     <DataExplorer<Venta>
+      volverA={{ href: "/ventas", label: "Órdenes de venta" }}
       titulo="Explorar ventas"
       descripcion="Elegí columnas, filtrá cada campo, combiná filtros y ordená por cualquier columna. Todo instantáneo."
       rows={ventas}

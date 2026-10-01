@@ -90,6 +90,7 @@ export default function ExplorarCajaMovimientosPage() {
 
   return (
     <DataExplorer<Mov>
+      volverA={{ href: "/reportes/caja-movimientos", label: "Movimientos de caja" }}
       titulo="Movimientos de caja"
       descripcion="Todo lo que movió plata en el período: cobros de ventas, pagos por evaluaciones, ingresos/egresos manuales y aperturas. Para cuadrar la caja del día."
       rows={rows} columns={columns} cargando={cargando} csvName="caja_movimientos"

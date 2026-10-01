@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import Link from "next/link";
 // xlsx se carga dinámicamente al exportar (chunk aparte) para no inflar el
 // bundle de cada página de explorador ni la memoria del build.
 
@@ -62,6 +63,9 @@ function fmtDate(v: string | number | null): string {
 export function DataExplorer<T>(props: {
   titulo: string;
   descripcion?: string;
+  /** Pantalla de la que viene este explorador, para poder volver.
+   *  Sin esto el explorador queda colgado: se entra y no hay salida. */
+  volverA?: { href: string; label: string };
   rows: T[];
   columns: ColumnDef<T>[];
   cargando?: boolean;
@@ -74,7 +78,7 @@ export function DataExplorer<T>(props: {
   /** Encabezado extra (ej. KPIs clickeables). */
   headerExtra?: ReactNode;
 }) {
-  const { titulo, descripcion, rows, columns, cargando, detailHref, csvName = "export", toolbarExtra, headerExtra } = props;
+  const { titulo, descripcion, volverA, rows, columns, cargando, detailHref, csvName = "export", toolbarExtra, headerExtra } = props;
 
   const [visibles, setVisibles] = useState<Set<string>>(
     () => new Set(columns.filter((c) => c.defaultVisible !== false || c.required).map((c) => c.key)),
@@ -406,6 +410,17 @@ export function DataExplorer<T>(props: {
         .dx-print-root .overflow-x-auto { overflow: visible !important; }
       }`}</style>
       <div>
+        <nav className="mb-1 flex flex-wrap items-center gap-2 text-sm text-slate-400 print:hidden">
+          <Link href="/explorar" className="transition-colors hover:text-[#4FAEB2]">Explorar</Link>
+          {volverA && (
+            <>
+              <span>/</span>
+              <Link href={volverA.href} className="transition-colors hover:text-[#4FAEB2]">{volverA.label}</Link>
+            </>
+          )}
+          <span>/</span>
+          <span className="font-medium text-slate-600">{titulo}</span>
+        </nav>
         <h1 className="text-2xl font-bold text-slate-900">{titulo}</h1>
         {descripcion && <p className="text-sm text-slate-500 mt-0.5 print:hidden">{descripcion}</p>}
       </div>

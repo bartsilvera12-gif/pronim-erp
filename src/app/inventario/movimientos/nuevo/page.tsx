@@ -6,6 +6,7 @@ import MontoInput from "@/components/ui/MontoInput";
 import SearchableSelect from "@/components/ui/SearchableSelect";
 import { getProductos, saveMovimiento } from "@/lib/inventario/storage";
 import type { Producto, TipoMovimiento, OrigenMovimiento } from "@/lib/inventario/types";
+import { getSucursalActivaId } from "@/lib/sucursales/activa";
 
 export default function NuevoMovimientoPage() {
   const router = useRouter();
@@ -21,7 +22,7 @@ export default function NuevoMovimientoPage() {
 
   useEffect(() => {
     let cancelled = false;
-    getProductos().then((data) => {
+    getProductos(getSucursalActivaId()).then((data) => {
       if (!cancelled) setProductos(data);
     });
     return () => { cancelled = true; };

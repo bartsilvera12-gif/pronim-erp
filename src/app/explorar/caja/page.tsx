@@ -48,6 +48,7 @@ export default function ExplorarCajaPage() {
 
   return (
     <DataExplorer<Caja>
+      volverA={{ href: "/reportes/cierres-caja", label: "Cierres de caja" }}
       titulo="Explorar cierres de caja"
       descripcion="Turnos con contado vs esperado. Filtrá (ej. Diferencia < 0), ordená y exportá a Excel."
       rows={rows} columns={columns} cargando={cargando} csvName="cajas"

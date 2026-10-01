@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { getProductos } from "@/lib/inventario/storage";
 import type { Producto } from "@/lib/inventario/types";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
+import { getSucursalActivaId } from "@/lib/sucursales/activa";
 
 function formatGs(n: number): string {
   return "Gs. " + Math.round(n).toLocaleString("es-PY").replace(/,/g, ".");
@@ -48,7 +49,7 @@ export default function RecibirPrendasPage() {
 
   useEffect(() => {
     let cancel = false;
-    void getProductos().then((data) => {
+    void getProductos(getSucursalActivaId()).then((data) => {
       if (!cancel) setProductos(data);
     });
     void (async () => {
