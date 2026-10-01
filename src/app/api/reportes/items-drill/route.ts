@@ -65,8 +65,13 @@ export async function GET(request: NextRequest) {
     let iDesde = 0, iHasta = 0;
     if (desde) { params.push(desde); iDesde = params.length; }
     if (hasta) { params.push(hasta); iHasta = params.length; }
-    const fV = [desde ? `v.fecha >= $${iDesde}::timestamptz` : "", hasta ? `v.fecha < ($${iHasta}::date + interval '1 day')` : ""].filter(Boolean).map((s) => `AND ${s}`).join(" ");
-    const fR = [desde ? `r.fecha >= $${iDesde}::timestamptz` : "", hasta ? `r.fecha < ($${iHasta}::date + interval '1 day')` : ""].filter(Boolean).map((s) => `AND ${s}`).join(" ");
+    // Sucursal: la fija del usuario manda; el admin la elige en el header.
+    const sucursalFiltro = auth.sucursal_id ?? (sp.get("sucursal_id") || null);
+    let iSuc = 0;
+    if (sucursalFiltro) { params.push(sucursalFiltro); iSuc = params.length; }
+    const sucCond = (col: string) => (iSuc ? ` AND ${col} = $${iSuc}::uuid` : "");
+    const fV = [desde ? `v.fecha >= $${iDesde}::timestamptz` : "", hasta ? `v.fecha < ($${iHasta}::date + interval '1 day')` : ""].filter(Boolean).map((s) => `AND ${s}`).join(" ") + (vHasSuc ? sucCond("v.sucursal_id") : "");
+    const fR = [desde ? `r.fecha >= $${iDesde}::timestamptz` : "", hasta ? `r.fecha < ($${iHasta}::date + interval '1 day')` : ""].filter(Boolean).map((s) => `AND ${s}`).join(" ") + (rHasSuc ? sucCond("r.sucursal_id") : "");
 
     const sql = `
       SELECT * FROM (

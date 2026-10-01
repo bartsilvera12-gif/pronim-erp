@@ -74,6 +74,13 @@ export async function GET(request: NextRequest) {
     const sucJoin = hasSuc ? `LEFT JOIN ${tS} s ON s.id = v.sucursal_id` : "";
     const sucGroup = hasSuc ? "v.sucursal_id, s.nombre" : "1";
 
+    // Sucursal: la fija del usuario manda; el admin la elige en el header.
+    // El comparativo muestra una fila por sucursal, así que filtrar acá deja
+    // solo la del local en el que se está parado.
+    const sucursalFiltro = auth.sucursal_id ?? (sp.get("sucursal_id") || null);
+    const sucWhere = hasSuc && sucursalFiltro ? "AND v.sucursal_id = $4::uuid" : "";
+    const sucArgs = hasSuc && sucursalFiltro ? [sucursalFiltro] : [];
+
     // Métricas por sucursal en un rango.
     async function metricas(d1: string, d2: string) {
       const r = await pool.query<{
@@ -92,8 +99,9 @@ export async function GET(request: NextRequest) {
            FROM ${tV} v ${sucJoin}
           WHERE v.empresa_id = $1 AND (v.estado IS NULL OR v.estado <> 'anulada')
             AND v.fecha >= $2::timestamptz AND v.fecha < ($3::date + interval '1 day')
+            ${sucWhere}
           GROUP BY ${sucGroup}`,
-        [auth.empresa_id, d1, d2],
+        [auth.empresa_id, d1, d2, ...sucArgs],
       );
       return r.rows;
     }

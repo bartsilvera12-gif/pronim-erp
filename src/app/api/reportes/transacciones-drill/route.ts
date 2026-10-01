@@ -86,14 +86,25 @@ export async function GET(request: NextRequest) {
     let idxDesde = 0, idxHasta = 0;
     if (desde) { params.push(desde); idxDesde = params.length; }
     if (hasta) { params.push(hasta); idxHasta = params.length; }
+
+    // Sucursal: la fija del usuario manda; el admin elige con el selector
+    // del header, que viaja como ?sucursal_id. Sin nada, se ve la empresa.
+    const sucursalFiltro = auth.sucursal_id ?? (sp.get("sucursal_id") || null);
+    let idxSuc = 0;
+    if (sucursalFiltro) { params.push(sucursalFiltro); idxSuc = params.length; }
+    const sucCond = (col: string) =>
+      idxSuc ? ` AND ${col} = $${idxSuc}::uuid` : "";
+
     const fVentas = [
       desde ? `v.fecha >= $${idxDesde}::timestamptz` : "",
       hasta ? `v.fecha < ($${idxHasta}::date + interval '1 day')` : "",
-    ].filter(Boolean).map((s) => `AND ${s}`).join(" ");
+    ].filter(Boolean).map((s) => `AND ${s}`).join(" ")
+      + (vHasSuc ? sucCond("v.sucursal_id") : "");
     const fRecep = [
       desde ? `r.fecha >= $${idxDesde}::timestamptz` : "",
       hasta ? `r.fecha < ($${idxHasta}::date + interval '1 day')` : "",
-    ].filter(Boolean).map((s) => `AND ${s}`).join(" ");
+    ].filter(Boolean).map((s) => `AND ${s}`).join(" ")
+      + (rHasSuc ? sucCond("r.sucursal_id") : "");
     void dateCond;
 
     // Signo de pagos de venta (reversas restan).

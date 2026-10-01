@@ -51,6 +51,16 @@ export async function GET(request: NextRequest) {
     const cols = new Set(colQ.rows.map((r) => r.column_name));
     const hasCategoria = cols.has("categoria");
 
+    // scope_clientes es de la migración de carteras: si no está, no se puede
+    // filtrar por sucursal y se devuelve todo, como antes.
+    const scopeQ = await pool.query<{ n: string }>(
+      `SELECT count(*)::text AS n FROM information_schema.columns
+        WHERE table_schema = $1 AND table_name IN ('clientes','sucursales')
+          AND column_name = 'scope_clientes'`,
+      [schema],
+    );
+    const hayScope = Number(scopeQ.rows[0]?.n ?? 0) >= 2;
+
     const sp = request.nextUrl.searchParams;
     const desde = sp.get("desde");
     const hasta = sp.get("hasta");
@@ -63,6 +73,10 @@ export async function GET(request: NextRequest) {
 
     // Condiciones para filtrar movimientos DEL PERÍODO / FILTROS
     const conds: string[] = ["m.empresa_id = $1"];
+    // El movimiento de crédito no tiene sucursal propia: el crédito es del
+    // cliente y el cliente pertenece a una cartera (scope_clientes), que a su
+    // vez corresponde a una sucursal. Se filtra por esa cadena.
+    const sucursalFiltro = auth.sucursal_id ?? (sp.get("sucursal_id") || null);
     const params: unknown[] = [auth.empresa_id];
     const push = (sql: string, val: unknown) => {
       params.push(val);
@@ -81,6 +95,17 @@ export async function GET(request: NextRequest) {
       conds.push(`(LOWER(COALESCE(c.empresa, c.nombre_contacto, c.nombre, '')) LIKE ${p}
                    OR LOWER(COALESCE(m.referencia_numero, '')) LIKE ${p}
                    OR LOWER(COALESCE(m.observaciones, '')) LIKE ${p})`);
+    }
+
+    // Filtro por sucursal: el cliente pertenece a una cartera y esa cartera
+    // es la de una sucursal. Si el schema no tiene scope_clientes, el EXISTS
+    // no se agrega y se sigue viendo todo (como antes).
+    if (sucursalFiltro && hayScope) {
+      const tSuc = quoteSchemaTable(schema, "sucursales");
+      params.push(sucursalFiltro);
+      conds.push(`EXISTS (SELECT 1 FROM ${tSuc} s
+                           WHERE s.id = $${params.length}::uuid
+                             AND s.scope_clientes IS NOT DISTINCT FROM c.scope_clientes)`);
     }
 
     const from = `${tM} m

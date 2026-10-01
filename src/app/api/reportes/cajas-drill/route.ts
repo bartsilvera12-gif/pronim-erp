@@ -83,7 +83,11 @@ export async function GET(request: NextRequest) {
     );
     const cajasCols = new Set(colQ.rows.map((r) => r.column_name));
     const hasSucursal = cajasCols.has("sucursal_id");
-    if (hasSucursal && auth.sucursal_id) push("c.sucursal_id = ?::uuid", auth.sucursal_id);
+    // La sucursal fija del usuario manda; si es admin, la del selector del
+    // header (?sucursal_id). Antes solo se miraba la fija, así que el admin
+    // veía las cajas de todos los locales aunque estuviera parado en uno.
+    const sucursalFiltro = auth.sucursal_id ?? (sp.get("sucursal_id") || null);
+    if (hasSucursal && sucursalFiltro) push("c.sucursal_id = ?::uuid", sucursalFiltro);
 
     const from = `${tCJ} c
        LEFT JOIN ${tU} ua ON ua.id = c.abierta_por

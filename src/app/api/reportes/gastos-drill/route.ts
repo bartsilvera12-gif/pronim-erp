@@ -42,6 +42,12 @@ export async function GET(request: NextRequest) {
     const conds: string[] = ["g.empresa_id = $1"];
     if (desde) { params.push(desde); conds.push(`g.fecha >= $${params.length}::date`); }
     if (hasta) { params.push(hasta); conds.push(`g.fecha <= $${params.length}::date`); }
+    // Sucursal: la fija del usuario manda; el admin la elige en el header.
+    const sucursalFiltro = auth.sucursal_id ?? (sp.get("sucursal_id") || null);
+    if (hasSuc && sucursalFiltro) {
+      params.push(sucursalFiltro);
+      conds.push(`g.sucursal_id = $${params.length}::uuid`);
+    }
 
     const r = await pool.query<Record<string, unknown>>(
       `SELECT g.id::text AS id, g.fecha::text AS fecha,
