@@ -56,8 +56,16 @@ export function membreteA4(origin = ""): string {
  * el ticket y la factura usan el mismo y se cambia desde la pantalla de
  * Facturación. Va en escala de grises porque la térmica es monocromo.
  */
-export function membreteTicket(logoUrl?: string | null, negocio?: string | null): string {
+export function membreteTicket(
+  logoUrl?: string | null,
+  negocio?: string | null,
+  contacto?: { direccion?: string | null; telefono?: string | null },
+): string {
   const e = EMPRESA_DOC;
+  // Dirección y teléfono DEL LOCAL: el cliente que quiere reclamar tiene
+  // que llamar a donde compró, no al número de la empresa.
+  const dir = (contacto?.direccion ?? "").trim() || e.direccion[0] || "";
+  const tel = (contacto?.telefono ?? "").trim() || e.telefono || "";
   // El nombre lo decide quien llama (la marca de la sucursal), no la
   // constante: la misma empresa opera como Akakua'a y como Novo Outra Vez.
   const nombre = (negocio ?? "").trim() || e.nombre;
@@ -66,8 +74,7 @@ export function membreteTicket(logoUrl?: string | null, negocio?: string | null)
   <div style="text-align:center;padding-bottom:6px;margin-bottom:6px;border-bottom:1px dashed #000;">
     ${logo ? `<img src="${esc(logo)}" alt="" style="display:block;margin:0 auto 4px;max-height:16mm;max-width:38mm;object-fit:contain;filter:grayscale(1) contrast(1.35);" />` : ""}
     <div style="font-weight:700;font-size:13px;">${esc(nombre)}</div>
-    ${e.telefono ? `<div style="font-size:10px;">Tel: ${esc(e.telefono)}</div>` : ""}
-    ${e.direccion[0] ? `<div style="font-size:10px;">${esc(e.direccion[0])}</div>` : ""}
-    ${e.direccion.length > 1 ? `<div style="font-size:10px;">${esc(e.direccion.slice(1).join(" · "))}</div>` : ""}
+    ${dir ? `<div style="font-size:10px;">${esc(dir)}</div>` : ""}
+    ${tel ? `<div style="font-size:10px;">Tel: ${esc(tel)}</div>` : ""}
   </div>`;
 }

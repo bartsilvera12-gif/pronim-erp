@@ -249,6 +249,8 @@ function renderCopia(opts: {
   factura?: DatosFactura | null;
   /** Logo del emisor, también para el ticket interno. */
   logoUrl?: string | null;
+  /** Dirección y teléfono DEL LOCAL donde se vendió. */
+  contacto?: { direccion?: string | null; telefono?: string | null };
 }): string {
   const { tipo, venta, brief, fontPx, isLast } = opts;
   const factura = opts.factura ?? null;
@@ -361,8 +363,16 @@ function renderCopia(opts: {
          ${e.logo_url ? `<img class="logo" src="${escapeHtml(e.logo_url)}" alt="">` : ""}
          <div class="razon">${escapeHtml(e.razon_social_emisor ?? opts.negocio)}</div>
          ${e.nombre_fantasia ? `<div class="fantasia">${escapeHtml(e.nombre_fantasia)}</div>` : ""}
-         ${e.direccion_matriz ? `<div>${escapeHtml(e.direccion_matriz)}</div>` : ""}
-         ${e.telefono ? `<div>Tel: ${escapeHtml(e.telefono)}</div>` : ""}
+         ${(() => {
+           // Dirección del ESTABLECIMIENTO que emite, no la de la matriz:
+           // cada establecimiento está declarado con la suya ante la SET.
+           const d = (opts.contacto?.direccion ?? e.direccion_matriz ?? "").trim();
+           return d ? `<div>${escapeHtml(d)}</div>` : "";
+         })()}
+         ${(() => {
+           const t2 = (opts.contacto?.telefono ?? e.telefono ?? "").trim();
+           return t2 ? `<div>Tel: ${escapeHtml(t2)}</div>` : "";
+         })()}
          <div>RUC: ${escapeHtml(e.ruc_emisor ?? "—")}</div>
          <div class="timbrado">
            Timbrado N° ${escapeHtml(e.timbrado_numero ?? "—")}<br>
@@ -381,7 +391,7 @@ function renderCopia(opts: {
     : "";
 
   return `<section class="paper ${isLast ? "last" : ""}">
-    ${cabeceraFiscal || headerCocina || membreteTicket(opts.logoUrl, opts.negocio)}
+    ${cabeceraFiscal || headerCocina || membreteTicket(opts.logoUrl, opts.negocio, opts.contacto)}
     ${factura ? "" : `<div class="meta">
       ${escapeHtml(venta.numero_control)}<br>
       ${formatFecha(venta.fecha)}
@@ -536,16 +546,23 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
   // marca de la empresa, como antes.
   let marcaSucursal: string | null = null;
   let logoSucursal: string | null = null;
+  let dirSucursal: string | null = null;
+  let telSucursal: string | null = null;
   if (venta.sucursal_id) {
     try {
       const sQ = await ctx.supabase
         .from("sucursales")
-        .select("nombre_comercial, logo_url")
+        .select("nombre_comercial, logo_url, direccion, telefono")
         .eq("id", venta.sucursal_id)
         .maybeSingle();
-      const row = sQ.data as { nombre_comercial?: string | null; logo_url?: string | null } | null;
+      const row = sQ.data as {
+        nombre_comercial?: string | null; logo_url?: string | null;
+        direccion?: string | null; telefono?: string | null;
+      } | null;
       marcaSucursal = (row?.nombre_comercial ?? null) || null;
       logoSucursal = (row?.logo_url ?? null) || null;
+      dirSucursal = (row?.direccion ?? null) || null;
+      telSucursal = (row?.telefono ?? null) || null;
     } catch { /* sin columnas: se usa la marca de la empresa */ }
   }
   const negocio = resolveNegocio(nombreEmpresa, marcaSucursal);
@@ -763,7 +780,12 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
 
   const seccionesHtml = copias
     .map((tipo, idx) =>
-      renderCopia({ tipo, venta, items, brief, fontPx, isLast: idx === copias.length - 1, negocio, factura, logoUrl })
+      renderCopia({
+        tipo, venta, items, brief, fontPx,
+        isLast: idx === copias.length - 1,
+        negocio, factura, logoUrl,
+        contacto: { direccion: dirSucursal, telefono: telSucursal },
+      })
     )
     .join("");
 
