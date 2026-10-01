@@ -350,8 +350,6 @@ export default function VentasPage() {
     }
     // Tipo de venta
     if (filtroTipo !== "" && v.tipo_venta !== filtroTipo) return false;
-    // IVA: coincide si al menos un ítem tiene ese tipo
-      return false;
     // Forma de pago
     if (filtroPago !== "" && v.metodo_pago !== filtroPago) return false;
     // Estado (completada / anulada) — si no se filtra, mostramos todo salvo
