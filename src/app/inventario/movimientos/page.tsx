@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { getMovimientos } from "@/lib/inventario/storage";
+import { useSucursalActivaId } from "@/lib/sucursales/activa";
 import type { MovimientoInventario, TipoMovimiento, OrigenMovimiento } from "@/lib/inventario/types";
 import { useT } from "@/lib/i18n/context";
 import { fmtActive } from "@/lib/i18n/currency";
@@ -20,6 +21,9 @@ const origenLabel: Record<OrigenMovimiento, string> = {
   venta: "Venta",
   ajuste_manual: "Ajuste manual",
   inventario_inicial: "Inventario inicial",
+  transferencia: "Transferencia",
+  recepcion: "Recepción",
+  venta_regalo: "Regalo",
 };
 
 const origenBadge: Record<OrigenMovimiento, string> = {
@@ -27,6 +31,9 @@ const origenBadge: Record<OrigenMovimiento, string> = {
   venta: "bg-purple-50 text-purple-600",
   ajuste_manual: "bg-gray-100 text-gray-600",
   inventario_inicial: "bg-orange-50 text-orange-600",
+  transferencia: "bg-teal-50 text-teal-700",
+  recepcion: "bg-emerald-50 text-emerald-700",
+  venta_regalo: "bg-pink-50 text-pink-600",
 };
 
 // formatGs → moneda activa del usuario (Gs. o R$).
@@ -65,14 +72,16 @@ export default function MovimientosPage() {
   const [paginaActual, setPaginaActual] = useState(0);
   const [cargandoLista, setCargandoLista] = useState(true);
 
+  // Los movimientos siguen al selector del header, igual que el resto.
+  const sucursalActivaId = useSucursalActivaId();
   useEffect(() => {
     let cancelled = false;
     setCargandoLista(true);
-    getMovimientos()
+    getMovimientos(sucursalActivaId)
       .then((data) => { if (!cancelled) setTodos(data); })
       .finally(() => { if (!cancelled) setCargandoLista(false); });
     return () => { cancelled = true; };
-  }, []);
+  }, [sucursalActivaId]);
 
   const filtrados = useMemo(() => todos.filter((m) => {
     const texto = busqueda.toLowerCase();

@@ -415,9 +415,13 @@ export async function updateProducto(
 // ─── Movimientos ─────────────────────────────────────────────────────────────
 
 /** Lista movimientos via API server-side (PG directo). */
-export async function getMovimientos(): Promise<MovimientoInventario[]> {
+/** `sucursalId` acota a esa sucursal (el selector del header). */
+export async function getMovimientos(sucursalId?: string | null): Promise<MovimientoInventario[]> {
   try {
-    const r = await fetchWithSupabaseSession("/api/inventario/movimientos", { cache: "no-store" });
+    const url = sucursalId
+      ? `/api/inventario/movimientos?sucursal_id=${encodeURIComponent(sucursalId)}`
+      : "/api/inventario/movimientos";
+    const r = await fetchWithSupabaseSession(url, { cache: "no-store" });
     const j = await r.json().catch(() => ({}));
     if (!r.ok || !j?.success) {
       console.error("[inventario] getMovimientos:", (j as { error?: string })?.error ?? r.status);

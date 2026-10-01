@@ -33,7 +33,11 @@ export async function GET(request: NextRequest) {
     if (!auth) return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
 
     const esAdmin = esRolAdminEmpresaOGlobal(auth.rol ?? undefined);
-    const sucScope = esAdmin ? null : (auth.sucursal_id ?? null);
+    // El cajero ve lo de su sucursal; el admin, la del selector del header
+    // (?sucursal_id). Sin elegir, el admin ve toda la empresa.
+    const sucScope = esAdmin
+      ? (request.nextUrl.searchParams.get("sucursal_id") || null)
+      : (auth.sucursal_id ?? null);
 
     const schema = await fetchDataSchemaForEmpresaId(auth.empresa_id);
     assertAllowedChatDataSchema(schema);
@@ -52,14 +56,27 @@ export async function GET(request: NextRequest) {
       //   - origen='venta'     → v.sucursal_id = $2
       //   - origen='recepcion' → r.sucursal_id = $2
       //   - resto de orígenes  → siempre pasan (no tienen sucursal derivable)
+      // `sucursal_id` propio de la fila (lo escriben las transferencias) gana
+      // sobre lo derivado: una transferencia tiene una salida en un local y
+      // una entrada en otro, así que no se puede deducir de un solo lado.
+      const tieneSucCol = await client.query<{ n: string }>(
+        `SELECT count(*)::text AS n FROM information_schema.columns
+          WHERE table_schema = $1 AND table_name = 'movimientos_inventario'
+            AND column_name = 'sucursal_id'`,
+        [schema],
+      );
+      const haySucCol = Number(tieneSucCol.rows[0]?.n ?? 0) > 0;
+
       let sucCond = "";
       if (sucScope) {
         args.push(sucScope);
         sucCond = `AND (
+          ${haySucCol ? "mi.sucursal_id = $2 OR (mi.sucursal_id IS NULL AND (" : "("}
           (mi.origen = 'venta'     AND v.sucursal_id = $2)
        OR (mi.origen = 'recepcion' AND r.sucursal_id = $2)
        OR (mi.origen = 'compra'    AND c.sucursal_id = $2)
        OR mi.origen NOT IN ('venta','recepcion','compra')
+          ${haySucCol ? "))" : ")"}
         )`;
       }
 
@@ -69,7 +86,7 @@ export async function GET(request: NextRequest) {
            mi.producto_sku, mi.tipo, mi.cantidad, mi.costo_unitario,
            mi.origen, mi.referencia, mi.fecha, mi.created_at, mi.updated_at,
            mi.created_by, mi.usuario_nombre,
-           COALESCE(v.sucursal_id, r.sucursal_id, c.sucursal_id) AS sucursal_derivada_id
+           ${haySucCol ? "COALESCE(mi.sucursal_id, v.sucursal_id, r.sucursal_id, c.sucursal_id)" : "COALESCE(v.sucursal_id, r.sucursal_id, c.sucursal_id)"} AS sucursal_derivada_id
          FROM ${movT} mi
          LEFT JOIN ${ventasT}  v ON mi.origen = 'venta'     AND v.numero_control = mi.referencia AND v.empresa_id = $1
          LEFT JOIN ${recepT}   r ON mi.origen = 'recepcion' AND r.numero_control = mi.referencia AND r.empresa_id = $1

@@ -280,6 +280,51 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // ── Rastro en Inventario → Movimientos ──────────────────────────────
+    // Dos filas por producto: la SALIDA del local que entrega y la ENTRADA
+    // del que recibe. Sin esto la mercadería cambiaba de sucursal sin dejar
+    // rastro en el historial de movimientos.
+    //
+    // Requiere la migración 20261003000000 (origen='transferencia' y la
+    // columna sucursal_id). Si todavía no corrió, la transferencia se
+    // registra igual: el rastro es deseable, pero no vale perder el
+    // movimiento de stock por él.
+    const refTransfer = `TRF-${String(transferId).slice(0, 8).toUpperCase()}`;
+    // SAVEPOINT y no solo try/catch: en Postgres, un INSERT que falla aborta
+    // la transacción entera y el COMMIT posterior también falla. Con el
+    // savepoint se deshace solo este pedazo y la transferencia se guarda.
+    await client.query("SAVEPOINT mov_transfer");
+    try {
+      const tMov = quoteSchemaTable(schema, "movimientos_inventario");
+      for (const it of items) {
+        for (const lado of [
+          { tipo: "SALIDA", suc: origen },
+          { tipo: "ENTRADA", suc: destino },
+        ]) {
+          await client.query(
+            `INSERT INTO ${tMov} (
+               empresa_id, producto_id, producto_nombre, producto_sku,
+               tipo, cantidad, costo_unitario, origen, referencia,
+               sucursal_id, fecha
+             )
+             SELECT $1::uuid, $2::uuid, $3, COALESCE(p.sku, ''),
+                    $4, $5::numeric, COALESCE(p.costo_promedio, 0), 'transferencia', $6,
+                    $7::uuid, now()
+               FROM ${tP} p WHERE p.id = $2::uuid`,
+            [
+              auth.empresa_id, it.producto_id, it.producto_nombre ?? null,
+              lado.tipo, it.cantidad, refTransfer, lado.suc,
+            ],
+          );
+        }
+      }
+      await client.query("RELEASE SAVEPOINT mov_transfer");
+    } catch (e) {
+      await client.query("ROLLBACK TO SAVEPOINT mov_transfer");
+      console.error("[transferencias] no se pudo registrar el movimiento de inventario:",
+        e instanceof Error ? e.message : e);
+    }
+
     await client.query("COMMIT");
     return NextResponse.json(successResponse({
       transferencia: {
