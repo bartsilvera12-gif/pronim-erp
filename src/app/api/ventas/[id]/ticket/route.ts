@@ -30,14 +30,20 @@ import { montoEnLetrasGs } from "@/lib/facturacion/monto-en-letras";
 
 /**
  * Nombre del negocio en el ticket. Orden de preferencia:
- *   1) process.env.NEURA_CLIENT_NAME (instancia dedicada monocliente)
- *   2) empresas.nombre_empresa de la empresa de la venta
- *   3) fallback seguro
- * Nunca se hardcodea otra marca.
+ *   1) sucursales.nombre_comercial de la sucursal de la venta
+ *   2) process.env.NEURA_CLIENT_NAME (instancia dedicada monocliente)
+ *   3) empresas.nombre_empresa de la empresa de la venta
+ *   4) fallback seguro
+ *
+ * La sucursal va primero porque una misma empresa puede operar con dos
+ * marcas: Akakua'a en Paraguay y Novo Outra Vez en Brasil. El ticket tiene
+ * que salir con la marca del local donde se vendió.
  */
 const NEGOCIO_FALLBACK = "Akakua'a";
 
-function resolveNegocio(nombreEmpresa?: string | null): string {
+function resolveNegocio(nombreEmpresa?: string | null, marcaSucursal?: string | null): string {
+  const m = (marcaSucursal ?? "").trim();
+  if (m) return m;
   const env = (process.env.NEURA_CLIENT_NAME ?? "").trim();
   if (env) return env;
   const e = (nombreEmpresa ?? "").trim();
@@ -182,6 +188,8 @@ interface VentaRow {
   observaciones: string | null;
   metodo_pago: string | null;
   cliente_id: string | null;
+  /** Sucursal donde se vendió: define la marca y el logo del comprobante. */
+  sucursal_id?: string | null;
   /** Número ya asignado por el autoimpresor. Si está, se reimprime la factura. */
   factura_numero?: string | null;
   /** Columnas opcionales: joyería no usa remisión, quedan en null. */
@@ -239,6 +247,8 @@ function renderCopia(opts: {
   negocio: string;
   /** Presente solo cuando se pidió ?factura=1 y la sucursal factura. */
   factura?: DatosFactura | null;
+  /** Logo del emisor, también para el ticket interno. */
+  logoUrl?: string | null;
 }): string {
   const { tipo, venta, brief, fontPx, isLast } = opts;
   const factura = opts.factura ?? null;
@@ -371,7 +381,7 @@ function renderCopia(opts: {
     : "";
 
   return `<section class="paper ${isLast ? "last" : ""}">
-    ${cabeceraFiscal || headerCocina || membreteTicket()}
+    ${cabeceraFiscal || headerCocina || membreteTicket(opts.logoUrl, opts.negocio)}
     ${factura ? "" : `<div class="meta">
       ${escapeHtml(venta.numero_control)}<br>
       ${formatFecha(venta.fecha)}
@@ -487,7 +497,7 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
   const empresaId = ctx.auth.empresa_id;
 
   // Venta
-  const COLS_BASE = "id, numero_control, fecha, subtotal, monto_iva, total, observaciones, metodo_pago, cliente_id";
+  const COLS_BASE = "id, numero_control, fecha, subtotal, monto_iva, total, observaciones, metodo_pago, cliente_id, sucursal_id";
   // `factura_numero` es de la migración del autoimpresor. En un deploy que
   // todavía no la aplicó, pedirla rompe el SELECT entero — así que si falla
   // se reintenta sin ella y el ticket sigue saliendo.
@@ -521,7 +531,24 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
   } catch {
     nombreEmpresa = null;
   }
-  const negocio = resolveNegocio(nombreEmpresa);
+  // Marca de la sucursal (Akakua'a en PY, Novo Outra Vez en BR) y su logo.
+  // Si la migración todavía no corrió, la consulta falla y se sigue con la
+  // marca de la empresa, como antes.
+  let marcaSucursal: string | null = null;
+  let logoSucursal: string | null = null;
+  if (venta.sucursal_id) {
+    try {
+      const sQ = await ctx.supabase
+        .from("sucursales")
+        .select("nombre_comercial, logo_url")
+        .eq("id", venta.sucursal_id)
+        .maybeSingle();
+      const row = sQ.data as { nombre_comercial?: string | null; logo_url?: string | null } | null;
+      marcaSucursal = (row?.nombre_comercial ?? null) || null;
+      logoSucursal = (row?.logo_url ?? null) || null;
+    } catch { /* sin columnas: se usa la marca de la empresa */ }
+  }
+  const negocio = resolveNegocio(nombreEmpresa, marcaSucursal);
 
   // Items
   const iQ = await ctx.supabase
@@ -651,6 +678,12 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
     if (hayPlancha) copias.push("plancha");
   }
 
+  // El logo sale de la configuración del emisor y se usa en los dos
+  // comprobantes. Si no hay config (o falla), el ticket va sin logo.
+  const emisorCfg = await leerDatosEmisor(empresaId).catch(() => null);
+  // El logo de la sucursal manda sobre el del emisor: son marcas distintas.
+  const logoUrl = logoSucursal ?? emisorCfg?.logo_url ?? null;
+
   // ── Factura del autoimpresor ─────────────────────────────────────────
   // Solo si la pidieron explícitamente: asignar el número consume uno del
   // rango autorizado, así que no pasa por accidente al ver el ticket.
@@ -677,7 +710,7 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
     }
     if (fallo) return fallo;
 
-    const emisor = asignado ? await leerDatosEmisor(empresaId) : null;
+    const emisor = asignado ? emisorCfg : null;
     if (!asignado) {
       const r = noSePudo("Esta sucursal no emite factura con timbrado. Revisá Configuración → Facturación.");
       if (r) return r;
@@ -730,7 +763,7 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
 
   const seccionesHtml = copias
     .map((tipo, idx) =>
-      renderCopia({ tipo, venta, items, brief, fontPx, isLast: idx === copias.length - 1, negocio, factura })
+      renderCopia({ tipo, venta, items, brief, fontPx, isLast: idx === copias.length - 1, negocio, factura, logoUrl })
     )
     .join("");
 

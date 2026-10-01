@@ -7,6 +7,7 @@ import { ArrowLeft, Loader2, Banknote, Download } from "lucide-react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { generarYAbrirRecibo } from "@/lib/recibos/client";
 import { RegistrarCobroModalCxc } from "@/components/cobros/RegistrarCobroModalCxc";
+import { tt } from "@/lib/i18n/dict";
 
 type Mov = {
   id: string;
@@ -112,7 +113,7 @@ export default function EstadoCuentaPage() {
         <div className="flex items-center gap-3">
           <Banknote className="h-7 w-7 text-[#4FAEB2]" />
           <div>
-            <h1 className="text-2xl font-bold text-gray-800">Estado de cuenta</h1>
+            <h1 className="text-2xl font-bold text-gray-800">{tt("Estado de cuenta")}</h1>
             <p className="text-gray-600">{cliente.nombre}{cliente.ruc ? ` · ${cliente.ruc}` : ""}</p>
           </div>
         </div>
@@ -122,7 +123,7 @@ export default function EstadoCuentaPage() {
           rel="noopener"
           className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
         >
-          <Download className="h-4 w-4" /> Descargar estado de cuenta
+          <Download className="h-4 w-4" /> {tt("Descargar estado de cuenta")}
         </a>
       </div>
 
@@ -130,7 +131,7 @@ export default function EstadoCuentaPage() {
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="text-xs uppercase tracking-wide text-gray-400">Total vendido</div>
+          <div className="text-xs uppercase tracking-wide text-gray-400">{tt("Total vendido")}</div>
           <div className="mt-1 text-xl font-bold text-slate-800">{fmtGs(resumen.total_vendido)}</div>
         </div>
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
@@ -149,22 +150,22 @@ export default function EstadoCuentaPage() {
 
       {/* Movimientos (créditos) */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="border-b border-slate-100 px-4 py-3"><h2 className="text-sm font-semibold text-gray-700">Cuentas a crédito</h2></div>
+        <div className="border-b border-slate-100 px-4 py-3"><h2 className="text-sm font-semibold text-gray-700">{tt("Cuentas a crédito")}</h2></div>
         {movs.length === 0 ? (
-          <div className="p-6 text-center text-sm text-gray-500">Este cliente no tiene ventas a crédito.</div>
+          <div className="p-6 text-center text-sm text-gray-500">{tt("Este cliente no tiene ventas a crédito.")}</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[760px] text-left text-sm">
               <thead className="bg-slate-50 text-xs uppercase text-gray-500">
                 <tr>
-                  <th className="py-2.5 px-4 font-medium">Venta</th>
-                  <th className="py-2.5 px-4 font-medium">Emisión</th>
+                  <th className="py-2.5 px-4 font-medium">{tt("Venta")}</th>
+                  <th className="py-2.5 px-4 font-medium">{tt("Emisión")}</th>
                   <th className="py-2.5 px-4 font-medium">Vencimiento</th>
-                  <th className="py-2.5 px-4 font-medium text-right">Total</th>
+                  <th className="py-2.5 px-4 font-medium text-right">{tt("Total")}</th>
                   <th className="py-2.5 px-4 font-medium text-right">Cobrado</th>
                   <th className="py-2.5 px-4 font-medium text-right">Saldo</th>
                   <th className="py-2.5 px-4 font-medium">Estado</th>
-                  <th className="py-2.5 px-4 font-medium text-right">Acción</th>
+                  <th className="py-2.5 px-4 font-medium text-right">{tt("Acción")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -198,16 +199,16 @@ export default function EstadoCuentaPage() {
 
       {/* Historial de cobros */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="border-b border-slate-100 px-4 py-3"><h2 className="text-sm font-semibold text-gray-700">Historial de cobros</h2></div>
+        <div className="border-b border-slate-100 px-4 py-3"><h2 className="text-sm font-semibold text-gray-700">{tt("Historial de cobros")}</h2></div>
         {cobros.length === 0 ? (
-          <div className="p-6 text-center text-sm text-gray-500">Sin cobros registrados.</div>
+          <div className="p-6 text-center text-sm text-gray-500">{tt("Sin cobros registrados.")}</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[520px] text-left text-sm">
               <thead className="bg-slate-50 text-xs uppercase text-gray-500">
                 <tr>
-                  <th className="py-2.5 px-4 font-medium">Fecha</th>
-                  <th className="py-2.5 px-4 font-medium">Método</th>
+                  <th className="py-2.5 px-4 font-medium">{tt("Fecha")}</th>
+                  <th className="py-2.5 px-4 font-medium">{tt("Método")}</th>
                   <th className="py-2.5 px-4 font-medium">Referencia</th>
                   <th className="py-2.5 px-4 font-medium text-right">Monto</th>
                   <th className="py-2.5 px-4 font-medium text-right">Recibo</th>

@@ -17,6 +17,7 @@ import MontoInput from "@/components/ui/MontoInput";
 import { fmtActive, getActiveMoneda } from "@/lib/i18n/currency";
 import { useT } from "@/lib/i18n/context";
 import { PromptModal } from "@/components/ui/PromptModal";
+import { tt } from "@/lib/i18n/dict";
 
 export type Franja = {
   id: string;
@@ -40,13 +41,31 @@ export type Linea = {
   precio_unitario: number;
   cantidad: number;
   tipo_prenda_id?: string | null;
-  /** Descuento manual por unidad (Gs./R$). Aplicado a LLEVA en /venta/nueva. */
+  /** Descuento manual por unidad. Es lo que consume el backend. Puede tener
+   *  decimales: sale de dividir el total de la línea por la cantidad. */
   descuento_unitario?: number;
+  /**
+   * Descuento TOTAL de la línea, que es como lo piensa el cajero: "a este
+   * cliente le hago 2.000 de descuento", no 2.000 por prenda. Se guarda
+   * aparte y tal cual se escribió para que el número no cambie al
+   * redondear la división, y para que no se multiplique si después se
+   * toca la cantidad.
+   */
+  descuento_total?: number;
 };
 
 export type TipoPrenda = { id: string; nombre: string; orden: number; activo: boolean };
 
 export const fmtGs = fmtActive;
+
+/**
+ * Descuento total de una línea. Si la línea viene de antes (solo tiene
+ * `descuento_unitario`), se reconstruye multiplicando por la cantidad.
+ */
+export function descTotalDe(l: Linea): number {
+  if (l.descuento_total != null) return Number(l.descuento_total) || 0;
+  return (Number(l.descuento_unitario) || 0) * Math.max(1, Number(l.cantidad) || 1);
+}
 
 /** Quita "Prenda - Categoría" y precios embebidos ("Gs. XXX"/"R$ XXX"). */
 export function short(str: string): string {
@@ -129,7 +148,7 @@ export function ColumnaAtencion(props: {
         <p className="text-xs text-slate-400 py-4 text-center animate-pulse">{t("Cargando categorías…")}</p>
       ) : franjas.length === 0 ? (
         <p className="text-xs text-amber-700 py-4 text-center">
-          No hay franjas de precio configuradas. Un administrador debe crearlas en <Link href="/admin/franjas" className="underline">Categorías</Link>.
+          {tt("No hay franjas de precio configuradas. Un administrador debe crearlas en")} <Link href="/admin/franjas" className="underline">{tt("Categorías")}</Link>.
         </p>
       ) : (
         <>
@@ -155,7 +174,7 @@ export function ColumnaAtencion(props: {
                   ? "border-emerald-300 text-emerald-700 hover:border-emerald-400"
                   : "border-sky-300 text-sky-700 hover:border-sky-400"
               }`}>
-              ＋ Franja con precio manual
+              {tt("＋ Franja con precio manual")}
             </button>
           )}
         </>
@@ -202,7 +221,7 @@ export function ColumnaAtencion(props: {
                 <th className="text-right text-[11px] font-semibold text-slate-500 px-3 py-2 uppercase tracking-wide w-20">{t("Cant.")}</th>
                 <th className="text-right text-[11px] font-semibold text-slate-500 px-3 py-2 uppercase tracking-wide w-32">{t("Precio unit.")}</th>
                 {permitirDescuento && (
-                  <th className="text-right text-[11px] font-semibold text-slate-500 px-3 py-2 uppercase tracking-wide w-24" title={t("Descuento por unidad (se multiplica por la cantidad)")}>{t("Desc. c/u")}</th>
+                  <th className="text-right text-[11px] font-semibold text-slate-500 px-3 py-2 uppercase tracking-wide w-24" title={t("Descuento total de la línea (no por unidad)")}>{t("Desc.")}</th>
                 )}
                 <th className="text-right text-[11px] font-semibold text-slate-500 px-3 py-2 uppercase tracking-wide w-28">{t("Subtotal")}</th>
                 <th className="w-8"></th>
@@ -218,7 +237,7 @@ export function ColumnaAtencion(props: {
                         value={l.tipo_prenda_id ?? ""}
                         onChange={(e) => onActualizar(idx, { tipo_prenda_id: e.target.value || null })}
                         className="ml-2 rounded border border-slate-200 bg-white px-1 py-0.5 text-[11px] text-slate-600 focus:outline-none focus:ring-1 focus:ring-emerald-400"
-                        aria-label="Tipo de prenda"
+                        aria-label={tt("Tipo de prenda")}
                         title={t("Tipo de prenda (opcional)")}
                       >
                         <option value="">— tipo —</option>
@@ -260,17 +279,20 @@ export function ColumnaAtencion(props: {
                   {permitirDescuento && (
                     <td className="px-3 py-2 text-right">
                       <MontoInput
-                        /* Descuento POR UNIDAD, que es como lo guarda el backend.
-                           Antes el input pedía el total de la línea y se guardaba
-                           dividido por la cantidad con Math.floor: el número que
-                           escribías volvía distinto (10.000 entre 3 volvía 9.999),
-                           y si después cambiabas la cantidad el total se
-                           multiplicaba solo. Pidiendo el valor por unidad no hay
-                           ida y vuelta que redondee ni que se recalcule. */
-                        value={Number(l.descuento_unitario) || 0}
-                        onChange={(n) => {
-                          const clamped = Math.max(0, Math.min(n, l.precio_unitario));
-                          onActualizar(idx, { descuento_unitario: admiteCentavos ? clamped : Math.round(clamped) });
+                        /* Descuento TOTAL de la línea. Se guarda tal cual en
+                           `descuento_total` y el valor por unidad se deriva sin
+                           redondear, así el número que se escribe es el que
+                           queda: antes se dividía con Math.floor y 10.000 entre
+                           3 volvía como 9.999. */
+                        value={descTotalDe(l)}
+                        onChange={(nTotal) => {
+                          const cant = Math.max(1, l.cantidad);
+                          const maxTotal = l.precio_unitario * cant;
+                          const total = Math.max(0, Math.min(nTotal, maxTotal));
+                          onActualizar(idx, {
+                            descuento_total: total,
+                            descuento_unitario: total / cant,
+                          });
                         }}
                         decimals={admiteCentavos}
                         className="w-24 rounded-md border border-slate-200 px-2 py-1 text-right text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
@@ -285,10 +307,7 @@ export function ColumnaAtencion(props: {
                         <>
                           {fmtGs(sub)}
                           {desc > 0 && (
-                            <p className="text-[10px] text-emerald-700 mt-0.5">
-                              −{fmtGs(desc * l.cantidad)}
-                              {l.cantidad > 1 && <span className="text-slate-400"> ({fmtGs(desc)} c/u)</span>}
-                            </p>
+                            <p className="text-[10px] text-emerald-700 mt-0.5">−{fmtGs(desc * l.cantidad)}</p>
                           )}
                         </>
                       );
@@ -422,7 +441,7 @@ export function NuevoClienteRapidoModal({
           <div>
             <h3 className="text-base font-semibold text-slate-900">{t("Nuevo cliente")}</h3>
             <p className="mt-1 text-xs text-slate-500">
-              Solo los datos mínimos. Podés completar el resto desde la ficha del cliente.
+              {tt("Solo los datos mínimos. Podés completar el resto desde la ficha del cliente.")}
             </p>
           </div>
           <button type="button" onClick={onClose} className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600" aria-label="Cerrar">
@@ -451,7 +470,7 @@ export function NuevoClienteRapidoModal({
           </div>
           <div>
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Teléfono <span className="text-red-500">*</span>
+              {tt("Teléfono")} <span className="text-red-500">*</span>
             </label>
             <input type="text" value={telefono} onChange={(e) => setTelefono(e.target.value)}
               placeholder={t("Ej: 0991 234 567")} required
@@ -459,7 +478,7 @@ export function NuevoClienteRapidoModal({
           </div>
           <div>
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-              ¿Cómo conoció la tienda? <span className="font-normal text-slate-400">(opcional)</span>
+              {tt("¿Cómo conoció la tienda?")} <span className="font-normal text-slate-400">(opcional)</span>
             </label>
             <input type="text" value={comoConocio} onChange={(e) => setComoConocio(e.target.value)}
               placeholder={t("Ej: Instagram, referida por María…")}
@@ -472,7 +491,7 @@ export function NuevoClienteRapidoModal({
         <div className="mt-5 flex items-center justify-end gap-2">
           <button type="button" onClick={onClose} disabled={saving}
             className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50">
-            Cancelar
+            {tt("Cancelar")}
           </button>
           <button type="button" onClick={submit} disabled={!puedeGuardar}
             className="rounded-lg bg-[#4FAEB2] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#3F8E91] disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500">

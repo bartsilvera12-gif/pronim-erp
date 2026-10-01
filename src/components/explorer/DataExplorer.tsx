@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
+import { tt } from "@/lib/i18n/dict";
 // xlsx se carga dinámicamente al exportar (chunk aparte) para no inflar el
 // bundle de cada página de explorador ni la memoria del build.
 
@@ -442,15 +443,15 @@ export function DataExplorer<T>(props: {
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2 print:hidden">
         {toolbarExtra}
-        <input type="text" placeholder="Buscar en todo…" value={q} onChange={(e) => setQ(e.target.value)}
+        <input type="text" placeholder={tt("Buscar en todo…")} value={q} onChange={(e) => setQ(e.target.value)}
           className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm min-w-[180px]" />
 
         {groupables.length > 0 && (
           <div className="inline-flex items-center gap-1">
-            <span className="text-[11px] text-slate-500 whitespace-nowrap">Agrupar por:</span>
+            <span className="text-[11px] text-slate-500 whitespace-nowrap">{tt("Agrupar por:")}</span>
             <select value={groupKey} onChange={(e) => setGroupKey(e.target.value)}
               className={`rounded-lg border px-2 py-1.5 text-xs font-semibold ${groupKey ? "border-[#4FAEB2] bg-[#4FAEB2]/10 text-[#3F8E91]" : "border-slate-200 bg-white text-slate-700"}`}>
-              <option value="">— sin agrupar —</option>
+              <option value="">{tt("— sin agrupar —")}</option>
               {groupables.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
             </select>
           </div>
@@ -542,14 +543,14 @@ export function DataExplorer<T>(props: {
                 </div>
               ))}
               {colsVis.filter((c) => c.filterable !== false).length === 0 && (
-                <p className="text-xs text-slate-400 italic">Mostrá columnas para poder filtrarlas.</p>
+                <p className="text-xs text-slate-400 italic">{tt("Mostrá columnas para poder filtrarlas.")}</p>
               )}
             </div>
           )}
         </div>
 
         {(filtrosActivos.length > 0 || q.trim()) && (
-          <button type="button" onClick={limpiarTodo} className="text-xs text-slate-500 hover:text-slate-800 underline">Limpiar todo</button>
+          <button type="button" onClick={limpiarTodo} className="text-xs text-slate-500 hover:text-slate-800 underline">{tt("Limpiar todo")}</button>
         )}
 
         <button type="button" onClick={exportarXlsxSafe} disabled={ordenadas.length === 0}
@@ -564,7 +565,7 @@ export function DataExplorer<T>(props: {
         </button>
         <div className="inline-flex items-center overflow-hidden rounded-lg border border-slate-200">
           <select value={printOrient} onChange={(e) => setPrintOrient(e.target.value as "portrait" | "landscape")}
-            title="Orientación de la hoja al imprimir / guardar PDF"
+            title={tt("Orientación de la hoja al imprimir / guardar PDF")}
             className="border-0 bg-slate-50 px-2 py-1.5 text-xs font-medium text-slate-600 focus:outline-none">
             <option value="landscape">Horizontal</option>
             <option value="portrait">Vertical</option>
@@ -589,7 +590,7 @@ export function DataExplorer<T>(props: {
           {q.trim() && (
             <span className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
               Buscando: “{q.trim()}”
-              <button type="button" onClick={() => setQ("")} title="Quitar la búsqueda" className="ml-1 text-slate-500 hover:text-slate-800">×</button>
+              <button type="button" onClick={() => setQ("")} title={tt("Quitar la búsqueda")} className="ml-1 text-slate-500 hover:text-slate-800">×</button>
             </span>
           )}
           {filtrosActivos.map(([key, f]) => {
@@ -612,7 +613,7 @@ export function DataExplorer<T>(props: {
                   <button
                     type="button"
                     onClick={() => toggleCol(key)}
-                    title="Esta columna está oculta pero sigue filtrando. Tocá para mostrarla."
+                    title={tt("Esta columna está oculta pero sigue filtrando. Tocá para mostrarla.")}
                     className="ml-1 underline decoration-dotted"
                   >
                     columna oculta
@@ -621,7 +622,7 @@ export function DataExplorer<T>(props: {
                 <button
                   type="button"
                   onClick={() => limpiarFiltro(key)}
-                  title="Quitar este filtro"
+                  title={tt("Quitar este filtro")}
                   className={`ml-1 ${oculta ? "text-amber-800 hover:text-amber-900" : "text-[#3F8E91] hover:text-[#2a6a6d]"}`}
                 >×</button>
               </span>
@@ -635,7 +636,7 @@ export function DataExplorer<T>(props: {
         {cargando ? (
           <p className="py-12 text-center text-sm text-slate-400 animate-pulse">Cargando…</p>
         ) : ordenadas.length === 0 ? (
-          <p className="py-12 text-center text-sm text-slate-400">Sin resultados con los filtros actuales.</p>
+          <p className="py-12 text-center text-sm text-slate-400">{tt("Sin resultados con los filtros actuales.")}</p>
         ) : (
           <table className="w-full text-sm border-separate border-spacing-0">
             {/* Encabezado fijo: al scrollear tablas largas no se pierde de vista

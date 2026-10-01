@@ -28,6 +28,7 @@ import {
   fmtGs, type Cliente, type Franja, type Linea,
 } from "@/lib/atencion/shared";
 import { CajaControlBanner, useCajaState } from "@/lib/atencion/caja-control";
+import { tt } from "@/lib/i18n/dict";
 
 type ClienteSegmento = {
   categoria: "nuevo" | "habitual" | "vip" | "dormido";
@@ -135,9 +136,15 @@ export default function NuevaVentaPage() {
 
   // ── Comprobante a emitir ─────────────────────────────────────────────
   // Solo las sucursales con timbrado cargado pueden facturar (las de Brasil
-  // no). Cuando puede, arranca en FACTURA: es lo que corresponde emitir.
+  // no). Arranca SIEMPRE en ticket: facturar consume un número del rango y
+  // exige el RUC del cliente, así que tiene que ser una decisión explícita.
   const [sucursalFactura, setSucursalFactura] = useState(false);
   const [comprobante, setComprobante] = useState<"ticket" | "factura">("ticket");
+  /** RUC con el que se va a emitir la factura. */
+  const [rucFactura, setRucFactura] = useState("");
+  /** El cajero tiene que confirmarlo a mano, aunque el cliente ya tenga uno. */
+  const [rucConfirmado, setRucConfirmado] = useState(false);
+  const [guardandoRuc, setGuardandoRuc] = useState(false);
   useEffect(() => {
     let cancel = false;
     const qs = sucursalActivaId
@@ -149,7 +156,6 @@ export default function NuevaVentaPage() {
         if (cancel) return;
         const emite = j?.data?.emite === true;
         setSucursalFactura(emite);
-        setComprobante(emite ? "factura" : "ticket");
       })
       .catch(() => { if (!cancel) setSucursalFactura(false); });
     return () => { cancel = true; };
@@ -375,6 +381,14 @@ export default function NuevaVentaPage() {
   }, [lleva, alertasConfig, clienteSegmento]);
 
   // ── Handlers ─────────────────────────────────────────────────────────
+  // Cada vez que cambia el cliente (o se vuelve a elegir Factura) hay que
+  // confirmar el RUC de nuevo: facturar a nombre del cliente equivocado no
+  // se arregla después.
+  useEffect(() => {
+    setRucFactura((cliente?.ruc ?? "").trim());
+    setRucConfirmado(false);
+  }, [cliente?.id, cliente?.ruc, comprobante]);
+
   function agregarLinea(f: Franja) {
     const precio = Number(f.precio_venta) || 0;
     setLleva((prev) => {
@@ -384,16 +398,18 @@ export default function NuevaVentaPage() {
         const l = copy[idx];
         const oldCant = Math.max(1, l.cantidad);
         const newCant = oldCant + 1;
-        const oldUnit = Number(l.descuento_unitario) || 0;
-        // Preservar el DESCUENTO TOTAL de la línea (lump) al sumar unidades
-        // de la misma franja — el descuento se aplicó pensando en el ítem,
-        // no por unidad.
-        let nuevoDescUnit = oldUnit;
-        if (oldUnit > 0) {
-          const lump = oldUnit * oldCant;
-          nuevoDescUnit = Math.min(l.precio_unitario, Math.round(lump / newCant));
-        }
-        copy[idx] = { ...l, cantidad: newCant, descuento_unitario: nuevoDescUnit };
+        // El descuento es un TOTAL de línea: al sumar una unidad más de la
+        // misma franja el total no cambia, solo se reparte entre más prendas.
+        const lump = l.descuento_total != null
+          ? Number(l.descuento_total) || 0
+          : (Number(l.descuento_unitario) || 0) * oldCant;
+        const totalDesc = Math.min(lump, l.precio_unitario * newCant);
+        copy[idx] = {
+          ...l,
+          cantidad: newCant,
+          descuento_total: totalDesc > 0 ? totalDesc : undefined,
+          descuento_unitario: totalDesc > 0 ? totalDesc / newCant : 0,
+        };
         return copy;
       }
       return [...prev, { franja_id: f.id, precio_referencia: precio, precio_unitario: precio, cantidad: 1, tipo_prenda_id: null }];
@@ -403,14 +419,20 @@ export default function NuevaVentaPage() {
     setLleva((prev) => prev.map((l, i) => {
       if (i !== idx) return l;
       const next = { ...l, ...patch };
-      // Si cambia la cantidad y hay descuento manual, preservar el lump total.
+      // El descuento es un TOTAL de línea: si cambia la cantidad, ese total
+      // se mantiene y lo que se recalcula es el valor por unidad.
       const oldCant = Math.max(1, Number(l.cantidad) || 1);
       const newCant = Math.max(1, Number(next.cantidad) || 1);
-      const oldUnit = Number(l.descuento_unitario) || 0;
-      const patchTocaDesc = Object.prototype.hasOwnProperty.call(patch, "descuento_unitario");
-      if (!patchTocaDesc && oldUnit > 0 && oldCant !== newCant) {
-        const lump = oldUnit * oldCant;
-        next.descuento_unitario = Math.min(next.precio_unitario, Math.round(lump / newCant));
+      const lump = l.descuento_total != null
+        ? Number(l.descuento_total) || 0
+        : (Number(l.descuento_unitario) || 0) * oldCant;
+      const patchTocaDesc = Object.prototype.hasOwnProperty.call(patch, "descuento_total")
+        || Object.prototype.hasOwnProperty.call(patch, "descuento_unitario");
+      if (!patchTocaDesc && lump > 0 && oldCant !== newCant) {
+        const tope = next.precio_unitario * newCant;
+        const total = Math.min(lump, tope);
+        next.descuento_total = total;
+        next.descuento_unitario = total / newCant;
       }
       return next;
     }));
@@ -465,6 +487,12 @@ export default function NuevaVentaPage() {
     if (!cliente) { setError("Elegí un cliente antes de confirmar."); return; }
     if (lleva.length === 0) { setError("Cargá al menos una prenda que el cliente lleva."); return; }
     if (lleva.some((l) => l.cantidad <= 0)) { setError("Revisá las líneas: la cantidad debe ser > 0."); return; }
+    // Red de seguridad: el botón ya está deshabilitado, pero si se llegara
+    // acá sin confirmar el RUC se emitiría una factura mal hecha.
+    if (comprobante === "factura" && sucursalFactura && !rucConfirmado) {
+      setError("Confirmá el RUC del cliente antes de facturar.");
+      return;
+    }
     if (aCobrar > 0 && faltaCobrar > 0) {
       setError(`Falta cobrar ${fmtGs(faltaCobrar)}. Repartí el monto entre efectivo/tarjeta/transferencia.`);
       return;
@@ -686,7 +714,7 @@ export default function NuevaVentaPage() {
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <button type="button" onClick={() => setDetalleClienteOpen(true)}
-                  title="Ver detalle completo del cliente"
+                  title={tt("Ver detalle completo del cliente")}
                   className="font-semibold text-slate-800 hover:text-[#3F8E91] hover:underline decoration-dotted underline-offset-2">
                   {cliente.nombre}
                 </button>
@@ -695,25 +723,25 @@ export default function NuevaVentaPage() {
                 )}
                 {clienteSegmento && (
                   <div className="flex flex-wrap items-center gap-2">
-                    {clienteSegmento.categoria === "vip" && <StickerBadge type="vip">Cliente VIP</StickerBadge>}
-                    {clienteSegmento.categoria === "habitual" && <StickerBadge type="frecuente" tilt="right">Cliente frecuente</StickerBadge>}
-                    {clienteSegmento.categoria === "nuevo" && <StickerBadge type="nuevo">Cliente nuevo</StickerBadge>}
+                    {clienteSegmento.categoria === "vip" && <StickerBadge type="vip">{tt("Cliente VIP")}</StickerBadge>}
+                    {clienteSegmento.categoria === "habitual" && <StickerBadge type="frecuente" tilt="right">{tt("Cliente frecuente")}</StickerBadge>}
+                    {clienteSegmento.categoria === "nuevo" && <StickerBadge type="nuevo">{tt("Cliente nuevo")}</StickerBadge>}
                     {clienteSegmento.categoria === "dormido" && (
                       <StickerBadge type="inactivo"
                         title={clienteSegmento.diasDesdeUltima != null ? `Última compra hace ${clienteSegmento.diasDesdeUltima} días` : undefined}>
-                        Hace tiempo que no visita
+                        {tt("Hace tiempo que no visita")}
                       </StickerBadge>
                     )}
                     {clienteSegmento.tieneReclamos && (
                       <StickerBadge type="deuda" tilt="right"
                         title={`${clienteSegmento.reclamosCount} reclamo${clienteSegmento.reclamosCount === 1 ? "" : "s"} previo${clienteSegmento.reclamosCount === 1 ? "" : "s"}`}>
-                        Con reclamos previos
+                        {tt("Con reclamos previos")}
                       </StickerBadge>
                     )}
                     {clienteSegmento.recibioBeneficios && (
                       <StickerBadge type="credito"
                         title={`${clienteSegmento.beneficiosCount} beneficio${clienteSegmento.beneficiosCount === 1 ? "" : "s"} entregado${clienteSegmento.beneficiosCount === 1 ? "" : "s"}`}>
-                        Ya recibió beneficios
+                        {tt("Ya recibió beneficios")}
                       </StickerBadge>
                     )}
                   </div>
@@ -753,7 +781,7 @@ export default function NuevaVentaPage() {
             </div>
             <button type="button" onClick={() => { setCliente(null); setClienteQuery(""); }}
               className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-500 hover:bg-slate-50">
-              Cambiar cliente
+              {tt("Cambiar cliente")}
             </button>
           </div>
         ) : (
@@ -771,10 +799,10 @@ export default function NuevaVentaPage() {
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
                     <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
                   </svg>
-                  Cargar nuevo cliente
+                  {tt("Cargar nuevo cliente")}
                 </button>
                 {clientesFiltrados.length === 0 ? (
-                  <p className="px-3 py-2 text-xs text-gray-400">Sin clientes que coincidan.</p>
+                  <p className="px-3 py-2 text-xs text-gray-400">{tt("Sin clientes que coincidan.")}</p>
                 ) : clientesFiltrados.map((c) => (
                   <button key={c.id} type="button"
                     onClick={() => { setCliente(c); setClienteOpen(false); }}
@@ -842,7 +870,7 @@ export default function NuevaVentaPage() {
         {/* Promo / cupón */}
         {totalLleva > 0 && (
           <div className="rounded-lg border border-fuchsia-200 bg-fuchsia-50/40 p-3 space-y-2">
-            <p className="text-[11px] uppercase font-semibold text-fuchsia-700">Promoción / cupón</p>
+            <p className="text-[11px] uppercase font-semibold text-fuchsia-700">{tt("Promoción / cupón")}</p>
             {promoAplicada ? (
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="text-sm text-fuchsia-900">
@@ -854,12 +882,12 @@ export default function NuevaVentaPage() {
                   </div>
                 </div>
                 <button type="button" onClick={quitarPromocion}
-                  className="rounded-lg border border-fuchsia-300 bg-white px-2 py-1 text-xs text-fuchsia-700 hover:bg-fuchsia-50">Quitar</button>
+                  className="rounded-lg border border-fuchsia-300 bg-white px-2 py-1 text-xs text-fuchsia-700 hover:bg-fuchsia-50">{tt("Quitar")}</button>
               </div>
             ) : (
               <div className="flex flex-wrap items-center gap-2">
                 <input type="text" value={cuponInput} onChange={(e) => setCuponInput(e.target.value.toUpperCase())}
-                  placeholder="Código de cupón (opcional)"
+                  placeholder={tt("Código de cupón (opcional)")}
                   className="flex-1 min-w-[140px] rounded-lg border border-fuchsia-200 px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-fuchsia-400" />
                 <button type="button" onClick={() => aplicarPromocion(cuponInput.trim() || null)} disabled={promoBuscando}
                   className="rounded-lg bg-fuchsia-600 hover:bg-fuchsia-700 disabled:opacity-50 text-white text-xs font-semibold px-3 py-1.5">
@@ -874,7 +902,7 @@ export default function NuevaVentaPage() {
         {totalLleva > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Aplicar del crédito ahora</label>
+              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">{tt("Aplicar del crédito ahora")}</label>
               <div className="flex gap-2 mb-1.5">
                 <button type="button" onClick={() => setAplicarCredito("")}
                   className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
@@ -882,7 +910,7 @@ export default function NuevaVentaPage() {
                       ? "border-[#4FAEB2] bg-[#4FAEB2]/10 text-[#3F8E91] ring-2 ring-[#4FAEB2]/20"
                       : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
                   }`}
-                  title="Usar todo el crédito que pueda">
+                  title={tt("Usar todo el crédito que pueda")}>
                   💰 Usar el máximo ({fmtGs(creditoMaxAplicable)})
                 </button>
                 <button type="button" onClick={() => setAplicarCredito("0")}
@@ -891,8 +919,8 @@ export default function NuevaVentaPage() {
                       ? "border-slate-400 bg-slate-100 text-slate-800 ring-2 ring-slate-300"
                       : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
                   }`}
-                  title="No usar crédito ahora">
-                  🔒 No usar (guardar para otra venta)
+                  title={tt("No usar crédito ahora")}>
+                  {tt("🔒 No usar (guardar para otra venta)")}
                 </button>
               </div>
               <MontoInput value={aplicarCredito}
@@ -926,7 +954,7 @@ export default function NuevaVentaPage() {
                     value={descuentoMotivo}
                     onChange={(e) => setDescuentoMotivo(e.target.value)}
                     className="w-full rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300"
-                    aria-label="Motivo del descuento"
+                    aria-label={tt("Motivo del descuento")}
                   >
                     {motivosDesc.map((m) => (
                       <option key={m.codigo} value={m.codigo}>{m.label}</option>
@@ -934,7 +962,7 @@ export default function NuevaVentaPage() {
                   </select>
                 </div>
                 <p className="text-[11px] text-amber-700">
-                  Se resta del total antes de cobrar. Se registra el motivo para reportes.
+                  {tt("Se resta del total antes de cobrar. Se registra el motivo para reportes.")}
                 </p>
               </div>
             )}
@@ -990,7 +1018,7 @@ export default function NuevaVentaPage() {
                               type="button"
                               onClick={() => setPagos((prev) => prev.filter((_, i) => i !== idx))}
                               className="ml-1 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs font-medium text-slate-400 hover:bg-red-50 hover:text-red-600"
-                              title="Quitar este método"
+                              title={tt("Quitar este método")}
                             >
                               ✕
                             </button>
@@ -1015,9 +1043,9 @@ export default function NuevaVentaPage() {
                               setLinea({ monto: String(restante) });
                             }}
                             className="rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-[11px] font-semibold text-slate-600 hover:bg-slate-100"
-                            title="Poner el saldo pendiente en esta línea"
+                            title={tt("Poner el saldo pendiente en esta línea")}
                           >
-                            Resto acá
+                            {tt("Resto acá")}
                           </button>
                         </div>
                         {p.metodo !== "efectivo" && (
@@ -1044,7 +1072,7 @@ export default function NuevaVentaPage() {
                     }}
                     className="w-full rounded-lg border border-dashed border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-500 hover:border-[#4FAEB2] hover:text-[#4FAEB2]"
                   >
-                    + Agregar otro método
+                    {tt("+ Agregar otro método")}
                   </button>
                 </div>
 
@@ -1055,7 +1083,7 @@ export default function NuevaVentaPage() {
                   </p>
                 ) : sobraSinEfectivo ? (
                   <p className="rounded-md border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-700">
-                    Sobra <strong>{fmtGs(excedente)}</strong> y no hay efectivo para dar vuelto. Ajustá los montos.
+                    Sobra <strong>{fmtGs(excedente)}</strong> {tt("y no hay efectivo para dar vuelto. Ajustá los montos.")}
                   </p>
                 ) : vuelto > 0 ? (
                   <p className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-sm text-emerald-800">
@@ -1063,7 +1091,7 @@ export default function NuevaVentaPage() {
                   </p>
                 ) : totalPagos > 0 ? (
                   <p className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs text-slate-600">
-                    Exacto — sin vuelto.
+                    {tt("Exacto — sin vuelto.")}
                   </p>
                 ) : null}
               </div>
@@ -1162,8 +1190,8 @@ export default function NuevaVentaPage() {
           <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-start justify-between gap-3 mb-4">
               <div>
-                <h3 className="text-lg font-bold text-slate-900">Antes de cerrar la venta</h3>
-                <p className="text-sm text-slate-500 mt-0.5">Repasá los recordatorios y marcá los beneficios que entregaste.</p>
+                <h3 className="text-lg font-bold text-slate-900">{tt("Antes de cerrar la venta")}</h3>
+                <p className="text-sm text-slate-500 mt-0.5">{tt("Repasá los recordatorios y marcá los beneficios que entregaste.")}</p>
               </div>
               <button type="button" onClick={() => setPreCierreOpen(false)} disabled={enviando}
                 className="text-slate-400 hover:text-slate-600 disabled:opacity-40" aria-label="Cerrar">
@@ -1190,7 +1218,7 @@ export default function NuevaVentaPage() {
                     }`}
                   >
                     <span className="block text-sm font-semibold text-slate-800">Factura</span>
-                    <span className="mt-0.5 block text-[11px] text-slate-500">Con timbrado. Consume un número.</span>
+                    <span className="mt-0.5 block text-[11px] text-slate-500">{tt("Con timbrado. Consume un número.")}</span>
                   </button>
                   <button
                     type="button"
@@ -1202,15 +1230,107 @@ export default function NuevaVentaPage() {
                     }`}
                   >
                     <span className="block text-sm font-semibold text-slate-800">Ticket</span>
-                    <span className="mt-0.5 block text-[11px] text-slate-500">Comprobante interno, sin timbrado.</span>
+                    <span className="mt-0.5 block text-[11px] text-slate-500">{tt("Comprobante interno, sin timbrado.")}</span>
                   </button>
                 </div>
+
+                {/* La factura sale a nombre del cliente: el RUC se confirma
+                    SIEMPRE, incluso si el cliente ya tiene uno cargado. Una
+                    factura emitida con el RUC equivocado no se corrige, hay
+                    que anularla con nota de crédito. */}
+                {comprobante === "factura" && (
+                  <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                    {rucConfirmado ? (
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-sm text-emerald-800">
+                          Se factura con RUC{" "}
+                          <strong className="font-mono">{rucFactura}</strong>
+                        </p>
+                        <button type="button" onClick={() => setRucConfirmado(false)}
+                          className="text-xs font-semibold text-slate-600 underline hover:text-slate-800">
+                          Cambiar
+                        </button>
+                      </div>
+                    ) : (cliente?.ruc ?? "").trim() ? (
+                      <>
+                        <p className="text-sm font-semibold text-amber-900">{tt("Confirmá el RUC")}</p>
+                        <p className="mt-0.5 text-xs text-amber-800">
+                          {cliente?.nombre} tiene cargado el RUC{" "}
+                          <strong className="font-mono">{(cliente?.ruc ?? "").trim()}</strong>.
+                          {" "}¿Facturamos con ese?
+                        </p>
+                        <div className="mt-2.5 flex flex-wrap gap-2">
+                          <button type="button"
+                            onClick={() => { setRucFactura((cliente?.ruc ?? "").trim()); setRucConfirmado(true); }}
+                            className="rounded-lg bg-[#4FAEB2] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#3F8E91]">
+                            {tt("Sí, usar ese RUC")}
+                          </button>
+                          <button type="button" onClick={() => setRucFactura("")}
+                            className="rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 hover:bg-amber-100">
+                            {tt("No, es otro")}
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-sm font-semibold text-amber-900">{tt("Falta el RUC para facturar")}</p>
+                        <p className="mt-0.5 text-xs text-amber-800">
+                          {cliente
+                            ? `${cliente.nombre} no tiene RUC cargado. Ingresalo para poder emitir la factura.`
+                            : "Elegí un cliente arriba e ingresá su RUC."}
+                        </p>
+                        <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                          <input
+                            type="text"
+                            value={rucFactura}
+                            onChange={(e) => setRucFactura(e.target.value)}
+                            placeholder="Ej: 80012345-6"
+                            className="w-48 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
+                          />
+                          <button type="button"
+                            disabled={!cliente || rucFactura.trim().length < 5 || guardandoRuc}
+                            onClick={async () => {
+                              if (!cliente) return;
+                              setGuardandoRuc(true);
+                              try {
+                                // Se guarda en la ficha: la factura lee el RUC
+                                // del cliente, y además sirve para la próxima.
+                                const r = await fetchWithSupabaseSession(`/api/clientes/${cliente.id}`, {
+                                  method: "PATCH",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ ruc: rucFactura.trim() }),
+                                });
+                                const j = await r.json().catch(() => ({}));
+                                if (!r.ok || j?.success === false) {
+                                  setError(j?.error ?? "No se pudo guardar el RUC.");
+                                  return;
+                                }
+                                setCliente((prev) => (prev ? { ...prev, ruc: rucFactura.trim() } : prev));
+                                setRucConfirmado(true);
+                              } catch (e) {
+                                setError(e instanceof Error ? e.message : "No se pudo guardar el RUC.");
+                              } finally {
+                                setGuardandoRuc(false);
+                              }
+                            }}
+                            className="rounded-lg bg-[#4FAEB2] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#3F8E91] disabled:bg-slate-300">
+                            {guardandoRuc ? "Guardando…" : "Guardar y facturar"}
+                          </button>
+                          <button type="button" onClick={() => setComprobante("ticket")}
+                            className="text-xs font-semibold text-slate-600 underline hover:text-slate-800">
+                            Mejor hacer ticket
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
             <div className="mb-2">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Beneficios entregados</p>
-              <p className="text-xs text-slate-400 mt-0.5">Marcá lo que le diste al cliente. Se registra en su historial.</p>
+              <p className="text-xs text-slate-400 mt-0.5">{tt("Marcá lo que le diste al cliente. Se registra en su historial.")}</p>
             </div>
             <div className="space-y-2 mb-5">
               {alertasConfig.beneficios.map((b) => {
@@ -1230,7 +1350,7 @@ export default function NuevaVentaPage() {
                       <p className="text-sm font-medium text-slate-800">{b.label}</p>
                       {b.tipo_evento === "cashback" && b.genera_credito && (
                         <p className="text-[11px] text-slate-500 mt-0.5">
-                          Si marcás con monto, se agrega como crédito a favor del cliente.
+                          {tt("Si marcás con monto, se agrega como crédito a favor del cliente.")}
                         </p>
                       )}
                     </div>
@@ -1250,9 +1370,11 @@ export default function NuevaVentaPage() {
             <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
               <button type="button" onClick={() => setPreCierreOpen(false)} disabled={enviando}
                 className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50">Volver</button>
-              <button type="button" onClick={confirmar} disabled={enviando}
+              <button type="button" onClick={confirmar}
+                disabled={enviando || (comprobante === "factura" && sucursalFactura && !rucConfirmado)}
+                title={comprobante === "factura" && sucursalFactura && !rucConfirmado ? "Confirmá el RUC antes de facturar" : undefined}
                 className="rounded-lg bg-[#4FAEB2] hover:bg-[#3F8E91] disabled:bg-slate-300 text-white text-sm font-semibold px-5 py-2 shadow-sm">
-                {enviando ? "Registrando…" : "Cerrar venta"}
+                {enviando ? "Registrando…" : comprobante === "factura" && sucursalFactura ? "Cerrar y facturar" : "Cerrar venta"}
               </button>
             </div>
           </div>

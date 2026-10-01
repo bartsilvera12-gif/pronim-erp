@@ -28,7 +28,8 @@ import {
 import { getFacturas, getSuscripciones } from "@/lib/facturacion/storage";
 import { getMarketingTasks, createMarketingTask, updateTaskStatus } from "@/lib/marketing/storage";
 import { getUsuariosActivosEmpresa, type UsuarioEmpresa } from "@/lib/usuarios/empresa";
-import { useMoney } from "@/lib/i18n/context";
+import { useUserCfg } from "@/lib/i18n/context";
+import { fmtMoneda, type Moneda } from "@/lib/i18n/currency";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { SifenEstadoBadge } from "@/components/sifen/SifenEstadoBadge";
 import { useFacturaSifenEstados } from "@/hooks/useFacturaSifenEstados";
@@ -62,6 +63,7 @@ import { ClienteDatosSifenReceptorForm } from "@/components/clientes/ClienteDato
 import { SUPABASE_APP_SCHEMA as NEURA_CLIENT_SCHEMA } from "@/lib/supabase/schema";
 import ClienteVehiculoEditor from "@/components/clientes/ClienteVehiculoEditor";
 import PromocionClienteTab from "@/components/clientes/PromocionClienteTab";
+import { tt } from "@/lib/i18n/dict";
 
 /** Detalle de clientes simplificado (sin campos SaaS/Neura como Tipo de
  *  servicio, Plan, Facturación al contado). Aplica a instancias monocliente
@@ -129,7 +131,7 @@ function PlaceholderTab({ icon, title, desc }: { icon: string; title: string; de
       <span className="text-5xl mb-4">{icon}</span>
       <h3 className="text-base font-semibold text-gray-600 mb-2">{title}</h3>
       <p className="text-sm text-gray-400 max-w-xs">{desc}</p>
-      <span className="mt-5 text-xs bg-gray-100 text-gray-500 px-3 py-1.5 rounded-full">Próximamente</span>
+      <span className="mt-5 text-xs bg-gray-100 text-gray-500 px-3 py-1.5 rounded-full">{tt("Próximamente")}</span>
     </div>
   );
 }
@@ -947,7 +949,7 @@ export default function ClienteDetailPage() {
   if (notFound) {
     return (
       <div className="space-y-4 max-w-5xl">
-        <h1 className="text-2xl font-bold text-gray-800">Cliente no encontrado</h1>
+        <h1 className="text-2xl font-bold text-gray-800">{tt("Cliente no encontrado")}</h1>
         <p className="text-xs font-mono text-gray-400 break-all">ID en URL: {id || "—"}</p>
         <button onClick={() => router.push("/clientes")} className="text-sm text-gray-500 underline">
           ← Volver a Clientes
@@ -959,7 +961,7 @@ export default function ClienteDetailPage() {
   if (errorCarga) {
     return (
       <div className="space-y-4 max-w-5xl">
-        <h1 className="text-xl font-bold text-gray-800">No se pudo cargar el cliente</h1>
+        <h1 className="text-xl font-bold text-gray-800">{tt("No se pudo cargar el cliente")}</h1>
         <p className="text-sm text-red-600">{errorCarga}</p>
         <p className="text-xs font-mono text-gray-400 break-all">ID: {id}</p>
         <button type="button" onClick={() => void cargar()} className="text-sm text-[#4FAEB2] underline">
@@ -975,7 +977,7 @@ export default function ClienteDetailPage() {
   if (!cliente) {
     return (
       <div className="space-y-4 max-w-5xl">
-        <p className="text-sm text-gray-600">No hay datos del cliente.</p>
+        <p className="text-sm text-gray-600">{tt("No hay datos del cliente.")}</p>
         <p className="text-xs font-mono text-gray-400 break-all">ID: {id}</p>
         <button type="button" onClick={() => router.push("/clientes")} className="text-sm text-gray-500 underline">
           ← Volver a Clientes
@@ -1009,7 +1011,7 @@ export default function ClienteDetailPage() {
               <div className="min-w-0 flex-1">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-[#3F8E91] flex items-center gap-1.5">
                   <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#4FAEB2]" />
-                  Cliente
+                  {tt("Cliente")}
                 </p>
                 <h1 className="text-2xl font-bold text-slate-900 leading-tight mt-1">{nombre}</h1>
                 <div className="flex items-center gap-2 mt-2 flex-wrap">
@@ -1066,7 +1068,7 @@ export default function ClienteDetailPage() {
                     ));
                   })()}
                   <span className="text-xs text-slate-500">
-                    Cliente desde <span className="font-medium text-slate-700">{formatFecha(cliente.created_at)}</span>
+                    {tt("Cliente desde")} <span className="font-medium text-slate-700">{formatFecha(cliente.created_at)}</span>
                   </span>
                 </div>
               </div>
@@ -1079,7 +1081,7 @@ export default function ClienteDetailPage() {
                     onClick={abrirModalBajaOperativa}
                     className="text-xs font-medium border border-amber-400 text-amber-700 bg-amber-50 hover:bg-amber-100 px-3 py-1.5 rounded-lg transition-colors"
                   >
-                    Dar de baja
+                    {tt("Dar de baja")}
                   </button>
                 ) : (
                   <button
@@ -1102,7 +1104,7 @@ export default function ClienteDetailPage() {
                   type="button"
                   onClick={() => void abrirModalEliminar()}
                   className="text-xs font-medium border border-rose-300 text-rose-700 bg-rose-50 hover:bg-rose-100 flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors"
-                  title="Eliminar cliente (baja lógica)"
+                  title={tt("Eliminar cliente (baja lógica)")}
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5 shrink-0" aria-hidden>
                     <path fillRule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z" clipRule="evenodd" />
@@ -1133,7 +1135,7 @@ export default function ClienteDetailPage() {
               }}
               className="text-xs font-semibold bg-[#4FAEB2] hover:bg-[#3F8E91] text-white inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors"
             >
-              <span className="text-base leading-none">+</span> Nueva suscripción
+              <span className="text-base leading-none">+</span> {tt("Nueva suscripción")}
             </button>
             )}
             <button
@@ -1220,7 +1222,7 @@ export default function ClienteDetailPage() {
                 {bajaPreview.suscripciones_activas === 1 ? "" : "s"}.
               </p>
               <p className="text-xs text-amber-800 mb-2">
-                ¿Desea cancelarlas al dar de baja? (quedarán en estado cancelada)
+                {tt("¿Desea cancelarlas al dar de baja? (quedarán en estado cancelada)")}
               </p>
               <div className="flex gap-3 flex-wrap">
                 <button
@@ -1228,14 +1230,14 @@ export default function ClienteDetailPage() {
                   onClick={() => setBajaCancelarSuscripciones(true)}
                   className={`text-xs px-3 py-1.5 rounded-lg font-medium ${bajaCancelarSuscripciones ? "bg-amber-600 text-white" : "bg-white border border-amber-300 text-amber-800 hover:bg-amber-100"}`}
                 >
-                  Sí, cancelar suscripciones activas
+                  {tt("Sí, cancelar suscripciones activas")}
                 </button>
                 <button
                   type="button"
                   onClick={() => setBajaCancelarSuscripciones(false)}
                   className={`text-xs px-3 py-1.5 rounded-lg font-medium ${!bajaCancelarSuscripciones ? "bg-amber-600 text-white" : "bg-white border border-amber-300 text-amber-800 hover:bg-amber-100"}`}
                 >
-                  No, conservar suscripciones activas
+                  {tt("No, conservar suscripciones activas")}
                 </button>
               </div>
             </div>
@@ -1248,7 +1250,7 @@ export default function ClienteDetailPage() {
                   : `Este cliente tiene factura pendiente (${bajaPreview.factura_pendiente_mes.numero_factura} — Gs. ${bajaPreview.factura_pendiente_mes.monto?.toLocaleString("es-PY")}).`}
               </p>
               <p className="text-xs text-amber-800 mb-2">
-                ¿Deseas anularlas al dar de baja? (quedarán en estado Anulado y no sumarán en cobranzas)
+                {tt("¿Deseas anularlas al dar de baja? (quedarán en estado Anulado y no sumarán en cobranzas)")}
               </p>
               <div className="flex gap-3">
                 <button
@@ -1256,14 +1258,14 @@ export default function ClienteDetailPage() {
                   onClick={() => setBajaAnularFactura(true)}
                   className={`text-xs px-3 py-1.5 rounded-lg font-medium ${bajaAnularFactura ? "bg-amber-600 text-white" : "bg-white border border-amber-300 text-amber-800 hover:bg-amber-100"}`}
                 >
-                  Sí, anular facturas pendientes
+                  {tt("Sí, anular facturas pendientes")}
                 </button>
                 <button
                   type="button"
                   onClick={() => setBajaAnularFactura(false)}
                   className={`text-xs px-3 py-1.5 rounded-lg font-medium ${!bajaAnularFactura ? "bg-amber-600 text-white" : "bg-white border border-amber-300 text-amber-800 hover:bg-amber-100"}`}
                 >
-                  No, conservar factura pendiente
+                  {tt("No, conservar factura pendiente")}
                 </button>
               </div>
             </div>
@@ -1273,7 +1275,7 @@ export default function ClienteDetailPage() {
             <textarea
               value={bajaMotivo}
               onChange={(e) => { setBajaMotivo(e.target.value); setErrorBaja(null); }}
-              placeholder="Ej: Fin del contrato, solicitud del cliente..."
+              placeholder={tt("Ej: Fin del contrato, solicitud del cliente...")}
               className="w-full border border-amber-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-amber-400 min-h-[60px]"
               rows={2}
             />
@@ -1292,7 +1294,7 @@ export default function ClienteDetailPage() {
               disabled={bajaProcesando}
               className="border border-amber-200 text-amber-700 px-3 py-1.5 rounded-lg text-xs hover:bg-amber-100 disabled:opacity-50"
             >
-              Cancelar
+              {tt("Cancelar")}
             </button>
           </div>
         </div>
@@ -1319,7 +1321,7 @@ export default function ClienteDetailPage() {
           >
             <div className="p-5 space-y-3 border-b border-slate-100">
               <h2 id="eliminar-cliente-titulo" className="text-base font-semibold text-slate-900">
-                Eliminar cliente
+                {tt("Eliminar cliente")}
               </h2>
               <p className="text-sm text-slate-600">
                 Eliminación administrativa (baja lógica): el registro se conserva por integridad contable; deja de listarse.
@@ -1336,7 +1338,7 @@ export default function ClienteDetailPage() {
               )}
               {eliminarPreview && !eliminarCargandoPreview && (
                 <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-3 text-sm text-slate-800">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">Resumen del cliente</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">{tt("Resumen del cliente")}</p>
                   <ul className="grid gap-1.5 text-sm">
                     <li>
                       Facturas con saldo pendiente:{" "}
@@ -1370,7 +1372,7 @@ export default function ClienteDetailPage() {
               )}
               {eliminarPreview && !eliminarPreview.puede_eliminar && (
                 <div className="bg-red-100/60 border border-red-300 rounded-lg p-3 text-sm text-red-900">
-                  <p className="font-medium mb-1">No se puede eliminar este cliente</p>
+                  <p className="font-medium mb-1">{tt("No se puede eliminar este cliente")}</p>
                   <p className="text-xs">
                     Tiene {eliminarPreview.bloqueos.join(" y ")} asociados. Resuelva esas relaciones antes de eliminar.
                   </p>
@@ -1383,14 +1385,14 @@ export default function ClienteDetailPage() {
                     {eliminarPreview.suscripciones_activas === 1 ? "" : "es"} activa
                     {eliminarPreview.suscripciones_activas === 1 ? "" : "s"}.
                   </p>
-                  <p className="text-xs text-red-800 mb-2">¿Cancelarlas al eliminar el cliente?</p>
+                  <p className="text-xs text-red-800 mb-2">{tt("¿Cancelarlas al eliminar el cliente?")}</p>
                   <div className="flex gap-3 flex-wrap">
                     <button
                       type="button"
                       onClick={() => setEliminarCancelarSusc(true)}
                       className={`text-xs px-3 py-1.5 rounded-lg font-medium ${eliminarCancelarSusc ? "bg-red-600 text-white" : "bg-white border border-red-300 text-red-800 hover:bg-red-50"}`}
                     >
-                      Sí, cancelar suscripciones
+                      {tt("Sí, cancelar suscripciones")}
                     </button>
                     <button
                       type="button"
@@ -1410,7 +1412,7 @@ export default function ClienteDetailPage() {
                       : `Hay ${eliminarPreview.facturas_pendientes_count} facturas con saldo pendiente${eliminarPreview.factura_ejemplo ? ` (ej.: ${eliminarPreview.factura_ejemplo.numero_factura})` : ""}.`}
                   </p>
                   <p className="text-xs text-red-800 mb-2">
-                    ¿Anularlas al eliminar? (estado Anulado, saldo 0 — no sumarán en cobranzas ni reportería de pendientes)
+                    {tt("¿Anularlas al eliminar? (estado Anulado, saldo 0 — no sumarán en cobranzas ni reportería de pendientes)")}
                   </p>
                   <div className="flex gap-3 flex-wrap">
                     <button
@@ -1418,14 +1420,14 @@ export default function ClienteDetailPage() {
                       onClick={() => setEliminarAnularFacturas(true)}
                       className={`text-xs px-3 py-1.5 rounded-lg font-medium ${eliminarAnularFacturas ? "bg-red-600 text-white" : "bg-white border border-red-300 text-red-800 hover:bg-red-50"}`}
                     >
-                      Sí, anular facturas pendientes
+                      {tt("Sí, anular facturas pendientes")}
                     </button>
                     <button
                       type="button"
                       onClick={() => setEliminarAnularFacturas(false)}
                       className={`text-xs px-3 py-1.5 rounded-lg font-medium ${!eliminarAnularFacturas ? "bg-red-600 text-white" : "bg-white border border-red-300 text-red-800 hover:bg-red-50"}`}
                     >
-                      No, conservar facturas
+                      {tt("No, conservar facturas")}
                     </button>
                   </div>
                 </div>
@@ -1438,7 +1440,7 @@ export default function ClienteDetailPage() {
                     setDeletionReason(e.target.value);
                     setErrorEliminar(null);
                   }}
-                  placeholder="Ej: Cliente duplicado, solicitud del interesado..."
+                  placeholder={tt("Ej: Cliente duplicado, solicitud del interesado...")}
                   className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-red-400 min-h-[60px]"
                   rows={2}
                 />
@@ -1469,7 +1471,7 @@ export default function ClienteDetailPage() {
                   disabled={eliminando}
                   className="border border-slate-200 text-slate-700 px-3 py-2 rounded-lg text-sm hover:bg-slate-50 disabled:opacity-50"
                 >
-                  Cancelar
+                  {tt("Cancelar")}
                 </button>
               </div>
             </div>
@@ -1536,7 +1538,7 @@ export default function ClienteDetailPage() {
                   <p className="text-xs font-semibold text-amber-800 uppercase tracking-wider">Baja operativa registrada</p>
                   <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
                     <div>
-                      <span className="text-amber-700">Fecha de baja:</span>
+                      <span className="text-amber-700">{tt("Fecha de baja:")}</span>
                       <span className="ml-2 font-medium text-amber-900">{formatFecha(cliente.baja_operativa_at)}</span>
                     </div>
                     <div>
@@ -1557,11 +1559,11 @@ export default function ClienteDetailPage() {
 
               {/* Tipo */}
               <section className="space-y-4">
-                <SectionTitle>Datos de identificación</SectionTitle>
+                <SectionTitle>{tt("Datos de identificación")}</SectionTitle>
 
                 {!SIMPLE_CLIENTE && (
                 <div>
-                  <label className={labelClass}>Tipo de servicio</label>
+                  <label className={labelClass}>{tt("Tipo de servicio")}</label>
                   <select
                     name="tipo_servicio_cliente"
                     value={form.tipo_servicio_cliente}
@@ -1597,11 +1599,11 @@ export default function ClienteDetailPage() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className={labelClass}>Teléfono principal <span className="text-red-500">*</span></label>
+                    <label className={labelClass}>{tt("Teléfono principal")} <span className="text-red-500">*</span></label>
                     <input type="text" name="telefono" value={form.telefono} onChange={handleChange} className={inputClass} required />
                   </div>
                   <div>
-                    <label className={labelClass}>Teléfono secundario</label>
+                    <label className={labelClass}>{tt("Teléfono secundario")}</label>
                     <input type="text" name="telefono_secundario" value={form.telefono_secundario} onChange={handleChange} className={inputClass} />
                   </div>
                 </div>
@@ -1618,7 +1620,7 @@ export default function ClienteDetailPage() {
                 </div>
 
                 <div>
-                  <label className={labelClass}>Dirección</label>
+                  <label className={labelClass}>{tt("Dirección")}</label>
                   <input type="text" name="direccion" value={form.direccion} onChange={handleChange} className={inputClass} />
                 </div>
 
@@ -1629,8 +1631,8 @@ export default function ClienteDetailPage() {
                     onChange={(e) => setForm((p) => ({ ...p, usa_nota_remision: e.target.checked }))}
                     className="h-4 w-4 rounded border-slate-300 text-[#4FAEB2] focus:ring-[#4FAEB2]"
                   />
-                  Usa nota de remisión
-                  <span className="text-xs text-slate-400">(se generará junto al ticket al venderle)</span>
+                  {tt("Usa nota de remisión")}
+                  <span className="text-xs text-slate-400">{tt("(se generará junto al ticket al venderle)")}</span>
                 </label>
 
                 <div className="grid grid-cols-2 gap-4">
@@ -1639,7 +1641,7 @@ export default function ClienteDetailPage() {
                     <input type="text" name="ciudad" value={form.ciudad} onChange={handleChange} className={`${inputClass} uppercase`} />
                   </div>
                   <div>
-                    <label className={labelClass}>País</label>
+                    <label className={labelClass}>{tt("País")}</label>
                     <input type="text" name="pais" value={form.pais} onChange={handleChange} className={`${inputClass} uppercase`} />
                   </div>
                 </div>
@@ -1763,18 +1765,18 @@ export default function ClienteDetailPage() {
                       moneda del local, así que no decidían nada. Los valores
                       guardados se conservan; solo se dejó de pedirlos. */}
                   <div>
-                    <label className={labelClass}>¿Cómo conoció la tienda?</label>
+                    <label className={labelClass}>{tt("¿Cómo conoció la tienda?")}</label>
                     <select
                       name="como_conocio"
                       value={form.como_conocio}
                       onChange={handleChange}
                       className={inputClass}
                     >
-                      <option value="">Seleccioná una opción…</option>
-                      <option value="Recomendación">Recomendación</option>
+                      <option value="">{tt("Seleccioná una opción…")}</option>
+                      <option value="Recomendación">{tt("Recomendación")}</option>
                       <option value="Redes sociales">Redes sociales</option>
                       <option value="Publicidad">Publicidad</option>
-                      <option value="Pasó por la tienda">Pasó por la tienda</option>
+                      <option value="Pasó por la tienda">{tt("Pasó por la tienda")}</option>
                       <option value="Volanteo / cartel">Volanteo / cartel</option>
                       <option value="Otro">Otro</option>
                     </select>
@@ -1807,7 +1809,7 @@ export default function ClienteDetailPage() {
                       onChange={(e) => setForm((p) => ({ ...p, vendedor_usuario_id: e.target.value }))}
                       className={inputClass}
                     >
-                      <option value="">— Sin asignar —</option>
+                      <option value="">{tt("— Sin asignar —")}</option>
                       {usuariosEmpresa.map((u) => (
                         <option key={u.id} value={u.id}>
                           {(u.nombre ?? "").trim() || u.email}
@@ -1817,7 +1819,7 @@ export default function ClienteDetailPage() {
                     {usuariosEmpresaError ? (
                       <p className="mt-1 text-xs text-red-600">{usuariosEmpresaError}</p>
                     ) : usuariosEmpresa.length === 0 ? (
-                      <p className="mt-1 text-xs text-slate-500">No hay usuarios activos disponibles para asignar.</p>
+                      <p className="mt-1 text-xs text-slate-500">{tt("No hay usuarios activos disponibles para asignar.")}</p>
                     ) : null}
                   </div>
                   <div>
@@ -1831,7 +1833,7 @@ export default function ClienteDetailPage() {
                 {/* Campos factura Contado */}
                 {form.condicion_pago === "CONTADO" && (
                   <div className="mt-6 p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-4">
-                    <SectionTitle>Facturación al contado</SectionTitle>
+                    <SectionTitle>{tt("Facturación al contado")}</SectionTitle>
                     {facturas.length > 0 ? (
                       <p className="text-sm text-slate-600">Este cliente ya tiene {facturas.length} factura(s).</p>
                     ) : (
@@ -1853,17 +1855,17 @@ export default function ClienteDetailPage() {
                                 value={formContadoEdit.monto}
                                 onChange={(n) => setFormContadoEdit((p) => ({ ...p, monto: String(n) }))}
                                 className={inputClass}
-                                placeholder="Monto de la factura"
+                                placeholder={tt("Monto de la factura")}
                               />
                             </div>
                             <div>
-                              <label className={labelClass}>Descripción</label>
+                              <label className={labelClass}>{tt("Descripción")}</label>
                               <input
                                 type="text"
                                 value={formContadoEdit.descripcion}
                                 onChange={(e) => setFormContadoEdit((p) => ({ ...p, descripcion: e.target.value }))}
                                 className={inputClass}
-                                placeholder="Venta al contado"
+                                placeholder={tt("Venta al contado")}
                               />
                             </div>
                           </>
@@ -1876,7 +1878,7 @@ export default function ClienteDetailPage() {
                 {/* Campos de suscripción (solo cuando condicion_pago = MENSUAL y no tiene suscripciones) */}
                 {!SIMPLE_CLIENTE && form.condicion_pago === "MENSUAL" && (
                   <div className="mt-6 p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-4">
-                    <SectionTitle>Configuración de suscripción</SectionTitle>
+                    <SectionTitle>{tt("Configuración de suscripción")}</SectionTitle>
                     {suscripciones.length > 0 ? (
                       <p className="text-sm text-slate-600">Este cliente ya tiene {suscripciones.length} suscripción(es). Podés agregar más desde la pestaña Suscripciones.</p>
                     ) : (
@@ -1898,7 +1900,7 @@ export default function ClienteDetailPage() {
                           </select>
                         </div>
                         <div>
-                          <label className={labelClass}>Precio (Gs.)</label>
+                          <label className={labelClass}>{tt("Precio (Gs.)")}</label>
                           <MontoInput
                             value={formSuscEdit.precio}
                             onChange={(n) => setFormSuscEdit((p) => ({ ...p, precio: String(n) }))}
@@ -1907,7 +1909,7 @@ export default function ClienteDetailPage() {
                           />
                         </div>
                         <div>
-                          <label className={labelClass}>Duración contrato (meses)</label>
+                          <label className={labelClass}>{tt("Duración contrato (meses)")}</label>
                           <input
                             type="number"
                             value={formSuscEdit.duracion_meses}
@@ -1918,7 +1920,7 @@ export default function ClienteDetailPage() {
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                           <div>
-                            <label className={labelClass}>Día facturación (1–28)</label>
+                            <label className={labelClass}>{tt("Día facturación (1–28)")}</label>
                             <input
                               type="number"
                               value={formSuscEdit.dia_facturacion}
@@ -1929,7 +1931,7 @@ export default function ClienteDetailPage() {
                             />
                           </div>
                           <div>
-                            <label className={labelClass}>Día vencimiento (1–31)</label>
+                            <label className={labelClass}>{tt("Día vencimiento (1–31)")}</label>
                             <input
                               type="number"
                               value={formSuscEdit.dia_vencimiento}
@@ -1947,7 +1949,7 @@ export default function ClienteDetailPage() {
                             checked={formSuscEdit.generar_factura}
                             onChange={(e) => setFormSuscEdit((p) => ({ ...p, generar_factura: e.target.checked }))}
                           />
-                          <label htmlFor="gen_fact_edit" className="text-sm text-slate-600">Emitir factura este mes</label>
+                          <label htmlFor="gen_fact_edit" className="text-sm text-slate-600">{tt("Emitir factura este mes")}</label>
                         </div>
                       </>
                     )}
@@ -1969,7 +1971,7 @@ export default function ClienteDetailPage() {
                         <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Opcional</p>
                         <p className="text-sm font-semibold text-slate-800 mt-0.5">Perfil tributario</p>
                         <p className="text-xs text-slate-500 mt-0.5 max-w-xl">
-                          Obligaciones, honorarios y vencimientos. El RUC principal sigue en Identificación.
+                          {tt("Obligaciones, honorarios y vencimientos. El RUC principal sigue en Identificación.")}
                         </p>
                       </div>
                       <span
@@ -2003,7 +2005,7 @@ export default function ClienteDetailPage() {
                   type="submit"
                   className="bg-[#4FAEB2] hover:bg-[#3F8E91] text-white px-5 py-2.5 rounded-lg text-sm font-medium transition-colors shadow-sm active:scale-95"
                 >
-                  Guardar cambios
+                  {tt("Guardar cambios")}
                 </button>
               </div>
             </form>
@@ -2020,7 +2022,7 @@ export default function ClienteDetailPage() {
           {activeTab === "estado_cuenta" && (
             <div className="space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <SectionTitle>Facturas del cliente</SectionTitle>
+                <SectionTitle>{tt("Facturas del cliente")}</SectionTitle>
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
@@ -2055,7 +2057,7 @@ export default function ClienteDetailPage() {
                 </div>
               </div>
               {facturas.length === 0 ? (
-                <p className="text-sm text-gray-400 py-8 text-center">No hay facturas registradas.</p>
+                <p className="text-sm text-gray-400 py-8 text-center">{tt("No hay facturas registradas.")}</p>
               ) : (
                 <div className="overflow-x-auto rounded-lg border border-slate-200">
                   <table className="w-full text-sm">
@@ -2064,7 +2066,7 @@ export default function ClienteDetailPage() {
                         {["Número", "Fecha", "Vencimiento", "Total", "Estado", "SIFEN"].map((h) => (
                           <th key={h} className="text-left text-xs font-semibold text-slate-600 px-4 py-3">{h}</th>
                         ))}
-                        <th className="text-right text-xs font-semibold text-slate-600 px-4 py-3">Acción</th>
+                        <th className="text-right text-xs font-semibold text-slate-600 px-4 py-3">{tt("Acción")}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -2129,11 +2131,11 @@ export default function ClienteDetailPage() {
                   onClick={() => { setFormSusc({ plan_id: "", precio: "", fecha_inicio: new Date().toISOString().slice(0, 10), duracion_meses: "12", dia_facturacion: "1", dia_vencimiento: "10", generar_factura_este_mes: false }); setModalSuscripcion(true); }}
                   className="bg-[#4FAEB2] hover:bg-[#3F8E91] text-white px-4 py-2 rounded-lg text-sm font-medium"
                 >
-                  Nueva suscripción
+                  {tt("Nueva suscripción")}
                 </button>
               </div>
               {suscripciones.length === 0 ? (
-                <p className="text-sm text-gray-400 py-8 text-center">No hay suscripciones.</p>
+                <p className="text-sm text-gray-400 py-8 text-center">{tt("No hay suscripciones.")}</p>
               ) : (
                 <div className="overflow-x-auto rounded-lg border border-slate-200">
                   <table className="w-full text-sm">
@@ -2174,7 +2176,7 @@ export default function ClienteDetailPage() {
           {activeTab === "marketing" && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <SectionTitle>Tareas de marketing</SectionTitle>
+                <SectionTitle>{tt("Tareas de marketing")}</SectionTitle>
                 <button
                   type="button"
                   onClick={() => {
@@ -2184,11 +2186,11 @@ export default function ClienteDetailPage() {
                   }}
                   className="bg-[#4FAEB2] hover:bg-[#3F8E91] text-white px-4 py-2 rounded-lg text-sm font-medium"
                 >
-                  Nueva tarea
+                  {tt("Nueva tarea")}
                 </button>
               </div>
               {marketingTasks.length === 0 ? (
-                <p className="text-sm text-gray-400 py-8 text-center">No hay tareas de marketing.</p>
+                <p className="text-sm text-gray-400 py-8 text-center">{tt("No hay tareas de marketing.")}</p>
               ) : (
                 <div className="overflow-x-auto rounded-lg border border-slate-200">
                   <table className="w-full text-sm">
@@ -2266,7 +2268,7 @@ export default function ClienteDetailPage() {
           {activeTab === "notas" && (
             <div className="max-w-2xl space-y-6">
               <form onSubmit={handleAgregarNota}>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Nueva nota</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">{tt("Nueva nota")}</label>
                 <textarea
                   ref={notaRef}
                   value={nuevaNota}
@@ -2278,7 +2280,7 @@ export default function ClienteDetailPage() {
                     }
                   }}
                   rows={3}
-                  placeholder="Escribí una nota interna (Ctrl+Enter para guardar)..."
+                  placeholder={tt("Escribí una nota interna (Ctrl+Enter para guardar)...")}
                   className="w-full border border-slate-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-[#4FAEB2] focus:outline-none bg-white text-sm resize-none mb-3"
                 />
 <button
@@ -2286,12 +2288,12 @@ export default function ClienteDetailPage() {
                 disabled={!nuevaNota.trim() || guardandoNota}
                 className="bg-[#4FAEB2] hover:bg-[#3F8E91] text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed active:scale-95"
               >
-                  Agregar nota
+                  {tt("Agregar nota")}
                 </button>
               </form>
 
               {cliente.notas.length === 0 ? (
-                <p className="text-sm text-gray-400 italic">No hay notas registradas aún.</p>
+                <p className="text-sm text-gray-400 italic">{tt("No hay notas registradas aún.")}</p>
               ) : (
                 <div className="space-y-3">
                   {[...cliente.notas].reverse().map((nota: NotaCliente) => (
@@ -2316,9 +2318,9 @@ export default function ClienteDetailPage() {
           onClick={() => setModalFacturaContado(false)}
         >
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-bold text-gray-800 mb-1">Nueva factura al contado</h3>
+            <h3 className="text-lg font-bold text-gray-800 mb-1">{tt("Nueva factura al contado")}</h3>
             <p className="text-xs text-slate-500 mb-4">
-              Compra puntual: no crea suscripción. El ítem se guarda en el servidor junto con la factura.
+              {tt("Compra puntual: no crea suscripción. El ítem se guarda en el servidor junto con la factura.")}
             </p>
             <form
               onSubmit={(e) => {
@@ -2337,17 +2339,17 @@ export default function ClienteDetailPage() {
                 />
               </div>
               <div>
-                <label className={labelClass}>Descripción (línea de factura)</label>
+                <label className={labelClass}>{tt("Descripción (línea de factura)")}</label>
                 <input
                   type="text"
                   value={formFacturaContado.descripcion}
                   onChange={(e) => setFormFacturaContado((p) => ({ ...p, descripcion: e.target.value }))}
                   className={inputClass}
-                  placeholder="Venta al contado"
+                  placeholder={tt("Venta al contado")}
                 />
               </div>
               <div>
-                <label className={labelClass}>IVA de esta factura</label>
+                <label className={labelClass}>{tt("IVA de esta factura")}</label>
                 <select
                   value={formFacturaContado.iva_tipo}
                   onChange={(e) =>
@@ -2363,7 +2365,7 @@ export default function ClienteDetailPage() {
                   <option value="exenta">Exenta</option>
                 </select>
                 <p className="text-[11px] text-slate-500 mt-1">
-                  Aplica solo a esta factura. Default IVA 10%.
+                  {tt("Aplica solo a esta factura. Default IVA 10%.")}
                 </p>
               </div>
               {errorFacturaContado ? (
@@ -2380,7 +2382,7 @@ export default function ClienteDetailPage() {
                   onClick={() => setModalFacturaContado(false)}
                   className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg"
                 >
-                  Cancelar
+                  {tt("Cancelar")}
                 </button>
                 <button
                   type="submit"
@@ -2399,7 +2401,7 @@ export default function ClienteDetailPage() {
       {modalSuscripcion && cliente && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setModalSuscripcion(false)}>
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-bold text-gray-800 mb-4">Nueva suscripción</h3>
+            <h3 className="text-lg font-bold text-gray-800 mb-4">{tt("Nueva suscripción")}</h3>
             <form onSubmit={async (e) => {
               e.preventDefault();
               setGuardandoSusc(true);
@@ -2437,37 +2439,37 @@ export default function ClienteDetailPage() {
                 </select>
               </div>
               <div>
-                <label className={labelClass}>Precio</label>
+                <label className={labelClass}>{tt("Precio")}</label>
                 <MontoInput value={formSusc.precio} onChange={(n) => setFormSusc((p) => ({ ...p, precio: String(n) }))} className={inputClass} required />
               </div>
               <div>
-                <label className={labelClass}>Fecha inicio</label>
+                <label className={labelClass}>{tt("Fecha inicio")}</label>
                 <input type="date" value={formSusc.fecha_inicio} onChange={(e) => setFormSusc((p) => ({ ...p, fecha_inicio: e.target.value }))} className={inputClass} required />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className={labelClass}>Duración (meses)</label>
+                  <label className={labelClass}>{tt("Duración (meses)")}</label>
                   <input type="number" value={formSusc.duracion_meses} onChange={(e) => setFormSusc((p) => ({ ...p, duracion_meses: e.target.value }))} className={inputClass} min={1} />
                 </div>
                 <div>
-                  <label className={labelClass}>Día facturación</label>
+                  <label className={labelClass}>{tt("Día facturación")}</label>
                   <input type="number" value={formSusc.dia_facturacion} onChange={(e) => setFormSusc((p) => ({ ...p, dia_facturacion: e.target.value }))} className={inputClass} min={1} max={28} />
                 </div>
               </div>
               <div>
-                <label className={labelClass}>Día vencimiento</label>
+                <label className={labelClass}>{tt("Día vencimiento")}</label>
                 <input type="number" value={formSusc.dia_vencimiento} onChange={(e) => setFormSusc((p) => ({ ...p, dia_vencimiento: e.target.value }))} className={inputClass} min={1} max={31} />
               </div>
               <div className="flex items-center gap-2">
                 <input type="checkbox" id="gen_fact" checked={formSusc.generar_factura_este_mes} onChange={(e) => setFormSusc((p) => ({ ...p, generar_factura_este_mes: e.target.checked }))} />
-                <label htmlFor="gen_fact" className="text-sm text-slate-600">Emitir factura este mes</label>
+                <label htmlFor="gen_fact" className="text-sm text-slate-600">{tt("Emitir factura este mes")}</label>
               </div>
               <div className="flex gap-3 pt-2">
                 <button type="submit" disabled={guardandoSusc} className="bg-[#4FAEB2] hover:bg-[#3F8E91] text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50">
-                  Guardar
+                  {tt("Guardar")}
                 </button>
                 <button type="button" onClick={() => setModalSuscripcion(false)} className="border border-slate-200 px-4 py-2 rounded-lg text-sm hover:bg-slate-50">
-                  Cancelar
+                  {tt("Cancelar")}
                 </button>
               </div>
             </form>
@@ -2479,21 +2481,21 @@ export default function ClienteDetailPage() {
       {modalNuevaTarea && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setModalNuevaTarea(false)}>
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-bold text-gray-800 mb-4">Nueva tarea de marketing</h3>
+            <h3 className="text-lg font-bold text-gray-800 mb-4">{tt("Nueva tarea de marketing")}</h3>
             <form onSubmit={handleGuardarTarea} className="space-y-4">
               <div>
-                <label className={labelClass}>Título *</label>
+                <label className={labelClass}>{tt("Título *")}</label>
                 <input
                   type="text"
                   value={formTarea.titulo}
                   onChange={(e) => setFormTarea((p) => ({ ...p, titulo: e.target.value }))}
                   className={inputClass}
-                  placeholder="Ej: Post campaña navidad"
+                  placeholder={tt("Ej: Post campaña navidad")}
                   required
                 />
               </div>
               <div>
-                <label className={labelClass}>Tipo de contenido</label>
+                <label className={labelClass}>{tt("Tipo de contenido")}</label>
                 <select
                   value={formTarea.tipo_contenido}
                   onChange={(e) => setFormTarea((p) => ({ ...p, tipo_contenido: e.target.value as typeof formTarea.tipo_contenido }))}
@@ -2505,7 +2507,7 @@ export default function ClienteDetailPage() {
                 </select>
               </div>
               <div>
-                <label className={labelClass}>Fecha de entrega *</label>
+                <label className={labelClass}>{tt("Fecha de entrega *")}</label>
                 <input
                   type="date"
                   value={formTarea.fecha_entrega}
@@ -2521,14 +2523,14 @@ export default function ClienteDetailPage() {
                   onChange={(e) => setFormTarea((p) => ({ ...p, responsable_user_id: e.target.value }))}
                   className={inputClass}
                 >
-                  <option value="">— Sin asignar —</option>
+                  <option value="">{tt("— Sin asignar —")}</option>
                   {usuariosEmpresa.map((u) => (
                     <option key={u.id} value={u.id}>{u.nombre ?? u.email}</option>
                   ))}
                 </select>
               </div>
               <div>
-                <label className={labelClass}>Descripción</label>
+                <label className={labelClass}>{tt("Descripción")}</label>
                 <textarea
                   value={formTarea.descripcion}
                   onChange={(e) => setFormTarea((p) => ({ ...p, descripcion: e.target.value }))}
@@ -2542,10 +2544,10 @@ export default function ClienteDetailPage() {
               )}
               <div className="flex gap-3 pt-2">
                 <button type="submit" disabled={guardandoTarea} className="bg-[#4FAEB2] hover:bg-[#3F8E91] text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50">
-                  Guardar
+                  {tt("Guardar")}
                 </button>
                 <button type="button" onClick={() => setModalNuevaTarea(false)} className="border border-slate-200 px-4 py-2 rounded-lg text-sm hover:bg-slate-50">
-                  Cancelar
+                  {tt("Cancelar")}
                 </button>
               </div>
             </form>
@@ -2599,11 +2601,11 @@ export default function ClienteDetailPage() {
                 <MontoInput value={formPago.monto} onChange={(n) => setFormPago((p) => ({ ...p, monto: String(n) }))} className={inputClass} required />
               </div>
               <div>
-                <label className={labelClass}>Fecha pago</label>
+                <label className={labelClass}>{tt("Fecha pago")}</label>
                 <input type="date" value={formPago.fecha_pago} onChange={(e) => setFormPago((p) => ({ ...p, fecha_pago: e.target.value }))} className={inputClass} required />
               </div>
               <div>
-                <label className={labelClass}>Método de pago</label>
+                <label className={labelClass}>{tt("Método de pago")}</label>
                 <select value={formPago.metodo_pago} onChange={(e) => setFormPago((p) => ({ ...p, metodo_pago: e.target.value as "efectivo" }))} className={inputClass}>
                   <option value="efectivo">Efectivo</option>
                   <option value="transferencia">Transferencia</option>
@@ -2614,14 +2616,14 @@ export default function ClienteDetailPage() {
               </div>
               <div>
                 <label className={labelClass}>Referencia</label>
-                <input type="text" value={formPago.referencia} onChange={(e) => setFormPago((p) => ({ ...p, referencia: e.target.value }))} className={inputClass} placeholder="Nº de comprobante" />
+                <input type="text" value={formPago.referencia} onChange={(e) => setFormPago((p) => ({ ...p, referencia: e.target.value }))} className={inputClass} placeholder={tt("Nº de comprobante")} />
               </div>
               <div className="flex gap-3 pt-2">
                 <button type="submit" disabled={guardandoPago} className="bg-[#4FAEB2] hover:bg-[#3F8E91] text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50">
-                  Guardar
+                  {tt("Guardar")}
                 </button>
                 <button type="button" onClick={() => setModalPago(false)} className="border border-slate-200 px-4 py-2 rounded-lg text-sm hover:bg-slate-50">
-                  Cancelar
+                  {tt("Cancelar")}
                 </button>
               </div>
             </form>
@@ -2650,12 +2652,17 @@ type MovimientoCartera = {
 };
 
 function CarteraPanel({ clienteId }: { clienteId: string }) {
-  const money = useMoney();
-  const fmt = (n: number) => money.format(n || 0);
+  const { lang } = useUserCfg();
   const [data, setData] = useState<{
     saldo_credito: number; saldo_cashback: number; saldo_consignacion: number;
+    moneda?: string | null;
     movimientos: MovimientoCartera[];
   } | null>(null);
+  // La plata del cliente se muestra SIEMPRE en su moneda, no en la de la
+  // sucursal desde la que se mira: si no, un crédito paraguayo de 250.000
+  // aparece como R$ 250.000 al pararse en Brasil.
+  const monedaCliente = (data?.moneda ?? "PYG") as Moneda;
+  const fmt = (n: number) => fmtMoneda(n || 0, monedaCliente, lang);
   const [cargando, setCargando] = useState(true);
   const [ver, setVer] = useState<"credito" | "cashback" | "consignacion">("credito");
   const [pagarOpen, setPagarOpen] = useState(false);
@@ -2733,11 +2740,12 @@ function CarteraPanel({ clienteId }: { clienteId: string }) {
     });
   }, [data, ver]);
 
-  const localeDate = money.moneda === "BRL" ? "pt-BR" : "es-PY";
+  // Las fechas de los movimientos también siguen al cliente, no al que mira.
+  const localeDate = monedaCliente === "BRL" ? "pt-BR" : "es-PY";
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">Cartera del cliente</h2>
+        <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">{tt("Cartera del cliente")}</h2>
         {cargando && <span className="text-[11px] text-slate-400 animate-pulse">Cargando…</span>}
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -2758,16 +2766,16 @@ function CarteraPanel({ clienteId }: { clienteId: string }) {
           {!pagarOpen ? (
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <p className="text-xs text-sky-800">
-                Saldo de consignación: <strong>{fmt(data?.saldo_consignacion ?? 0)}</strong>. Podés pagarlo en efectivo o convertirlo en crédito.
+                {tt("Saldo de consignación:")} <strong>{fmt(data?.saldo_consignacion ?? 0)}</strong>{tt(". Podés pagarlo en efectivo o convertirlo en crédito.")}
               </p>
               <button type="button" onClick={() => { setPagarOpen(true); setPagarMonto(String(Math.round(data?.saldo_consignacion ?? 0))); setPagarError(null); setPagarMsg(null); }}
                 className="rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold px-3 py-1.5">
-                Pagar / liquidar consignación
+                {tt("Pagar / liquidar consignación")}
               </button>
             </div>
           ) : (
             <div className="space-y-2">
-              <p className="text-xs font-semibold text-sky-900">Pagar consignación</p>
+              <p className="text-xs font-semibold text-sky-900">{tt("Pagar consignación")}</p>
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-[11px] text-slate-600">Monto:</span>
                 <input type="text" inputMode="numeric"
@@ -2781,7 +2789,7 @@ function CarteraPanel({ clienteId }: { clienteId: string }) {
                 <span className="text-[11px] text-slate-600">Forma:</span>
                 <button type="button" onClick={() => setPagarMetodo("caja")}
                   className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${pagarMetodo === "caja" ? "border-sky-500 bg-sky-100 text-sky-800" : "border-slate-200 bg-white text-slate-600"}`}>
-                  💵 Pago por caja (efectivo)
+                  {tt("💵 Pago por caja (efectivo)")}
                 </button>
                 <button type="button" onClick={() => setPagarMetodo("transferencia")}
                   className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${pagarMetodo === "transferencia" ? "border-indigo-500 bg-indigo-100 text-indigo-800" : "border-slate-200 bg-white text-slate-600"}`}>
@@ -2789,7 +2797,7 @@ function CarteraPanel({ clienteId }: { clienteId: string }) {
                 </button>
                 <button type="button" onClick={() => setPagarMetodo("credito")}
                   className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${pagarMetodo === "credito" ? "border-emerald-500 bg-emerald-100 text-emerald-800" : "border-slate-200 bg-white text-slate-600"}`}>
-                  💰 Usar como crédito
+                  {tt("💰 Usar como crédito")}
                 </button>
               </div>
               {pagarMetodo === "transferencia" && (
@@ -2798,7 +2806,7 @@ function CarteraPanel({ clienteId }: { clienteId: string }) {
                     placeholder="Banco / entidad (opcional)"
                     className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-sky-300" />
                   <input type="text" value={pagarRef} onChange={(e) => setPagarRef(e.target.value)}
-                    placeholder="N° de comprobante (opcional)"
+                    placeholder={tt("N° de comprobante (opcional)")}
                     className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-sky-300" />
                 </div>
               )}
@@ -2813,7 +2821,7 @@ function CarteraPanel({ clienteId }: { clienteId: string }) {
               {pagarMsg && <p className="text-[11px] text-emerald-700">{pagarMsg}</p>}
               <div className="flex justify-end gap-2">
                 <button type="button" onClick={() => setPagarOpen(false)}
-                  className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50">Cancelar</button>
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50">{tt("Cancelar")}</button>
                 <button type="button" onClick={pagarConsignacion} disabled={pagando}
                   className="rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold px-4 py-1.5 disabled:opacity-50">
                   {pagando ? "Procesando…" : "Confirmar pago"}
@@ -2831,7 +2839,7 @@ function CarteraPanel({ clienteId }: { clienteId: string }) {
           </p>
         </header>
         {filtrados.length === 0 ? (
-          <p className="py-6 text-center text-xs text-slate-400">Sin movimientos.</p>
+          <p className="py-6 text-center text-xs text-slate-400">{tt("Sin movimientos.")}</p>
         ) : (
           <ul className="divide-y divide-slate-100 max-h-64 overflow-y-auto">
             {filtrados.slice(0, 50).map((m) => (

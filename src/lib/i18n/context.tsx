@@ -110,7 +110,16 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
 
   // Publicar la config al registro global.
   setActiveCfg(efectiva.moneda, efectiva.lang);
-  return <Ctx.Provider value={efectiva}>{children}</Ctx.Provider>;
+  // El <Fragment key={lang}> fuerza a remontar el árbol cuando cambia el
+  // idioma. Hace falta porque muchos textos se traducen con tt() (sin hook,
+  // leyendo el registro global): sin remontar, los componentes que no
+  // consumen el contexto se quedarían con el idioma anterior hasta navegar.
+  // El idioma solo cambia al elegir otra sucursal, así que el costo es nulo.
+  return (
+    <Ctx.Provider value={efectiva}>
+      <React.Fragment key={efectiva.lang}>{children}</React.Fragment>
+    </Ctx.Provider>
+  );
 }
 
 /** Traducción — devuelve la clave si no hay entrada. */

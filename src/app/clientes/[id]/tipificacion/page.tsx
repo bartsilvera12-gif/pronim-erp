@@ -7,6 +7,7 @@ import { getTipificaciones, saveTipificacion } from "@/lib/gestion-clientes/stor
 import { useAutoClearFlag } from "@/hooks/useAutoClearFlag";
 import type { Cliente } from "@/lib/clientes/types";
 import type { Tipificacion, TipoGestion, ResultadoTipificacion } from "@/lib/gestion-clientes/types";
+import { tt } from "@/lib/i18n/dict";
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -135,7 +136,7 @@ export default function TipificacionPage() {
   if (notFound) {
     return (
       <div className="space-y-4">
-        <h1 className="text-2xl font-bold text-gray-800">Cliente no encontrado</h1>
+        <h1 className="text-2xl font-bold text-gray-800">{tt("Cliente no encontrado")}</h1>
         <button onClick={() => router.push("/clientes")} className="text-sm text-gray-500 underline">
           ← Volver a Clientes
         </button>
@@ -151,14 +152,14 @@ export default function TipificacionPage() {
       {/* ── Breadcrumb ────────────────────────────────────────────────── */}
       <div className="flex items-center gap-2 text-xs text-gray-400">
         <button onClick={() => router.push("/gestion-clientes")} className="hover:text-gray-600 transition-colors">
-          Gestión de clientes
+          {tt("Gestión de clientes")}
         </button>
         <span>›</span>
         <button onClick={() => router.push(`/clientes/${id}`)} className="hover:text-gray-600 transition-colors">
           {clienteNombre(cliente)}
         </button>
         <span>›</span>
-        <span className="text-gray-600 font-medium">Tipificación</span>
+        <span className="text-gray-600 font-medium">{tt("Tipificación")}</span>
       </div>
 
       {/* ── Header del cliente ────────────────────────────────────────── */}
@@ -185,7 +186,7 @@ export default function TipificacionPage() {
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         <div className="bg-gray-50 border-b border-gray-200 px-6 py-3">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest">
-            Nueva tipificación
+            {tt("Nueva tipificación")}
           </p>
         </div>
 
@@ -195,7 +196,7 @@ export default function TipificacionPage() {
             {/* Tipo de gestión */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                Tipo de gestión <span className="text-red-500">*</span>
+                {tt("Tipo de gestión")} <span className="text-red-500">*</span>
               </label>
               <select
                 name="tipo_gestion"
@@ -230,21 +231,21 @@ export default function TipificacionPage() {
           {/* Observación */}
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              Observación <span className="text-red-500">*</span>
+              {tt("Observación")} <span className="text-red-500">*</span>
             </label>
             <textarea
               name="observacion"
               value={form.observacion}
               onChange={handleChange}
               rows={3}
-              placeholder="Describí la gestión realizada con el cliente..."
+              placeholder={tt("Describí la gestión realizada con el cliente...")}
               className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm outline-none focus:border-gray-500 transition-colors resize-none"
             />
           </div>
 
           {/* Aviso usuario */}
           <p className="text-xs text-gray-400 mb-4">
-            👤 Se registrará como: <span className="font-semibold text-gray-600">{USUARIO_DEFAULT}</span>
+            {tt("👤 Se registrará como:")} <span className="font-semibold text-gray-600">{USUARIO_DEFAULT}</span>
           </p>
 
           {/* Error / Éxito */}
@@ -256,7 +257,7 @@ export default function TipificacionPage() {
 
           {exito && (
             <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-2.5 text-sm text-green-700 font-medium mb-4">
-              ✓ Tipificación registrada correctamente.
+              {tt("✓ Tipificación registrada correctamente.")}
             </div>
           )}
 
@@ -264,7 +265,7 @@ export default function TipificacionPage() {
             type="submit"
             className="bg-gray-900 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-700 transition-colors"
           >
-            Guardar tipificación
+            {tt("Guardar tipificación")}
           </button>
         </form>
       </div>
@@ -273,7 +274,7 @@ export default function TipificacionPage() {
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         <div className="bg-gray-50 border-b border-gray-200 px-6 py-3 flex items-center justify-between">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest">
-            Historial de tipificaciones
+            {tt("Historial de tipificaciones")}
           </p>
           <span className="text-xs font-bold text-gray-600 bg-white border border-gray-200 px-2 py-0.5 rounded-full">
             {tipificaciones.length}
@@ -282,18 +283,18 @@ export default function TipificacionPage() {
 
         {tipificaciones.length === 0 ? (
           <div className="py-12 text-center text-sm text-gray-400">
-            No hay tipificaciones registradas para este cliente.
+            {tt("No hay tipificaciones registradas para este cliente.")}
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50/40">
-                  <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-5 py-3">Fecha</th>
+                  <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-5 py-3">{tt("Fecha")}</th>
                   <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-5 py-3">Usuario</th>
                   <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-5 py-3">Tipo</th>
                   <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-5 py-3">Resultado</th>
-                  <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-5 py-3">Observación</th>
+                  <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-5 py-3">{tt("Observación")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">

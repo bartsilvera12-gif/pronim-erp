@@ -18,6 +18,7 @@ import MontoInput from "@/components/ui/MontoInput";
 import { useT, useMoney } from "@/lib/i18n/context";
 import { fmtGs, ResumenRow } from "./shared";
 import { getSucursalActivaId } from "@/lib/sucursales/activa";
+import { tt } from "@/lib/i18n/dict";
 
 type CajaAbierta = {
   id: string;
@@ -405,9 +406,9 @@ export function CajaControlBanner({ state }: { state: CajaState }) {
               {t("Movimiento")}
             </button>
             <button type="button" onClick={() => { setConsigError(null); setConsigMsg(null); setConsigCliente(null); setConsigQuery(""); setModal("consig"); }}
-              title="Pagarle a un cliente sus prendas en consignación"
+              title={tt("Pagarle a un cliente sus prendas en consignación")}
               className="rounded-lg border border-sky-300 bg-white px-3 py-1.5 text-sm font-medium text-sky-800 hover:bg-sky-100">
-              Pagar consignación
+              {tt("Pagar consignación")}
             </button>
             <button type="button" onClick={() => { setCierreError(null); setCierreResumen(null); setModal("cerrar"); void cargarResumenCierre(); }}
               className="rounded-lg bg-rose-600 hover:bg-rose-700 text-white px-3 py-1.5 text-sm font-semibold">
@@ -445,7 +446,7 @@ export function CajaControlBanner({ state }: { state: CajaState }) {
                     <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Apertura estimada</p>
                     <div className="rounded-lg border border-sky-200 bg-sky-50/60 p-3 text-sm">
                       <div className="flex justify-between text-slate-700">
-                        <span>Último cierre</span>
+                        <span>{tt("Último cierre")}</span>
                         <span>
                           {ultimoCierreInfo.fecha_cierre
                             ? new Date(ultimoCierreInfo.fecha_cierre).toLocaleDateString("es-PY")
@@ -453,7 +454,7 @@ export function CajaControlBanner({ state }: { state: CajaState }) {
                         </span>
                       </div>
                       <div className="flex justify-between text-slate-700 border-b border-sky-200 pb-2">
-                        <span>Efectivo que quedó al cerrar</span>
+                        <span>{tt("Efectivo que quedó al cerrar")}</span>
                         <span>{fmtGs(ultimoCierreInfo.monto)}</span>
                       </div>
                       <div className="flex justify-between items-baseline pt-2">
@@ -472,20 +473,20 @@ export function CajaControlBanner({ state }: { state: CajaState }) {
                       className="w-full rounded-lg border-2 border-[#4FAEB2] px-3 py-2 text-lg font-semibold focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]" />
                     {ultimoCierreInfo && ultimoCierreInfo.monto > 0 && (
                       <p className="mt-1 text-[11px] text-slate-500">
-                        Prellenado con el efectivo del último cierre. Podés editarlo si contás distinto.
+                        {tt("Prellenado con el efectivo del último cierre. Podés editarlo si contás distinto.")}
                       </p>
                     )}
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Observación (opcional)</label>
+                    <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">{tt("Observación (opcional)")}</label>
                     <input type="text" value={aperturaObs} onChange={(e) => setAperturaObs(e.target.value)}
-                      placeholder="Ej: turno mañana"
+                      placeholder={tt("Ej: turno mañana")}
                       className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]" />
                   </div>
                 </div>
                 <div className="mt-5 flex gap-2 justify-end">
                   <button type="button" onClick={() => setModal(null)} disabled={abriendo}
-                    className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50">Cancelar</button>
+                    className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50">{tt("Cancelar")}</button>
                   <button type="button" onClick={abrirCaja} disabled={abriendo || !puntoCajaId}
                     className="rounded-lg bg-[#4FAEB2] hover:bg-[#3F8E91] disabled:bg-slate-200 disabled:text-slate-500 disabled:cursor-not-allowed text-white text-sm font-semibold px-4 py-2 shadow-sm">
                     {abriendo ? "Abriendo…" : "Abrir caja"}
@@ -502,7 +503,7 @@ export function CajaControlBanner({ state }: { state: CajaState }) {
                 {cierreResumen ? (
                   <>
                     <div className="mt-4">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Resumen de ventas del turno</p>
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1.5">{tt("Resumen de ventas del turno")}</p>
                       <div className="rounded-lg border border-slate-200 divide-y divide-slate-100 text-sm">
                         <ResumenRow label="Cantidad de ventas" value={String(cierreResumen.cantidad_ventas)} />
                         <ResumenRow label="Ventas en efectivo" value={fmtGs(cierreResumen.total_efectivo)} />
@@ -512,19 +513,19 @@ export function CajaControlBanner({ state }: { state: CajaState }) {
                       </div>
                     </div>
                     <div className="mt-4">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Cierre total del turno</p>
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1.5">{tt("Cierre total del turno")}</p>
                       <div className="rounded-lg border border-sky-200 bg-sky-50/60 p-3 text-sm">
-                        <div className="flex justify-between text-slate-700"><span>Monto de apertura</span><span>{fmtGs(cierreResumen.monto_apertura)}</span></div>
-                        <div className="flex justify-between text-slate-700 border-b border-sky-200 pb-2"><span>Total vendido</span><span>+ {fmtGs(cierreResumen.total_vendido)}</span></div>
+                        <div className="flex justify-between text-slate-700"><span>{tt("Monto de apertura")}</span><span>{fmtGs(cierreResumen.monto_apertura)}</span></div>
+                        <div className="flex justify-between text-slate-700 border-b border-sky-200 pb-2"><span>{tt("Total vendido")}</span><span>+ {fmtGs(cierreResumen.total_vendido)}</span></div>
                         <div className="flex justify-between items-baseline pt-2">
-                          <span className="font-semibold text-sky-800">Cierre total esperado</span>
+                          <span className="font-semibold text-sky-800">{tt("Cierre total esperado")}</span>
                           <span className="text-xl font-bold text-sky-900">{fmtGs(cierreResumen.monto_apertura + cierreResumen.total_vendido)}</span>
                         </div>
                       </div>
                     </div>
                   </>
                 ) : (
-                  <p className="mt-3 text-xs text-slate-400 animate-pulse">Cargando resumen del turno…</p>
+                  <p className="mt-3 text-xs text-slate-400 animate-pulse">{tt("Cargando resumen del turno…")}</p>
                 )}
 
                 <div className="mt-4 space-y-3">
@@ -538,7 +539,7 @@ export function CajaControlBanner({ state }: { state: CajaState }) {
                     const contado = Number(cierreContado) || 0;
                     const dif = contado - cierreResumen.efectivo_esperado;
                     return dif === 0 ? (
-                      <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">✓ Cuadra: sin diferencia.</div>
+                      <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{tt("✓ Cuadra: sin diferencia.")}</div>
                     ) : dif > 0 ? (
                       <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-800">Sobrante: <strong>{fmtGs(dif)}</strong></div>
                     ) : (
@@ -546,15 +547,15 @@ export function CajaControlBanner({ state }: { state: CajaState }) {
                     );
                   })()}
                   <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Observación (opcional)</label>
+                    <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">{tt("Observación (opcional)")}</label>
                     <input type="text" value={cierreObs} onChange={(e) => setCierreObs(e.target.value)}
-                      placeholder="Ej: cierre turno mañana"
+                      placeholder={tt("Ej: cierre turno mañana")}
                       className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]" />
                   </div>
                 </div>
                 <div className="mt-5 flex gap-2 justify-end">
                   <button type="button" onClick={() => setModal(null)} disabled={cerrando}
-                    className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50">Cancelar</button>
+                    className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50">{tt("Cancelar")}</button>
                   <button type="button" onClick={cerrarCaja} disabled={cerrando || cierreContado === ""}
                     className="rounded-lg bg-rose-600 hover:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold px-4 py-2 shadow-sm">
                     {cerrando ? "Cerrando…" : "Confirmar cierre"}
@@ -566,7 +567,7 @@ export function CajaControlBanner({ state }: { state: CajaState }) {
             {modal === "mov" && (
               <>
                 <h3 className="text-base font-semibold text-slate-900">Movimiento manual</h3>
-                <p className="mt-0.5 text-xs text-slate-500">Ingreso/egreso de plata en la caja fuera de una venta (ej. pagar un delivery, retirar cambio).</p>
+                <p className="mt-0.5 text-xs text-slate-500">{tt("Ingreso/egreso de plata en la caja fuera de una venta (ej. pagar un delivery, retirar cambio).")}</p>
                 {movError && <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{movError}</div>}
                 <div className="mt-4 space-y-3">
                   <div className="grid grid-cols-4 gap-1.5">
@@ -593,7 +594,7 @@ export function CajaControlBanner({ state }: { state: CajaState }) {
                         className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]" />
                     </div>
                     <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Método</label>
+                      <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">{tt("Método")}</label>
                       <select value={movMedio} onChange={(e) => setMovMedio(e.target.value as "efectivo"|"tarjeta"|"transferencia"|"otro")}
                         className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]">
                         <option value="efectivo">Efectivo</option>
@@ -604,14 +605,14 @@ export function CajaControlBanner({ state }: { state: CajaState }) {
                     </div>
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Observación (opcional)</label>
+                    <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">{tt("Observación (opcional)")}</label>
                     <input type="text" value={movObs} onChange={(e) => setMovObs(e.target.value)}
                       className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]" />
                   </div>
                 </div>
                 <div className="mt-5 flex gap-2 justify-end">
                   <button type="button" onClick={() => setModal(null)} disabled={movEnviando}
-                    className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50">Cancelar</button>
+                    className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50">{tt("Cancelar")}</button>
                   <button type="button" onClick={registrarMov} disabled={movEnviando}
                     className="rounded-lg bg-[#4FAEB2] hover:bg-[#3F8E91] disabled:opacity-50 text-white text-sm font-semibold px-4 py-2 shadow-sm">
                     {movEnviando ? "Registrando…" : "Registrar"}
@@ -622,16 +623,16 @@ export function CajaControlBanner({ state }: { state: CajaState }) {
 
             {modal === "consig" && (
               <>
-                <h3 className="text-base font-semibold text-slate-900">Pagar consignación</h3>
+                <h3 className="text-base font-semibold text-slate-900">{tt("Pagar consignación")}</h3>
                 <p className="mt-1 text-xs text-slate-500">
-                  Le pagás al cliente sus prendas consignadas. Baja su saldo y sale de la caja.
+                  {tt("Le pagás al cliente sus prendas consignadas. Baja su saldo y sale de la caja.")}
                 </p>
 
                 {!consigCliente ? (
                   <div className="mt-4">
                     <input type="text" autoFocus value={consigQuery}
                       onChange={(e) => setConsigQuery(e.target.value)}
-                      placeholder="Buscar cliente por nombre o teléfono…"
+                      placeholder={tt("Buscar cliente por nombre o teléfono…")}
                       className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-300" />
                     <ul className="mt-2 max-h-56 overflow-y-auto divide-y divide-slate-100 rounded-lg border border-slate-200">
                       {consigClientes
@@ -659,9 +660,9 @@ export function CajaControlBanner({ state }: { state: CajaState }) {
                   <div className="mt-4 space-y-3">
                     <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2">
                       <p className="text-sm font-semibold text-sky-900">{consigCliente.nombre}</p>
-                      <p className="text-xs text-sky-800">Saldo de consignación: <strong>{fmtGs(consigSaldo)}</strong></p>
+                      <p className="text-xs text-sky-800">{tt("Saldo de consignación:")} <strong>{fmtGs(consigSaldo)}</strong></p>
                       <button type="button" onClick={() => { setConsigCliente(null); setConsigError(null); }}
-                        className="mt-1 text-[11px] text-sky-700 underline">Cambiar cliente</button>
+                        className="mt-1 text-[11px] text-sky-700 underline">{tt("Cambiar cliente")}</button>
                     </div>
 
                     <div>
@@ -691,7 +692,7 @@ export function CajaControlBanner({ state }: { state: CajaState }) {
 
                 <div className="mt-5 flex gap-2 justify-end">
                   <button type="button" onClick={() => setModal(null)} disabled={consigEnviando}
-                    className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50">Cancelar</button>
+                    className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50">{tt("Cancelar")}</button>
                   {consigCliente && (
                     <button type="button" onClick={pagarConsigDesdeCaja} disabled={consigEnviando || !(consigSaldo > 0)}
                       className="rounded-lg bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white text-sm font-semibold px-4 py-2 shadow-sm">

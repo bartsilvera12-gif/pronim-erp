@@ -42,6 +42,8 @@ import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session"
 import { etiquetaVisibleTipoServicio } from "@/lib/clientes/tipo-servicio-catalogo";
 import { useMapNombreTipoServicioCatalogo } from "@/lib/clientes/use-map-nombre-tipo-servicio";
 import { getEtapas, getEtapaClasses, normalizeEtapaCodigo, type EtapaCrm } from "@/lib/crm/etapas";
+import { useT } from "@/lib/i18n/context";
+import { tt } from "@/lib/i18n/dict";
 import {
   isDashboardTabSlug,
   type DashboardTabSlug,
@@ -453,7 +455,7 @@ function HBarChart({
       ))}
       {data.length === 0 && (
         <p className={`py-4 text-center text-xs ${z ? "" : "text-gray-400"}`} style={z ? { color: Z.muted } : undefined}>
-          Sin datos
+          {tt("Sin datos")}
         </p>
       )}
     </div>
@@ -463,7 +465,7 @@ function HBarChart({
 function AreaChart({
   data, color = "#6366f1",
 }: { data: { label: string; value: number }[]; color?: string }) {
-  if (data.length < 2) return <p className="text-xs text-gray-400 py-8 text-center">Sin datos suficientes</p>;
+  if (data.length < 2) return <p className="text-xs text-gray-400 py-8 text-center">{tt("Sin datos suficientes")}</p>;
   const W = 480, H = 130, PL = 48, PR = 8, PT = 8, PB = 24;
   const cW = W - PL - PR, cH = H - PT - PB;
   const max = Math.max(...data.map(d => d.value), 1);
@@ -526,7 +528,7 @@ function DonutChart({
           style={isZ ? { backgroundColor: Z.surface } : undefined}
         >
           <span className={`text-xs ${isZ ? "" : "text-gray-400"}`} style={isZ ? { color: Z.muted } : undefined}>
-            Sin datos
+            {tt("Sin datos")}
           </span>
         </div>
       </div>
@@ -1065,7 +1067,7 @@ function DashComercial({
               Pipeline CRM
             </h3>
           </div>
-          <p className="mt-1 pl-3 text-[11px] text-slate-500">Distribución de prospectos por etapa</p>
+          <p className="mt-1 pl-3 text-[11px] text-slate-500">{tt("Distribución de prospectos por etapa")}</p>
           <div className="mt-5">
             <PipelineBar data={pipeline} tone="zentra" />
           </div>
@@ -1078,7 +1080,7 @@ function DashComercial({
               Clientes ganados por vendedor
             </h3>
           </div>
-          <p className="mt-1 pl-3 text-[11px] text-slate-500">Ranking por cierres en el período</p>
+          <p className="mt-1 pl-3 text-[11px] text-slate-500">{tt("Ranking por cierres en el período")}</p>
           <div className="mt-5">
             <HBarChart data={rendimiento} color="bg-[#4FAEB2]" tone="zentra" />
           </div>
@@ -1093,10 +1095,10 @@ function DashComercial({
             Clientes nuevos por tipo
           </h3>
         </div>
-        <p className="mt-1 pl-3 text-[11px] text-slate-500">Distribución de altas en el período seleccionado</p>
+        <p className="mt-1 pl-3 text-[11px] text-slate-500">{tt("Distribución de altas en el período seleccionado")}</p>
         <div className="mt-5">
           {clientesNuevosPorTipo.length === 0 ? (
-            <p className="text-center text-sm text-slate-500">Sin altas en el período</p>
+            <p className="text-center text-sm text-slate-500">{tt("Sin altas en el período")}</p>
           ) : (
             <HBarChart data={clientesNuevosPorTipo} color="bg-[#4FAEB2]" tone="zentra" />
           )}
@@ -1113,7 +1115,7 @@ function DashComercial({
         </div>
         {topPlanesEnNegociacion.length === 0 ? (
           <p className="mt-6 text-center text-sm text-slate-500">
-            Sin prospectos en negociación
+            {tt("Sin prospectos en negociación")}
           </p>
         ) : (
           <div className="mt-6">
@@ -1141,18 +1143,18 @@ function DashComercial({
             <div className="flex items-center gap-2">
               <span className="h-1 w-1 rounded-full bg-[#4FAEB2]" />
               <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#4FAEB2]">
-                Cartera · período
+                {tt("Cartera · período")}
               </p>
             </div>
             <h2 className="mt-2 text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl">
-              Clientes del período
+              {tt("Clientes del período")}
             </h2>
             <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-500">
-              Altas con <strong className="text-slate-700">fecha de creación</strong> en el rango del filtro. Valor: suma de{" "}
-              <strong className="text-slate-700">facturas emitidas en el período</strong> por cliente (neto de{" "}
-              <strong className="text-slate-700">notas de crédito aprobadas</strong> por SET vinculadas a esas facturas; se excluyen
+              {tt("Altas con")} <strong className="text-slate-700">{tt("fecha de creación")}</strong> en el rango del filtro. Valor: suma de{" "}
+              <strong className="text-slate-700">{tt("facturas emitidas en el período")}</strong> por cliente (neto de{" "}
+              <strong className="text-slate-700">{tt("notas de crédito aprobadas")}</strong> por SET vinculadas a esas facturas; se excluyen
               anuladas y corregidas por NC); si no hay, suma de{" "}
-              <strong className="text-slate-700">precio de suscripción</strong> con alta o inicio en el período.
+              <strong className="text-slate-700">{tt("precio de suscripción")}</strong> {tt("con alta o inicio en el período.")}
             </p>
           </div>
         </div>
@@ -1186,7 +1188,7 @@ function DashComercial({
 
         {filasClientesPeriodo.length === 0 ? (
           <p className="mt-8 text-center text-sm" style={{ color: Z.muted }}>
-            No hay altas de cliente en este período.
+            {tt("No hay altas de cliente en este período.")}
           </p>
         ) : (
           <div
@@ -1592,7 +1594,7 @@ function DashFinanciero({
           className={`${finKpiBase} border border-[#4FAEB2]/45 bg-white`}
         >
           <div className="flex items-start justify-between gap-2">
-            <p className={finKpiLabel}>Facturado del período</p>
+            <p className={finKpiLabel}>{tt("Facturado del período")}</p>
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-500">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -1604,7 +1606,7 @@ function DashFinanciero({
           <div className={`mt-auto ${finKpiValueWrap}`}>
             <FinMontoGs kpi monto={facturadoCohortPeriodo} className="text-slate-900" />
           </div>
-          <p className={`mt-1 ${finKpiSub}`}>Total emitido</p>
+          <p className={`mt-1 ${finKpiSub}`}>{tt("Total emitido")}</p>
         </motion.div>
 
         {/* Cobrado — card destacada */}
@@ -1617,7 +1619,7 @@ function DashFinanciero({
             className="pointer-events-none absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-[#4FAEB2] via-[#4FAEB2]/70 to-[#4FAEB2]/30"
           />
           <div className="flex items-start justify-between gap-2">
-            <p className={finKpiLabel}>Cobrado del período</p>
+            <p className={finKpiLabel}>{tt("Cobrado del período")}</p>
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#4FAEB2]/30 bg-[#4FAEB2]/12 text-[#4FAEB2]">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
                 <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
@@ -1644,7 +1646,7 @@ function DashFinanciero({
           className={`${finKpiBase} border border-amber-200 bg-gradient-to-br from-white via-white to-amber-50/40`}
         >
           <div className="flex items-start justify-between gap-2">
-            <p className={finKpiLabel}>Pendiente del período</p>
+            <p className={finKpiLabel}>{tt("Pendiente del período")}</p>
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-amber-200 bg-amber-50 text-amber-600">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
                 <circle cx="12" cy="12" r="10" />
@@ -1666,7 +1668,7 @@ function DashFinanciero({
               }
             />
           </div>
-          <p className={`mt-1 ${finKpiSub}`}>Por cobrar</p>
+          <p className={`mt-1 ${finKpiSub}`}>{tt("Por cobrar")}</p>
         </motion.div>
 
         {/* % de cobranza — con gauge */}
@@ -1675,7 +1677,7 @@ function DashFinanciero({
           className={`${finKpiBase} border border-[#4FAEB2]/45 bg-white`}
         >
           <div className="flex items-start justify-between gap-2">
-            <p className={finKpiLabel}>% de cobranza</p>
+            <p className={finKpiLabel}>{tt("% de cobranza")}</p>
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-500">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
                 <line x1="19" y1="5" x2="5" y2="19" />
@@ -1732,18 +1734,18 @@ function DashFinanciero({
               <span aria-hidden="true" className="block h-5 w-1 rounded-full bg-[#4FAEB2]" />
               <h3 className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-600">
                 <span aria-hidden="true" className="inline-block h-1.5 w-1.5 rounded-full bg-[#4FAEB2]" />
-                Cobrado por día
+                {tt("Cobrado por día")}
               </h3>
             </div>
-            <p className="mt-1 pl-3 text-[11px] text-slate-500">Pagos registrados por fecha de pago</p>
+            <p className="mt-1 pl-3 text-[11px] text-slate-500">{tt("Pagos registrados por fecha de pago")}</p>
           </div>
           <div className="flex min-w-0 flex-col gap-0.5 sm:items-end sm:text-right">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Total cobrado</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">{tt("Total cobrado")}</p>
             <FinMontoGs monto={cobradoRegistradoPeriodo} dense className="text-[#3F8E91]" />
           </div>
         </div>
         {cobradoPorDiaSerie.length === 0 ? (
-          <p className="mt-6 text-sm text-slate-500">Sin rango de fechas válido.</p>
+          <p className="mt-6 text-sm text-slate-500">{tt("Sin rango de fechas válido.")}</p>
         ) : (
           <div className="mt-5 h-[300px] w-full min-w-0">
             <ResponsiveContainer width="100%" height="100%">
@@ -1808,10 +1810,10 @@ function DashFinanciero({
           <span aria-hidden="true" className="block h-5 w-1 rounded-full bg-[#4FAEB2]" />
           <h3 className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-600">
             <span aria-hidden="true" className="inline-block h-1.5 w-1.5 rounded-full bg-[#4FAEB2]" />
-            Composición del período
+            {tt("Composición del período")}
           </h3>
         </div>
-        <p className="mt-1 pl-3 text-[11px] text-slate-500">Facturación emitida por tipo de factura</p>
+        <p className="mt-1 pl-3 text-[11px] text-slate-500">{tt("Facturación emitida por tipo de factura")}</p>
         <div className="mt-5 flex h-4 w-full overflow-hidden rounded-full bg-slate-100 ring-1 ring-slate-200/70">
           {composicionModalidad.total > 0 ? (
             <>
@@ -1837,7 +1839,7 @@ function DashFinanciero({
             </p>
           </div>
           <div className="rounded-xl border border-slate-100 bg-slate-50/90 px-4 py-3">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Mensual / suscripción</p>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{tt("Mensual / suscripción")}</p>
             <FinMontoGs monto={composicionModalidad.mensual} dense className="text-slate-900" />
             <p className="mt-1 text-sm font-semibold tabular-nums text-slate-500">
               {composicionModalidad.total > 0 ? `${composicionModalidad.pctMensual.toFixed(1)}%` : "—"}
@@ -1845,13 +1847,13 @@ function DashFinanciero({
           </div>
         </div>
         <div className="mt-5 flex flex-col gap-1 border-t border-slate-100 pt-4 sm:flex-row sm:items-baseline sm:justify-between">
-          <span className="text-xs font-semibold text-slate-500">Total emitido</span>
+          <span className="text-xs font-semibold text-slate-500">{tt("Total emitido")}</span>
           <div className="min-w-0 sm:text-right">
             <FinMontoGs monto={composicionModalidad.total} dense className="text-slate-900" />
           </div>
         </div>
         <p className="mt-3 text-[10px] leading-snug text-slate-400">
-          Emisión en el período, sin anuladas · contado vs resto por tipo · sin pagos ni doble conteo.
+          {tt("Emisión en el período, sin anuladas · contado vs resto por tipo · sin pagos ni doble conteo.")}
         </p>
       </div>
 
@@ -1861,7 +1863,7 @@ function DashFinanciero({
             <span aria-hidden="true" className="block h-5 w-1 rounded-full bg-[#4FAEB2]" />
             <h3 className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-600">
               <span aria-hidden="true" className="inline-block h-1.5 w-1.5 rounded-full bg-[#4FAEB2]" />
-              Deuda por tipo de cliente
+              {tt("Deuda por tipo de cliente")}
             </h3>
           </div>
           <p className="mt-1 pl-3 text-[11px] text-slate-500">
@@ -1870,7 +1872,7 @@ function DashFinanciero({
             CRM).
           </p>
           {deudaPorTipoServicio.list.length === 0 ? (
-            <p className="mt-6 text-sm text-slate-500">No hay deuda pendiente (saldo &gt; 0) en el período o sin segmentos con saldo.</p>
+            <p className="mt-6 text-sm text-slate-500">{tt("No hay deuda pendiente (saldo &gt; 0) en el período o sin segmentos con saldo.")}</p>
           ) : (
             <div className="mt-6 space-y-4">
               {deudaPorTipoServicio.list.map((row) => (
@@ -1900,7 +1902,7 @@ function DashFinanciero({
                 </div>
               ))}
               <div className="flex min-w-0 items-baseline justify-between gap-2 border-t border-slate-100 pt-4 text-sm">
-                <span className="font-semibold text-slate-600">Total deuda (vista)</span>
+                <span className="font-semibold text-slate-600">{tt("Total deuda (vista)")}</span>
                 <span className="shrink-0 text-right text-base font-bold tabular-nums text-slate-900">
                   Gs. {formatGs(deudaPorTipoServicio.total)}
                 </span>
@@ -1913,18 +1915,18 @@ function DashFinanciero({
             <span aria-hidden="true" className="block h-5 w-1 rounded-full bg-[#4FAEB2]" />
             <h3 className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-600">
               <span aria-hidden="true" className="inline-block h-1.5 w-1.5 rounded-full bg-[#4FAEB2]" />
-              Cobrado por tipo de cliente
+              {tt("Cobrado por tipo de cliente")}
             </h3>
           </div>
           <p className="mt-1 pl-3 text-[11px] text-slate-500">
-            Σ <span className="font-medium text-slate-600">monto de pagos</span> con fecha de pago en el rango (misma
-            lógica que <span className="font-medium text-slate-600">Cobrado por día</span> / factura no anulada),
+            Σ <span className="font-medium text-slate-600">{tt("monto de pagos")}</span> con fecha de pago en el rango (misma
+            lógica que <span className="font-medium text-slate-600">{tt("Cobrado por día")}</span> / factura no anulada),
             asignado al <span className="font-medium text-slate-600">cliente</span> vía{" "}
             <span className="font-medium text-slate-600">tipo_servicio_cliente</span> (nombre catálogo CRM). No
             incluye contado sin fila de pago.
           </p>
           {cobradoPorTipoServicio.list.length === 0 ? (
-            <p className="mt-6 text-sm text-slate-500">No hay pagos en el período con factura vinculada a cliente.</p>
+            <p className="mt-6 text-sm text-slate-500">{tt("No hay pagos en el período con factura vinculada a cliente.")}</p>
           ) : (
             <div className="mt-6 space-y-4">
               {cobradoPorTipoServicio.list.map((row) => (
@@ -1954,7 +1956,7 @@ function DashFinanciero({
                 </div>
               ))}
               <div className="flex min-w-0 items-baseline justify-between gap-2 border-t border-slate-100 pt-4 text-sm">
-                <span className="font-semibold text-slate-600">Total cobrado (vista)</span>
+                <span className="font-semibold text-slate-600">{tt("Total cobrado (vista)")}</span>
                 <span className="shrink-0 text-right text-base font-bold tabular-nums text-slate-900">
                   Gs. {formatGs(cobradoPorTipoServicio.total)}
                 </span>
@@ -1970,10 +1972,10 @@ function DashFinanciero({
             <span aria-hidden="true" className="block h-5 w-1 rounded-full bg-[#4FAEB2]" />
             <h3 className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-600">
               <span aria-hidden="true" className="inline-block h-1.5 w-1.5 rounded-full bg-[#4FAEB2]" />
-              Progreso de metas
+              {tt("Progreso de metas")}
             </h3>
           </div>
-          <p className="mt-1 pl-3 text-[11px] text-slate-500">Avance del mes calendario vs. objetivos configurados</p>
+          <p className="mt-1 pl-3 text-[11px] text-slate-500">{tt("Avance del mes calendario vs. objetivos configurados")}</p>
           <div className="mt-6 grid grid-cols-1 gap-8 sm:grid-cols-2">
             <ProgressBar
               variant="light"
@@ -2006,7 +2008,7 @@ function DashFinanciero({
             <span aria-hidden="true" className="block h-5 w-1 rounded-full bg-[#4FAEB2]" />
             <h3 className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-600">
               <span aria-hidden="true" className="inline-block h-1.5 w-1.5 rounded-full bg-[#4FAEB2]" />
-              Distribución de clientes
+              {tt("Distribución de clientes")}
             </h3>
           </div>
           <p className="mt-1 pl-3 text-[11px] text-slate-500">
@@ -2142,6 +2144,7 @@ function getInitialTab(): TabDash {
 }
 
 export default function DashboardPage() {
+  const t = useT();
   const [dashScope, setDashScope] = useState<DashScope>({ kind: "pending" });
   const [tab,      setTab]      = useState<TabDash>(getInitialTab);
   const [periodo,  setPeriodo]  = useState<Periodo>("mes");
@@ -2317,7 +2320,7 @@ export default function DashboardPage() {
         <span className="text-4xl">🔒</span>
         <h2 className="text-lg font-bold text-gray-800">Acceso restringido</h2>
         <p className="text-sm text-gray-500 text-center max-w-sm">
-          El dashboard solo está disponible para usuarios con nivel <strong>Supervisor</strong> o <strong>Administrador</strong>.
+          {tt("El dashboard solo está disponible para usuarios con nivel")} <strong>Supervisor</strong> o <strong>Administrador</strong>.
         </p>
         <div className="flex items-center gap-2 text-sm text-gray-500 mt-2">
           Cambiar a:
@@ -2352,13 +2355,13 @@ export default function DashboardPage() {
                 Dashboard
               </h1>
               <p className="mt-1.5 max-w-md text-sm leading-relaxed text-slate-500">
-                No hay vistas del tablero disponibles para tu usuario.
+                {tt("No hay vistas del tablero disponibles para tu usuario.")}
               </p>
             </div>
           </div>
         </header>
         <div className="rounded-2xl border border-[#4FAEB2]/45 bg-white px-5 py-10 text-center text-sm shadow-sm">
-          <p className="font-semibold text-slate-900">Sin vistas asignadas</p>
+          <p className="font-semibold text-slate-900">{tt("Sin vistas asignadas")}</p>
           <p className="mx-auto mt-2 max-w-md text-slate-500">
             Tu empresa aún no habilitó pestañas para vos, o tu perfil no tiene vistas del dashboard. Pedí a un
             administrador que revise <span className="font-semibold text-slate-700">Usuarios</span> y las vistas habilitadas para la
@@ -2430,7 +2433,7 @@ export default function DashboardPage() {
                         : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
                     }`}
                   >
-                    {p.label}
+                    {t(p.label)}
                   </button>
                 );
               })}
@@ -2481,7 +2484,7 @@ export default function DashboardPage() {
                 }`}
               >
                 <TabIcon className="h-4 w-4 shrink-0" />
-                {meta.label}
+                {t(meta.label)}
               </button>
             );
           })}

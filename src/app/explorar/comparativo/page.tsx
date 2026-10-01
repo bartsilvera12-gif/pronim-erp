@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
+import { useSucursalActivaId } from "@/lib/sucursales/activa";
 import { useMoney } from "@/lib/i18n/context";
+import { tt } from "@/lib/i18n/dict";
 
 type Metricas = { facturacion: number; cnt_ventas: number; prendas: number; clientes: number; ticket_prom: number; precio_prenda: number };
 type Suc = {
@@ -30,6 +32,8 @@ export default function ExplorarComparativoPage() {
   const money = useMoney();
   const fmt = (n: number) => money.format(Math.round(n) || 0);
   const [data, setData] = useState<Data | null>(null);
+  /** "" = todas las sucursales juntas. */
+  const [sucursalId, setSucursalId] = useState("");
   const [cargando, setCargando] = useState(true);
   const [desde, setDesde] = useState<string>(() => { const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10); });
   const [hasta, setHasta] = useState<string>(() => new Date().toISOString().slice(0, 10));
@@ -70,6 +74,10 @@ export default function ExplorarComparativoPage() {
     setPrevHasta(iso(fin));
   }
 
+  // Explorar sigue al selector del header: si estoy parada en LILLO, todo
+  // lo que veo acá es de LILLO. Sin sucursal elegida se ve la empresa.
+  const sucursalActivaId = useSucursalActivaId();
+
   useEffect(() => {
     let cancel = false;
     setCargando(true);
@@ -78,13 +86,14 @@ export default function ExplorarComparativoPage() {
       qs.set("prev_desde", prevDesde);
       qs.set("prev_hasta", prevHasta);
     }
+    if (sucursalActivaId) qs.set("sucursal_id", sucursalActivaId);
     fetchWithSupabaseSession(`/api/reportes/comparativo?${qs}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((j) => { if (!cancel && j?.success) setData(j.data as Data); })
       .catch(() => {})
       .finally(() => { if (!cancel) setCargando(false); });
     return () => { cancel = true; };
-  }, [desde, hasta, manual, prevDesde, prevHasta]);
+  }, [desde, hasta, manual, prevDesde, prevHasta, sucursalActivaId]);
 
   function DeltaPct({ v }: { v: number }) {
     const cls = v > 0 ? "text-emerald-700 bg-emerald-50" : v < 0 ? "text-rose-700 bg-rose-50" : "text-slate-500 bg-slate-50";
@@ -101,12 +110,28 @@ export default function ExplorarComparativoPage() {
     return partes.length ? partes.join(" · ") : "sin cambios relevantes";
   }
 
+  // Al elegir una sucursal se muestra solo su fila y el resumen de arriba
+  // pasa a ser el de ESA sucursal: si siguiera mostrando el total general,
+  // el encabezado diría una cosa y la tabla otra.
+  const filas = data
+    ? (sucursalId ? data.sucursales.filter((x) => (x.sucursal_id ?? "sin") === sucursalId) : data.sucursales)
+    : [];
+  const elegida = sucursalId ? filas[0] : null;
+  const resumen = elegida
+    ? {
+        actual: elegida.actual,
+        anterior: elegida.anterior,
+        delta_facturacion: elegida.delta_facturacion,
+        delta_facturacion_pct: elegida.delta_facturacion_pct,
+      }
+    : data?.total ?? null;
+
   return (
     <div className="max-w-full space-y-4">
       <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 space-y-2.5">
         {/* Período A — el que se analiza */}
         <div className="flex flex-wrap items-center gap-2">
-          <span className="w-24 shrink-0 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Período</span>
+          <span className="w-24 shrink-0 text-[11px] font-semibold uppercase tracking-wide text-slate-500">{tt("Período")}</span>
           <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)}
             className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm" />
           <span className="text-slate-400 text-xs">→</span>
@@ -117,7 +142,7 @@ export default function ExplorarComparativoPage() {
 
         {/* Período B — contra qué se compara */}
         <div className="flex flex-wrap items-center gap-2">
-          <span className="w-24 shrink-0 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Comparar con</span>
+          <span className="w-24 shrink-0 text-[11px] font-semibold uppercase tracking-wide text-slate-500">{tt("Comparar con")}</span>
           {manual ? (
             <>
               <input type="date" value={prevDesde} onChange={(e) => setPrevDesde(e.target.value)}
@@ -128,19 +153,19 @@ export default function ExplorarComparativoPage() {
               {data && <span className="text-[11px] text-slate-500">{data.dias_anterior ?? "—"} día(s)</span>}
               <button type="button" onClick={() => setManual(false)}
                 className="text-[11px] text-slate-500 underline hover:text-slate-700">
-                Volver al automático
+                {tt("Volver al automático")}
               </button>
             </>
           ) : (
             <>
               <span className="text-sm text-slate-600">
                 {data
-                  ? <>Período anterior: <strong>{fmtFecha(data.periodo_anterior.desde)}</strong> → <strong>{fmtFecha(data.periodo_anterior.hasta)}</strong></>
+                  ? <>{tt("Período anterior:")} <strong>{fmtFecha(data.periodo_anterior.desde)}</strong> → <strong>{fmtFecha(data.periodo_anterior.hasta)}</strong></>
                   : "Período anterior (automático)"}
               </span>
               <button type="button" onClick={activarManual}
                 className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-50">
-                Elegir otro período
+                {tt("Elegir otro período")}
               </button>
             </>
           )}
@@ -152,12 +177,33 @@ export default function ExplorarComparativoPage() {
             <span className="text-[10px] uppercase tracking-wide text-slate-400">Atajos</span>
             <button type="button" onClick={mismoPeriodoAnioPasado}
               className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-100">
-              Mismo período del año pasado
+              {tt("Mismo período del año pasado")}
             </button>
             <button type="button" onClick={mesAnterior}
               className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-100">
               Mes anterior completo
             </button>
+          </div>
+        )}
+
+        {data && data.sucursales.length > 1 && (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[10px] uppercase tracking-wide text-slate-400 sm:w-[6.5rem]">{tt("Sucursal")}</span>
+            <select
+              value={sucursalId}
+              onChange={(e) => setSucursalId(e.target.value)}
+              aria-label={tt("Comparar una sola sucursal")}
+              className={`rounded-lg border px-2.5 py-1.5 text-sm font-semibold ${
+                sucursalId
+                  ? "border-[#4FAEB2] bg-[#4FAEB2]/10 text-[#3F8E91]"
+                  : "border-slate-200 bg-white text-slate-700"
+              }`}
+            >
+              <option value="">{tt("Todas las sucursales")}</option>
+              {data.sucursales.map((x) => (
+                <option key={x.sucursal_id ?? "sin"} value={x.sucursal_id ?? "sin"}>{x.sucursal}</option>
+              ))}
+            </select>
           </div>
         )}
 
@@ -171,21 +217,23 @@ export default function ExplorarComparativoPage() {
       {cargando ? (
         <p className="py-12 text-center text-sm text-slate-400 animate-pulse">Cargando…</p>
       ) : !data ? (
-        <p className="py-12 text-center text-sm text-slate-400">Sin datos.</p>
+        <p className="py-12 text-center text-sm text-slate-400">{tt("Sin datos.")}</p>
       ) : (
         <>
           {/* Resumen total */}
           <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-4 flex flex-wrap items-center gap-4">
             <div>
-              <p className="text-[10px] uppercase font-semibold text-slate-500">Facturación del período</p>
-              <p className="text-2xl font-bold text-slate-900 tabular-nums">{fmt(data.total.actual.facturacion)}</p>
-              <p className="text-xs text-slate-500">anterior: {fmt(data.total.anterior.facturacion)}</p>
+              <p className="text-[10px] uppercase font-semibold text-slate-500">
+                Facturación del período{elegida ? ` · ${elegida.sucursal}` : ""}
+              </p>
+              <p className="text-2xl font-bold text-slate-900 tabular-nums">{fmt(resumen?.actual.facturacion ?? 0)}</p>
+              <p className="text-xs text-slate-500">anterior: {fmt(resumen?.anterior.facturacion ?? 0)}</p>
             </div>
-            <div className="text-3xl"><DeltaPct v={data.total.delta_facturacion_pct} /></div>
+            <div className="text-3xl"><DeltaPct v={resumen?.delta_facturacion_pct ?? 0} /></div>
             <p className="text-sm text-slate-600 ml-auto max-w-md">
-              {data.total.delta_facturacion >= 0
-                ? `Creció ${fmt(data.total.delta_facturacion)} respecto al período anterior.`
-                : `Cayó ${fmt(Math.abs(data.total.delta_facturacion))} respecto al período anterior.`}
+              {(resumen?.delta_facturacion ?? 0) >= 0
+                ? `Creció ${fmt(resumen?.delta_facturacion ?? 0)} respecto al período anterior.`
+                : `Cayó ${fmt(Math.abs(resumen?.delta_facturacion ?? 0))} respecto al período anterior.`}
             </p>
           </div>
 
@@ -194,19 +242,19 @@ export default function ExplorarComparativoPage() {
             <table className="w-full text-sm">
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
-                  <th className="text-left px-3 py-2 text-[11px] uppercase font-semibold text-slate-600">Sucursal</th>
-                  <th className="text-right px-3 py-2 text-[11px] uppercase font-semibold text-slate-600">Facturación</th>
+                  <th className="text-left px-3 py-2 text-[11px] uppercase font-semibold text-slate-600">{tt("Sucursal")}</th>
+                  <th className="text-right px-3 py-2 text-[11px] uppercase font-semibold text-slate-600">{tt("Facturación")}</th>
                   <th className="text-center px-3 py-2 text-[11px] uppercase font-semibold text-slate-600">Δ%</th>
                   <th className="text-right px-3 py-2 text-[11px] uppercase font-semibold text-slate-600">Ventas</th>
                   <th className="text-right px-3 py-2 text-[11px] uppercase font-semibold text-slate-600">Clientes</th>
                   <th className="text-right px-3 py-2 text-[11px] uppercase font-semibold text-slate-600">Ticket prom.</th>
                   <th className="text-right px-3 py-2 text-[11px] uppercase font-semibold text-slate-600">Prendas</th>
-                  <th className="text-right px-3 py-2 text-[11px] uppercase font-semibold text-slate-600">Precio/prenda</th>
-                  <th className="text-left px-3 py-2 text-[11px] uppercase font-semibold text-slate-600">¿De dónde vino?</th>
+                  <th className="text-right px-3 py-2 text-[11px] uppercase font-semibold text-slate-600">{tt("Precio/prenda")}</th>
+                  <th className="text-left px-3 py-2 text-[11px] uppercase font-semibold text-slate-600">{tt("¿De dónde vino?")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {data.sucursales.map((s) => (
+                {filas.map((s) => (
                   <tr key={s.sucursal_id ?? "sin"} className={`hover:bg-slate-50 ${s.delta_facturacion > 0 ? "bg-emerald-50/20" : s.delta_facturacion < 0 ? "bg-rose-50/20" : ""}`}>
                     <td className="px-3 py-2 font-medium text-slate-800">{s.sucursal}</td>
                     <td className="px-3 py-2 text-right tabular-nums font-semibold text-slate-800">{fmt(s.actual.facturacion)}<div className="text-[10px] font-normal text-slate-400">ant. {fmt(s.anterior.facturacion)}</div></td>
@@ -220,9 +268,11 @@ export default function ExplorarComparativoPage() {
                   </tr>
                 ))}
               </tbody>
+              {/* Con una sola sucursal elegida el pie repetiría la única fila. */}
+              {!elegida && (
               <tfoot className="border-t-2 border-slate-300 bg-slate-50">
                 <tr>
-                  <td className="px-3 py-2 text-xs font-bold text-slate-700 uppercase">Total</td>
+                  <td className="px-3 py-2 text-xs font-bold text-slate-700 uppercase">{tt("Total")}</td>
                   <td className="px-3 py-2 text-right tabular-nums font-bold text-slate-900">{fmt(data.total.actual.facturacion)}</td>
                   <td className="px-3 py-2 text-center"><DeltaPct v={data.total.delta_facturacion_pct} /></td>
                   <td className="px-3 py-2 text-right tabular-nums font-bold text-slate-800">{data.total.actual.cnt_ventas}</td>
@@ -233,10 +283,11 @@ export default function ExplorarComparativoPage() {
                   <td />
                 </tr>
               </tfoot>
+              )}
             </table>
           </div>
           <p className="text-[11px] text-slate-400">
-            El período anterior se calcula automáticamente con la misma cantidad de días, terminando el día antes de que empiece el período elegido.
+            {tt("El período anterior se calcula automáticamente con la misma cantidad de días, terminando el día antes de que empiece el período elegido.")}
           </p>
         </>
       )}

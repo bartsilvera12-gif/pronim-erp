@@ -215,29 +215,25 @@ export async function POST(request: NextRequest) {
       }
       if (!it.producto_nombre) it.producto_nombre = pRow.nombre ?? null;
 
-      // Lockear stock origen y verificar cantidad disponible.
-      const stockOrigenRes = await client.query<{ stock: number | string }>(
-        `SELECT stock_actual::float8 AS stock FROM ${tPSS}
+      // Lockear la fila de origen. NO se rechaza por falta de stock: igual
+      // que en las ventas, el stock puede quedar en negativo. En la tienda
+      // la mercadería se mueve antes de que el sistema esté al día, y
+      // bloquear la transferencia solo lograba que no se registrara nunca.
+      // El negativo queda a la vista y se corrige con el inventario.
+      await client.query(
+        `SELECT stock_actual FROM ${tPSS}
           WHERE producto_id = $1::uuid AND sucursal_id = $2::uuid FOR UPDATE`,
         [it.producto_id, origen],
       );
-      const stockOrigen = Number(stockOrigenRes.rows[0]?.stock ?? 0);
-      if (stockOrigen < it.cantidad) {
-        await client.query("ROLLBACK");
-        return NextResponse.json(
-          errorResponse(
-            `Stock insuficiente en la sucursal origen para el producto ${it.producto_nombre ?? it.producto_id}: ` +
-            `disponibles ${stockOrigen}, se piden ${it.cantidad}.`,
-          ),
-          { status: 400 },
-        );
-      }
 
-      // Decrementar origen.
+      // Decrementar origen. Upsert y no UPDATE: si la sucursal todavía no
+      // tiene fila para ese producto, un UPDATE no afectaría ninguna fila y
+      // la salida se perdería sin dejar rastro.
       await client.query(
-        `UPDATE ${tPSS}
-            SET stock_actual = stock_actual - $3::numeric, updated_at = now()
-          WHERE producto_id = $1::uuid AND sucursal_id = $2::uuid`,
+        `INSERT INTO ${tPSS} (producto_id, sucursal_id, stock_actual, stock_minimo, updated_at)
+         VALUES ($1::uuid, $2::uuid, -$3::numeric, 0, now())
+         ON CONFLICT (producto_id, sucursal_id) DO UPDATE
+            SET stock_actual = ${tPSS}.stock_actual - $3::numeric, updated_at = now()`,
         [it.producto_id, origen, it.cantidad],
       );
 

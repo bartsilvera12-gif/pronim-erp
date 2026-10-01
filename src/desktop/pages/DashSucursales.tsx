@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { MetaCelebrationModal } from "@/components/metas/MetaCelebrationModal";
 import DashSucursalDiario from "./DashSucursalDiario";
+import { tt } from "@/lib/i18n/dict";
 
 /**
  * Dashboard OPERATIVO de Sucursales — rediseño visual.
@@ -264,7 +265,7 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
   if (loading && !data) return <div className="py-10 text-center text-sm text-slate-500">Cargando…</div>;
   if (err) return (
     <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-      No se pudo cargar el dashboard de sucursales.
+      {tt("No se pudo cargar el dashboard de sucursales.")}
       <div className="mt-1 text-xs">{err}</div>
       <button type="button" onClick={cargar} className="mt-2 rounded border border-rose-300 bg-white px-2 py-1 text-xs">Reintentar</button>
     </div>
@@ -376,7 +377,7 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
                   }}
                   className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3 py-1.5 shadow-sm"
                 >
-                  Ver cómo se logró
+                  {tt("Ver cómo se logró")}
                   <svg viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
                     <path fillRule="evenodd" d="M5 10a.75.75 0 0 1 .75-.75h6.638L10.23 7.29a.75.75 0 1 1 1.04-1.08l3.5 3.25a.75.75 0 0 1 0 1.08l-3.5 3.25a.75.75 0 1 1-1.04-1.08l2.158-1.96H5.75A.75.75 0 0 1 5 10Z" clipRule="evenodd" />
                   </svg>
@@ -398,7 +399,7 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
                 ? "bg-[#4FAEB2] text-white shadow-sm"
                 : "text-slate-500 hover:text-slate-800"
             }`}
-          >Resumen del período</button>
+          >{tt("Resumen del período")}</button>
           <button
             type="button"
             onClick={() => {
@@ -413,7 +414,7 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
                 ? "bg-[#4FAEB2] text-white shadow-sm"
                 : "text-slate-500 hover:text-slate-800"
             }`}
-          >Bitácora diaria</button>
+          >{tt("Bitácora diaria")}</button>
         </div>
         {/* Selector de sucursal removido en la vista Resumen — Karen quiere
             ver todo dividido por sucursal en lugar de filtrar. El selector
@@ -450,9 +451,9 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
       {data.ventas.evolucion_por_sucursal.length > 0 && (
         <div className="rounded-2xl border border-slate-200 bg-white p-5">
           <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm font-bold text-slate-800">Evolución de ventas por día</h3>
+            <h3 className="text-sm font-bold text-slate-800">{tt("Evolución de ventas por día")}</h3>
             <span className="text-[11px] text-slate-400">
-              Cada línea = una sucursal
+              {tt("Cada línea = una sucursal")}
             </span>
           </div>
           {/* Se pasa la lista pivoteada sin la línea 'Total' (evita mezclar
@@ -471,8 +472,8 @@ export default function DashSucursales({ desde, hasta }: { desde: string; hasta:
       {data.sucursales.length > 0 && (
         <div id="rendimiento-sucursales">
           <div className="flex items-baseline justify-between mb-3">
-            <h3 className="text-base font-bold text-slate-800">Detalle por sucursal</h3>
-            <span className="text-[11px] text-slate-400">Cada card es una sucursal — no es un promedio</span>
+            <h3 className="text-base font-bold text-slate-800">{tt("Detalle por sucursal")}</h3>
+            <span className="text-[11px] text-slate-400">{tt("Cada card es una sucursal — no es un promedio")}</span>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {data.sucursales.map(s => <SucursalCard key={s.sucursal_id} s={s} />)}
@@ -570,7 +571,7 @@ function FranjasPorSucursal({
     map.get(r.sucursal_id)!.items.push({ tipo_id: r.tipo_id, tipo_nombre: r.tipo_nombre, cantidad: r.cantidad });
   }
   if (map.size === 0) {
-    return <p className="text-sm text-slate-400 py-2">Sin datos en el período.</p>;
+    return <p className="text-sm text-slate-400 py-2">{tt("Sin datos en el período.")}</p>;
   }
   const sucursales = Array.from(map.entries()).sort((a, b) => a[1].nombre.localeCompare(b[1].nombre));
 
@@ -843,7 +844,7 @@ function MultiLineChart({
           ))}
         </ul>
         <p className="text-[10px] text-slate-400 mt-3 italic">
-          Vista de barras: hay un solo día en el rango. Ampliá el filtro para ver evolución en el tiempo.
+          {tt("Vista de barras: hay un solo día en el rango. Ampliá el filtro para ver evolución en el tiempo.")}
         </p>
       </div>
     );
@@ -874,7 +875,7 @@ function MultiLineChart({
           {totalPorDia.length > 0 && (
             <span className="inline-flex items-center gap-1.5 text-slate-500">
               <span className="h-0.5 w-4 border-t-2 border-dashed border-slate-400" />
-              Total (ref.)
+              {tt("Total (ref.)")}
             </span>
           )}
         </div>
@@ -962,7 +963,7 @@ function MultiLineChart({
               {totalPorDia.length > 0 && (
                 <li className="flex items-center gap-2 pt-1 mt-1 border-t border-slate-100">
                   <span className="h-2 w-2 rounded-full shrink-0 bg-slate-400" />
-                  <span className="flex-1 text-slate-500">Total</span>
+                  <span className="flex-1 text-slate-500">{tt("Total")}</span>
                   <span className="tabular-nums font-bold text-slate-900">
                     {fmtGsCompact(totalPorDia[hoverIdx]?.total ?? 0)}
                   </span>
@@ -1084,7 +1085,7 @@ function SucursalCard({ s }: {
         <p className="text-[10px] text-slate-500 -mt-2 mb-3 pl-1">
           Entraron <span className="tabular-nums font-semibold text-slate-700">{fmtN(s.visitas)}</span> ve{s.visitas === 1 ? "z" : "ces"}
           {" · "}
-          <span className="font-semibold text-slate-700 tabular-nums">{s.conversion_pct}%</span> terminó en venta
+          <span className="font-semibold text-slate-700 tabular-nums">{s.conversion_pct}%</span> {tt("terminó en venta")}
         </p>
       )}
 
@@ -1139,7 +1140,7 @@ function SucursalCard({ s }: {
                     : "Meta acumulada del período."
               }
             >
-              Meta del período
+              {tt("Meta del período")}
             </span>
             <span className={`text-xs font-bold tabular-nums ${
               pctExacto >= 100 ? "text-emerald-700" : "text-orange-700"
@@ -1296,7 +1297,7 @@ function DrillModal({
         <div className="overflow-auto flex-1">
           {err ? <div className="p-4 text-sm text-rose-700">{err}</div>
            : rows == null ? <div className="p-8 text-center text-sm text-slate-400">Cargando…</div>
-           : rows.length === 0 ? <div className="p-8 text-center text-sm text-slate-400">Sin datos.</div>
+           : rows.length === 0 ? <div className="p-8 text-center text-sm text-slate-400">{tt("Sin datos.")}</div>
            : (
             <table className="w-full text-xs">
               <thead className="bg-slate-50 text-left text-[10px] uppercase text-slate-500 sticky top-0">
@@ -1313,7 +1314,7 @@ function DrillModal({
           )}
         </div>
         <div className="px-5 py-2 border-t border-slate-100 text-[11px] text-slate-400 shrink-0">
-          Fórmula documentada en docs/dashboards-formulas.md
+          {tt("Fórmula documentada en docs/dashboards-formulas.md")}
         </div>
       </div>
     </div>

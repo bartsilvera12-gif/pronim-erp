@@ -22,6 +22,7 @@ import {
   fmtGs, type Cliente, type Franja, type Linea, type TipoPrenda,
 } from "@/lib/atencion/shared";
 import { CajaControlBanner, useCajaState } from "@/lib/atencion/caja-control";
+import { tt } from "@/lib/i18n/dict";
 
 export default function NuevaEvaluacionPage() {
   const router = useRouter();
@@ -478,7 +479,7 @@ export default function NuevaEvaluacionPage() {
             </div>
             <button type="button" onClick={() => { setCliente(null); setClienteQuery(""); }}
               className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-500 hover:bg-slate-50">
-              Cambiar cliente
+              {tt("Cambiar cliente")}
             </button>
           </div>
         ) : (
@@ -496,10 +497,10 @@ export default function NuevaEvaluacionPage() {
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
                     <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
                   </svg>
-                  Cargar nuevo cliente
+                  {tt("Cargar nuevo cliente")}
                 </button>
                 {clientesFiltrados.length === 0 ? (
-                  <p className="px-3 py-2 text-xs text-gray-400">Sin clientes que coincidan.</p>
+                  <p className="px-3 py-2 text-xs text-gray-400">{tt("Sin clientes que coincidan.")}</p>
                 ) : clientesFiltrados.map((c) => (
                   <button key={c.id} type="button"
                     onClick={() => { setCliente(c); setClienteOpen(false); }}
@@ -561,13 +562,13 @@ export default function NuevaEvaluacionPage() {
                   ? "border-emerald-500 bg-emerald-500 text-white"
                   : "border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-50"
               }`}
-              title="Cargar N prendas por un monto total sin elegir franja">
+              title={tt("Cargar N prendas por un monto total sin elegir franja")}>
               ⚡ {t("Carga rápida")}
             </button>
             {cargaRapidaOpen && (
               <div className="w-full mt-2 rounded-lg border border-emerald-300 bg-emerald-50/70 p-3">
                 <p className="text-[11px] text-emerald-900 mb-2">
-                  Ingresá <strong>cuántas prendas</strong> trae y el <strong>monto total</strong> que le pagás.
+                  {tt("Ingresá")} <strong>{tt("cuántas prendas")}</strong> {tt("trae y el")} <strong>{tt("monto total")}</strong> que le pagás.
                   Se crearán N unidades prorrateadas; después ajustás las franjas al ingresar al stock.
                 </p>
                 <div className="flex flex-wrap items-end gap-2">
@@ -594,7 +595,7 @@ export default function NuevaEvaluacionPage() {
                     }}
                     disabled={!(parseInt(cargaRapidaCantidad, 10) > 0) || !((Number(cargaRapidaMonto) || 0) > 0)}
                     className="rounded-md bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white text-xs font-semibold px-3 py-1.5">
-                    Cargar
+                    {tt("Cargar")}
                   </button>
                   <button type="button" onClick={() => setCargaRapidaOpen(false)}
                     className="text-[11px] text-slate-500 hover:text-slate-700 underline">cancelar</button>
@@ -609,7 +610,7 @@ export default function NuevaEvaluacionPage() {
               <div className="flex items-start justify-between gap-3 flex-wrap">
                 <div className="min-w-0">
                   <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
-                    Monto final de la evaluación
+                    {tt("Monto final de la evaluación")}
                   </p>
                   <p className="text-[11px] text-slate-500 mt-0.5">
                     Escribí lo que efectivamente le acreditás al cliente. Si lo dejás vacío se usa el subtotal ({fmtGs(totalTraeSubtotal)}).
@@ -623,7 +624,7 @@ export default function NuevaEvaluacionPage() {
                   {totalTraeManual != null && (
                     <button type="button" onClick={() => setTraeMontoFinal("")}
                       className="text-xs text-slate-500 hover:text-slate-700 underline decoration-dotted"
-                      title="Volver al subtotal de los items">limpiar</button>
+                      title={tt("Volver al subtotal de los items")}>limpiar</button>
                   )}
                 </div>
               </div>
@@ -659,7 +660,7 @@ export default function NuevaEvaluacionPage() {
         {totalTraeSubtotal > 0 && (
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Dividir el subtotal
+              {tt("Dividir el subtotal")}
             </p>
             <div className="flex flex-wrap gap-2 items-center">
               {([1, 2, 2.5, 3] as const).map((d) => (
@@ -743,7 +744,7 @@ export default function NuevaEvaluacionPage() {
             <span>
               <strong>Ingresar al stock ahora</strong>
               <span className="ml-1 text-xs text-slate-400">
-                (si lo destildás, la recepción queda "pendiente de ingreso" y podés catalogarla después)
+                {tt("(si lo destildás, la recepción queda \"pendiente de ingreso\" y podés catalogarla después)")}
               </span>
             </span>
           </label>
@@ -770,7 +771,7 @@ export default function NuevaEvaluacionPage() {
           </button>
           <button type="button" onClick={() => router.push("/atencion/pendientes-ingreso")}
             className="text-sm text-slate-400 hover:text-slate-700">
-            Ver bandeja de recepciones →
+            {tt("Ver bandeja de recepciones →")}
           </button>
         </div>
       </div>
@@ -861,7 +862,7 @@ function RepartoPago(props: {
     <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-3">
       <div className="flex items-center justify-between">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-          Cómo se paga al cliente
+          {tt("Cómo se paga al cliente")}
         </p>
         <button
           type="button"
@@ -871,14 +872,14 @@ function RepartoPago(props: {
           }}
           className="text-xs text-[#4FAEB2] hover:underline font-medium"
         >
-          Todo a crédito
+          {tt("Todo a crédito")}
         </button>
       </div>
 
       {/* Crédito en productos */}
       <div className={rowCls}>
         <span className={`${chipBase} border-emerald-200 bg-emerald-50 text-emerald-700 w-32 text-center`}>
-          💳 Crédito
+          {tt("💳 Crédito")}
         </span>
         <MontoInput
           value={credito} decimals={false}
@@ -892,9 +893,9 @@ function RepartoPago(props: {
             props.onCredito(restante > 0 ? String(restante) : "");
           }}
           className="text-[11px] text-slate-500 hover:text-slate-700 underline whitespace-nowrap"
-          title="Poner el restante en crédito"
+          title={tt("Poner el restante en crédito")}
         >
-          Resto acá
+          {tt("Resto acá")}
         </button>
       </div>
 
@@ -915,9 +916,9 @@ function RepartoPago(props: {
             props.onEfectivo(restante > 0 ? String(restante) : "");
           }}
           className="text-[11px] text-slate-500 hover:text-slate-700 underline whitespace-nowrap"
-          title="Poner el restante en efectivo"
+          title={tt("Poner el restante en efectivo")}
         >
-          Resto acá
+          {tt("Resto acá")}
         </button>
       </div>
 
@@ -938,17 +939,17 @@ function RepartoPago(props: {
             props.onTransf(restante > 0 ? String(restante) : "");
           }}
           className="text-[11px] text-slate-500 hover:text-slate-700 underline whitespace-nowrap"
-          title="Poner el restante en transferencia"
+          title={tt("Poner el restante en transferencia")}
         >
-          Resto acá
+          {tt("Resto acá")}
         </button>
       </div>
 
       {/* Consignación */}
       <div className={rowCls}>
         <span className={`${chipBase} border-amber-200 bg-amber-50 text-amber-700 w-32 text-center`}
-          title="La mercadería queda del cliente hasta venderla. Puede retirarse en efectivo o usarse en compra.">
-          📦 Consignación
+          title={tt("La mercadería queda del cliente hasta venderla. Puede retirarse en efectivo o usarse en compra.")}>
+          {tt("📦 Consignación")}
         </span>
         <MontoInput
           value={consign} decimals={false}
@@ -962,9 +963,9 @@ function RepartoPago(props: {
             props.onConsign(restante > 0 ? String(restante) : "");
           }}
           className="text-[11px] text-slate-500 hover:text-slate-700 underline whitespace-nowrap"
-          title="Poner el restante en consignación"
+          title={tt("Poner el restante en consignación")}
         >
-          Resto acá
+          {tt("Resto acá")}
         </button>
       </div>
 
@@ -986,7 +987,7 @@ function RepartoPago(props: {
             type="text"
             value={transfReferencia}
             onChange={(e) => props.onTransfReferencia(e.target.value)}
-            placeholder="Nro de operación / comprobante"
+            placeholder={tt("Nro de operación / comprobante")}
             className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
           />
         </div>

@@ -27,6 +27,7 @@ import type { ClienteTipoServicioRow } from "@/lib/clientes/tipo-servicio-catalo
 import { filasTiposDesdeSistemaEstatico, fetchTiposFormCliente } from "@/lib/clientes/fetch-tipos-servicio-form";
 import type { Plan } from "@/lib/planes/types";
 import { SUPABASE_APP_SCHEMA as NEURA_CLIENT_SCHEMA } from "@/lib/supabase/schema";
+import { tt } from "@/lib/i18n/dict";
 
 /** Formulario de clientes simplificado (sin campos SaaS/Neura como Tipo de
  *  servicio, Plan, Facturación al contado). Aplica a instancias monocliente
@@ -407,8 +408,8 @@ function NuevoClienteForm() {
         >
           ← Clientes
         </button>
-        <h1 className="text-3xl font-bold text-gray-800">Nuevo cliente</h1>
-        <p className="text-gray-500 text-sm mt-1">Registrá un cliente en la base de datos</p>
+        <h1 className="text-3xl font-bold text-gray-800">{tt("Nuevo cliente")}</h1>
+        <p className="text-gray-500 text-sm mt-1">{tt("Registrá un cliente en la base de datos")}</p>
       </div>
 
       {/* Banner CRM */}
@@ -427,11 +428,11 @@ function NuevoClienteForm() {
 
           {/* ── Identificación ───────────────────────────────────────────── */}
           <section className="space-y-4">
-            <SectionTitle>Identificación</SectionTitle>
+            <SectionTitle>{tt("Identificación")}</SectionTitle>
 
             {!SIMPLE_CLIENTE && (
             <div>
-              <label className={labelClass}>Tipo de servicio</label>
+              <label className={labelClass}>{tt("Tipo de servicio")}</label>
               <select
                 name="tipo_servicio_cliente"
                 value={form.tipo_servicio_cliente}
@@ -470,7 +471,7 @@ function NuevoClienteForm() {
                   name="documento"
                   value={form.documento}
                   onChange={handleChange}
-                  placeholder="CI sin puntos"
+                  placeholder={tt("CI sin puntos")}
                   className={inputClass}
                 />
               </div>
@@ -484,7 +485,7 @@ function NuevoClienteForm() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label className={labelClass}>
-                  Teléfono principal <span className="text-red-500">*</span>
+                  {tt("Teléfono principal")} <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
@@ -497,7 +498,7 @@ function NuevoClienteForm() {
                 />
               </div>
               <div>
-                <label className={labelClass}>Teléfono secundario</label>
+                <label className={labelClass}>{tt("Teléfono secundario")}</label>
                 <input
                   type="text"
                   name="telefono_secundario"
@@ -535,13 +536,13 @@ function NuevoClienteForm() {
             </div>
 
             <div>
-              <label className={labelClass}>Dirección</label>
+              <label className={labelClass}>{tt("Dirección")}</label>
               <input
                 type="text"
                 name="direccion"
                 value={form.direccion}
                 onChange={handleChange}
-                placeholder="Av. / Calle y número"
+                placeholder={tt("Av. / Calle y número")}
                 className={inputClass}
               />
             </div>
@@ -553,8 +554,8 @@ function NuevoClienteForm() {
                 onChange={(e) => setForm((p) => ({ ...p, usa_nota_remision: e.target.checked }))}
                 className="h-4 w-4 rounded border-slate-300 text-[#4FAEB2] focus:ring-[#4FAEB2]"
               />
-              Usa nota de remisión
-              <span className="text-xs text-slate-400">(se generará junto al ticket al venderle)</span>
+              {tt("Usa nota de remisión")}
+              <span className="text-xs text-slate-400">{tt("(se generará junto al ticket al venderle)")}</span>
             </label>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -565,12 +566,12 @@ function NuevoClienteForm() {
                   name="ciudad"
                   value={form.ciudad}
                   onChange={handleChange}
-                  placeholder="ASUNCIÓN"
+                  placeholder={tt("ASUNCIÓN")}
                   className={`${inputClass} uppercase`}
                 />
               </div>
               <div>
-                <label className={labelClass}>País</label>
+                <label className={labelClass}>{tt("País")}</label>
                 <input
                   type="text"
                   name="pais"
@@ -661,18 +662,18 @@ function NuevoClienteForm() {
                   Moneda preferida, que en retail por franjas no decidían
                   nada (se cobra en el momento y en la moneda del local). */}
               <div>
-                <label className={labelClass}>¿Cómo conoció la tienda?</label>
+                <label className={labelClass}>{tt("¿Cómo conoció la tienda?")}</label>
                 <select
                   name="como_conocio"
                   value={form.como_conocio}
                   onChange={handleChange}
                   className={inputClass}
                 >
-                  <option value="">Seleccioná una opción…</option>
-                  <option value="Recomendación">Recomendación</option>
+                  <option value="">{tt("Seleccioná una opción…")}</option>
+                  <option value="Recomendación">{tt("Recomendación")}</option>
                   <option value="Redes sociales">Redes sociales</option>
                   <option value="Publicidad">Publicidad</option>
-                  <option value="Pasó por la tienda">Pasó por la tienda</option>
+                  <option value="Pasó por la tienda">{tt("Pasó por la tienda")}</option>
                   <option value="Volanteo / cartel">Volanteo / cartel</option>
                   <option value="Otro">Otro</option>
                 </select>
@@ -698,7 +699,7 @@ function NuevoClienteForm() {
                   onChange={(e) => setForm((prev) => ({ ...prev, vendedor_usuario_id: e.target.value }))}
                   className={inputClass}
                 >
-                  <option value="">— Sin asignar —</option>
+                  <option value="">{tt("— Sin asignar —")}</option>
                   {usuariosEmpresa.map((u) => (
                     <option key={u.id} value={u.id}>
                       {(u.nombre ?? "").trim() || u.email}
@@ -708,7 +709,7 @@ function NuevoClienteForm() {
                 {usuariosEmpresaError ? (
                   <p className="mt-1 text-xs text-red-600">{usuariosEmpresaError}</p>
                 ) : usuariosEmpresa.length === 0 ? (
-                  <p className="mt-1 text-xs text-slate-500">No hay usuarios activos disponibles para asignar.</p>
+                  <p className="mt-1 text-xs text-slate-500">{tt("No hay usuarios activos disponibles para asignar.")}</p>
                 ) : null}
               </div>
               )}
@@ -732,7 +733,7 @@ function NuevoClienteForm() {
             {!SIMPLE_CLIENTE && (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
-                <label className={labelClass}>Origen del cliente</label>
+                <label className={labelClass}>{tt("Origen del cliente")}</label>
                 <select
                   name="origen"
                   value={form.origen}
@@ -742,7 +743,7 @@ function NuevoClienteForm() {
                 >
                   <option value="MANUAL">Manual</option>
                   <option value="CRM">CRM</option>
-                  <option value="VENTA">Venta</option>
+                  <option value="VENTA">{tt("Venta")}</option>
                 </select>
               </div>
             </div>
@@ -779,7 +780,7 @@ function NuevoClienteForm() {
             {/* Campos factura inicial Contado */}
             {form.condicion_pago === "CONTADO" && (
               <div className="mt-6 p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-4">
-                <SectionTitle>Facturación al contado</SectionTitle>
+                <SectionTitle>{tt("Facturación al contado")}</SectionTitle>
                 <div className="flex items-center gap-2">
                   <input
                     type="checkbox"
@@ -797,17 +798,17 @@ function NuevoClienteForm() {
                         value={formContado.monto}
                         onChange={(n) => setFormContado((p) => ({ ...p, monto: String(n) }))}
                         className={inputClass}
-                        placeholder="Monto de la factura"
+                        placeholder={tt("Monto de la factura")}
                       />
                     </div>
                     <div>
-                      <label className={labelClass}>Descripción</label>
+                      <label className={labelClass}>{tt("Descripción")}</label>
                       <input
                         type="text"
                         value={formContado.descripcion}
                         onChange={(e) => setFormContado((p) => ({ ...p, descripcion: e.target.value }))}
                         className={inputClass}
-                        placeholder="Venta al contado"
+                        placeholder={tt("Venta al contado")}
                       />
                     </div>
                   </>
@@ -818,9 +819,9 @@ function NuevoClienteForm() {
             {/* Campos de suscripción (solo cuando condicion_pago = MENSUAL) */}
             {form.condicion_pago === "MENSUAL" && (
               <div className="mt-6 p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-4">
-                <SectionTitle>Configuración de suscripción</SectionTitle>
+                <SectionTitle>{tt("Configuración de suscripción")}</SectionTitle>
                 <div>
-                  <label className={labelClass}>Precio (Gs.)</label>
+                  <label className={labelClass}>{tt("Precio (Gs.)")}</label>
                   <MontoInput
                     value={formSusc.precio}
                     onChange={(n) => setFormSusc((p) => ({ ...p, precio: String(n) }))}
@@ -829,7 +830,7 @@ function NuevoClienteForm() {
                   />
                 </div>
                 <div>
-                  <label className={labelClass}>Duración contrato (meses)</label>
+                  <label className={labelClass}>{tt("Duración contrato (meses)")}</label>
                   <input
                     type="number"
                     value={formSusc.duracion_meses}
@@ -840,7 +841,7 @@ function NuevoClienteForm() {
                 </div>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div>
-                    <label className={labelClass}>Día facturación (1–28)</label>
+                    <label className={labelClass}>{tt("Día facturación (1–28)")}</label>
                     <input
                       type="number"
                       value={formSusc.dia_facturacion}
@@ -851,7 +852,7 @@ function NuevoClienteForm() {
                     />
                   </div>
                   <div>
-                    <label className={labelClass}>Día vencimiento (1–31)</label>
+                    <label className={labelClass}>{tt("Día vencimiento (1–31)")}</label>
                     <input
                       type="number"
                       value={formSusc.dia_vencimiento}
@@ -869,7 +870,7 @@ function NuevoClienteForm() {
                     checked={formSusc.generar_factura}
                     onChange={(e) => setFormSusc((p) => ({ ...p, generar_factura: e.target.checked }))}
                   />
-                  <label htmlFor="gen_fact_nuevo" className="text-sm text-slate-600">Emitir factura este mes</label>
+                  <label htmlFor="gen_fact_nuevo" className="text-sm text-slate-600">{tt("Emitir factura este mes")}</label>
                 </div>
               </div>
             )}
@@ -882,7 +883,7 @@ function NuevoClienteForm() {
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Opcional</p>
                     <p className="text-sm font-semibold text-slate-800 mt-0.5">Perfil tributario</p>
-                    <p className="text-xs text-slate-500 mt-0.5 max-w-xl">Expandir para IVA, IRE, honorarios y obligaciones. Los datos fiscales no reemplazan la ficha comercial.</p>
+                    <p className="text-xs text-slate-500 mt-0.5 max-w-xl">{tt("Expandir para IVA, IRE, honorarios y obligaciones. Los datos fiscales no reemplazan la ficha comercial.")}</p>
                   </div>
                   <span
                     className="shrink-0 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 group-open:bg-indigo-50 group-open:text-indigo-800 group-open:border-indigo-100"
@@ -924,7 +925,7 @@ function NuevoClienteForm() {
               onClick={() => router.push("/clientes")}
               className="border border-slate-200 px-6 py-3 rounded-lg text-sm hover:bg-slate-50 transition-colors"
             >
-              Cancelar
+              {tt("Cancelar")}
             </button>
           </div>
 

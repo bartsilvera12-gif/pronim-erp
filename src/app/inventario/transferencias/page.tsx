@@ -6,6 +6,7 @@ import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session"
 import { useT } from "@/lib/i18n/context";
 import { useUsuarioActual } from "@/shared/hooks/useUsuarioActual";
 import { esRolAdminEmpresaOGlobal } from "@/lib/auth/rol-empresa";
+import { tt } from "@/lib/i18n/dict";
 
 type Sucursal = { id: string; nombre: string; es_principal?: boolean; activo?: boolean };
 type ItemBorrador = { producto_id: string; producto_nombre: string; cantidad: string };
@@ -83,10 +84,12 @@ export default function TransferenciasStockPage() {
   // nada, porque no sabemos de donde puede salir la mercaderia.
   const rutaLista = Boolean(origen && destino && origen !== destino);
 
-  // Ninguna línea puede pedir más de lo que hay en la sucursal de origen (el
-  // backend además lo revalida al confirmar).
+  // Se avisa cuando una línea pide más de lo que figura en origen, pero NO
+  // se bloquea: igual que en las ventas, el stock puede quedar en negativo.
+  // En la tienda la mercadería se mueve antes de que el sistema esté al día;
+  // impedir la transferencia solo lograba que no se registrara nunca.
   const hayExceso = items.some((it) => Number(it.cantidad) > (stockOrigen[it.producto_id] ?? 0));
-  const puedeEnviar = rutaLista && items.length > 0 && !enviando && !hayExceso;
+  const puedeEnviar = rutaLista && items.length > 0 && !enviando;
 
   const nombreOrigen = sucursales.find((s) => s.id === origen)?.nombre ?? "";
   const nombreDestino = sucursales.find((s) => s.id === destino)?.nombre ?? "";
@@ -308,8 +311,8 @@ export default function TransferenciasStockPage() {
           <span className="text-gray-700 font-medium">{t("Transferencias entre sucursales")}</span>
         </div>
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-6 text-sm text-amber-900">
-          <h2 className="text-base font-bold mb-1">Solo el administrador puede transferir stock</h2>
-          <p>Las transferencias entre sucursales están reservadas al administrador. Si necesitás mover mercadería, pedile al admin que lo haga desde su cuenta.</p>
+          <h2 className="text-base font-bold mb-1">{tt("Solo el administrador puede transferir stock")}</h2>
+          <p>{tt("Las transferencias entre sucursales están reservadas al administrador. Si necesitás mover mercadería, pedile al admin que lo haga desde su cuenta.")}</p>
           <div className="mt-4">
             <Link href="/inventario" className="inline-flex items-center gap-1 text-amber-800 hover:text-amber-900 font-semibold underline">
               ← Volver a Inventario
@@ -331,7 +334,7 @@ export default function TransferenciasStockPage() {
       <div>
         <h1 className="text-2xl font-bold text-gray-900">{t("Transferencias entre sucursales")}</h1>
         <p className="text-sm text-gray-500 mt-0.5">
-          Mové mercadería de un local a otro en tres pasos. El stock se descuenta del origen y se suma al destino en el momento.
+          {tt("Mové mercadería de un local a otro en tres pasos. El stock se descuenta del origen y se suma al destino en el momento.")}
         </p>
       </div>
 
@@ -345,21 +348,21 @@ export default function TransferenciasStockPage() {
           <div className="flex items-center gap-3 mb-5">
             <PasoNumero n={1} activo hecho={rutaLista} />
             <div>
-              <h2 className="text-sm font-bold text-slate-800">¿De dónde a dónde?</h2>
-              <p className="text-xs text-slate-500">Elegí el local que entrega y el que recibe.</p>
+              <h2 className="text-sm font-bold text-slate-800">{tt("¿De dónde a dónde?")}</h2>
+              <p className="text-xs text-slate-500">{tt("Elegí el local que entrega y el que recibe.")}</p>
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] gap-3 md:gap-2 md:items-end">
             <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Sale de</label>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">{tt("Sale de")}</label>
               <select
                 value={origen}
                 onChange={(e) => setOrigen(e.target.value)}
                 className="w-full px-3 py-2.5 text-sm font-medium border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#4FAEB2] bg-white"
                 required
               >
-                <option value="">Elegí la sucursal que entrega…</option>
+                <option value="">{tt("Elegí la sucursal que entrega…")}</option>
                 {sucursales.map((s) => (
                   <option key={s.id} value={s.id}>{s.nombre}{s.es_principal ? " (Principal)" : ""}</option>
                 ))}
@@ -384,7 +387,7 @@ export default function TransferenciasStockPage() {
                 className="w-full px-3 py-2.5 text-sm font-medium border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#4FAEB2] bg-white"
                 required
               >
-                <option value="">Elegí la sucursal que recibe…</option>
+                <option value="">{tt("Elegí la sucursal que recibe…")}</option>
                 {sucursales.filter((s) => s.id !== origen).map((s) => (
                   <option key={s.id} value={s.id}>{s.nombre}{s.es_principal ? " (Principal)" : ""}</option>
                 ))}
@@ -413,10 +416,10 @@ export default function TransferenciasStockPage() {
           <div className="flex items-center gap-3 mb-5">
             <PasoNumero n={2} activo={rutaLista} hecho={rutaLista && items.length > 0} />
             <div>
-              <h2 className={`text-sm font-bold ${rutaLista ? "text-slate-800" : "text-slate-400"}`}>¿Qué se mueve?</h2>
+              <h2 className={`text-sm font-bold ${rutaLista ? "text-slate-800" : "text-slate-400"}`}>{tt("¿Qué se mueve?")}</h2>
               <p className="text-xs text-slate-500">
                 {rutaLista
-                  ? `Solo aparece lo que ${nombreOrigen} tiene hoy en stock.`
+                  ? `Por defecto aparece lo que ${nombreOrigen} tiene en stock; se puede mover igual lo que no figure.`
                   : "Se habilita cuando elijas las dos sucursales."}
               </p>
             </div>
@@ -425,10 +428,10 @@ export default function TransferenciasStockPage() {
           {!rutaLista ? (
             <div className="rounded-lg border border-dashed border-slate-300 bg-white/60 px-6 py-10 text-center">
               <p className="text-sm font-medium text-slate-500">
-                Primero decinos de qué sucursal sale y a cuál va.
+                {tt("Primero decinos de qué sucursal sale y a cuál va.")}
               </p>
               <p className="mt-1 text-xs text-slate-400">
-                Recién ahí podemos mostrarte qué mercadería hay disponible para mover.
+                {tt("Recién ahí podemos mostrarte qué mercadería hay disponible para mover.")}
               </p>
             </div>
           ) : (
@@ -453,7 +456,7 @@ export default function TransferenciasStockPage() {
 
               {items.length === 0 && (
                 <div className="mt-4 rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center">
-                  <p className="text-sm text-slate-500">Todavía no cargaste nada para mover.</p>
+                  <p className="text-sm text-slate-500">{tt("Todavía no cargaste nada para mover.")}</p>
                 </div>
               )}
 
@@ -463,7 +466,7 @@ export default function TransferenciasStockPage() {
                     <thead className="bg-slate-50 border-b border-slate-200">
                       <tr>
                         <th className="text-left text-xs font-semibold text-gray-500 px-3 py-2 uppercase tracking-wide">Producto</th>
-                        <th className="text-left text-xs font-semibold text-gray-500 px-3 py-2 uppercase tracking-wide w-36">Hay en origen</th>
+                        <th className="text-left text-xs font-semibold text-gray-500 px-3 py-2 uppercase tracking-wide w-36">{tt("Hay en origen")}</th>
                         <th className="text-left text-xs font-semibold text-gray-500 px-3 py-2 uppercase tracking-wide w-40">Mover</th>
                         <th className="w-12"></th>
                       </tr>
@@ -480,25 +483,26 @@ export default function TransferenciasStockPage() {
                               <input
                                 type="number"
                                 min={0}
-                                max={disp}
                                 step="0.001"
                                 value={it.cantidad}
                                 onChange={(e) => actualizarCantidad(it.producto_id, e.target.value)}
                                 className={`w-32 px-2 py-1 text-sm tabular-nums border rounded-md focus:outline-none focus:ring-2 ${
                                   excede
-                                    ? "border-rose-300 bg-rose-50 text-rose-700 focus:ring-rose-300"
+                                    ? "border-amber-300 bg-amber-50 text-amber-800 focus:ring-amber-300"
                                     : "border-slate-200 focus:ring-[#4FAEB2]"
                                 }`}
                               />
                               {excede && (
-                                <p className="mt-1 text-[11px] text-rose-600">Solo hay {disp} en {nombreOrigen}.</p>
+                                <p className="mt-1 text-[11px] text-amber-700">
+                                  En {nombreOrigen} figuran {disp}: queda en {disp - Number(it.cantidad)}.
+                                </p>
                               )}
                             </td>
                             <td className="px-3 py-2 text-right">
                               <button
                                 type="button"
                                 onClick={() => quitar(it.producto_id)}
-                                title="Quitar"
+                                title={tt("Quitar")}
                                 className="text-slate-400 hover:text-red-600 text-lg leading-none"
                               >×</button>
                             </td>
@@ -537,20 +541,21 @@ export default function TransferenciasStockPage() {
             </div>
           )}
 
-          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Observación (opcional)</label>
+          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">{tt("Observación (opcional)")}</label>
           <textarea
             value={observacion}
             onChange={(e) => setObservacion(e.target.value)}
             rows={2}
             disabled={items.length === 0}
             className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#4FAEB2] bg-white disabled:bg-slate-100"
-            placeholder="Motivo, quién la lleva, referencia interna…"
+            placeholder={tt("Motivo, quién la lleva, referencia interna…")}
           />
 
           <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
             {hayExceso && (
-              <span className="text-xs font-medium text-rose-600 sm:mr-auto">
-                Hay líneas que piden más de lo que hay en {nombreOrigen}.
+              <span className="text-xs font-medium text-amber-700 sm:mr-auto">
+                Hay líneas que piden más de lo que figura en {nombreOrigen}:
+                el stock de esa sucursal va a quedar en negativo.
               </span>
             )}
             <button
@@ -569,12 +574,12 @@ export default function TransferenciasStockPage() {
           <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wider">Historial reciente</h2>
         </div>
         {historia.length === 0 ? (
-          <div className="py-10 text-center text-sm text-gray-400">Sin transferencias registradas.</div>
+          <div className="py-10 text-center text-sm text-gray-400">{tt("Sin transferencias registradas.")}</div>
         ) : (
           <table className="w-full min-w-[720px] text-sm">
             <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
-                <th className="text-left text-xs font-semibold text-gray-500 px-4 py-2 uppercase tracking-wide">Fecha</th>
+                <th className="text-left text-xs font-semibold text-gray-500 px-4 py-2 uppercase tracking-wide">{tt("Fecha")}</th>
                 <th className="text-left text-xs font-semibold text-gray-500 px-4 py-2 uppercase tracking-wide">Origen → Destino</th>
                 <th className="text-left text-xs font-semibold text-gray-500 px-4 py-2 uppercase tracking-wide">Productos</th>
                 <th className="text-left text-xs font-semibold text-gray-500 px-4 py-2 uppercase tracking-wide">Usuario</th>
@@ -632,7 +637,7 @@ export default function TransferenciasStockPage() {
           <div
             role="dialog"
             aria-modal="true"
-            aria-label="Elegir productos para transferir"
+            aria-label={tt("Elegir productos para transferir")}
             onClick={(e) => e.stopPropagation()}
             className="flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl"
           >
@@ -640,7 +645,7 @@ export default function TransferenciasStockPage() {
               <div>
                 <h3 className="text-base font-bold text-slate-900">¿Qué sale de {nombreOrigen}?</h3>
                 <p className="mt-0.5 text-xs text-slate-500">
-                  Tocá un producto para agregarlo. Podés elegir varios.
+                  {tt("Tocá un producto para agregarlo. Podés elegir varios.")}
                 </p>
               </div>
               <button
@@ -661,7 +666,7 @@ export default function TransferenciasStockPage() {
                 autoFocus
                 value={busqueda}
                 onChange={(e) => setBusqueda(e.target.value)}
-                placeholder="Buscar franja o producto (ej: 19.000, FRJ-19000)…"
+                placeholder={tt("Buscar franja o producto (ej: 19.000, FRJ-19000)…")}
                 className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
               />
               <label className="inline-flex items-center gap-2 whitespace-nowrap text-xs text-slate-500">
@@ -677,7 +682,7 @@ export default function TransferenciasStockPage() {
 
             <div className="flex-1 overflow-y-auto">
               {buscando ? (
-                <p className="animate-pulse px-5 py-10 text-center text-sm text-slate-400">Cargando catálogo…</p>
+                <p className="animate-pulse px-5 py-10 text-center text-sm text-slate-400">{tt("Cargando catálogo…")}</p>
               ) : resultadosFiltrados.length === 0 ? (
                 <div className="px-5 py-10 text-center text-sm text-slate-500">
                   {busqueda.trim() ? (
@@ -686,7 +691,7 @@ export default function TransferenciasStockPage() {
                     <>
                       {nombreOrigen} no tiene stock cargado.{" "}
                       <button type="button" onClick={() => setVerTodo(true)} className="font-medium text-slate-600 underline hover:text-slate-800">
-                        Ver todo el catálogo
+                        {tt("Ver todo el catálogo")}
                       </button>
                     </>
                   )}
@@ -702,8 +707,14 @@ export default function TransferenciasStockPage() {
                         <button
                           type="button"
                           onClick={() => agregarProducto(p)}
-                          disabled={sinStock || yaEsta}
-                          title={sinStock ? `Sin stock en ${nombreOrigen}` : yaEsta ? "Ya está en la lista" : undefined}
+                          disabled={yaEsta}
+                          title={
+                            yaEsta
+                              ? "Ya está en la lista"
+                              : sinStock
+                                ? `Sin stock registrado en ${nombreOrigen}: se puede mover igual y queda en negativo`
+                                : undefined
+                          }
                           className="flex w-full items-center justify-between gap-2 px-5 py-3 text-left text-sm transition-colors hover:bg-[#4FAEB2]/[0.07] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-transparent"
                         >
                           <span>
@@ -713,7 +724,7 @@ export default function TransferenciasStockPage() {
                           {yaEsta ? (
                             <span className="whitespace-nowrap text-xs font-semibold text-[#3F8E91]">✓ agregado</span>
                           ) : (
-                            <span className={`whitespace-nowrap text-xs font-semibold tabular-nums ${sinStock ? "text-slate-400" : "text-emerald-700"}`}>
+                            <span className={`whitespace-nowrap text-xs font-semibold tabular-nums ${sinStock ? "text-amber-600" : "text-emerald-700"}`}>
                               {disp} disp.
                             </span>
                           )}

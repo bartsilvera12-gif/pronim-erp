@@ -10,8 +10,14 @@ type Prod = {
   categorias: string; tipo_prenda: string;
 };
 
+type SucursalOpt = { id: string; nombre: string };
+
 export default function ExplorarInventarioPage() {
   const [rows, setRows] = useState<Prod[]>([]);
+  const [sucursales, setSucursales] = useState<SucursalOpt[]>([]);
+  // Sin sucursal elegida el stock es el TOTAL de la empresa (suma de todos
+  // los locales), que es lo que se mostraba siempre y confundía.
+  const [sucursalId, setSucursalId] = useState("");
   const [cargando, setCargando] = useState(true);
 
   useEffect(() => {
@@ -23,13 +29,18 @@ export default function ExplorarInventarioPage() {
       if (p.get("solo_bajo_stock") === "1") qs.set("solo_bajo_stock", "1");
       if (p.get("sin_stock") === "1") qs.set("sin_stock", "1");
     }
+    if (sucursalId) qs.set("sucursal_id", sucursalId);
     fetchWithSupabaseSession(`/api/reportes/inventario-drill?${qs}`, { cache: "no-store" })
       .then((r) => r.json())
-      .then((j) => { if (!cancel && j?.success) setRows((j.data?.productos ?? []) as Prod[]); })
+      .then((j) => {
+        if (cancel || !j?.success) return;
+        setRows((j.data?.productos ?? []) as Prod[]);
+        setSucursales((j.data?.opciones?.sucursales ?? []) as SucursalOpt[]);
+      })
       .catch(() => {})
       .finally(() => { if (!cancel) setCargando(false); });
     return () => { cancel = true; };
-  }, []);
+  }, [sucursalId]);
 
   const columns = useMemo<ColumnDef<Prod>[]>(() => {
     const tipos = Array.from(new Set(rows.map((r) => r.tipo_prenda).filter(Boolean))) as string[];
@@ -56,9 +67,35 @@ export default function ExplorarInventarioPage() {
     <DataExplorer<Prod>
       volverA={{ href: "/inventario", label: "Inventario" }}
       titulo="Explorar inventario"
-      descripcion="Productos, stock y valor. Filtrá (ej. Stock < 5), ordená y exportá a Excel."
+      descripcion={
+        sucursalId
+          ? `Stock de ${sucursales.find((s) => s.id === sucursalId)?.nombre ?? "la sucursal"}. Filtrá, ordená y exportá a Excel.`
+          : "Stock TOTAL de la empresa (todas las sucursales juntas). Elegí una sucursal arriba para ver la suya."
+      }
       rows={rows} columns={columns} cargando={cargando} csvName="inventario"
       detailHref={(r) => `/inventario/${r.id}`}
+      toolbarExtra={
+        sucursales.length > 1 ? (
+          <div className="flex items-center gap-1.5">
+            <span className="whitespace-nowrap text-[11px] text-slate-500">Sucursal:</span>
+            <select
+              value={sucursalId}
+              onChange={(e) => setSucursalId(e.target.value)}
+              aria-label="Filtrar el stock por sucursal"
+              className={`rounded-lg border px-2 py-1.5 text-xs font-semibold ${
+                sucursalId
+                  ? "border-[#4FAEB2] bg-[#4FAEB2]/10 text-[#3F8E91]"
+                  : "border-slate-200 bg-white text-slate-700"
+              }`}
+            >
+              <option value="">Todas (stock total)</option>
+              {sucursales.map((s) => (
+                <option key={s.id} value={s.id}>{s.nombre}</option>
+              ))}
+            </select>
+          </div>
+        ) : null
+      }
     />
   );
 }

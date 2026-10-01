@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import ExportExcelButton from "@/components/ui/ExportExcelButton";
 import ImportExcelButton from "@/components/ui/ImportExcelButton";
 import { useIsAdmin } from "@/lib/auth/use-is-admin";
+import { tt } from "@/lib/i18n/dict";
 
 interface Ubicacion {
   id: string;
@@ -92,9 +93,9 @@ export default function UbicacionesPage() {
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-800">Depósitos y ubicaciones</h1>
+          <h1 className="text-3xl font-bold text-gray-800">{tt("Depósitos y ubicaciones")}</h1>
           <p className="text-gray-600">
-            Donde se almacena físicamente cada producto: depósitos, salones, pasillos, góndolas, estantes, zonas.
+            {tt("Donde se almacena físicamente cada producto: depósitos, salones, pasillos, góndolas, estantes, zonas.")}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -116,7 +117,7 @@ export default function UbicacionesPage() {
 
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6 max-w-3xl">
         <p className="text-xs text-gray-400 mb-3 uppercase tracking-wide font-semibold">
-          Nueva ubicación
+          {tt("Nueva ubicación")}
         </p>
         <form onSubmit={handleCrear} className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
           <div className="md:col-span-2">
@@ -124,13 +125,13 @@ export default function UbicacionesPage() {
             <input
               value={nombre}
               onChange={(e) => setNombre(e.target.value)}
-              placeholder="Ej: Depósito central"
+              placeholder={tt("Ej: Depósito central")}
               className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
               required
             />
           </div>
           <div>
-            <label className="block text-xs text-gray-600 mb-1">Código (opcional)</label>
+            <label className="block text-xs text-gray-600 mb-1">{tt("Código (opcional)")}</label>
             <input
               value={codigo}
               onChange={(e) => setCodigo(e.target.value)}
@@ -149,7 +150,7 @@ export default function UbicacionesPage() {
             </select>
           </div>
           <div className="md:col-span-3">
-            <label className="block text-xs text-gray-600 mb-1">Ubicación padre (opcional)</label>
+            <label className="block text-xs text-gray-600 mb-1">{tt("Ubicación padre (opcional)")}</label>
             <select
               value={parentId}
               onChange={(e) => setParentId(e.target.value)}
@@ -178,14 +179,14 @@ export default function UbicacionesPage() {
         {loading ? (
           <p className="p-6 text-sm text-gray-400">Cargando...</p>
         ) : items.length === 0 ? (
-          <p className="p-6 text-sm text-gray-400">Todavía no cargaste ubicaciones.</p>
+          <p className="p-6 text-sm text-gray-400">{tt("Todavía no cargaste ubicaciones.")}</p>
         ) : (
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-slate-600 text-xs uppercase tracking-wide">
               <tr>
                 <th className="text-left px-4 py-2">Nombre</th>
                 <th className="text-left px-4 py-2">Tipo</th>
-                <th className="text-left px-4 py-2">Código</th>
+                <th className="text-left px-4 py-2">{tt("Código")}</th>
                 <th className="text-left px-4 py-2">Padre</th>
                 <th className="text-left px-4 py-2">Estado</th>
                 <th className="px-4 py-2"></th>

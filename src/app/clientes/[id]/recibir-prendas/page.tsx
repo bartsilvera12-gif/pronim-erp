@@ -7,6 +7,7 @@ import { getProductos } from "@/lib/inventario/storage";
 import type { Producto } from "@/lib/inventario/types";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { getSucursalActivaId } from "@/lib/sucursales/activa";
+import { tt } from "@/lib/i18n/dict";
 
 function formatGs(n: number): string {
   return "Gs. " + Math.round(n).toLocaleString("es-PY").replace(/,/g, ".");
@@ -267,9 +268,9 @@ export default function RecibirPrendasPage() {
     <div className="mx-auto max-w-6xl space-y-6 p-4 sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Comprar prendas al cliente</h1>
+          <h1 className="text-2xl font-bold text-slate-900">{tt("Comprar prendas al cliente")}</h1>
           <p className="text-sm text-slate-600">
-            Cliente: <strong>{nombreCliente}</strong>. Por cada categoría de precio ingresá
+            {tt("Cliente:")} <strong>{nombreCliente}</strong>. Por cada categoría de precio ingresá
             cuántas prendas entran y a qué precio de compra por unidad.
           </p>
         </div>
@@ -277,7 +278,7 @@ export default function RecibirPrendasPage() {
           href={`/clientes/${clienteId}`}
           className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
         >
-          ← Volver al cliente
+          {tt("← Volver al cliente")}
         </Link>
       </div>
 
@@ -294,7 +295,7 @@ export default function RecibirPrendasPage() {
 
       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-          Categorías (cantidad + precio de compra por unidad)
+          {tt("Categorías (cantidad + precio de compra por unidad)")}
         </p>
         {franjas.length === 0 ? (
           <p className="text-sm text-slate-500">
@@ -309,9 +310,9 @@ export default function RecibirPrendasPage() {
             <table className="w-full min-w-[720px] text-sm">
               <thead className="text-left text-[11px] uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="pb-2 pr-3">Categoría (precio venta)</th>
+                  <th className="pb-2 pr-3">{tt("Categoría (precio venta)")}</th>
                   <th className="pb-2 pr-3 text-right">Cantidad</th>
-                  <th className="pb-2 pr-3 text-right">Precio compra / u</th>
+                  <th className="pb-2 pr-3 text-right">{tt("Precio compra / u")}</th>
                   <th className="pb-2 pr-3 text-right">Subtotal compra</th>
                   <th className="pb-2 pr-3 text-right">Margen</th>
                 </tr>
@@ -382,11 +383,11 @@ export default function RecibirPrendasPage() {
 
       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-          Formas de pago
+          {tt("Formas de pago")}
         </p>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div>
-            <label className="text-[11px] font-medium text-slate-600">Crédito a favor</label>
+            <label className="text-[11px] font-medium text-slate-600">{tt("Crédito a favor")}</label>
             <input
               type="number"
               min={0}
@@ -406,7 +407,7 @@ export default function RecibirPrendasPage() {
               placeholder="0"
               className="mt-1 w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-right text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-emerald-400/40"
             />
-            <p className="mt-1 text-[10px] text-slate-400">Genera egreso en la caja abierta.</p>
+            <p className="mt-1 text-[10px] text-slate-400">{tt("Genera egreso en la caja abierta.")}</p>
           </div>
           <div>
             <label className="text-[11px] font-medium text-slate-600">Transferencia</label>
@@ -427,7 +428,7 @@ export default function RecibirPrendasPage() {
                   type="text"
                   value={transfEntidad}
                   onChange={(e) => setTransfEntidad(e.target.value)}
-                  placeholder="Ej: Banco Itaú"
+                  placeholder={tt("Ej: Banco Itaú")}
                   className="mt-1 w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/40"
                 />
               </div>
@@ -458,7 +459,7 @@ export default function RecibirPrendasPage() {
           value={observaciones}
           onChange={(e) => setObservaciones(e.target.value)}
           rows={2}
-          placeholder="Estado de las prendas, acuerdos, etc."
+          placeholder={tt("Estado de las prendas, acuerdos, etc.")}
           className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/40"
         />
       </div>
@@ -488,7 +489,7 @@ export default function RecibirPrendasPage() {
             disabled={!puedeEnviar}
             className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40"
           >
-            Guardar compra pendiente
+            {tt("Guardar compra pendiente")}
           </button>
           <button
             type="button"

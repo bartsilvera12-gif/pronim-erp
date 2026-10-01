@@ -11,6 +11,7 @@ import type { MetodoValuacion } from "@/lib/inventario/types";
 import { ShoppingBag, Boxes, ClipboardList, type LucideIcon } from "lucide-react";
 import QuickNuevoProveedorModal from "@/components/proveedores/QuickNuevoProveedorModal";
 import { useIsAdmin } from "@/lib/auth/use-is-admin";
+import { tt } from "@/lib/i18n/dict";
 
 interface SucursalOpt { id: string; nombre: string; es_principal: boolean }
 
@@ -475,8 +476,8 @@ export default function NuevoProductoPage() {
     return (
       <div className="space-y-8">
         <div>
-          <h1 className="text-3xl font-bold text-gray-800">Nuevo producto</h1>
-          <p className="text-gray-600">¿Qué tipo de producto vas a cargar?</p>
+          <h1 className="text-3xl font-bold text-gray-800">{tt("Nuevo producto")}</h1>
+          <p className="text-gray-600">{tt("¿Qué tipo de producto vas a cargar?")}</p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-5xl">
           {([
@@ -527,7 +528,7 @@ export default function NuevoProductoPage() {
             onClick={() => router.push("/inventario")}
             className="text-sm text-gray-500 hover:text-gray-700"
           >
-            ← Cancelar
+            {tt("← Cancelar")}
           </button>
         </div>
       </div>
@@ -542,7 +543,7 @@ export default function NuevoProductoPage() {
     <div className="space-y-8">
 
       <div>
-        <h1 className="text-3xl font-bold text-gray-800">Nuevo producto</h1>
+        <h1 className="text-3xl font-bold text-gray-800">{tt("Nuevo producto")}</h1>
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 max-w-5xl">
@@ -570,11 +571,11 @@ export default function NuevoProductoPage() {
           {errorDuplicado && (
             <div className="bg-red-50 border border-red-200 rounded-lg p-4 space-y-1">
               <p className="text-sm font-semibold text-red-700">
-                Este producto ya existe en el inventario.
+                {tt("Este producto ya existe en el inventario.")}
               </p>
               <p className="text-xs text-red-600">{errorDuplicado}</p>
               <p className="text-xs text-red-500">
-                Para modificar su stock debés registrar un movimiento de inventario.
+                {tt("Para modificar su stock debés registrar un movimiento de inventario.")}
               </p>
               <Link
                 href="/inventario/movimientos"
@@ -587,7 +588,7 @@ export default function NuevoProductoPage() {
 
           {/* Nombre */}
           <div>
-            <label className={labelClass}>Nombre del producto</label>
+            <label className={labelClass}>{tt("Nombre del producto")}</label>
             <input
               type="text"
               name="nombre"
@@ -603,7 +604,7 @@ export default function NuevoProductoPage() {
           <div>
             <label className={labelClass}>
               Descripción
-              {tipoGastro === "menu" && <span className="text-xs font-normal text-amber-700 ml-2">(visible al cliente)</span>}
+              {tipoGastro === "menu" && <span className="text-xs font-normal text-amber-700 ml-2">{tt("(visible al cliente)")}</span>}
             </label>
             <textarea
               name="descripcion"
@@ -644,11 +645,11 @@ export default function NuevoProductoPage() {
                   {generandoSku ? "…" : "Generar SKU"}
                 </button>
               </div>
-              <p className="mt-1.5 text-[11px] text-gray-400">Código interno editable. Podés ajustar el número final.</p>
+              <p className="mt-1.5 text-[11px] text-gray-400">{tt("Código interno editable. Podés ajustar el número final.")}</p>
             </div>
 
             <div className={tipoGastro === "menu" ? "hidden" : ""}>
-              <label className={labelClass}>Unidad de medida</label>
+              <label className={labelClass}>{tt("Unidad de medida")}</label>
               <select
                 name="unidad_medida"
                 value={form.unidad_medida}
@@ -665,14 +666,14 @@ export default function NuevoProductoPage() {
 
           {/* Código de barras (escaneable, separado del SKU) */}
           <div className="border-t border-slate-100 pt-5">
-            <label className={labelClass}>Código de barras</label>
+            <label className={labelClass}>{tt("Código de barras")}</label>
             <div className="flex gap-2">
               <input
                 type="text"
                 name="codigo_barras"
                 value={form.codigo_barras}
                 onChange={handleChange}
-                placeholder="Escaneá, escribí o generá (EAN-13)"
+                placeholder={tt("Escaneá, escribí o generá (EAN-13)")}
                 className={`${inputClass} flex-1`}
                 autoComplete="off"
                 inputMode="numeric"
@@ -687,13 +688,13 @@ export default function NuevoProductoPage() {
               </button>
             </div>
             <p className="mt-1.5 text-xs text-gray-400">
-              Código escaneable para lector o etiqueta (EAN-13). Debe ser único. <span className="italic">(opcional)</span>
+              {tt("Código escaneable para lector o etiqueta (EAN-13). Debe ser único.")} <span className="italic">(opcional)</span>
             </p>
           </div>
 
           {/* Imagen del producto */}
           <div>
-            <label className={labelClass}>Imagen del producto</label>
+            <label className={labelClass}>{tt("Imagen del producto")}</label>
             <div className="flex items-start gap-4">
               <div className="w-28 h-28 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center overflow-hidden shrink-0">
                 {imagenPreview ? (
@@ -722,12 +723,12 @@ export default function NuevoProductoPage() {
                       onClick={quitarImagen}
                       className="text-sm text-red-600 hover:text-red-800 px-3 py-2 rounded-lg border border-slate-200 hover:bg-red-50"
                     >
-                      Quitar
+                      {tt("Quitar")}
                     </button>
                   )}
                 </div>
                 <p className="mt-1.5 text-xs text-slate-400">
-                  JPG, PNG o WebP — máx. 5 MB. Se asociará al producto al guardarlo.
+                  {tt("JPG, PNG o WebP — máx. 5 MB. Se asociará al producto al guardarlo.")}
                 </p>
                 {imagenError && (
                   <p className="mt-1.5 text-xs text-red-600">{imagenError}</p>
@@ -772,12 +773,12 @@ export default function NuevoProductoPage() {
                     %
                   </span>
                 </div>
-                <p className="mt-1.5 text-xs text-gray-400">(precio − costo) / costo</p>
+                <p className="mt-1.5 text-xs text-gray-400">{tt("(precio − costo) / costo")}</p>
               </div>
               )}
 
               <div className={showPrecioVenta ? "" : "hidden"}>
-                <label className={labelClass}>Precio de venta (Gs.)</label>
+                <label className={labelClass}>{tt("Precio de venta (Gs.)")}</label>
                 <MontoInput
                   value={form.precio_venta}
                   onChange={handlePrecioChange}
@@ -796,7 +797,7 @@ export default function NuevoProductoPage() {
             {false && showPrecioVenta && (
               <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
-                  <label className={labelClass}>Precio mayorista (Gs.) <span className="text-gray-400 font-normal">(opcional)</span></label>
+                  <label className={labelClass}>{tt("Precio mayorista (Gs.)")} <span className="text-gray-400 font-normal">(opcional)</span></label>
                   <MontoInput
                     value={form.precio_mayorista}
                     onChange={(n) => setForm((prev) => ({ ...prev, precio_mayorista: String(n) }))}
@@ -806,7 +807,7 @@ export default function NuevoProductoPage() {
                   />
                 </div>
                 <div>
-                  <label className={labelClass}>Cantidad mínima mayorista <span className="text-gray-400 font-normal">(opcional)</span></label>
+                  <label className={labelClass}>{tt("Cantidad mínima mayorista")} <span className="text-gray-400 font-normal">(opcional)</span></label>
                   <input
                     type="number"
                     min={0}
@@ -818,7 +819,7 @@ export default function NuevoProductoPage() {
                   />
                 </div>
                 <div>
-                  <label className={labelClass}>Precio proveedor (Gs.) <span className="text-gray-400 font-normal">(opcional)</span></label>
+                  <label className={labelClass}>{tt("Precio proveedor (Gs.)")} <span className="text-gray-400 font-normal">(opcional)</span></label>
                   <MontoInput
                     value={form.precio_distribuidor}
                     onChange={(n) => setForm((prev) => ({ ...prev, precio_distribuidor: String(n) }))}
@@ -828,7 +829,7 @@ export default function NuevoProductoPage() {
                   />
                 </div>
                 <p className="sm:col-span-2 text-xs text-gray-400">
-                  Precios por canal: en Ventas el cajero elige Minorista, Mayorista o Proveedor. El precio proveedor es comercial (no es el costo).
+                  {tt("Precios por canal: en Ventas el cajero elige Minorista, Mayorista o Proveedor. El precio proveedor es comercial (no es el costo).")}
                 </p>
               </div>
             )}
@@ -842,7 +843,7 @@ export default function NuevoProductoPage() {
                   <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-xs text-red-600">
                     <span className="mt-0.5 text-base leading-none">⚠</span>
                     <span>
-                      El precio de venta es <strong>menor al costo</strong>. Cada unidad vendida generará una pérdida neta.
+                      {tt("El precio de venta es")} <strong>menor al costo</strong>{tt(". Cada unidad vendida generará una pérdida neta.")}
                     </span>
                   </div>
                 )}
@@ -866,7 +867,7 @@ export default function NuevoProductoPage() {
                   {/* Margen sobre venta */}
                   <div className={`border rounded-lg px-4 py-3 ${esPerdida ? "bg-red-50 border-red-200" : "bg-green-50 border-green-100"}`}>
                     <p className={`text-xs font-medium mb-1 ${esPerdida ? "text-red-500" : "text-green-500"}`}>
-                      Margen sobre venta
+                      {tt("Margen sobre venta")}
                     </p>
                     <p className={`text-lg font-bold tabular-nums ${esPerdida ? "text-red-700" : "text-green-700"}`}>
                       {margenVentaCalc.toFixed(2)}%
@@ -887,14 +888,14 @@ export default function NuevoProductoPage() {
           <div className="border-t border-slate-100 pt-6">
             <div className="flex items-baseline justify-between mb-3">
               <p className="text-xs text-gray-400 uppercase tracking-wide font-semibold">
-                Clasificación y ubicación
+                {tt("Clasificación y ubicación")}
               </p>
               <span className="text-xs text-gray-400">Opcional</span>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-12 gap-5">
               {/* Categoría — 4 cols */}
               <div className="md:col-span-4 min-w-0">
-                <label className={labelClass}>Categoría principal</label>
+                <label className={labelClass}>{tt("Categoría principal")}</label>
                 <SelectFromList
                   value={categoriaId}
                   onChange={setCategoriaId}
@@ -940,7 +941,7 @@ export default function NuevoProductoPage() {
               {/* Ubicación principal — oculta en instancia En lo de Mari (no aplica para gastronomía).
                   Lógica/state preservados; submit envía ubicacionId que queda en null por defecto. */}
               <div className="hidden md:col-span-4 min-w-0">
-                <label className={labelClass}>Ubicación principal</label>
+                <label className={labelClass}>{tt("Ubicación principal")}</label>
                 <SelectFromList
                   value={ubicacionId}
                   onChange={setUbicacionId}
@@ -963,7 +964,7 @@ export default function NuevoProductoPage() {
 
             {/* Clasificación gastronómica — oculta (presets aplicados por el tipo seleccionado) */}
             <div className="hidden mt-5 pt-4 border-t border-gray-100">
-              <label className={labelClass}>Clasificación</label>
+              <label className={labelClass}>{tt("Clasificación")}</label>
               <div className="flex flex-wrap gap-4 mt-1">
                 <label className="inline-flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
                   <input
@@ -972,7 +973,7 @@ export default function NuevoProductoPage() {
                     onChange={(e) => setEsVendible(e.target.checked)}
                     className="h-4 w-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
                   />
-                  Vendible (se vende al cliente final)
+                  {tt("Vendible (se vende al cliente final)")}
                 </label>
                 <label className="inline-flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
                   <input
@@ -985,14 +986,14 @@ export default function NuevoProductoPage() {
                 </label>
               </div>
               <p className="mt-1 text-xs text-gray-400">
-                Puede ser ambos (producto mixto). Por defecto: vendible.
+                {tt("Puede ser ambos (producto mixto). Por defecto: vendible.")}
               </p>
             </div>
 
             {/* Configuración gastronómica — oculta (campos técnicos no necesarios en UX gastro simplificada) */}
             <div className="hidden mt-5 pt-4 border-t border-gray-100">
               <p className="text-xs uppercase tracking-wide font-semibold text-gray-500 mb-3">
-                Configuración gastronómica
+                {tt("Configuración gastronómica")}
               </p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <label className="inline-flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
@@ -1014,7 +1015,7 @@ export default function NuevoProductoPage() {
                   Valorizado
                 </label>
                 <div>
-                  <label className={labelClass}>Unidad de compra</label>
+                  <label className={labelClass}>{tt("Unidad de compra")}</label>
                   <input
                     type="text"
                     value={unidadCompra}
@@ -1024,7 +1025,7 @@ export default function NuevoProductoPage() {
                   />
                 </div>
                 <div>
-                  <label className={labelClass}>Unidad de receta</label>
+                  <label className={labelClass}>{tt("Unidad de receta")}</label>
                   <input
                     type="text"
                     value={unidadReceta}
@@ -1045,7 +1046,7 @@ export default function NuevoProductoPage() {
                   />
                 </div>
                 <div>
-                  <label className={labelClass}>Tiempo preparación (min)</label>
+                  <label className={labelClass}>{tt("Tiempo preparación (min)")}</label>
                   <input
                     type="number"
                     min="0"
@@ -1057,7 +1058,7 @@ export default function NuevoProductoPage() {
                 </div>
               </div>
               <p className="mt-2 text-xs text-gray-400">
-                Ejemplo: Harina se compra por bolsa de 25kg, pero se usa en recetas por gramos. En ese caso unidad compra = bolsa 25kg, unidad receta = g, factor = 25000.
+                {tt("Ejemplo: Harina se compra por bolsa de 25kg, pero se usa en recetas por gramos. En ese caso unidad compra = bolsa 25kg, unidad receta = g, factor = 25000.")}
               </p>
             </div>
           </div>
@@ -1080,7 +1081,7 @@ export default function NuevoProductoPage() {
               </div>
 
               <div>
-                <label className={labelClass}>Stock mínimo</label>
+                <label className={labelClass}>{tt("Stock mínimo")}</label>
                 <input
                   type="number"
                   name="stock_minimo"
@@ -1103,7 +1104,7 @@ export default function NuevoProductoPage() {
           {/* Método de valuación — oculto en instancia En lo de Mari.
               Se mantiene siempre 'CPP' (default del state form.metodo_valuacion) y se envía al backend tal cual. */}
           <div className="hidden">
-            <label className={labelClass}>Método de valuación</label>
+            <label className={labelClass}>{tt("Método de valuación")}</label>
             <select
               name="metodo_valuacion"
               value={form.metodo_valuacion}
@@ -1112,7 +1113,7 @@ export default function NuevoProductoPage() {
             >
               <option value="CPP">CPP — Costo Promedio Ponderado</option>
               <option value="FIFO">FIFO — Primero en entrar, primero en salir</option>
-              <option value="LIFO">LIFO — Último en entrar, primero en salir</option>
+              <option value="LIFO">{tt("LIFO — Último en entrar, primero en salir")}</option>
             </select>
           </div>
 
@@ -1131,7 +1132,7 @@ export default function NuevoProductoPage() {
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-sm font-semibold text-sky-900">Sucursales adicionales</p>
                   <span className="text-xs text-sky-800">
-                    Total: <strong className="tabular-nums">{total}</strong>
+                    {tt("Total:")} <strong className="tabular-nums">{total}</strong>
                     {sumExtras > 0 && (
                       <>
                         {" · "}Principal quedará con{" "}
@@ -1222,7 +1223,7 @@ export default function NuevoProductoPage() {
                   onChange={(e) => setActivo(e.target.checked)}
                   className="h-4 w-4 rounded border-slate-300 text-[#4FAEB2] focus:ring-[#4FAEB2]"
                 />
-                Activo <span className="text-xs text-slate-400">(disponible para vender)</span>
+                Activo <span className="text-xs text-slate-400">{tt("(disponible para vender)")}</span>
               </label>
             </div>
           </div>
@@ -1242,7 +1243,7 @@ export default function NuevoProductoPage() {
               onClick={() => router.push("/inventario")}
               className="border border-slate-200 px-5 py-3 rounded-lg text-sm hover:bg-slate-50 transition-colors"
             >
-              Cancelar
+              {tt("Cancelar")}
             </button>
           </div>
 

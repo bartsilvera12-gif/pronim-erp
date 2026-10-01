@@ -14,8 +14,10 @@ import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session"
 import { useT } from "@/lib/i18n/context";
 import PedidosPendientesCaja from "./PedidosPendientesCaja";
 import CambioModal from "./CambioModal";
+import FacturaModal from "./FacturaModal";
 import { useIsAdmin } from "@/lib/auth/use-is-admin";
 import type { Venta, TipoVenta, TipoIvaVenta } from "@/lib/ventas/types";
+import { tt } from "@/lib/i18n/dict";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -75,7 +77,7 @@ function ResumenProductos({ v }: { v: Venta }) {
             {primero.sku ? <span className="font-mono"> · {primero.sku}</span> : null}
           </span>
         ) : (
-          <span className="text-xs text-gray-400">Sin líneas cargadas</span>
+          <span className="text-xs text-gray-400">{tt("Sin líneas cargadas")}</span>
         )}
         {extra > 0 && (
           <span className="bg-gray-100 text-gray-500 text-xs px-1.5 py-0.5 rounded-full font-medium shrink-0">
@@ -117,11 +119,12 @@ export default function VentasPage() {
   const { isAdmin: puedeAnular, loaded: rolLoaded } = useIsAdmin();
   const [todas,      setTodas]      = useState<Venta[]>([]);
   const [pagina,     setPagina]     = useState(1);
+  /** Venta para la que se está por emitir (o reimprimir) la factura. */
+  const [facturaVenta, setFacturaVenta] = useState<Venta | null>(null);
   /** Sucursales con timbrado activo: solo ahí tiene sentido ofrecer Factura. */
   const [sucursalesQueFacturan, setSucursalesQueFacturan] = useState<Set<string>>(new Set());
   const [busqueda,   setBusqueda]   = useState("");
   const [filtroTipo, setFiltroTipo] = useState<TipoVenta | "">("");
-  const [filtroIva,  setFiltroIva]  = useState<TipoIvaVenta | "">("");
   // Solo para admin: filtro por sucursal del histórico completo. Los cajeros
   // ya reciben la lista scopeada por su sucursal desde la API.
   const [filtroSucursal, setFiltroSucursal] = useState<string>("");
@@ -186,7 +189,7 @@ export default function VentasPage() {
   const [colsOpen, setColsOpen] = useState(false);
 
   type VentaSegData = {
-    busqueda: string; filtroTipo: string; filtroIva: string; filtroSucursal: string;
+    busqueda: string; filtroTipo: string; filtroSucursal: string;
     filtroPago: string; filtroEstado: string; segmento: string;
   };
   const {
@@ -348,7 +351,6 @@ export default function VentasPage() {
     // Tipo de venta
     if (filtroTipo !== "" && v.tipo_venta !== filtroTipo) return false;
     // IVA: coincide si al menos un ítem tiene ese tipo
-    if (filtroIva !== "" && !v.items.some((i) => i.tipo_iva === filtroIva))
       return false;
     // Forma de pago
     if (filtroPago !== "" && v.metodo_pago !== filtroPago) return false;
@@ -401,7 +403,7 @@ export default function VentasPage() {
 
   // Cualquier cambio de filtro u orden reinicia la paginación: quedarse en la
   // página 7 de un resultado que ahora tiene 2 páginas deja la tabla vacía.
-  useEffect(() => { setPagina(1); }, [busqueda, filtroTipo, filtroIva, filtroSucursal, filtroEstado, segmento, sortKey, sortDir, fechaDesde, fechaHasta]);
+  useEffect(() => { setPagina(1); }, [busqueda, filtroTipo, filtroSucursal, filtroEstado, segmento, sortKey, sortDir, fechaDesde, fechaHasta]);
 
   useEffect(() => {
     fetchWithSupabaseSession("/api/facturacion/sucursal-emite", { cache: "no-store" })
@@ -429,7 +431,7 @@ export default function VentasPage() {
     });
   })();
 
-  const hayFiltros = busqueda || filtroTipo || filtroIva || filtroSucursal;
+  const hayFiltros = busqueda || filtroTipo || filtroSucursal;
 
   // ── Paginación ──────────────────────────────────────────────────────
   // El historial crece sin techo; mostrar todo de una vuelve la pantalla
@@ -500,12 +502,6 @@ export default function VentasPage() {
               <FancySelect value={filtroTipo} onChange={(v) => setFiltroTipo(v as TipoVenta | "")}
                 ariaLabel={t("Filtrar por tipo de venta")} className="w-full" size="sm"
                 options={[{ value: "", label: t("Todos los tipos") }, { value: "CONTADO", label: t("Contado") }, { value: "CREDITO", label: t("Crédito") }]} />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">IVA</label>
-              <FancySelect value={filtroIva} onChange={(v) => setFiltroIva(v as TipoIvaVenta | "")}
-                ariaLabel={t("Filtrar por IVA")} className="w-full" size="sm"
-                options={[{ value: "", label: t("Todos los IVA") }, { value: "EXENTA", label: t("Exenta") }, { value: "5%", label: "IVA 5%" }, { value: "10%", label: "IVA 10%" }]} />
             </div>
             {puedeAnular && sucursales.length > 1 && (
               <div className="flex flex-col gap-1">
@@ -588,7 +584,7 @@ export default function VentasPage() {
           {(hayFiltros || filtroPago || filtroEstado || segmento || fechaDesde || fechaHasta) && (
             <div className="mt-3 flex items-center gap-2">
               <button
-                onClick={() => { setBusqueda(""); setFiltroTipo(""); setFiltroIva(""); setFiltroSucursal(""); setFiltroPago(""); setFiltroEstado(""); setSegmento(""); setFechaDesde(""); setFechaHasta(""); }}
+                onClick={() => { setBusqueda(""); setFiltroTipo(""); setFiltroSucursal(""); setFiltroPago(""); setFiltroEstado(""); setSegmento(""); setFechaDesde(""); setFechaHasta(""); }}
                 className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-50 transition-colors"
               >
                 ✕ {t("Limpiar filtros")}
@@ -672,14 +668,13 @@ export default function VentasPage() {
                   <button type="button" onClick={() => {
                     setBusqueda(s.data.busqueda ?? "");
                     setFiltroTipo((s.data.filtroTipo as TipoVenta | "") ?? "");
-                    setFiltroIva((s.data.filtroIva as TipoIvaVenta | "") ?? "");
                     setFiltroSucursal(s.data.filtroSucursal ?? "");
                     setFiltroPago((s.data.filtroPago as typeof filtroPago) ?? "");
                     setFiltroEstado((s.data.filtroEstado as typeof filtroEstado) ?? "");
                     setSegmento((s.data.segmento as typeof segmento) ?? "");
                   }}
                     className="inline-flex items-center gap-1 text-[#3F8E91] hover:text-[#2A6668] font-semibold mr-1"
-                    title="Aplicar este segmento">
+                    title={tt("Aplicar este segmento")}>
                     <span className="text-amber-500 text-xs">★</span> {s.nombre}
                   </button>
                   <button type="button" onClick={() => borrarSeg(s.id)}
@@ -695,16 +690,16 @@ export default function VentasPage() {
           )}
 
           {/* Botón guardar filtro — solo icono, muy sutil, al final */}
-          {(busqueda || filtroTipo || filtroIva || filtroSucursal || filtroPago || filtroEstado || segmento) && (
+          {(busqueda || filtroTipo || filtroSucursal || filtroPago || filtroEstado || segmento) && (
             <button type="button" onClick={() => guardarSeg({
-              busqueda, filtroTipo, filtroIva, filtroSucursal, filtroPago, filtroEstado, segmento,
+              busqueda, filtroTipo, filtroSucursal, filtroPago, filtroEstado, segmento,
             })}
               className="ml-auto inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-500 hover:border-[#4FAEB2] hover:text-[#3F8E91] hover:bg-[#4FAEB2]/5 transition"
-              title="Guardar esta combinación de filtros como segmento reutilizable">
+              title={tt("Guardar esta combinación de filtros como segmento reutilizable")}>
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
                 <path fillRule="evenodd" d="M6.32 2.577a49.255 49.255 0 0 1 7.36 0 3 3 0 0 1 2.82 2.995v11.856a.75.75 0 0 1-1.212.59L10 14.187l-5.288 3.83A.75.75 0 0 1 3.5 17.428V5.572a3 3 0 0 1 2.82-2.995Z" clipRule="evenodd" />
               </svg>
-              Guardar filtro
+              {tt("Guardar filtro")}
             </button>
           )}
         </div>
@@ -816,7 +811,7 @@ export default function VentasPage() {
                                 href={`/api/ventas/${v.id}/ticket?mode=comandas`}
                                 target="_blank" rel="noopener"
                                 className="inline-flex items-center justify-center rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-slate-300 hover:bg-slate-50 transition-colors"
-                                title="Abrir comandas + ticket cliente"
+                                title={tt("Abrir comandas + ticket cliente")}
                               >
                                 Imprimir
                               </a>
@@ -826,30 +821,23 @@ export default function VentasPage() {
                                   sucursal tiene timbrado: en Brasil no existe
                                   factura que emitir. */}
                               {(v.factura_numero || (v.sucursal_id && sucursalesQueFacturan.has(v.sucursal_id))) && (
-                              <a
-                                href={`/api/ventas/${v.id}/ticket?factura=1`}
-                                target="_blank" rel="noopener"
-                                onClick={(e) => {
-                                  if (!window.confirm(
-                                    "¿Emitir la factura con timbrado de esta venta?\n\n" +
-                                    "Se le asigna un número correlativo del rango autorizado. " +
-                                    "Reimprimirla después no consume otro número."
-                                  )) e.preventDefault();
-                                }}
+                              <button
+                                type="button"
+                                onClick={() => setFacturaVenta(v)}
                                 className="inline-flex items-center justify-center rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 transition-colors"
-                                title="Factura con timbrado (autoimpresor)"
+                                title={tt("Factura con timbrado (autoimpresor)")}
                               >
-                                Factura
-                              </a>
+                                {v.factura_numero ? "Ver factura" : "Factura"}
+                              </button>
                               )}
                               {v.genera_nota_remision && (
                                 <a
                                   href={`/api/ventas/${v.id}/ticket?tipo=remision`}
                                   target="_blank" rel="noopener"
                                   className="inline-flex items-center justify-center rounded-md border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-700 hover:bg-sky-100 transition-colors"
-                                  title="Nota de remisión (documento no fiscal)"
+                                  title={tt("Nota de remisión (documento no fiscal)")}
                                 >
-                                  Nota de remisión
+                                  {tt("Nota de remisión")}
                                 </a>
                               )}
                               {puedeAnular && (
@@ -857,7 +845,7 @@ export default function VentasPage() {
                                   type="button"
                                   onClick={() => setAnularVenta(v)}
                                   className="inline-flex items-center justify-center rounded-md border border-rose-200 bg-white px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-50 transition-colors"
-                                  title="Anular esta venta (revierte stock y crédito)"
+                                  title={tt("Anular esta venta (revierte stock y crédito)")}
                                 >
                                   Anular
                                 </button>
@@ -866,7 +854,7 @@ export default function VentasPage() {
                                 type="button"
                                 onClick={() => setCambioVenta(v)}
                                 className="inline-flex items-center justify-center rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-800 hover:bg-amber-100 transition-colors"
-                                title="Registrar cambio de productos de esta venta"
+                                title={tt("Registrar cambio de productos de esta venta")}
                               >
                                 Cambio
                               </button>
@@ -944,6 +932,19 @@ export default function VentasPage() {
 
       </div>
 
+      {facturaVenta && (
+        <FacturaModal
+          venta={facturaVenta}
+          onClose={() => setFacturaVenta(null)}
+          onEmitida={() => {
+            setFacturaVenta(null);
+            // Refrescar: la venta ya tiene numero de factura y la columna
+            // Numero tiene que mostrarlo.
+            getVentas().then(setTodas);
+          }}
+        />
+      )}
+
       {/* Modal: cambio de productos (devuelve items + se lleva franjas) */}
       {cambioVenta && (
         <CambioModal
@@ -973,12 +974,12 @@ export default function VentasPage() {
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-lg font-bold text-slate-900 mb-1">Anular venta {anularVenta.numero_control}</h3>
             <p className="text-sm text-slate-500 mb-3">
-              Revierte el stock, cancela cobros inmediatos y devuelve el crédito aplicado al cliente. Requiere permisos de administrador.
+              {tt("Revierte el stock, cancela cobros inmediatos y devuelve el crédito aplicado al cliente. Requiere permisos de administrador.")}
             </p>
             <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 mb-4 text-xs text-slate-600 space-y-0.5">
-              <p><strong>Total:</strong> {formatGs(anularVenta.total)}</p>
-              <p><strong>Fecha:</strong> {formatFecha(anularVenta.fecha)}</p>
-              {anularVenta.sucursal_nombre && <p><strong>Sucursal:</strong> {anularVenta.sucursal_nombre}</p>}
+              <p><strong>{tt("Total:")}</strong> {formatGs(anularVenta.total)}</p>
+              <p><strong>{tt("Fecha:")}</strong> {formatFecha(anularVenta.fecha)}</p>
+              {anularVenta.sucursal_nombre && <p><strong>{tt("Sucursal:")}</strong> {anularVenta.sucursal_nombre}</p>}
             </div>
             <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
               Motivo *
@@ -987,7 +988,7 @@ export default function VentasPage() {
               value={anularMotivo}
               onChange={(e) => setAnularMotivo(e.target.value)}
               disabled={anulandoBusy}
-              placeholder="Ej: cliente devolvió, error de carga, etc."
+              placeholder={tt("Ej: cliente devolvió, error de carga, etc.")}
               rows={3}
               className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500"
             />
@@ -1003,7 +1004,7 @@ export default function VentasPage() {
                 disabled={anulandoBusy}
                 className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-50"
               >
-                Cancelar
+                {tt("Cancelar")}
               </button>
               <button
                 type="button"

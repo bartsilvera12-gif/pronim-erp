@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
+import { tt } from "@/lib/i18n/dict";
 
 /**
  * Vista DIARIA operativa de una sucursal — inspirada en la planilla
@@ -106,7 +107,7 @@ export default function DashSucursalDiario({
   if (!sucursalId) {
     return (
       <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-        Elegí una sucursal en el filtro para ver su bitácora diaria.
+        {tt("Elegí una sucursal en el filtro para ver su bitácora diaria.")}
       </div>
     );
   }
@@ -116,7 +117,7 @@ export default function DashSucursalDiario({
       {/* Barra de controles */}
       <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4">
         <div className="flex items-center gap-2">
-          <label className="text-xs font-semibold text-slate-500 uppercase">Sucursal</label>
+          <label className="text-xs font-semibold text-slate-500 uppercase">{tt("Sucursal")}</label>
           <select
             value={sucursalId}
             onChange={(e) => onChangeSucursal(e.target.value)}
@@ -126,7 +127,7 @@ export default function DashSucursalDiario({
           </select>
         </div>
         <div className="flex items-center gap-2">
-          <label className="text-xs font-semibold text-slate-500 uppercase">Fecha</label>
+          <label className="text-xs font-semibold text-slate-500 uppercase">{tt("Fecha")}</label>
           <input
             type="date"
             value={fecha}
@@ -141,7 +142,7 @@ export default function DashSucursalDiario({
         </div>
       </div>
 
-      {loading && !data && <div className="py-10 text-center text-sm text-slate-500">Cargando bitácora…</div>}
+      {loading && !data && <div className="py-10 text-center text-sm text-slate-500">{tt("Cargando bitácora…")}</div>}
       {err && (
         <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
           {err}
@@ -193,11 +194,11 @@ export default function DashSucursalDiario({
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             {/* Caja del día */}
             <div className="lg:col-span-1 rounded-2xl border border-slate-200 bg-white p-4">
-              <h3 className="text-sm font-bold text-slate-800 mb-3">Caja del día</h3>
+              <h3 className="text-sm font-bold text-slate-800 mb-3">{tt("Caja del día")}</h3>
               <div>
                 <p className="text-[10px] uppercase font-semibold text-emerald-700 mb-1">Ingresos</p>
                 {data.caja_del_dia.ingresos.length === 0 ? (
-                  <p className="text-xs text-slate-400 mb-3">Sin ingresos.</p>
+                  <p className="text-xs text-slate-400 mb-3">{tt("Sin ingresos.")}</p>
                 ) : (
                   <table className="w-full text-xs mb-3">
                     <tbody className="divide-y divide-slate-100">
@@ -209,7 +210,7 @@ export default function DashSucursalDiario({
                         </tr>
                       ))}
                       <tr className="border-t-2 border-slate-200">
-                        <td className="py-1.5 font-semibold text-emerald-800">Total ingresos</td>
+                        <td className="py-1.5 font-semibold text-emerald-800">{tt("Total ingresos")}</td>
                         <td></td>
                         <td className="py-1.5 text-right font-bold text-emerald-800 tabular-nums">
                           {fmtGsCompact(data.caja_del_dia.ingresos.reduce((s, x) => s + x.total, 0))}
@@ -222,7 +223,7 @@ export default function DashSucursalDiario({
               <div>
                 <p className="text-[10px] uppercase font-semibold text-rose-700 mb-1">Egresos (evaluaciones pagadas)</p>
                 {data.caja_del_dia.egresos.length === 0 ? (
-                  <p className="text-xs text-slate-400 mb-3">Sin egresos.</p>
+                  <p className="text-xs text-slate-400 mb-3">{tt("Sin egresos.")}</p>
                 ) : (
                   <table className="w-full text-xs mb-3">
                     <tbody className="divide-y divide-slate-100">
@@ -239,11 +240,11 @@ export default function DashSucursalDiario({
               </div>
               <div className="pt-2 border-t border-slate-100 space-y-1">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-600">Crédito generado hoy</span>
+                  <span className="text-slate-600">{tt("Crédito generado hoy")}</span>
                   <span className="font-semibold text-emerald-700 tabular-nums">{fmtGsCompact(data.caja_del_dia.credito_generado)}</span>
                 </div>
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-600">Crédito usado hoy</span>
+                  <span className="text-slate-600">{tt("Crédito usado hoy")}</span>
                   <span className="font-semibold text-sky-700 tabular-nums">{fmtGsCompact(data.caja_del_dia.credito_usado)}</span>
                 </div>
               </div>
@@ -252,11 +253,11 @@ export default function DashSucursalDiario({
             {/* Bitácora de operaciones */}
             <div className="lg:col-span-2 rounded-2xl border border-slate-200 bg-white overflow-hidden">
               <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-                <h3 className="text-sm font-bold text-slate-800">Bitácora del día</h3>
+                <h3 className="text-sm font-bold text-slate-800">{tt("Bitácora del día")}</h3>
                 <span className="text-[11px] text-slate-400">{data.operaciones.length} operaciones · corrida de stock</span>
               </div>
               {data.operaciones.length === 0 ? (
-                <p className="p-8 text-center text-sm text-slate-400">Sin operaciones en este día.</p>
+                <p className="p-8 text-center text-sm text-slate-400">{tt("Sin operaciones en este día.")}</p>
               ) : (
                 <div className="max-h-[600px] overflow-auto">
                   <table className="w-full text-xs">
@@ -264,7 +265,7 @@ export default function DashSucursalDiario({
                       <tr>
                         <th className="px-3 py-2">Hora</th>
                         <th className="px-3 py-2">Tipo</th>
-                        <th className="px-3 py-2">Cliente</th>
+                        <th className="px-3 py-2">{tt("Cliente")}</th>
                         <th className="px-3 py-2">Forma pago</th>
                         <th className="px-3 py-2 text-right">Monto</th>
                         <th className="px-3 py-2 text-right">Cant.</th>

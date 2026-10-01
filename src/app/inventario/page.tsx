@@ -13,6 +13,7 @@ import { useIsAdmin, useIsSuperAdmin } from "@/lib/auth/use-is-admin";
 import { useUsuarioActual } from "@/shared/hooks/useUsuarioActual";
 import { useT } from "@/lib/i18n/context";
 import { fmtActive } from "@/lib/i18n/currency";
+import { tt } from "@/lib/i18n/dict";
 
 const inputFilterClass =
   "border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-[#4FAEB2] focus:outline-none";
@@ -454,7 +455,7 @@ export default function InventarioPage() {
               value={filtroStock}
               onChange={(e) => setFiltroStock(e.target.value as FiltroStock)}
               className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-[#4FAEB2]/30"
-              title="Estado de stock"
+              title={tt("Estado de stock")}
             >
               <option value="todos">{t("Stock: todos")}</option>
               <option value="con_stock">{t("Con stock (>0)")}</option>
@@ -498,7 +499,7 @@ export default function InventarioPage() {
               <label className="block text-xs text-gray-400 mb-1">Nombre</label>
               <input
                 type="text"
-                placeholder="Buscar nombre..."
+                placeholder={tt("Buscar nombre...")}
                 value={filtroPorNombre}
                 onChange={(e) => setFiltroPorNombre(e.target.value)}
                 className={inputFilterClass}
@@ -508,7 +509,7 @@ export default function InventarioPage() {
               <label className="block text-xs text-gray-400 mb-1">SKU</label>
               <input
                 type="text"
-                placeholder="Buscar SKU..."
+                placeholder={tt("Buscar SKU...")}
                 value={filtroPorSku}
                 onChange={(e) => setFiltroPorSku(e.target.value)}
                 className={inputFilterClass}
@@ -525,7 +526,7 @@ export default function InventarioPage() {
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Precio venta</label>
+              <label className="block text-xs text-gray-400 mb-1">{tt("Precio venta")}</label>
               <input
                 type="text"
                 placeholder="Ej: 75000"
@@ -540,27 +541,27 @@ export default function InventarioPage() {
               Ocultada para instancia En lo de Mari — la lógica de filtros sigue activa pero sin UI. */}
           <div className="hidden flex-wrap items-center gap-3">
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Valuación</label>
+              <label className="block text-xs text-gray-400 mb-1">{tt("Valuación")}</label>
               <select
                 value={filtroValuacion}
                 onChange={(e) => setFiltroValuacion(e.target.value as MetodoValuacion | "")}
                 className={inputFilterClass}
               >
-                <option value="">Todos los métodos</option>
+                <option value="">{tt("Todos los métodos")}</option>
                 <option value="CPP">CPP</option>
                 <option value="FIFO">FIFO</option>
                 <option value="LIFO">LIFO</option>
               </select>
             </div>
             <div className="min-w-[14rem]">
-              <label className="block text-xs text-gray-400 mb-1">Depósito / Ubicación</label>
+              <label className="block text-xs text-gray-400 mb-1">{tt("Depósito / Ubicación")}</label>
               <select
                 value={filtroUbicacion}
                 onChange={(e) => setFiltroUbicacion(e.target.value)}
                 className={`${inputFilterClass} w-full`}
               >
-                <option value="">Todas las ubicaciones</option>
-                <option value="__sin__">Sin ubicación asignada</option>
+                <option value="">{tt("Todas las ubicaciones")}</option>
+                <option value="__sin__">{tt("Sin ubicación asignada")}</option>
                 {ubicaciones.map((u) => (
                   <option key={u.id} value={u.id}>
                     {u.nombre} — {u.tipo}
@@ -641,7 +642,7 @@ export default function InventarioPage() {
                   onClick={() => setPaginaActual(0)}
                   disabled={paginaSegura === 0}
                   className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                  title="Primera página"
+                  title={tt("Primera página")}
                 >«</button>
                 <button
                   type="button"
@@ -650,7 +651,7 @@ export default function InventarioPage() {
                   className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
                 >‹ Anterior</button>
                 <span className="px-3 text-xs text-slate-600 tabular-nums">
-                  Página <span className="font-semibold">{paginaSegura + 1}</span> de {totalPaginas}
+                  {tt("Página")} <span className="font-semibold">{paginaSegura + 1}</span> de {totalPaginas}
                 </span>
                 <button
                   type="button"
@@ -663,7 +664,7 @@ export default function InventarioPage() {
                   onClick={() => setPaginaActual(totalPaginas - 1)}
                   disabled={paginaSegura >= totalPaginas - 1}
                   className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                  title="Última página"
+                  title={tt("Última página")}
                 >»</button>
               </div>
             )}
@@ -693,7 +694,7 @@ export default function InventarioPage() {
                 )}
                 {tab !== "materia" && (
                   <th className="hidden py-3 pr-6 text-right font-semibold lg:table-cell">
-                    <span title="(precio - costo) / precio × 100">{t("Margen s/venta")}</span>
+                    <span title={tt("(precio - costo) / precio × 100")}>{t("Margen s/venta")}</span>
                   </th>
                 )}
                 <th className="py-3 pl-4 pr-4 font-semibold text-center w-32">{t("Acción")}</th>
@@ -755,7 +756,7 @@ export default function InventarioPage() {
                     {tab !== "materia" && <td className="py-4 pr-4 text-gray-700">{formatGs(p.precio_venta)}</td>}
                     <td className="py-4 pr-4 text-center">
                       {sinControl ? (
-                        <span className="text-xs text-gray-400">— sin control</span>
+                        <span className="text-xs text-gray-400">{tt("— sin control")}</span>
                       ) : (
                         <span className={`font-semibold tabular-nums ${stockBajo ? "text-red-600" : "text-gray-800"}`}>
                           {formatStock(p.stock_actual)}{" "}
@@ -906,7 +907,7 @@ export default function InventarioPage() {
                   onClick={() => setPaginaActual(0)}
                   disabled={paginaSegura === 0}
                   className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                  title="Primera página"
+                  title={tt("Primera página")}
                 >«</button>
                 <button
                   type="button"
@@ -915,7 +916,7 @@ export default function InventarioPage() {
                   className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
                 >‹ Anterior</button>
                 <span className="px-3 text-xs text-slate-600 tabular-nums">
-                  Página <span className="font-semibold">{paginaSegura + 1}</span> de {totalPaginas}
+                  {tt("Página")} <span className="font-semibold">{paginaSegura + 1}</span> de {totalPaginas}
                 </span>
                 <button
                   type="button"
@@ -928,7 +929,7 @@ export default function InventarioPage() {
                   onClick={() => setPaginaActual(totalPaginas - 1)}
                   disabled={paginaSegura >= totalPaginas - 1}
                   className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                  title="Última página"
+                  title={tt("Última página")}
                 >»</button>
               </div>
             )}
@@ -956,9 +957,9 @@ export default function InventarioPage() {
                 <Trash2 className="h-5 w-5 text-red-600" aria-hidden />
               </div>
               <div className="min-w-0 flex-1">
-                <h3 className="text-base font-semibold text-slate-900">¿Borrar producto?</h3>
+                <h3 className="text-base font-semibold text-slate-900">{tt("¿Borrar producto?")}</h3>
                 <p className="mt-1 text-sm text-slate-600">
-                  Se va a eliminar definitivamente <span className="font-medium text-slate-800">&quot;{productoABorrar.nombre}&quot;</span> del inventario y del catálogo web. Esta acción no se puede deshacer.
+                  Se va a eliminar definitivamente <span className="font-medium text-slate-800">&quot;{productoABorrar.nombre}&quot;</span> {tt("del inventario y del catálogo web. Esta acción no se puede deshacer.")}
                 </p>
                 {errorBorrar && (
                   <p className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
@@ -974,7 +975,7 @@ export default function InventarioPage() {
                 disabled={mutandoIds.has(productoABorrar.id)}
                 className="inline-flex items-center justify-center rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:border-slate-300 hover:bg-slate-50 transition-colors disabled:opacity-50"
               >
-                Cancelar
+                {tt("Cancelar")}
               </button>
               <button
                 type="button"

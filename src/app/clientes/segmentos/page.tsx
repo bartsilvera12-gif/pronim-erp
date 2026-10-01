@@ -5,6 +5,7 @@ import Link from "next/link";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { VistasGuardadasBar } from "@/components/reportes/VistasGuardadasBar";
 import { DataExplorer, type ColumnDef } from "@/components/explorer/DataExplorer";
+import { tt } from "@/lib/i18n/dict";
 
 type SegmentoSlug =
   | "vip" | "con_credito" | "con_cashback"
@@ -100,7 +101,7 @@ function ResumenCliente({ c }: { c: ClienteSeg }) {
         <Dato label="Teléfono">
           {c.telefono
             ? <a href={`tel:${c.telefono}`} className="text-[#3F8E91] hover:underline">{c.telefono}</a>
-            : <span className="text-slate-400">Sin teléfono</span>}
+            : <span className="text-slate-400">{tt("Sin teléfono")}</span>}
         </Dato>
         <Dato label="Email">{c.email || <span className="text-slate-400">—</span>}</Dato>
         <Dato label="RUC / CI">{c.ruc || <span className="text-slate-400">—</span>}</Dato>
@@ -131,7 +132,7 @@ function ResumenCliente({ c }: { c: ClienteSeg }) {
                 ({fmtGs(credito)} crédito{cashback > 0 ? ` + ${fmtGs(cashback)} cashback` : ""})
               </span>
             </span>
-          ) : <span className="text-slate-400">Sin saldo</span>}
+          ) : <span className="text-slate-400">{tt("Sin saldo")}</span>}
         </Dato>
       </div>
 
@@ -279,13 +280,13 @@ export default function ClientesSegmentosPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Clientes</h1>
           <p className="text-sm text-slate-500 mt-0.5">
-            Tildá segmentos para acotar, después filtrá y ordená cualquier columna como en Excel.
+            {tt("Tildá segmentos para acotar, después filtrá y ordená cualquier columna como en Excel.")}
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <Link href="/clientes/nuevo"
             className="inline-flex items-center gap-1.5 rounded-lg bg-[#4FAEB2] hover:bg-[#3F8E91] text-white px-3 py-1.5 text-xs font-semibold shadow-sm">
-            + Nuevo cliente
+            {tt("+ Nuevo cliente")}
           </Link>
         </div>
       </div>
@@ -341,7 +342,7 @@ export default function ClientesSegmentosPage() {
               <button type="button" onClick={() => toggleFiltro(f.slug)} className="ml-1 text-[#3F8E91] hover:text-[#2a6a6d]">×</button>
             </span>
           ))}
-          <button type="button" onClick={() => setFiltros(new Set())} className="text-xs text-slate-500 hover:text-slate-800 underline">Quitar segmentos</button>
+          <button type="button" onClick={() => setFiltros(new Set())} className="text-xs text-slate-500 hover:text-slate-800 underline">{tt("Quitar segmentos")}</button>
           <span className="text-[11px] text-slate-400">· {clientes.length} de {totalClientes} clientes en este segmento</span>
         </div>
       )}

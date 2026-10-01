@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
+import { tt } from "@/lib/i18n/dict";
 
 /**
  * Sección "Ventas — por sucursal" para el dashboard de Ventas.
@@ -66,15 +67,15 @@ export default function VentasPorSucursalPanel() {
     return () => { cancel = true; };
   }, []);
 
-  if (loading) return <div className="text-sm text-slate-500">Cargando ventas por sucursal…</div>;
+  if (loading) return <div className="text-sm text-slate-500">{tt("Cargando ventas por sucursal…")}</div>;
   if (err) return <div className="text-sm text-rose-700">{err}</div>;
   if (sucursales.length === 0) return null;
 
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex items-baseline justify-between mb-4">
-        <h3 className="text-base font-bold text-slate-800">Ventas — por sucursal</h3>
-        <span className="text-[11px] text-slate-400">Últimos 30 días</span>
+        <h3 className="text-base font-bold text-slate-800">{tt("Ventas — por sucursal")}</h3>
+        <span className="text-[11px] text-slate-400">{tt("Últimos 30 días")}</span>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {sucursales.map(s => {
@@ -171,7 +172,7 @@ export default function VentasPorSucursalPanel() {
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-3.5 w-3.5">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M2 8h20v10H2Zm0 4h20M6 16h2" />
                     </svg>
-                    Formas de pago
+                    {tt("Formas de pago")}
                   </p>
                   <div className="space-y-1.5">
                     {v.pagos.map((p, i) => {
@@ -198,14 +199,14 @@ export default function VentasPorSucursalPanel() {
 
               {/* Nota si no hay ventas */}
               {v.cantidad === 0 && (
-                <p className="text-xs text-slate-400 italic mt-1">Sin ventas en el período.</p>
+                <p className="text-xs text-slate-400 italic mt-1">{tt("Sin ventas en el período.")}</p>
               )}
             </div>
           );
         })}
       </div>
       <p className="text-[10px] text-slate-400 mt-3 italic">
-        Costo = SUM(cantidad × costo_unitario_snapshot). Margen bruto = Total − Costo. Margen % = Margen / Total × 100.
+        {tt("Costo = SUM(cantidad × costo_unitario_snapshot). Margen bruto = Total − Costo. Margen % = Margen / Total × 100.")}
       </p>
     </section>
   );

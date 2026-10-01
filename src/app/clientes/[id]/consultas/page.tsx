@@ -4,6 +4,7 @@ import { Fragment, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
+import { tt } from "@/lib/i18n/dict";
 
 function formatGs(n: number): string {
   return "Gs. " + Math.round(n).toLocaleString("es-PY").replace(/,/g, ".");
@@ -273,9 +274,9 @@ export default function ConsultasClientePage() {
     <div className="mx-auto max-w-6xl space-y-6 p-4 sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Consultas del cliente</h1>
+          <h1 className="text-2xl font-bold text-slate-900">{tt("Consultas del cliente")}</h1>
           <p className="text-sm text-slate-600">
-            Vista consolidada: crédito, historial, frecuencia, anotaciones y beneficios.
+            {tt("Vista consolidada: crédito, historial, frecuencia, anotaciones y beneficios.")}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -291,7 +292,7 @@ export default function ConsultasClientePage() {
               href={`/clientes/${clienteId}`}
               className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
             >
-              ← Ficha del cliente
+              {tt("← Ficha del cliente")}
             </Link>
           )}
         </div>
@@ -299,7 +300,7 @@ export default function ConsultasClientePage() {
 
       {evPanelAbierto && (
         <div className="rounded-xl border border-indigo-200 bg-indigo-50/50 p-4">
-          <h2 className="mb-3 text-sm font-semibold text-indigo-900">Registrar evento en el historial</h2>
+          <h2 className="mb-3 text-sm font-semibold text-indigo-900">{tt("Registrar evento en el historial")}</h2>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className="text-xs font-medium text-slate-600">Tipo</label>
@@ -313,27 +314,27 @@ export default function ConsultasClientePage() {
                 <option value="beneficio">Beneficio otorgado</option>
                 <option value="descuento">Descuento otorgado</option>
                 <option value="cashback">Cashback</option>
-                <option value="cambio">Cambio de mercadería</option>
+                <option value="cambio">{tt("Cambio de mercadería")}</option>
                 <option value="otro">Otro</option>
               </select>
             </div>
             <div>
-              <label className="text-xs font-medium text-slate-600">Título (opcional)</label>
+              <label className="text-xs font-medium text-slate-600">{tt("Título (opcional)")}</label>
               <input
                 type="text"
                 value={evTitulo}
                 onChange={(e) => setEvTitulo(e.target.value)}
-                placeholder="Ej: Devolución tardía…"
+                placeholder={tt("Ej: Devolución tardía…")}
                 className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400/40"
               />
             </div>
             <div className="sm:col-span-2">
-              <label className="text-xs font-medium text-slate-600">Descripción *</label>
+              <label className="text-xs font-medium text-slate-600">{tt("Descripción *")}</label>
               <textarea
                 value={evDescripcion}
                 onChange={(e) => setEvDescripcion(e.target.value)}
                 rows={3}
-                placeholder="Contá lo sucedido…"
+                placeholder={tt("Contá lo sucedido…")}
                 className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400/40"
               />
             </div>
@@ -357,7 +358,7 @@ export default function ConsultasClientePage() {
                     onChange={(e) => setEvGenerarCredito(e.target.checked)}
                     className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
                   />
-                  Acreditar como crédito a favor (recomendado)
+                  {tt("Acreditar como crédito a favor (recomendado)")}
                 </label>
               </div>
             )}
@@ -368,7 +369,7 @@ export default function ConsultasClientePage() {
               onClick={() => setEvPanelAbierto(false)}
               className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
             >
-              Cancelar
+              {tt("Cancelar")}
             </button>
             <button
               type="button"
@@ -447,7 +448,7 @@ export default function ConsultasClientePage() {
       {lotes.length > 0 && (
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
-            Créditos por lote (FIFO)
+            {tt("Créditos por lote (FIFO)")}
           </h2>
           <p className="mb-3 text-xs text-slate-500">
             Cada crédito ingresado se muestra por separado con su saldo actual.
@@ -458,7 +459,7 @@ export default function ConsultasClientePage() {
               <thead>
                 <tr className="text-left text-[11px] uppercase tracking-wide text-slate-500">
                   <th className="pb-2 pr-3">Origen</th>
-                  <th className="pb-2 pr-3">Fecha</th>
+                  <th className="pb-2 pr-3">{tt("Fecha")}</th>
                   <th className="pb-2 pr-3">Referencia</th>
                   <th className="pb-2 pr-3 text-right">Monto inicial</th>
                   <th className="pb-2 pr-3 text-right">Consumido</th>
@@ -516,7 +517,7 @@ export default function ConsultasClientePage() {
                           <td colSpan={7} className="bg-slate-50 px-3 pb-3 pt-1">
                             <div className="rounded-lg border border-slate-200 bg-white p-2">
                               <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                                Usos de este crédito
+                                {tt("Usos de este crédito")}
                               </p>
                               <ul className="space-y-1">
                                 {l.usos.map((u, i) => (
@@ -553,7 +554,7 @@ export default function ConsultasClientePage() {
             Historial
           </h2>
           {timeline.length === 0 ? (
-            <p className="text-sm text-slate-500">Todavía no hay movimientos.</p>
+            <p className="text-sm text-slate-500">{tt("Todavía no hay movimientos.")}</p>
           ) : (
             <ul className="space-y-2">
               {timeline.map((e, idx) => {
@@ -599,14 +600,14 @@ export default function ConsultasClientePage() {
 
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
-            Anotaciones del equipo
+            {tt("Anotaciones del equipo")}
           </h2>
           <div className="space-y-2">
             <textarea
               value={nuevaNota}
               onChange={(e) => setNuevaNota(e.target.value)}
               rows={3}
-              placeholder="Escribí una nota sobre este cliente…"
+              placeholder={tt("Escribí una nota sobre este cliente…")}
               className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]/40"
             />
             <button
@@ -621,7 +622,7 @@ export default function ConsultasClientePage() {
 
           <ul className="mt-4 space-y-2">
             {notas.length === 0 ? (
-              <li className="text-xs text-slate-400">Sin anotaciones.</li>
+              <li className="text-xs text-slate-400">{tt("Sin anotaciones.")}</li>
             ) : (
               notas.map((n) => {
                 const puedoBorrar = soySuperAdmin || (miUserId && n.autor_id === miUserId);

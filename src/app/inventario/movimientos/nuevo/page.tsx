@@ -7,6 +7,7 @@ import SearchableSelect from "@/components/ui/SearchableSelect";
 import { getProductos, saveMovimiento } from "@/lib/inventario/storage";
 import type { Producto, TipoMovimiento, OrigenMovimiento } from "@/lib/inventario/types";
 import { getSucursalActivaId } from "@/lib/sucursales/activa";
+import { tt } from "@/lib/i18n/dict";
 
 export default function NuevoMovimientoPage() {
   const router = useRouter();
@@ -96,8 +97,8 @@ export default function NuevoMovimientoPage() {
     <div className="space-y-8">
 
       <div>
-        <h1 className="text-3xl font-bold text-gray-800">Nuevo movimiento</h1>
-        <p className="text-gray-600">Registra una entrada, salida o ajuste de stock</p>
+        <h1 className="text-3xl font-bold text-gray-800">{tt("Nuevo movimiento")}</h1>
+        <p className="text-gray-600">{tt("Registra una entrada, salida o ajuste de stock")}</p>
       </div>
 
       <div className="bg-white rounded-xl shadow p-6 max-w-2xl">
@@ -120,7 +121,7 @@ export default function NuevoMovimientoPage() {
           {/* Tipo + Origen */}
           <div className="grid grid-cols-2 gap-6">
             <div>
-              <label className={labelClass}>Tipo de movimiento</label>
+              <label className={labelClass}>{tt("Tipo de movimiento")}</label>
               <select
                 name="tipo"
                 value={form.tipo}
@@ -129,7 +130,7 @@ export default function NuevoMovimientoPage() {
               >
                 <option value="ENTRADA">ENTRADA — aumenta stock</option>
                 <option value="SALIDA">SALIDA — disminuye stock</option>
-                <option value="AJUSTE">AJUSTE — corrección manual</option>
+                <option value="AJUSTE">{tt("AJUSTE — corrección manual")}</option>
               </select>
             </div>
 
@@ -142,7 +143,7 @@ export default function NuevoMovimientoPage() {
                 className={inputClass}
               >
                 <option value="compra">Compra</option>
-                <option value="venta">Venta</option>
+                <option value="venta">{tt("Venta")}</option>
                 <option value="ajuste_manual">Ajuste manual</option>
               </select>
             </div>
@@ -155,7 +156,7 @@ export default function NuevoMovimientoPage() {
                 Cantidad
                 {form.tipo === "AJUSTE" && (
                   <span className="ml-2 text-xs text-gray-400 font-normal">
-                    (negativo para disminuir)
+                    {tt("(negativo para disminuir)")}
                   </span>
                 )}
               </label>
@@ -186,13 +187,13 @@ export default function NuevoMovimientoPage() {
 
           {/* Nota de fecha automática */}
           <p className="text-xs text-gray-400">
-            La fecha y hora del movimiento se registrarán automáticamente al guardar.
+            {tt("La fecha y hora del movimiento se registrarán automáticamente al guardar.")}
           </p>
 
           {/* Vista previa del impacto en stock */}
           {productoSeleccionado && form.cantidad !== "" && (
             <div className="rounded-lg border border-gray-200 p-4 bg-gray-50 text-sm space-y-1">
-              <p className="font-medium text-gray-700 mb-2">Vista previa del impacto</p>
+              <p className="font-medium text-gray-700 mb-2">{tt("Vista previa del impacto")}</p>
               <div className="flex justify-between text-gray-600">
                 <span>Stock actual</span>
                 <span className="font-semibold tabular-nums">
@@ -238,14 +239,14 @@ export default function NuevoMovimientoPage() {
               type="submit"
               className="bg-gray-900 text-white px-5 py-3 rounded-lg text-sm hover:bg-gray-700 transition-colors"
             >
-              Guardar movimiento
+              {tt("Guardar movimiento")}
             </button>
             <button
               type="button"
               onClick={() => router.push("/inventario/movimientos")}
               className="border border-gray-300 px-5 py-3 rounded-lg text-sm hover:bg-gray-50 transition-colors"
             >
-              Cancelar
+              {tt("Cancelar")}
             </button>
           </div>
 

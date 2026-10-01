@@ -8,6 +8,8 @@ import {
   BarChart3,
 } from "lucide-react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
+import { useT } from "@/lib/i18n/context";
+import { tt } from "@/lib/i18n/dict";
 
 /**
  * Dashboard operativo de Clientes con la estética cálida de Akakua'a:
@@ -48,10 +50,14 @@ function fmtN(n: number) { return (n || 0).toLocaleString("es-PY"); }
 
 
 export default function DashClientes({ desde, hasta }: { desde: string; hasta: string }) {
+  const t = useT();
   const [data, setData] = useState<Payload | null>(null);
   const [q, setQ] = useState("");
   /** Tarjeta desplegada. Tocar la misma otra vez la cierra. */
   const [abierta, setAbierta] = useState<string | null>(null);
+  /** Filtro propio de esta pestaña: el resto del tablero no lo usa. */
+  const [sucursalFiltro, setSucursalFiltro] = useState("");
+  const [sucursales, setSucursales] = useState<{ id: string; nombre: string }[]>([]);
   const [segmento, setSegmento] = useState("");
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -61,6 +67,7 @@ export default function DashClientes({ desde, hasta }: { desde: string; hasta: s
     setLoading(true); setErr(null);
     const attempt = async (): Promise<Payload> => {
       const params = new URLSearchParams({ desde, hasta });
+      if (sucursalFiltro) params.set("sucursal_id", sucursalFiltro);
       if (q.trim()) params.set("q", q.trim());
       if (segmento) params.set("segmento", segmento);
       const url = `/api/dashboard/clientes?${params.toString()}`;
@@ -100,9 +107,16 @@ export default function DashClientes({ desde, hasta }: { desde: string; hasta: s
     } finally {
       setLoading(false);
     }
-  }, [desde, hasta, q, segmento]);
+  }, [desde, hasta, q, segmento, sucursalFiltro]);
 
   useEffect(() => { void cargar(); }, [cargar]);
+
+  useEffect(() => {
+    fetchWithSupabaseSession("/api/sucursales", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => setSucursales((j?.data?.sucursales ?? j?.sucursales ?? []) as { id: string; nombre: string }[]))
+      .catch(() => { /* sin lista, el filtro no aparece */ });
+  }, []);
 
   if (loading && !data) {
     return <div className="py-10 text-center text-sm text-slate-500">Cargando…</div>;
@@ -110,7 +124,7 @@ export default function DashClientes({ desde, hasta }: { desde: string; hasta: s
   if (err) {
     return (
       <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-        <p className="font-semibold mb-1">No se pudo cargar el dashboard de clientes.</p>
+        <p className="font-semibold mb-1">{tt("No se pudo cargar el dashboard de clientes.")}</p>
         <p className="text-rose-800">{err}</p>
         <button
           type="button"
@@ -123,35 +137,62 @@ export default function DashClientes({ desde, hasta }: { desde: string; hasta: s
     );
   }
   if (!data) {
-    return <div className="py-6 text-center text-sm text-slate-400">Sin datos.</div>;
+    return <div className="py-6 text-center text-sm text-slate-400">{tt("Sin datos.")}</div>;
   }
 
   const k = data.kpis;
 
   return (
     <div className="space-y-6">
+      {/* Filtro propio de esta pestaña. El tablero general no tiene uno y
+          acá hace falta: los clientes son de una sucursal concreta. */}
+      {sucursales.length > 1 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{t("Sucursal")}</span>
+          <button type="button" onClick={() => setSucursalFiltro("")}
+            className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+              sucursalFiltro
+                ? "border border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
+                : "bg-[#4FAEB2] text-white shadow-sm"
+            }`}>
+            {t("Todas")}
+          </button>
+          {sucursales.map((su) => (
+            <button key={su.id} type="button" onClick={() => setSucursalFiltro(su.id)}
+              className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+                sucursalFiltro === su.id
+                  ? "bg-[#4FAEB2] text-white shadow-sm"
+                  : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
+              }`}>
+              {su.nombre}
+            </button>
+          ))}
+          {loading && <span className="text-[11px] text-slate-400">actualizando…</span>}
+        </div>
+      )}
+
       {/* Fila 1: segmentos (Total + 4 categorías).
           Tocar una tarjeta despliega la lista de esos clientes acá abajo en
           vez de saltar a otra pantalla: se perdía el hilo del tablero. */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         <KpiCard icon={<Users className="h-5 w-5" />} tone="rose"
-          label="Total clientes" value={fmtN(k.total)}
+          label={t("Total clientes")} value={fmtN(k.total)}
           tip="Total de clientes que matchean el filtro actual (segmento, sucursal, búsqueda)."
           panelKey="total" abierta={abierta} onToggle={setAbierta} />
         <KpiCard icon={<Crown className="h-5 w-5" />} tone="amber"
-          label="VIP" value={fmtN(k.vip)}
+          label={t("VIP")} value={fmtN(k.vip)}
           tip="Marcados como VIP."
           panelKey="vip" abierta={abierta} onToggle={setAbierta} />
         <KpiCard icon={<Star className="h-5 w-5" />} tone="emerald"
-          label="Frecuentes" value={fmtN(k.habitual)}
+          label={t("Frecuentes")} value={fmtN(k.habitual)}
           tip="Con compras pero no VIP y no Dormido."
           panelKey="habitual" abierta={abierta} onToggle={setAbierta} />
         <KpiCard icon={<UserPlus className="h-5 w-5" />} tone="sky"
-          label="Nuevos" value={fmtN(k.nuevo)}
+          label={t("Nuevos")} value={fmtN(k.nuevo)}
           tip="Alta este mes."
           panelKey="nuevo" abierta={abierta} onToggle={setAbierta} />
         <KpiCard icon={<Moon className="h-5 w-5" />} tone="lavender"
-          label="Dormidos" value={fmtN(k.dormido)}
+          label={t("Dormidos")} value={fmtN(k.dormido)}
           tip="Más de 90 días sin visita."
           panelKey="dormido" abierta={abierta} onToggle={setAbierta} />
       </div>
@@ -161,23 +202,23 @@ export default function DashClientes({ desde, hasta }: { desde: string; hasta: s
       {/* Fila 2: actividad + crédito + cadencia */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         <KpiCard icon={<Truck className="h-5 w-5" />} tone="sky"
-          label="Solo traen" value={fmtN(k.solo_trae)}
+          label={t("Solo traen")} value={fmtN(k.solo_trae)}
           tip="Clientes con recepciones pero ninguna venta."
           panelKey="solo_trae" abierta={abierta} onToggle={setAbierta} />
         <KpiCard icon={<ShoppingBag className="h-5 w-5" />} tone="emerald"
-          label="Solo compran" value={fmtN(k.solo_lleva)}
+          label={t("Solo compran")} value={fmtN(k.solo_lleva)}
           tip="Clientes con ventas pero ninguna recepción."
           panelKey="solo_lleva" abierta={abierta} onToggle={setAbierta} />
         <KpiCard icon={<ArrowLeftRight className="h-5 w-5" />} tone="peach"
-          label="Ambos (trae + lleva)" value={fmtN(k.ambos)}
+          label={t("Ambos (trae + lleva)")} value={fmtN(k.ambos)}
           tip="Clientes con recepciones y ventas."
           panelKey="ambos" abierta={abierta} onToggle={setAbierta} />
         <KpiCard icon={<Wallet className="h-5 w-5" />} tone="amber"
-          label="Crédito disponible total" value={fmtGs(k.credito_disponible_total)}
+          label={t("Crédito disponible total")} value={fmtGs(k.credito_disponible_total)}
           tip="SUM de saldos > 0 de todos los clientes en el filtro."
           panelKey="con_credito" abierta={abierta} onToggle={setAbierta} />
         <KpiCard icon={<CalendarDays className="h-5 w-5" />} tone="lavender"
-          label="Prom. días desde última visita"
+          label={t("Prom. días desde última visita")}
           value={k.prom_dias_entre_visitas != null ? `${k.prom_dias_entre_visitas} días` : "—"}
           tip="AVG de días desde la última visita, sobre clientes con al menos 1 visita."
           panelKey="prom_dias" abierta={abierta} onToggle={setAbierta} />
@@ -340,7 +381,7 @@ function PanelClientes({ abierta, claves, filas, onCerrar }: {
       </div>
 
       {muestra.length === 0 ? (
-        <p className="px-4 py-8 text-center text-sm text-slate-400">No hay clientes en este grupo.</p>
+        <p className="px-4 py-8 text-center text-sm text-slate-400">{tt("No hay clientes en este grupo.")}</p>
       ) : (
         <div className="max-h-80 overflow-y-auto">
           <table className="w-full text-sm">
@@ -425,10 +466,10 @@ function DistribucionSegmentos({ kpis }: { kpis: Payload["kpis"] }) {
       <div className="flex items-center gap-2 mb-1">
         <BarChart3 className="h-4 w-4 text-slate-500" />
         <h3 className="text-xs uppercase tracking-wide text-slate-500 font-bold">
-          Distribución de clientes
+          {tt("Distribución de clientes")}
         </h3>
       </div>
-      <p className="text-xs text-slate-400 mb-4">Por segmento (según actividad reciente).</p>
+      <p className="text-xs text-slate-400 mb-4">{tt("Por segmento (según actividad reciente).")}</p>
       <div className="grid grid-cols-1 lg:grid-cols-[auto,1fr,auto] gap-6 items-center">
         {/* Donut */}
         <div className="relative shrink-0 mx-auto">
@@ -509,7 +550,7 @@ function Ranking({ titulo, icon, headerTone, filas, getVal }: {
         </h3>
       </div>
       {filas.length === 0 ? (
-        <p className="text-sm text-slate-400 py-3">Sin datos.</p>
+        <p className="text-sm text-slate-400 py-3">{tt("Sin datos.")}</p>
       ) : (
         <ol className="space-y-1.5">
           {filas.map((c, i) => {

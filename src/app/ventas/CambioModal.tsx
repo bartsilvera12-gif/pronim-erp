@@ -11,6 +11,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import type { Venta } from "@/lib/ventas/types";
+import { tt } from "@/lib/i18n/dict";
 
 type Franja = { id: string; nombre: string; precio_venta: number | string };
 type CajaAbierta = { id: string; numero_caja?: number; punto_caja_nombre?: string | null };
@@ -206,7 +207,7 @@ export default function CambioModal({
           <div>
             <h3 className="text-base font-bold text-slate-800">Cambio de la venta {venta.numero_control}</h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              El cliente devuelve prendas de esta venta y se lleva otras. La diferencia se cobra o se devuelve.
+              {tt("El cliente devuelve prendas de esta venta y se lleva otras. La diferencia se cobra o se devuelve.")}
             </p>
           </div>
           <button
@@ -238,7 +239,7 @@ export default function CambioModal({
                     onChange={(e) => setCajaId(e.target.value || null)}
                     className="w-full rounded-md border border-amber-300 bg-white px-2 py-1.5 text-sm"
                   >
-                    <option value="">— Elegí caja —</option>
+                    <option value="">{tt("— Elegí caja —")}</option>
                     {cajas.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.punto_caja_nombre ?? `Caja ${c.numero_caja ?? ""}`}
@@ -253,7 +254,7 @@ export default function CambioModal({
                 <div className="rounded-xl border-2 border-sky-200 overflow-hidden">
                   <div className="bg-sky-50 px-3 py-2 border-b border-sky-200">
                     <h4 className="text-xs font-bold uppercase text-sky-800">Devuelve</h4>
-                    <p className="text-[10px] text-sky-700">Elegí cuántas prendas devuelve el cliente</p>
+                    <p className="text-[10px] text-sky-700">{tt("Elegí cuántas prendas devuelve el cliente")}</p>
                   </div>
                   <ul className="divide-y divide-slate-100 max-h-[380px] overflow-y-auto">
                     {devuelve.map((l, i) => (
@@ -289,7 +290,7 @@ export default function CambioModal({
                     ))}
                   </ul>
                   <div className="border-t border-sky-200 bg-sky-50/60 px-3 py-2 flex items-center justify-between">
-                    <span className="text-[11px] uppercase font-semibold text-sky-800">Total devuelve</span>
+                    <span className="text-[11px] uppercase font-semibold text-sky-800">{tt("Total devuelve")}</span>
                     <span className="text-sm font-bold text-sky-900 tabular-nums">{fmtGs(totalDevuelve)}</span>
                   </div>
                 </div>
@@ -298,11 +299,11 @@ export default function CambioModal({
                 <div className="rounded-xl border-2 border-emerald-200 overflow-hidden">
                   <div className="bg-emerald-50 px-3 py-2 border-b border-emerald-200">
                     <h4 className="text-xs font-bold uppercase text-emerald-800">Se lleva</h4>
-                    <p className="text-[10px] text-emerald-700">Tocá una franja para agregar una prenda de ese precio</p>
+                    <p className="text-[10px] text-emerald-700">{tt("Tocá una franja para agregar una prenda de ese precio")}</p>
                   </div>
                   {franjas.length === 0 ? (
                     <p className="p-4 text-center text-xs text-slate-400">
-                      No hay franjas de precio configuradas.
+                      {tt("No hay franjas de precio configuradas.")}
                     </p>
                   ) : (
                     <div className="p-3 grid grid-cols-3 gap-2 border-b border-slate-100">
@@ -321,7 +322,7 @@ export default function CambioModal({
                   <ul className="divide-y divide-slate-100 max-h-[220px] overflow-y-auto">
                     {lleva.length === 0 ? (
                       <li className="px-3 py-6 text-center text-[11px] italic text-slate-400">
-                        Todavía no hay nada. Tocá una franja para agregar.
+                        {tt("Todavía no hay nada. Tocá una franja para agregar.")}
                       </li>
                     ) : (
                       lleva.map((l, i) => (
@@ -363,7 +364,7 @@ export default function CambioModal({
                     )}
                   </ul>
                   <div className="border-t border-emerald-200 bg-emerald-50/60 px-3 py-2 flex items-center justify-between">
-                    <span className="text-[11px] uppercase font-semibold text-emerald-800">Total se lleva</span>
+                    <span className="text-[11px] uppercase font-semibold text-emerald-800">{tt("Total se lleva")}</span>
                     <span className="text-sm font-bold text-emerald-900 tabular-nums">{fmtGs(totalLleva)}</span>
                   </div>
                 </div>
@@ -390,7 +391,7 @@ export default function CambioModal({
                 {clientePaga > 0 && (
                   <div className="space-y-2">
                     <p className="text-xs text-emerald-800">
-                      El cliente <strong>paga {fmtGs(clientePaga)}</strong> por la diferencia.
+                      {tt("El cliente")} <strong>paga {fmtGs(clientePaga)}</strong> {tt("por la diferencia.")}
                     </p>
                     <div className="flex gap-2">
                       {(["efectivo", "transferencia", "tarjeta"] as const).map((m) => (
@@ -421,7 +422,7 @@ export default function CambioModal({
                 )}
                 {tiendaDevuelve > 0 && (
                   <p className="text-xs text-amber-900">
-                    La tienda <strong>devuelve {fmtGs(tiendaDevuelve)}</strong> en efectivo al cliente.
+                    {tt("La tienda")} <strong>devuelve {fmtGs(tiendaDevuelve)}</strong> {tt("en efectivo al cliente.")}
                   </p>
                 )}
               </div>
@@ -442,7 +443,7 @@ export default function CambioModal({
             disabled={enviando}
             className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-40"
           >
-            Cancelar
+            {tt("Cancelar")}
           </button>
           <button
             type="button"

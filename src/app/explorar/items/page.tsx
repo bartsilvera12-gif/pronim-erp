@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
+import { useSucursalActivaId } from "@/lib/sucursales/activa";
 import { DataExplorer, type ColumnDef } from "@/components/explorer/DataExplorer";
 
 type It = {
@@ -18,19 +19,24 @@ export default function ExplorarItemsPage() {
   const [desde, setDesde] = useState<string>(() => { const d = new Date(); d.setMonth(d.getMonth() - 3); return d.toISOString().slice(0, 10); });
   const [hasta, setHasta] = useState<string>(() => new Date().toISOString().slice(0, 10));
 
+  // Explorar sigue al selector del header: si estoy parada en LILLO, todo
+  // lo que veo acá es de LILLO. Sin sucursal elegida se ve la empresa.
+  const sucursalActivaId = useSucursalActivaId();
+
   useEffect(() => {
     let cancel = false;
     setCargando(true);
     const qs = new URLSearchParams();
     if (desde) qs.set("desde", desde);
     if (hasta) qs.set("hasta", hasta);
+    if (sucursalActivaId) qs.set("sucursal_id", sucursalActivaId);
     fetchWithSupabaseSession(`/api/reportes/items-drill?${qs}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((j) => { if (!cancel && j?.success) setRows((j.data?.items ?? []) as It[]); })
       .catch(() => {})
       .finally(() => { if (!cancel) setCargando(false); });
     return () => { cancel = true; };
-  }, [desde, hasta]);
+  }, [desde, hasta, sucursalActivaId]);
 
   const columns = useMemo<ColumnDef<It>[]>(() => {
     const sucursales = Array.from(new Set(rows.map((r) => r.sucursal).filter(Boolean))) as string[];

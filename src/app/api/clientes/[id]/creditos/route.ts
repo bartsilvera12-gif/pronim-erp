@@ -129,12 +129,36 @@ export async function GET(
         [empresaId, clienteId],
       );
 
+      // Moneda DEL CLIENTE, no la del que está mirando. Un crédito que se
+      // generó en Paraguay son guaraníes siempre: si se mostrara en la
+      // moneda de la sucursal activa, los mismos 250.000 pasarían de Gs. a
+      // R$ con solo cambiar de local. Se resuelve por la cartera del
+      // cliente (scope_clientes) contra la moneda de esa sucursal.
+      let monedaCliente = "PYG";
+      try {
+        const sucursalesT = quoteSchemaTable(schema, "sucursales");
+        const mq = await client.query<{ moneda: string | null }>(
+          `SELECT s.moneda
+             FROM ${clientesT} c
+             JOIN ${sucursalesT} s
+               ON s.empresa_id = c.empresa_id
+              AND s.scope_clientes = c.scope_clientes
+            WHERE c.id = $1::uuid AND c.empresa_id = $2::uuid
+            LIMIT 1`,
+          [clienteId, empresaId],
+        );
+        if (mq.rows[0]?.moneda) monedaCliente = String(mq.rows[0].moneda);
+      } catch {
+        // Sin columna scope_clientes o sin moneda: queda el default PYG.
+      }
+
       return NextResponse.json(
         successResponse({
           saldo,
           saldo_credito: saldoCredito,
           saldo_cashback: saldoCashback,
           saldo_consignacion: saldoConsignacion,
+          moneda: monedaCliente,
           movimientos: movQ.rows,
         }),
       );

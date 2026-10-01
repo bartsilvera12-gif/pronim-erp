@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
+import { useSucursalActivaId } from "@/lib/sucursales/activa";
 import { DataExplorer, type ColumnDef } from "@/components/explorer/DataExplorer";
 
 type Mov = {
@@ -37,17 +38,22 @@ export default function ExplorarCajaMovimientosPage() {
   const [desde, setDesde] = useState<string>(hoy);
   const [hasta, setHasta] = useState<string>(hoy);
 
+  // Explorar sigue al selector del header: si estoy parada en LILLO, todo
+  // lo que veo acá es de LILLO. Sin sucursal elegida se ve la empresa.
+  const sucursalActivaId = useSucursalActivaId();
+
   useEffect(() => {
     let cancel = false;
     setCargando(true);
     const qs = new URLSearchParams({ desde, hasta });
+    if (sucursalActivaId) qs.set("sucursal_id", sucursalActivaId);
     fetchWithSupabaseSession(`/api/reportes/caja-movimientos?${qs}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((j) => { if (!cancel && j?.success) setRows((j.data?.movimientos ?? []) as Mov[]); })
       .catch(() => {})
       .finally(() => { if (!cancel) setCargando(false); });
     return () => { cancel = true; };
-  }, [desde, hasta]);
+  }, [desde, hasta, sucursalActivaId]);
 
   // Arqueo: solo lo que mueve efectivo físico.
   const resumen = useMemo(() => {

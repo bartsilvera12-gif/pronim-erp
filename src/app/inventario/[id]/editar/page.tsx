@@ -13,6 +13,7 @@ import ProveedoresCostos from "@/components/inventario/ProveedoresCostos";
 import StockPorSucursalBox from "@/components/inventario/StockPorSucursalBox";
 import { useIsAdmin } from "@/lib/auth/use-is-admin";
 import { ShoppingBag, Boxes, ClipboardList, type LucideIcon } from "lucide-react";
+import { tt } from "@/lib/i18n/dict";
 
 // Opciones estándar de unidad de medida (UX simplificada gastro)
 const UNIDADES_OPCIONES = [
@@ -465,7 +466,7 @@ export default function EditarProductoPage() {
     <div className="space-y-8">
       <div>
         <h1 className="text-3xl font-bold text-gray-800">Editar producto</h1>
-        <p className="text-gray-600">Modifica los datos del producto</p>
+        <p className="text-gray-600">{tt("Modifica los datos del producto")}</p>
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 max-w-5xl">
@@ -478,7 +479,7 @@ export default function EditarProductoPage() {
           <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
             <span className="mt-0.5">⚠</span>
             <span>
-              Este producto tiene una <strong>receta asociada</strong>. Al cambiarlo a
+              {tt("Este producto tiene una")} <strong>receta asociada</strong>. Al cambiarlo a
               <strong> {tipoGastro === "reventa" ? "Reventa" : "Materia prima"}</strong>, la receta deja de aplicarse al vender
               (no se borra). Revisá Recetas si querés ajustarla.
             </span>
@@ -488,9 +489,9 @@ export default function EditarProductoPage() {
         {/* Modo de receta: solo para Menú con receta asociada */}
         {tipoGastro === "menu" && tieneReceta && (
           <div className="mt-4 border-t border-slate-100 pt-4">
-            <p className="text-xs uppercase tracking-wide font-semibold text-gray-500 mb-1">Modo de receta</p>
+            <p className="text-xs uppercase tracking-wide font-semibold text-gray-500 mb-1">{tt("Modo de receta")}</p>
             <p className="text-xs text-slate-500 mb-3">
-              Define cuándo se descuenta la materia prima de este producto.
+              {tt("Define cuándo se descuenta la materia prima de este producto.")}
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {([
@@ -523,7 +524,7 @@ export default function EditarProductoPage() {
             </div>
             {modoReceta === "produccion_previa" && (
               <p className="mt-2 text-xs text-[#4FAEB2]">
-                Usá el botón <strong>Fabricar</strong> en el detalle de la receta para producir y cargar stock.
+                {tt("Usá el botón")} <strong>Fabricar</strong> {tt("en el detalle de la receta para producir y cargar stock.")}
               </p>
             )}
           </div>
@@ -544,7 +545,7 @@ export default function EditarProductoPage() {
           )}
 
           <div>
-            <label className={labelClass}>Nombre del producto</label>
+            <label className={labelClass}>{tt("Nombre del producto")}</label>
             <input
               type="text"
               name="nombre"
@@ -558,7 +559,7 @@ export default function EditarProductoPage() {
           <div>
             <label className={labelClass}>
               Descripción
-              {tipoGastro === "menu" && <span className="text-xs font-normal text-amber-700 ml-2">(visible al cliente)</span>}
+              {tipoGastro === "menu" && <span className="text-xs font-normal text-amber-700 ml-2">{tt("(visible al cliente)")}</span>}
             </label>
             <textarea
               value={descripcion}
@@ -603,16 +604,16 @@ export default function EditarProductoPage() {
                   defaultValue=""
                   className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-600 outline-none focus:ring-2 focus:ring-[#4FAEB2]"
                 >
-                  <option value="">Usar patrón existente…</option>
+                  <option value="">{tt("Usar patrón existente…")}</option>
                   {skuPatrones.map((p) => (
                     <option key={p.prefix} value={p.siguiente}>{p.prefix} → {p.siguiente}</option>
                   ))}
                 </select>
-                <span className="text-[11px] text-gray-400">Código interno editable. Podés ajustar el número final.</span>
+                <span className="text-[11px] text-gray-400">{tt("Código interno editable. Podés ajustar el número final.")}</span>
               </div>
             </div>
             <div className={tipoGastro === "menu" ? "hidden" : ""}>
-              <label className={labelClass}>Unidad de medida</label>
+              <label className={labelClass}>{tt("Unidad de medida")}</label>
               <select
                 name="unidad_medida"
                 value={form.unidad_medida}
@@ -638,14 +639,14 @@ export default function EditarProductoPage() {
 
           {/* Codigo de barras */}
           <div className="border-t border-slate-100 pt-5">
-            <label className={labelClass}>Código de barras</label>
+            <label className={labelClass}>{tt("Código de barras")}</label>
             <div className="flex gap-2">
               <input
                 type="text"
                 name="codigo_barras"
                 value={form.codigo_barras}
                 onChange={handleChange}
-                placeholder="Escaneá, escribí o generá (EAN-13)"
+                placeholder={tt("Escaneá, escribí o generá (EAN-13)")}
                 className={`${inputClass} flex-1`}
                 inputMode="numeric"
                 autoComplete="off"
@@ -663,13 +664,13 @@ export default function EditarProductoPage() {
               </button>
             </div>
             <p className="mt-1.5 text-xs text-gray-400">
-              Código escaneable para lector o etiqueta (EAN-13). Debe ser único. (opcional)
+              {tt("Código escaneable para lector o etiqueta (EAN-13). Debe ser único. (opcional)")}
             </p>
           </div>
 
           {/* Imagen del producto */}
           <div>
-            <label className={labelClass}>Imagen del producto</label>
+            <label className={labelClass}>{tt("Imagen del producto")}</label>
             <ProductImageUploader
               productoId={id}
               initialUrl={imagenUrl}
@@ -685,13 +686,13 @@ export default function EditarProductoPage() {
           <div className="border-t border-slate-100 pt-6">
             <div className="flex items-baseline justify-between mb-3">
               <p className="text-xs text-gray-400 uppercase tracking-wide font-semibold">
-                Clasificación y ubicación
+                {tt("Clasificación y ubicación")}
               </p>
               <span className="text-xs text-gray-400">Opcional</span>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-12 gap-5">
               <div className="md:col-span-4 min-w-0">
-                <label className={labelClass}>Categoría principal</label>
+                <label className={labelClass}>{tt("Categoría principal")}</label>
                 <SelectFromList
                   value={categoriaId}
                   onChange={setCategoriaId}
@@ -733,7 +734,7 @@ export default function EditarProductoPage() {
               </div>
               {/* Ubicación principal — oculta en instancia En lo de Mari (no aplica para gastronomía). */}
               <div className="hidden md:col-span-4 min-w-0">
-                <label className={labelClass}>Ubicación principal</label>
+                <label className={labelClass}>{tt("Ubicación principal")}</label>
                 <SelectFromList
                   value={ubicacionId}
                   onChange={setUbicacionId}
@@ -756,7 +757,7 @@ export default function EditarProductoPage() {
 
             {/* Clasificación — oculta (presets vienen del tipo gastro inferido) */}
             <div className="hidden mt-5 pt-4 border-t border-gray-100">
-              <label className={labelClass}>Clasificación</label>
+              <label className={labelClass}>{tt("Clasificación")}</label>
               <div className="flex flex-wrap gap-4 mt-1">
                 <label className="inline-flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
                   <input
@@ -765,7 +766,7 @@ export default function EditarProductoPage() {
                     onChange={(e) => setEsVendible(e.target.checked)}
                     className="h-4 w-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
                   />
-                  Vendible (se vende al cliente final)
+                  {tt("Vendible (se vende al cliente final)")}
                 </label>
                 <label className="inline-flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
                   <input
@@ -785,7 +786,7 @@ export default function EditarProductoPage() {
             {/* Configuración gastronómica — oculta (no relevante en UX simplificada) */}
             <div className="hidden mt-5 pt-4 border-t border-gray-100">
               <p className="text-xs uppercase tracking-wide font-semibold text-gray-500 mb-3">
-                Configuración gastronómica
+                {tt("Configuración gastronómica")}
               </p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <label className="inline-flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
@@ -807,7 +808,7 @@ export default function EditarProductoPage() {
                   Valorizado
                 </label>
                 <div>
-                  <label className={labelClass}>Unidad de compra</label>
+                  <label className={labelClass}>{tt("Unidad de compra")}</label>
                   <input
                     type="text"
                     value={unidadCompra}
@@ -817,7 +818,7 @@ export default function EditarProductoPage() {
                   />
                 </div>
                 <div>
-                  <label className={labelClass}>Unidad de receta</label>
+                  <label className={labelClass}>{tt("Unidad de receta")}</label>
                   <input
                     type="text"
                     value={unidadReceta}
@@ -838,7 +839,7 @@ export default function EditarProductoPage() {
                   />
                 </div>
                 <div>
-                  <label className={labelClass}>Tiempo preparación (min)</label>
+                  <label className={labelClass}>{tt("Tiempo preparación (min)")}</label>
                   <input
                     type="number"
                     min="0"
@@ -850,7 +851,7 @@ export default function EditarProductoPage() {
                 </div>
               </div>
               <p className="mt-2 text-xs text-gray-400">
-                Ejemplo: Harina se compra por bolsa de 25kg, pero se usa en recetas por gramos. En ese caso unidad compra = bolsa 25kg, unidad receta = g, factor = 25000.
+                {tt("Ejemplo: Harina se compra por bolsa de 25kg, pero se usa en recetas por gramos. En ese caso unidad compra = bolsa 25kg, unidad receta = g, factor = 25000.")}
               </p>
             </div>
           </div>
@@ -884,7 +885,7 @@ export default function EditarProductoPage() {
               </div>
               )}
               <div className={showPrecioVenta ? "" : "hidden"}>
-                <label className={labelClass}>Precio de venta (Gs.)</label>
+                <label className={labelClass}>{tt("Precio de venta (Gs.)")}</label>
                 <MontoInput
                   value={form.precio_venta}
                   onChange={handlePrecioChange}
@@ -899,7 +900,7 @@ export default function EditarProductoPage() {
             {false && showPrecioVenta && (
               <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
-                  <label className={labelClass}>Precio mayorista (Gs.) <span className="text-gray-400 font-normal">(opcional)</span></label>
+                  <label className={labelClass}>{tt("Precio mayorista (Gs.)")} <span className="text-gray-400 font-normal">(opcional)</span></label>
                   <MontoInput
                     value={form.precio_mayorista}
                     onChange={(n) => setForm((prev) => ({ ...prev, precio_mayorista: String(n) }))}
@@ -909,7 +910,7 @@ export default function EditarProductoPage() {
                   />
                 </div>
                 <div>
-                  <label className={labelClass}>Cantidad mínima mayorista <span className="text-gray-400 font-normal">(opcional)</span></label>
+                  <label className={labelClass}>{tt("Cantidad mínima mayorista")} <span className="text-gray-400 font-normal">(opcional)</span></label>
                   <input
                     type="number"
                     min={0}
@@ -921,7 +922,7 @@ export default function EditarProductoPage() {
                   />
                 </div>
                 <div>
-                  <label className={labelClass}>Precio proveedor (Gs.) <span className="text-gray-400 font-normal">(opcional)</span></label>
+                  <label className={labelClass}>{tt("Precio proveedor (Gs.)")} <span className="text-gray-400 font-normal">(opcional)</span></label>
                   <MontoInput
                     value={form.precio_distribuidor}
                     onChange={(n) => setForm((prev) => ({ ...prev, precio_distribuidor: String(n) }))}
@@ -931,7 +932,7 @@ export default function EditarProductoPage() {
                   />
                 </div>
                 <p className="sm:col-span-2 text-xs text-gray-400">
-                  Precios por canal: en Ventas el cajero elige Minorista, Mayorista o Proveedor. El precio proveedor es comercial (no es el costo).
+                  {tt("Precios por canal: en Ventas el cajero elige Minorista, Mayorista o Proveedor. El precio proveedor es comercial (no es el costo).")}
                 </p>
               </div>
             )}
@@ -944,7 +945,7 @@ export default function EditarProductoPage() {
                   </p>
                 </div>
                 <div className={`border rounded-lg px-4 py-3 ${esPerdida ? "bg-red-50 border-red-200" : "bg-green-50 border-green-100"}`}>
-                  <p className={`text-xs font-medium mb-1 ${esPerdida ? "text-red-500" : "text-green-500"}`}>Margen s/venta</p>
+                  <p className={`text-xs font-medium mb-1 ${esPerdida ? "text-red-500" : "text-green-500"}`}>{tt("Margen s/venta")}</p>
                   <p className={`text-lg font-bold tabular-nums ${esPerdida ? "text-red-700" : "text-green-700"}`}>
                     {margenVentaCalc.toFixed(2)}%
                   </p>
@@ -966,11 +967,11 @@ export default function EditarProductoPage() {
                 required={showStock}
               />
               <p className="mt-1 text-xs text-gray-400">
-                Para ajustes de stock, preferí registrar un <Link href="/inventario/movimientos/nuevo" className="underline">movimiento</Link>.
+                {tt("Para ajustes de stock, preferí registrar un")} <Link href="/inventario/movimientos/nuevo" className="underline">movimiento</Link>.
               </p>
             </div>
             <div>
-              <label className={labelClass}>Stock mínimo</label>
+              <label className={labelClass}>{tt("Stock mínimo")}</label>
               <input
                 type="number"
                 name="stock_minimo"
@@ -985,7 +986,7 @@ export default function EditarProductoPage() {
 
           {/* Método de valuación — oculto en instancia En lo de Mari (siempre CPP). */}
           <div className="hidden">
-            <label className={labelClass}>Método de valuación</label>
+            <label className={labelClass}>{tt("Método de valuación")}</label>
             <select
               name="metodo_valuacion"
               value={form.metodo_valuacion}
@@ -994,7 +995,7 @@ export default function EditarProductoPage() {
             >
               <option value="CPP">CPP — Costo Promedio Ponderado</option>
               <option value="FIFO">FIFO — Primero en entrar, primero en salir</option>
-              <option value="LIFO">LIFO — Último en entrar, primero en salir</option>
+              <option value="LIFO">{tt("LIFO — Último en entrar, primero en salir")}</option>
             </select>
           </div>
 
@@ -1014,7 +1015,7 @@ export default function EditarProductoPage() {
                   onChange={(e) => setActivo(e.target.checked)}
                   className="h-4 w-4 rounded border-slate-300 text-[#4FAEB2] focus:ring-[#4FAEB2]"
                 />
-                Activo <span className="text-xs text-slate-400">(disponible para vender)</span>
+                Activo <span className="text-xs text-slate-400">{tt("(disponible para vender)")}</span>
               </label>
             </div>
           </div>
@@ -1032,7 +1033,7 @@ export default function EditarProductoPage() {
               onClick={() => router.push("/inventario")}
               className="border border-gray-300 px-5 py-3 rounded-lg text-sm hover:bg-gray-50 transition-colors"
             >
-              Cancelar
+              {tt("Cancelar")}
             </button>
           </div>
         </form>

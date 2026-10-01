@@ -12,6 +12,7 @@ import { generarYAbrirRecibo } from "@/lib/recibos/client";
 import type { TipoIvaVenta, TipoVenta, MonedaVenta, LineaVenta, MetodoPago, TipoPrecioVenta } from "@/lib/ventas/types";
 import type { Producto } from "@/lib/inventario/types";
 import { getSucursalActivaId } from "@/lib/sucursales/activa";
+import { tt } from "@/lib/i18n/dict";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -880,9 +881,9 @@ export default function NuevaVentaPage() {
 
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">Nueva venta</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">{tt("Nueva venta")}</h1>
           <p className="text-gray-600">
-            Agregá productos de reventa o del catálogo. Al confirmar se registra la venta.
+            {tt("Agregá productos de reventa o del catálogo. Al confirmar se registra la venta.")}
           </p>
         </div>
         {!isFranjaMode && (
@@ -891,7 +892,7 @@ export default function NuevaVentaPage() {
             onClick={() => setPickerOpen(true)}
             className="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-[#4FAEB2] px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-[#3F8E91] active:scale-95"
           >
-            + Agregar producto
+            {tt("+ Agregar producto")}
           </button>
         )}
       </div>
@@ -914,13 +915,13 @@ export default function NuevaVentaPage() {
 
         {/* ── SECCIÓN 0: Datos de la venta (cliente obligatorio + condición) ────── */}
         <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 sm:p-6">
-          <SectionTitle>Datos de la venta</SectionTitle>
+          <SectionTitle>{tt("Datos de la venta")}</SectionTitle>
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
 
             {/* Cliente (obligatorio) */}
             <div ref={clienteContainerRef} className="relative">
               <label className={labelClass}>
-                Cliente <span className="text-xs font-normal text-red-500">*</span>
+                {tt("Cliente")} <span className="text-xs font-normal text-red-500">*</span>
               </label>
               <div className="flex gap-2">
                 <input
@@ -928,7 +929,7 @@ export default function NuevaVentaPage() {
                   value={clienteSel ? clienteSel.label : clienteQuery}
                   onChange={(e) => { setClienteId(""); setClienteQuery(e.target.value); setClienteOpen(true); }}
                   onFocus={() => setClienteOpen(true)}
-                  placeholder="Buscar por nombre o RUC…"
+                  placeholder={tt("Buscar por nombre o RUC…")}
                   className={`${inputClass} ${clienteSel ? "font-medium" : ""}`}
                 />
                 {clienteSel && (
@@ -937,7 +938,7 @@ export default function NuevaVentaPage() {
                     onClick={() => { setClienteId(""); setClienteQuery(""); setGeneraNotaRemision(false); }}
                     className="shrink-0 rounded-lg border border-slate-200 px-3 text-xs text-slate-500 hover:bg-slate-50"
                   >
-                    Quitar
+                    {tt("Quitar")}
                   </button>
                 )}
               </div>
@@ -952,10 +953,10 @@ export default function NuevaVentaPage() {
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
                       <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
                     </svg>
-                    Cargar nuevo cliente
+                    {tt("Cargar nuevo cliente")}
                   </button>
                   {clientesFiltrados.length === 0 ? (
-                    <p className="px-3 py-2 text-xs text-gray-400">Sin clientes que coincidan.</p>
+                    <p className="px-3 py-2 text-xs text-gray-400">{tt("Sin clientes que coincidan.")}</p>
                   ) : (
                     clientesFiltrados.map((c) => (
                       <button
@@ -966,7 +967,7 @@ export default function NuevaVentaPage() {
                       >
                         <span className="font-medium text-gray-800">{c.label}</span>
                         {c.ruc && <span className="ml-2 text-xs text-gray-400">RUC {c.ruc}</span>}
-                        {c.usa_nota_remision && <span className="ml-2 text-[10px] rounded-full bg-sky-100 text-sky-700 px-1.5 py-0.5 font-semibold">Nota remisión</span>}
+                        {c.usa_nota_remision && <span className="ml-2 text-[10px] rounded-full bg-sky-100 text-sky-700 px-1.5 py-0.5 font-semibold">{tt("Nota remisión")}</span>}
                       </button>
                     ))
                   )}
@@ -976,13 +977,13 @@ export default function NuevaVentaPage() {
               {clienteSel && clienteSegmento && (
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
                   {clienteSegmento.categoria === "vip" && (
-                    <StickerBadge type="vip">Cliente VIP</StickerBadge>
+                    <StickerBadge type="vip">{tt("Cliente VIP")}</StickerBadge>
                   )}
                   {clienteSegmento.categoria === "habitual" && (
-                    <StickerBadge type="frecuente" tilt="right">Cliente frecuente</StickerBadge>
+                    <StickerBadge type="frecuente" tilt="right">{tt("Cliente frecuente")}</StickerBadge>
                   )}
                   {clienteSegmento.categoria === "nuevo" && (
-                    <StickerBadge type="nuevo">Cliente nuevo</StickerBadge>
+                    <StickerBadge type="nuevo">{tt("Cliente nuevo")}</StickerBadge>
                   )}
                   {clienteSegmento.categoria === "dormido" && (
                     <StickerBadge
@@ -993,7 +994,7 @@ export default function NuevaVentaPage() {
                           : undefined
                       }
                     >
-                      Hace tiempo que no visita
+                      {tt("Hace tiempo que no visita")}
                     </StickerBadge>
                   )}
                   {clienteSegmento.tieneReclamos && (
@@ -1002,7 +1003,7 @@ export default function NuevaVentaPage() {
                       tilt="right"
                       title={`${clienteSegmento.reclamosCount} reclamo${clienteSegmento.reclamosCount === 1 ? "" : "s"} previo${clienteSegmento.reclamosCount === 1 ? "" : "s"}`}
                     >
-                      Con reclamos previos
+                      {tt("Con reclamos previos")}
                     </StickerBadge>
                   )}
                   {clienteSegmento.recibioBeneficios && (
@@ -1010,7 +1011,7 @@ export default function NuevaVentaPage() {
                       type="credito"
                       title={`${clienteSegmento.beneficiosCount} beneficio${clienteSegmento.beneficiosCount === 1 ? "" : "s"} entregado${clienteSegmento.beneficiosCount === 1 ? "" : "s"}`}
                     >
-                      Ya recibió beneficios
+                      {tt("Ya recibió beneficios")}
                     </StickerBadge>
                   )}
                   <span className="text-gray-500">
@@ -1039,7 +1040,7 @@ export default function NuevaVentaPage() {
                     onClick={() => setNuevoClienteOpen(true)}
                     className="font-medium text-[#4FAEB2] underline decoration-dotted underline-offset-2 hover:text-[#37888c]"
                   >
-                    Crear cliente nuevo
+                    {tt("Crear cliente nuevo")}
                   </button>
                 )}
               </div>
@@ -1049,7 +1050,7 @@ export default function NuevaVentaPage() {
                 <div className="mt-2 rounded-lg border border-sky-100 bg-sky-50/60 px-3 py-2">
                   {clienteSel.usa_nota_remision && (
                     <p className="mb-1.5 text-[11px] text-sky-700">
-                      Este cliente usa nota de remisión. Se generará junto al ticket.
+                      {tt("Este cliente usa nota de remisión. Se generará junto al ticket.")}
                     </p>
                   )}
                   <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
@@ -1059,7 +1060,7 @@ export default function NuevaVentaPage() {
                       onChange={(e) => setGeneraNotaRemision(e.target.checked)}
                       className="h-4 w-4 rounded border-slate-300 text-[#4FAEB2] focus:ring-[#4FAEB2]"
                     />
-                    Generar nota de remisión
+                    {tt("Generar nota de remisión")}
                   </label>
                 </div>
               )}
@@ -1067,7 +1068,7 @@ export default function NuevaVentaPage() {
 
             {/* Condición: Contado / Crédito */}
             <div>
-              <label className={labelClass}>Condición</label>
+              <label className={labelClass}>{tt("Condición")}</label>
               <SegmentedControl<TipoVenta>
                 value={tipoVenta}
                 options={[
@@ -1078,7 +1079,7 @@ export default function NuevaVentaPage() {
               />
               {tipoVenta === "CREDITO" && (
                 <div className="mt-3 space-y-2">
-                  <label className={labelClass}>Plazo de crédito (días)</label>
+                  <label className={labelClass}>{tt("Plazo de crédito (días)")}</label>
                   <input
                     type="number"
                     min={1}
@@ -1088,10 +1089,10 @@ export default function NuevaVentaPage() {
                     className={`${inputClass} ${plazoDiasNum < 1 ? "border-red-300 bg-red-50" : ""}`}
                   />
                   {plazoDiasNum < 1 && (
-                    <p className="mt-1 text-[11px] text-red-600">Ingresá un plazo de al menos 1 día.</p>
+                    <p className="mt-1 text-[11px] text-red-600">{tt("Ingresá un plazo de al menos 1 día.")}</p>
                   )}
                   {!clienteId && (
-                    <p className="mt-1 text-[11px] text-red-600">La venta a crédito requiere un cliente seleccionado.</p>
+                    <p className="mt-1 text-[11px] text-red-600">{tt("La venta a crédito requiere un cliente seleccionado.")}</p>
                   )}
                   <label className={labelClass}>Entrega inicial (opcional)</label>
                   <input
@@ -1103,7 +1104,7 @@ export default function NuevaVentaPage() {
                     className={inputClass}
                   />
                   <p className="mt-1 text-[11px] text-slate-500">
-                    Si el cliente paga una parte al momento, cargá el monto acá. El saldo restante va a Cuentas por Cobrar.
+                    {tt("Si el cliente paga una parte al momento, cargá el monto acá. El saldo restante va a Cuentas por Cobrar.")}
                   </p>
                 </div>
               )}
@@ -1115,9 +1116,9 @@ export default function NuevaVentaPage() {
         {/* ── SECCIÓN 2: Grilla POS por franja de precio (modelo Pronim) ── */}
         {isFranjaMode && (
           <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 sm:p-6">
-            <SectionTitle>Cargá cantidad por categoría</SectionTitle>
+            <SectionTitle>{tt("Cargá cantidad por categoría")}</SectionTitle>
             <p className="mb-3 text-xs text-slate-500">
-              Ingresá cuántas prendas se venden por cada categoría de precio. El subtotal se calcula solo.
+              {tt("Ingresá cuántas prendas se venden por cada categoría de precio. El subtotal se calcula solo.")}
             </p>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
               {franjas.map((f) => {
@@ -1187,11 +1188,11 @@ export default function NuevaVentaPage() {
 
         {/* ── SECCIÓN 3: Carrito + totales + confirmar ─────────────────────── */}
         <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 sm:p-6">
-          <SectionTitle>Productos en esta venta</SectionTitle>
+          <SectionTitle>{tt("Productos en esta venta")}</SectionTitle>
 
           {items.length === 0 ? (
             <div className="py-10 text-center text-gray-400 text-sm border-2 border-dashed border-gray-200 rounded-lg">
-              Todavía no agregaste productos a esta venta.
+              {tt("Todavía no agregaste productos a esta venta.")}
             </div>
           ) : (
             <>
@@ -1205,11 +1206,11 @@ export default function NuevaVentaPage() {
                       <th className="py-2.5 pr-3 font-medium">Producto</th>
                       <th className="hidden py-2.5 pr-3 font-medium lg:table-cell">SKU</th>
                       <th className="py-2.5 pr-3 font-medium text-right">Cant.</th>
-                      <th className="py-2.5 pr-3 font-medium text-right">Precio unit.</th>
+                      <th className="py-2.5 pr-3 font-medium text-right">{tt("Precio unit.")}</th>
                       <th className="hidden py-2.5 pr-3 text-center font-medium lg:table-cell">IVA</th>
                       <th className="py-2.5 pr-3 font-medium text-right hidden lg:table-cell">Subtotal</th>
                       <th className="py-2.5 pr-3 font-medium text-right hidden lg:table-cell">IVA Gs.</th>
-                      <th className="py-2.5 pr-3 font-medium text-right">Total</th>
+                      <th className="py-2.5 pr-3 font-medium text-right">{tt("Total")}</th>
                       <th className="py-2.5 font-medium"></th>
                     </tr>
                   </thead>
@@ -1285,7 +1286,7 @@ export default function NuevaVentaPage() {
                     {!!clienteId && saldoCredito > 0 && (
                       <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-2 space-y-1">
                         <div className="flex items-center justify-between text-[11px] text-emerald-800">
-                          <span className="font-semibold">Saldo a favor del cliente</span>
+                          <span className="font-semibold">{tt("Saldo a favor del cliente")}</span>
                           <span className="tabular-nums">{formatGs(saldoCredito)}</span>
                         </div>
                         {saldoCashback > 0 && (
@@ -1296,7 +1297,7 @@ export default function NuevaVentaPage() {
                         )}
                         {saldoCredito - saldoCashback > 0 && saldoCashback > 0 && (
                           <div className="flex items-center justify-between text-[10px] text-emerald-700">
-                            <span>· crédito normal</span>
+                            <span>{tt("· crédito normal")}</span>
                             <span className="tabular-nums">{formatGs(saldoCredito - saldoCashback)}</span>
                           </div>
                         )}
@@ -1315,13 +1316,13 @@ export default function NuevaVentaPage() {
                             onClick={() => setCreditoUsado(String(Math.min(saldoCredito, totalGeneral)))}
                             className="h-8 rounded-md border border-emerald-300 px-2 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100"
                           >
-                            Máx
+                            {tt("Máx")}
                           </button>
                         </div>
                       </div>
                     )}
                     <div className="flex justify-between text-base font-bold text-gray-900 pt-2 border-t border-gray-200">
-                      <span>TOTAL</span>
+                      <span>{tt("TOTAL")}</span>
                       <span className="tabular-nums">{formatGs(totalGeneral)}</span>
                     </div>
                   </div>
@@ -1417,7 +1418,7 @@ export default function NuevaVentaPage() {
               onClick={() => router.push("/ventas")}
               className="border border-slate-200 px-6 py-3 rounded-lg text-sm hover:bg-slate-50 transition-colors min-h-[48px] w-full sm:w-auto"
             >
-              Cancelar
+              {tt("Cancelar")}
             </button>
             <button
               type="submit"
@@ -1476,13 +1477,13 @@ export default function NuevaVentaPage() {
                 type="text"
                 value={entidadQuery}
                 onChange={(e) => setEntidadQuery(e.target.value)}
-                placeholder="Buscar por código o nombre…"
+                placeholder={tt("Buscar por código o nombre…")}
                 className={inputClass}
                 autoFocus
               />
               <div className="mt-1 max-h-40 overflow-auto rounded-lg border border-slate-100">
                 {entidadesFiltradas.length === 0 ? (
-                  <p className="px-3 py-2 text-xs text-gray-400">Sin entidades. Cargalas en Configuración → Entidades bancarias.</p>
+                  <p className="px-3 py-2 text-xs text-gray-400">{tt("Sin entidades. Cargalas en Configuración → Entidades bancarias.")}</p>
                 ) : (
                   entidadesFiltradas.map((en) => (
                     <button
@@ -1502,14 +1503,14 @@ export default function NuevaVentaPage() {
 
             {metodoPago === "transferencia" && (
               <div>
-                <label className="block text-xs text-gray-600 mb-1">Titular que transfirió</label>
-                <input type="text" value={pagoTitular} onChange={(e) => setPagoTitular(e.target.value)} placeholder="Nombre del titular" className={inputClass} />
+                <label className="block text-xs text-gray-600 mb-1">{tt("Titular que transfirió")}</label>
+                <input type="text" value={pagoTitular} onChange={(e) => setPagoTitular(e.target.value)} placeholder={tt("Nombre del titular")} className={inputClass} />
               </div>
             )}
 
             <div>
-              <label className="block text-xs text-gray-600 mb-1">N° de comprobante / referencia</label>
-              <input type="text" value={pagoReferencia} onChange={(e) => setPagoReferencia(e.target.value)} placeholder="Comprobante / transacción" className={inputClass} />
+              <label className="block text-xs text-gray-600 mb-1">{tt("N° de comprobante / referencia")}</label>
+              <input type="text" value={pagoReferencia} onChange={(e) => setPagoReferencia(e.target.value)} placeholder={tt("Comprobante / transacción")} className={inputClass} />
             </div>
 
             <button type="button" onClick={() => setCobroModalOpen(false)} className="w-full rounded-lg bg-[#4FAEB2] py-2 text-sm font-medium text-white hover:bg-[#3F8E91]">
@@ -1526,8 +1527,8 @@ export default function NuevaVentaPage() {
             <div className="flex items-start gap-2">
               <span className="text-amber-500 text-xl leading-none">⚠</span>
               <div>
-                <h3 className="text-sm font-semibold text-slate-800">Hay productos/insumos sin stock suficiente</h3>
-                <p className="text-xs text-slate-500 mt-0.5">Revisá el detalle. Podés vender igual: el stock quedará negativo y se registrará el movimiento de salida.</p>
+                <h3 className="text-sm font-semibold text-slate-800">{tt("Hay productos/insumos sin stock suficiente")}</h3>
+                <p className="text-xs text-slate-500 mt-0.5">{tt("Revisá el detalle. Podés vender igual: el stock quedará negativo y se registrará el movimiento de salida.")}</p>
               </div>
             </div>
 
@@ -1581,13 +1582,13 @@ export default function NuevaVentaPage() {
             <div>
               <h3 className="text-base font-semibold text-slate-800">Venta {postVenta.numero} registrada</h3>
               {postVenta.credito && (
-                <p className="mt-1 text-sm font-medium text-amber-700">Venta a crédito registrada. Cuenta por cobrar generada.</p>
+                <p className="mt-1 text-sm font-medium text-amber-700">{tt("Venta a crédito registrada. Cuenta por cobrar generada.")}</p>
               )}
               {postVenta.generaNota && (
-                <p className="mt-1 text-sm text-sky-700">Esta venta genera nota de remisión.</p>
+                <p className="mt-1 text-sm text-sky-700">{tt("Esta venta genera nota de remisión.")}</p>
               )}
               <p className="mt-1 text-xs text-gray-400">
-                Si tu navegador bloqueó las pestañas, abrí los documentos con estos botones.
+                {tt("Si tu navegador bloqueó las pestañas, abrí los documentos con estos botones.")}
               </p>
             </div>
 
@@ -1607,7 +1608,7 @@ export default function NuevaVentaPage() {
                   rel="noopener"
                   className="rounded-lg border border-sky-300 bg-sky-50 px-4 py-2.5 text-sm font-medium text-sky-700 hover:bg-sky-100"
                 >
-                  Abrir nota de remisión
+                  {tt("Abrir nota de remisión")}
                 </a>
               )}
               {/* Recibo de dinero solo para venta contado (en crédito el recibo sale al cobrar). */}
@@ -1620,7 +1621,7 @@ export default function NuevaVentaPage() {
                   }}
                   className="rounded-lg border border-[#4FAEB2]/40 bg-[#4FAEB2]/[0.08] px-4 py-2.5 text-sm font-medium text-[#3F8E91] hover:bg-[#4FAEB2]/[0.16]"
                 >
-                  Generar recibo de dinero
+                  {tt("Generar recibo de dinero")}
                 </button>
               )}
             </div>
@@ -1732,9 +1733,9 @@ function NuevoClienteRapidoModal({
       >
         <div className="mb-1 flex items-start justify-between gap-2">
           <div>
-            <h3 className="text-base font-semibold text-slate-900">Nuevo cliente</h3>
+            <h3 className="text-base font-semibold text-slate-900">{tt("Nuevo cliente")}</h3>
             <p className="mt-1 text-xs text-slate-500">
-              Solo los datos mínimos. Podés completar dirección, SIFEN y condiciones más tarde desde la ficha del cliente.
+              {tt("Solo los datos mínimos. Podés completar dirección, SIFEN y condiciones más tarde desde la ficha del cliente.")}
             </p>
           </div>
           <button
@@ -1777,7 +1778,7 @@ function NuevoClienteRapidoModal({
           </div>
           <div>
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Teléfono <span className="text-red-500">*</span>
+              {tt("Teléfono")} <span className="text-red-500">*</span>
             </label>
             <input
               type="text"
@@ -1803,7 +1804,7 @@ function NuevoClienteRapidoModal({
             disabled={saving}
             className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50"
           >
-            Cancelar
+            {tt("Cancelar")}
           </button>
           <button
             type="button"
