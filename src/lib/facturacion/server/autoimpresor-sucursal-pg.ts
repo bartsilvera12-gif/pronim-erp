@@ -44,6 +44,8 @@ export type AutoimpresorEmpresa = {
   timbrado_numero: string | null;
   timbrado_inicio_vigencia: string | null;
   timbrado_fin_vigencia: string | null;
+  /** Ruta del sitio (/akakuaa/brand/…) o URL absoluta. Vacío = sin logo. */
+  logo_url: string | null;
 };
 
 /** "001-001-0000123" — el formato que exige la SET. */
@@ -333,7 +335,7 @@ export async function leerDatosEmisor(empresaId: string): Promise<AutoimpresorEm
   const tEmp = quoteSchemaTable(schema, "empresa_autoimpresor_config");
   const r = await pool.query<AutoimpresorEmpresa>(
     `SELECT ruc_emisor, razon_social_emisor, nombre_fantasia, direccion_matriz,
-            telefono, timbrado_numero,
+            telefono, timbrado_numero, logo_url,
             timbrado_inicio_vigencia::text, timbrado_fin_vigencia::text
        FROM ${tEmp} WHERE empresa_id = $1::uuid`,
     [empresaId],

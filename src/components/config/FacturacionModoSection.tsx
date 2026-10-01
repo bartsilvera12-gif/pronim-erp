@@ -18,6 +18,8 @@ interface FacturacionModo {
 }
 
 interface Autoimpresor {
+  /** Ruta del sitio o URL absoluta. Se imprime arriba del comprobante. */
+  logo_url: string | null;
   activo: boolean;
   ruc_emisor: string | null;
   razon_social_emisor: string | null;
@@ -276,6 +278,10 @@ function AutoimpresorForm({
         <Field label="Nombre fantasía"><input className={`${inputClass} uppercase`} value={f.nombre_fantasia ?? ""} onChange={(e) => set("nombre_fantasia", e.target.value || null)} /></Field>
         <Field label="Dirección" className="md:col-span-2"><input className={`${inputClass} uppercase`} value={f.direccion_matriz ?? ""} onChange={(e) => set("direccion_matriz", e.target.value || null)} /></Field>
         <Field label="Teléfono"><input className={inputClass} value={f.telefono ?? ""} onChange={(e) => set("telefono", e.target.value || null)} /></Field>
+        <Field label="Logo de la factura (ruta o URL)" className="md:col-span-3">
+          <input className={inputClass} placeholder="/akakuaa/brand/akakuaa.png" value={f.logo_url ?? ""} onChange={(e) => set("logo_url", e.target.value || null)} />
+          <p className="mt-1 text-[11px] text-slate-400">Se imprime arriba del comprobante. La impresora térmica es monocromo: conviene un logo de trazo simple y buen contraste.</p>
+        </Field>
       </div>
 
       <div className="border-t border-slate-100 pt-4 grid grid-cols-1 md:grid-cols-3 gap-3">

@@ -346,6 +346,7 @@ function renderCopia(opts: {
   const e = factura?.emisor;
   const cabeceraFiscal = factura && e
     ? `<div class="fiscal-head">
+         ${e.logo_url ? `<img class="logo" src="${escapeHtml(e.logo_url)}" alt="">` : ""}
          <div class="razon">${escapeHtml(e.razon_social_emisor ?? opts.negocio)}</div>
          ${e.nombre_fantasia ? `<div class="fantasia">${escapeHtml(e.nombre_fantasia)}</div>` : ""}
          ${e.direccion_matriz ? `<div>${escapeHtml(e.direccion_matriz)}</div>` : ""}
@@ -742,6 +743,7 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
   .obs { font-size: ${fontPx - 1}px; margin: 2mm 0; }
   .footer { font-size: ${fontPx - 2}px; text-align: center; margin-top: 3mm; font-style: italic; }
   .fiscal-head { text-align: center; font-size: ${fontPx - 1}px; line-height: 1.35; }
+  .fiscal-head .logo { display: block; margin: 0 auto 2mm; max-height: 18mm; max-width: 40mm; object-fit: contain; filter: grayscale(1) contrast(1.35); }
   .fiscal-head .razon { font-size: ${fontPx + 2}px; font-weight: 800; letter-spacing: 0.5px; }
   .fiscal-head .fantasia { font-weight: 600; }
   .fiscal-head .timbrado { margin-top: 1.5mm; }

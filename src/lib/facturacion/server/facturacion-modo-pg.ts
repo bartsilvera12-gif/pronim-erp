@@ -121,6 +121,7 @@ export interface AutoimpresorRow {
   timbrado_fin_vigencia: string | null;
   establecimiento_codigo: string | null;
   punto_expedicion_codigo: string | null;
+  logo_url: string | null;
   numero_actual: number | null;
   numero_inicial: number | null;
   numero_final: number | null;
@@ -139,7 +140,7 @@ const AI_COLS = `
   establecimiento_codigo, punto_expedicion_codigo,
   numero_actual, numero_inicial, numero_final,
   tipo_documento_default, formato_impresion_default,
-  leyenda_papel_termico, observaciones,
+  leyenda_papel_termico, observaciones, logo_url,
   created_at, updated_at
 `;
 
@@ -152,6 +153,7 @@ export function defaultAutoimpresor(empresaId: string): AutoimpresorRow {
     direccion_matriz: null, telefono: null,
     timbrado_numero: null, timbrado_inicio_vigencia: null, timbrado_fin_vigencia: null,
     establecimiento_codigo: null, punto_expedicion_codigo: null,
+    logo_url: null,
     numero_actual: null, numero_inicial: null, numero_final: null,
     tipo_documento_default: "factura",
     formato_impresion_default: "pdf_a4",
@@ -185,6 +187,7 @@ export interface AutoimpresorPatch {
   timbrado_fin_vigencia?: string | null;
   establecimiento_codigo?: string | null;
   punto_expedicion_codigo?: string | null;
+  logo_url?: string | null;
   numero_actual?: number | null;
   numero_inicial?: number | null;
   numero_final?: number | null;
@@ -214,6 +217,7 @@ export async function upsertAutoimpresor(
     timbrado_fin_vigencia: p.timbrado_fin_vigencia !== undefined ? p.timbrado_fin_vigencia : base.timbrado_fin_vigencia,
     establecimiento_codigo: p.establecimiento_codigo !== undefined ? p.establecimiento_codigo : base.establecimiento_codigo,
     punto_expedicion_codigo: p.punto_expedicion_codigo !== undefined ? p.punto_expedicion_codigo : base.punto_expedicion_codigo,
+    logo_url: p.logo_url !== undefined ? p.logo_url : base.logo_url,
     numero_actual: p.numero_actual !== undefined ? p.numero_actual : base.numero_actual,
     numero_inicial: p.numero_inicial !== undefined ? p.numero_inicial : base.numero_inicial,
     numero_final: p.numero_final !== undefined ? p.numero_final : base.numero_final,
@@ -230,7 +234,7 @@ export async function upsertAutoimpresor(
        establecimiento_codigo, punto_expedicion_codigo,
        numero_actual, numero_inicial, numero_final,
        tipo_documento_default, formato_impresion_default,
-       leyenda_papel_termico, observaciones
+       leyenda_papel_termico, observaciones, logo_url
      ) VALUES (
        $1::uuid, $2::boolean, $3, $4, $5,
        $6, $7, $8,
@@ -238,7 +242,7 @@ export async function upsertAutoimpresor(
        $11, $12,
        $13::integer, $14::integer, $15::integer,
        $16, $17,
-       $18, $19
+       $18, $19, $20
      )
      ON CONFLICT (empresa_id) DO UPDATE SET
        activo = EXCLUDED.activo,
@@ -259,6 +263,7 @@ export async function upsertAutoimpresor(
        formato_impresion_default = EXCLUDED.formato_impresion_default,
        leyenda_papel_termico = EXCLUDED.leyenda_papel_termico,
        observaciones = EXCLUDED.observaciones,
+       logo_url = EXCLUDED.logo_url,
        updated_at = now()
      RETURNING ${AI_COLS}`,
     [empresaId, m.activo, m.ruc_emisor, m.razon_social_emisor, m.nombre_fantasia,
@@ -267,7 +272,7 @@ export async function upsertAutoimpresor(
      m.establecimiento_codigo, m.punto_expedicion_codigo,
      m.numero_actual, m.numero_inicial, m.numero_final,
      m.tipo_documento_default, m.formato_impresion_default,
-     m.leyenda_papel_termico, m.observaciones]
+     m.leyenda_papel_termico, m.observaciones, m.logo_url]
   );
   return rows[0];
 }

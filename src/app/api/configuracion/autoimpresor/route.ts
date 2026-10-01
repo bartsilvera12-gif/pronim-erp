@@ -60,6 +60,7 @@ export async function PATCH(request: NextRequest) {
       nombre_fantasia: body.nombre_fantasia === undefined ? undefined : str(body.nombre_fantasia),
       direccion_matriz: body.direccion_matriz === undefined ? undefined : str(body.direccion_matriz),
       telefono: body.telefono === undefined ? undefined : strKeep(body.telefono),
+      logo_url: body.logo_url === undefined ? undefined : strKeep(body.logo_url),
       timbrado_numero: body.timbrado_numero === undefined ? undefined : strKeep(body.timbrado_numero),
       timbrado_inicio_vigencia: body.timbrado_inicio_vigencia === undefined ? undefined : dateN(body.timbrado_inicio_vigencia),
       timbrado_fin_vigencia: body.timbrado_fin_vigencia === undefined ? undefined : dateN(body.timbrado_fin_vigencia),
