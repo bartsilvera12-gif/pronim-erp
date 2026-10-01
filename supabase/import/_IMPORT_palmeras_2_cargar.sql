@@ -127,9 +127,14 @@ BEGIN
   )
   SELECT
     i.venta_id, v_emp, i.cliente_id,
-    'H-' || lpad(coalesce(i.controle, i.fila_excel)::text, 6, '0'),
+    -- fila_excel es la clave primaria del staging: unico garantizado.
+    -- `controle` tiene huecos y podria chocar contra un fila_excel de otra fila.
+    'H-' || lpad(i.fila_excel::text, 6, '0'),
     'PYG', 1,
-    i.venta - i.descuento, 0, i.venta - i.descuento,
+    -- El total es lo que figura como VENTA en el Excel. El descuento no se
+    -- resta del total: es una de las formas en que se cubrio esa venta, y
+    -- restarlo haria que el total importado no cuadre contra la planilla.
+    i.venta, 0, i.venta,
     'completada', 'contado', i.fecha::timestamptz,
     'Importado del diario de Palmeras (fila ' || i.fila_excel || ')',
     v_suc,
@@ -144,6 +149,21 @@ BEGIN
 
   GET DIAGNOSTICS n = ROW_COUNT;
   RAISE NOTICE '2) ventas historicas: %', n;
+
+  -- El descuento se guarda aparte, no restado del total: asi el reporte puede
+  -- mostrar cuanto se resigno sin ensuciar cuanto se vendio.
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+              WHERE table_schema='pronimerp' AND table_name='ventas'
+                AND column_name='descuento_general') THEN
+    EXECUTE $q$
+      UPDATE pronimerp.ventas v
+         SET descuento_general = i.descuento
+        FROM pronimerp.import_palmeras i
+       WHERE i.venta_id = v.id AND i.descuento > 0
+    $q$;
+    GET DIAGNOSTICS n = ROW_COUNT;
+    RAISE NOTICE '2b) ventas con descuento: %', n;
+  END IF;
 
 
   -- ── 3) Como se pago cada venta ─────────────────────────────────────────
@@ -187,7 +207,7 @@ BEGIN
     referencia_id, referencia_tipo, referencia_numero, observaciones
   )
   SELECT v_emp, i.cliente_id, 'SALIDA', i.credito_utilizado, 'importacion',
-         i.venta_id, 'venta', 'H-' || lpad(coalesce(i.controle, i.fila_excel)::text, 6, '0'),
+         i.venta_id, 'venta', 'H-' || lpad(i.fila_excel::text, 6, '0'),
          'Credito usado el ' || to_char(i.fecha, 'DD/MM/YYYY')
     FROM pronimerp.import_palmeras i
    WHERE i.cliente_id IS NOT NULL AND i.credito_utilizado > 0;
