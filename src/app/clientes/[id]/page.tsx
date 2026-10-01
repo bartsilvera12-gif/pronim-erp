@@ -227,6 +227,7 @@ export default function ClienteDetailPage() {
     vendedor_asignado:     "",
     vendedor_usuario_id:   "",
     tipo_servicio_cliente: "" as string,
+    como_conocio:          "",
     estado:                "activo" as Cliente["estado"],
     usa_nota_remision:     false,
     sifen_receptor_manual: false,
@@ -384,6 +385,7 @@ export default function ClienteDetailPage() {
         vendedor_asignado:    c.vendedor_asignado   ?? "",
         vendedor_usuario_id:  c.vendedor_usuario_id ?? "",
         tipo_servicio_cliente: c.tipo_servicio_cliente ?? "",
+        como_conocio:         c.como_conocio ?? "",
         estado:               c.estado,
         usa_nota_remision:    c.usa_nota_remision === true,
         sifen_receptor_manual: Boolean(c.sifen_receptor_manual),
@@ -682,6 +684,8 @@ export default function ClienteDetailPage() {
         linkedin:            form.linkedin.trim()            || undefined,
         valor_cliente:       parseFloat(form.valor_cliente) || undefined,
         condicion_pago:      form.condicion_pago.trim().toUpperCase()    || undefined,
+        // null (y no undefined) para que vaciar el campo también lo borre.
+        como_conocio:        form.como_conocio.trim() || null,
         moneda_preferida:    form.moneda_preferida,
         vendedor_asignado:   form.vendedor_asignado.trim().toUpperCase() || undefined,
         vendedor_usuario_id: form.vendedor_usuario_id.trim() || null,
@@ -1752,33 +1756,37 @@ export default function ClienteDetailPage() {
                 )}
 
                 <div className="grid grid-cols-3 gap-4">
+                  {/* Antes acá estaban Condición de pago y Moneda preferida.
+                      En retail por franjas se cobra en el momento y en la
+                      moneda del local, así que no decidían nada. Los valores
+                      guardados se conservan; solo se dejó de pedirlos. */}
                   <div>
-                    <label className={labelClass}>Condición de pago</label>
+                    <label className={labelClass}>¿Cómo conoció la tienda?</label>
                     <select
-                      name="condicion_pago"
-                      value={form.condicion_pago}
+                      name="como_conocio"
+                      value={form.como_conocio}
                       onChange={handleChange}
                       className={inputClass}
                     >
-                      <option value="">—</option>
-                      <option value="CONTADO">Contado</option>
-                      <option value="15 DÍAS">15 días</option>
-                      <option value="30 DÍAS">30 días</option>
-                      <option value="60 DÍAS">60 días</option>
-                      <option value="90 DÍAS">90 días</option>
-                      {!SIMPLE_CLIENTE && <option value="MENSUAL">Mensual</option>}
+                      <option value="">Seleccioná una opción…</option>
+                      <option value="Recomendación">Recomendación</option>
+                      <option value="Redes sociales">Redes sociales</option>
+                      <option value="Publicidad">Publicidad</option>
+                      <option value="Pasó por la tienda">Pasó por la tienda</option>
+                      <option value="Volanteo / cartel">Volanteo / cartel</option>
+                      <option value="Otro">Otro</option>
                     </select>
                   </div>
                   <div>
-                    <label className={labelClass}>Moneda preferida</label>
+                    <label className={labelClass}>Estado</label>
                     <select
-                      name="moneda_preferida"
-                      value={form.moneda_preferida}
-                      onChange={(e) => setForm((p) => ({ ...p, moneda_preferida: e.target.value as "GS" | "USD" }))}
+                      name="estado"
+                      value={form.estado}
+                      onChange={(e) => setForm((p) => ({ ...p, estado: e.target.value as Cliente["estado"] }))}
                       className={inputClass}
                     >
-                      <option value="GS">Guaraníes (GS)</option>
-                      <option value="USD">Dólares (USD)</option>
+                      <option value="activo">Activo</option>
+                      <option value="inactivo">Inactivo</option>
                     </select>
                   </div>
                   <div>
@@ -1817,20 +1825,6 @@ export default function ClienteDetailPage() {
                 </div>
                 )}
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className={labelClass}>Estado</label>
-                    <select
-                      name="estado"
-                      value={form.estado}
-                      onChange={(e) => setForm((p) => ({ ...p, estado: e.target.value as Cliente["estado"] }))}
-                      className={inputClass}
-                    >
-                      <option value="activo">Activo</option>
-                      <option value="inactivo">Inactivo</option>
-                    </select>
-                  </div>
-                </div>
 
                 {/* Campos factura Contado */}
                 {form.condicion_pago === "CONTADO" && (

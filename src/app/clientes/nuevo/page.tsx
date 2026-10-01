@@ -656,32 +656,37 @@ function NuevoClienteForm() {
             <SectionTitle>Datos comerciales</SectionTitle>
 
             <div className={`grid gap-4 ${SIMPLE_CLIENTE ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-3"}`}>
+              {/* Lo primero del bloque: de dónde salió el cliente y en qué
+                  estado arranca. Antes acá estaban Condición de pago y
+                  Moneda preferida, que en retail por franjas no decidían
+                  nada (se cobra en el momento y en la moneda del local). */}
               <div>
-                <label className={labelClass}>Condición de pago</label>
+                <label className={labelClass}>¿Cómo conoció la tienda?</label>
                 <select
-                  name="condicion_pago"
-                  value={form.condicion_pago}
+                  name="como_conocio"
+                  value={form.como_conocio}
                   onChange={handleChange}
                   className={inputClass}
                 >
-                  <option value="CONTADO">Contado</option>
-                  <option value="15 DÍAS">15 días</option>
-                  <option value="30 DÍAS">30 días</option>
-                  <option value="60 DÍAS">60 días</option>
-                  <option value="90 DÍAS">90 días</option>
-                  {!SIMPLE_CLIENTE && <option value="MENSUAL">Mensual</option>}
+                  <option value="">Seleccioná una opción…</option>
+                  <option value="Recomendación">Recomendación</option>
+                  <option value="Redes sociales">Redes sociales</option>
+                  <option value="Publicidad">Publicidad</option>
+                  <option value="Pasó por la tienda">Pasó por la tienda</option>
+                  <option value="Volanteo / cartel">Volanteo / cartel</option>
+                  <option value="Otro">Otro</option>
                 </select>
               </div>
               <div>
-                <label className={labelClass}>Moneda preferida</label>
+                <label className={labelClass}>Estado inicial</label>
                 <select
-                  name="moneda_preferida"
-                  value={form.moneda_preferida}
-                  onChange={(e) => setForm((prev) => ({ ...prev, moneda_preferida: e.target.value as "GS" | "USD" }))}
+                  name="estado"
+                  value={form.estado}
+                  onChange={(e) => setForm((prev) => ({ ...prev, estado: e.target.value as "activo" | "inactivo" }))}
                   className={inputClass}
                 >
-                  <option value="GS">Guaraníes (GS)</option>
-                  <option value="USD">Dólares (USD)</option>
+                  <option value="activo">Activo</option>
+                  <option value="inactivo">Inactivo</option>
                 </select>
               </div>
               {!SIMPLE_CLIENTE && (
@@ -720,27 +725,12 @@ function NuevoClienteForm() {
                 />
               </div>
               )}
-              <div>
-                <label className={labelClass}>¿Cómo conoció la tienda?</label>
-                <select
-                  name="como_conocio"
-                  value={form.como_conocio}
-                  onChange={handleChange}
-                  className={inputClass}
-                >
-                  <option value="">Seleccioná una opción…</option>
-                  <option value="Recomendación">Recomendación</option>
-                  <option value="Redes sociales">Redes sociales</option>
-                  <option value="Publicidad">Publicidad</option>
-                  <option value="Pasó por la tienda">Pasó por la tienda</option>
-                  <option value="Volanteo / cartel">Volanteo / cartel</option>
-                  <option value="Otro">Otro</option>
-                </select>
-              </div>
             </div>
 
+            {/* Origen del cliente es de CRM: en retail simple no va, y si se
+                dejara el grid vacío quedaba un hueco en la pantalla. */}
+            {!SIMPLE_CLIENTE && (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              {!SIMPLE_CLIENTE && (
               <div>
                 <label className={labelClass}>Origen del cliente</label>
                 <select
@@ -755,20 +745,8 @@ function NuevoClienteForm() {
                   <option value="VENTA">Venta</option>
                 </select>
               </div>
-              )}
-              <div>
-                <label className={labelClass}>Estado inicial</label>
-                <select
-                  name="estado"
-                  value={form.estado}
-                  onChange={(e) => setForm((prev) => ({ ...prev, estado: e.target.value as "activo" | "inactivo" }))}
-                  className={inputClass}
-                >
-                  <option value="activo">Activo</option>
-                  <option value="inactivo">Inactivo</option>
-                </select>
-              </div>
             </div>
+            )}
 
             {!SIMPLE_CLIENTE && (
             <div className="mt-6 p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-4">
