@@ -50,6 +50,8 @@ function fmtN(n: number) { return (n || 0).toLocaleString("es-PY"); }
 export default function DashClientes({ desde, hasta }: { desde: string; hasta: string }) {
   const [data, setData] = useState<Payload | null>(null);
   const [q, setQ] = useState("");
+  /** Tarjeta desplegada. Tocar la misma otra vez la cierra. */
+  const [abierta, setAbierta] = useState<string | null>(null);
   const [segmento, setSegmento] = useState("");
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -128,54 +130,60 @@ export default function DashClientes({ desde, hasta }: { desde: string; hasta: s
 
   return (
     <div className="space-y-6">
-      {/* Fila 1: segmentos (Total + 4 categorías) */}
+      {/* Fila 1: segmentos (Total + 4 categorías).
+          Tocar una tarjeta despliega la lista de esos clientes acá abajo en
+          vez de saltar a otra pantalla: se perdía el hilo del tablero. */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         <KpiCard icon={<Users className="h-5 w-5" />} tone="rose"
           label="Total clientes" value={fmtN(k.total)}
           tip="Total de clientes que matchean el filtro actual (segmento, sucursal, búsqueda)."
-          href="/clientes/segmentos" />
+          panelKey="total" abierta={abierta} onToggle={setAbierta} />
         <KpiCard icon={<Crown className="h-5 w-5" />} tone="amber"
           label="VIP" value={fmtN(k.vip)}
           tip="Marcados como VIP."
-          href="/clientes/segmentos?vip=1" />
+          panelKey="vip" abierta={abierta} onToggle={setAbierta} />
         <KpiCard icon={<Star className="h-5 w-5" />} tone="emerald"
           label="Frecuentes" value={fmtN(k.habitual)}
           tip="Con compras pero no VIP y no Dormido."
-          href="/clientes/segmentos" />
+          panelKey="habitual" abierta={abierta} onToggle={setAbierta} />
         <KpiCard icon={<UserPlus className="h-5 w-5" />} tone="sky"
           label="Nuevos" value={fmtN(k.nuevo)}
           tip="Alta este mes."
-          href="/clientes/segmentos?nuevos_mes=1" />
+          panelKey="nuevo" abierta={abierta} onToggle={setAbierta} />
         <KpiCard icon={<Moon className="h-5 w-5" />} tone="lavender"
           label="Dormidos" value={fmtN(k.dormido)}
           tip="Más de 90 días sin visita."
-          href="/clientes/segmentos?inactivos_90d=1" />
+          panelKey="dormido" abierta={abierta} onToggle={setAbierta} />
       </div>
+
+      <PanelClientes abierta={abierta} claves={["total","vip","habitual","nuevo","dormido"]} filas={data.filas} onCerrar={() => setAbierta(null)} />
 
       {/* Fila 2: actividad + crédito + cadencia */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         <KpiCard icon={<Truck className="h-5 w-5" />} tone="sky"
           label="Solo traen" value={fmtN(k.solo_trae)}
           tip="Clientes con recepciones pero ninguna venta."
-          href="/clientes/segmentos" />
+          panelKey="solo_trae" abierta={abierta} onToggle={setAbierta} />
         <KpiCard icon={<ShoppingBag className="h-5 w-5" />} tone="emerald"
           label="Solo compran" value={fmtN(k.solo_lleva)}
           tip="Clientes con ventas pero ninguna recepción."
-          href="/clientes/segmentos" />
+          panelKey="solo_lleva" abierta={abierta} onToggle={setAbierta} />
         <KpiCard icon={<ArrowLeftRight className="h-5 w-5" />} tone="peach"
           label="Ambos (trae + lleva)" value={fmtN(k.ambos)}
           tip="Clientes con recepciones y ventas."
-          href="/clientes/segmentos" />
+          panelKey="ambos" abierta={abierta} onToggle={setAbierta} />
         <KpiCard icon={<Wallet className="h-5 w-5" />} tone="amber"
           label="Crédito disponible total" value={fmtGs(k.credito_disponible_total)}
           tip="SUM de saldos > 0 de todos los clientes en el filtro."
-          href="/clientes/segmentos?con_credito=1" />
+          panelKey="con_credito" abierta={abierta} onToggle={setAbierta} />
         <KpiCard icon={<CalendarDays className="h-5 w-5" />} tone="lavender"
           label="Prom. días desde última visita"
           value={k.prom_dias_entre_visitas != null ? `${k.prom_dias_entre_visitas} días` : "—"}
           tip="AVG de días desde la última visita, sobre clientes con al menos 1 visita."
-          href="/clientes/segmentos" />
+          panelKey="prom_dias" abierta={abierta} onToggle={setAbierta} />
       </div>
+
+      <PanelClientes abierta={abierta} claves={["solo_trae","solo_lleva","ambos","con_credito","prom_dias"]} filas={data.filas} onCerrar={() => setAbierta(null)} />
 
       {/* Distribución donut + barras + segmento principal */}
       <DistribucionSegmentos kpis={k} />
@@ -222,9 +230,15 @@ const TONE_ICON_BG: Record<Tone, string> = {
   peach:    "bg-orange-100 text-orange-600 ring-1 ring-orange-200",
 };
 
-function KpiCard({ icon, tone, label, value, tip, href }: {
+function KpiCard({ icon, tone, label, value, tip, href, panelKey, abierta, onToggle }: {
   icon: React.ReactNode; tone: Tone; label: string; value: string; tip?: string; href?: string;
+  /** Si viene, la tarjeta despliega la lista acá abajo en vez de navegar. */
+  panelKey?: string;
+  abierta?: string | null;
+  onToggle?: (k: string | null) => void;
 }) {
+  const desplegable = Boolean(panelKey && onToggle);
+  const activa = desplegable && abierta === panelKey;
   const inner = (
     <>
       <div className={`h-11 w-11 shrink-0 rounded-xl flex items-center justify-center ${TONE_ICON_BG[tone]}`}>
@@ -234,10 +248,25 @@ function KpiCard({ icon, tone, label, value, tip, href }: {
         <p className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold truncate">{label}</p>
         <p className="mt-0.5 text-xl font-bold text-slate-900 tabular-nums truncate">{value}</p>
       </div>
-      {href && <span aria-hidden className="text-[#4FAEB2] opacity-40 group-hover:opacity-100 transition text-lg">→</span>}
+      {href && !desplegable && <span aria-hidden className="text-[#4FAEB2] opacity-40 group-hover:opacity-100 transition text-lg">→</span>}
+      {desplegable && (
+        <span aria-hidden className={`text-[#4FAEB2] transition ${activa ? "rotate-180 opacity-100" : "opacity-40 group-hover:opacity-100"} text-lg`}>⌄</span>
+      )}
     </>
   );
   const base = "rounded-2xl border border-slate-200 bg-white p-4 flex items-center gap-3 shadow-sm hover:shadow-md transition";
+  if (desplegable) {
+    return (
+      <button
+        type="button"
+        onClick={() => onToggle!(activa ? null : panelKey!)}
+        className={`${base} w-full text-left cursor-pointer group ${activa ? "border-[#4FAEB2] ring-1 ring-[#4FAEB2]/30" : "hover:border-[#4FAEB2]"}`}
+        title={tip ? `${tip} · Click para ver la lista acá abajo` : "Click para ver la lista acá abajo"}
+      >
+        {inner}
+      </button>
+    );
+  }
   if (href) {
     return (
       <a href={href} className={`${base} hover:border-[#4FAEB2] cursor-pointer group`} title={tip ? `${tip} · Click para ver la lista` : "Click para ver la lista"}>
@@ -246,6 +275,116 @@ function KpiCard({ icon, tone, label, value, tip, href }: {
     );
   }
   return <div className={base} title={tip}>{inner}</div>;
+}
+
+/** Título y filtro de cada tarjeta desplegable. */
+const PANELES: Record<string, { titulo: string; filtra: (f: Fila) => boolean; verMas: string }> = {
+  total:       { titulo: "Todos los clientes",        filtra: () => true,                                 verMas: "/clientes/segmentos" },
+  vip:         { titulo: "Clientes VIP",              filtra: (f) => f.segmento === "vip",                verMas: "/clientes/segmentos?vip=1" },
+  habitual:    { titulo: "Clientes frecuentes",       filtra: (f) => f.segmento === "habitual",           verMas: "/clientes/segmentos" },
+  nuevo:       { titulo: "Clientes nuevos",           filtra: (f) => f.segmento === "nuevo",              verMas: "/clientes/segmentos?nuevos_mes=1" },
+  dormido:     { titulo: "Clientes dormidos",         filtra: (f) => f.segmento === "dormido",            verMas: "/clientes/segmentos?inactivos_90d=1" },
+  solo_trae:   { titulo: "Solo traen",                filtra: (f) => f.actividad === "solo_trae",         verMas: "/clientes/segmentos" },
+  solo_lleva:  { titulo: "Solo compran",              filtra: (f) => f.actividad === "solo_lleva",        verMas: "/clientes/segmentos" },
+  ambos:       { titulo: "Traen y compran",           filtra: (f) => f.actividad === "ambos",             verMas: "/clientes/segmentos" },
+  con_credito: { titulo: "Clientes con crédito",      filtra: (f) => (Number(f.saldo_credito) || 0) > 0,  verMas: "/clientes/segmentos?con_credito=1" },
+  prom_dias:   { titulo: "Por días sin venir",        filtra: (f) => f.dias_desde_ultima != null,         verMas: "/clientes/segmentos" },
+};
+
+/**
+ * Lista que se abre debajo de la tarjeta tocada.
+ *
+ * Karen: tocar una tarjeta te sacaba del tablero y te dejaba en la pantalla
+ * de Clientes sin contexto. Los datos ya vienen en el payload, así que se
+ * muestran acá mismo y recién si hace falta se salta a la lista completa.
+ */
+function PanelClientes({ abierta, claves, filas, onCerrar }: {
+  abierta: string | null;
+  claves: string[];
+  filas: Fila[];
+  onCerrar: () => void;
+}) {
+  if (!abierta || !claves.includes(abierta)) return null;
+  const cfg = PANELES[abierta];
+  if (!cfg) return null;
+
+  const lista = filas.filter(cfg.filtra);
+  // En "días sin venir" ordenamos por el dato que se está mirando.
+  const ordenada = abierta === "prom_dias"
+    ? [...lista].sort((a, b) => (b.dias_desde_ultima ?? 0) - (a.dias_desde_ultima ?? 0))
+    : [...lista].sort((a, b) => (b.total_historico || 0) - (a.total_historico || 0));
+  const muestra = ordenada.slice(0, 50);
+
+  return (
+    <div className="rounded-2xl border border-[#4FAEB2]/40 bg-white shadow-sm">
+      <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
+        <div>
+          <h3 className="text-sm font-bold text-slate-800">{cfg.titulo}</h3>
+          <p className="text-[11px] text-slate-500">
+            {lista.length} cliente{lista.length === 1 ? "" : "s"}
+            {ordenada.length > muestra.length && ` · se muestran los primeros ${muestra.length}`}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Link href={cfg.verMas}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50">
+            Ver lista completa →
+          </Link>
+          <button type="button" onClick={onCerrar} aria-label="Cerrar"
+            className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-4 w-4">
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      {muestra.length === 0 ? (
+        <p className="px-4 py-8 text-center text-sm text-slate-400">No hay clientes en este grupo.</p>
+      ) : (
+        <div className="max-h-80 overflow-y-auto">
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 bg-slate-50">
+              <tr>
+                {["Cliente", "Segmento", "Sucursal", "Última visita", "Compró", "A favor"].map((h, i) => (
+                  <th key={h}
+                    className={`px-4 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-500 ${i >= 4 ? "text-right" : "text-left"}`}>
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {muestra.map((c) => (
+                <tr key={c.cliente_id} className="transition-colors hover:bg-[#4FAEB2]/[0.06]">
+                  <td className="px-4 py-2.5">
+                    <Link href={`/clientes/${c.cliente_id}`}
+                      className="font-medium text-slate-800 hover:text-[#3F8E91] hover:underline">
+                      {c.nombre}
+                    </Link>
+                  </td>
+                  <td className="px-4 py-2.5 text-xs text-slate-600 capitalize">{c.segmento}</td>
+                  <td className="px-4 py-2.5 text-xs text-slate-600">{c.sucursal_preferida_nombre ?? "—"}</td>
+                  <td className="px-4 py-2.5 text-xs text-slate-600">
+                    {c.ultima_visita ? new Date(c.ultima_visita).toLocaleDateString("es-PY") : "Nunca"}
+                    {c.dias_desde_ultima != null && (
+                      <span className="ml-1 text-slate-400">({c.dias_desde_ultima} d)</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-2.5 text-right text-xs tabular-nums text-slate-700">{fmtGs(c.total_historico)}</td>
+                  <td className="px-4 py-2.5 text-right text-xs tabular-nums">
+                    {(Number(c.saldo_credito) || 0) > 0
+                      ? <span className="font-semibold text-emerald-700">{fmtGs(c.saldo_credito)}</span>
+                      : <span className="text-slate-300">—</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function DistribucionSegmentos({ kpis }: { kpis: Payload["kpis"] }) {
