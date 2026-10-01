@@ -130,12 +130,15 @@ BEGIN
     -- fila_excel es la clave primaria del staging: unico garantizado.
     -- `controle` tiene huecos y podria chocar contra un fila_excel de otra fila.
     'H-' || lpad(i.fila_excel::text, 6, '0'),
-    'PYG', 1,
+    -- 'GS', no 'PYG': `ventas.moneda` solo acepta GS o USD. El codigo PYG se
+    -- usa en otras tablas (compras, sorteos) y ahi si es el valido.
+    'GS', 1,
     -- El total es lo que figura como VENTA en el Excel. El descuento no se
     -- resta del total: es una de las formas en que se cubrio esa venta, y
     -- restarlo haria que el total importado no cuadre contra la planilla.
     i.venta, 0, i.venta,
-    'completada', 'contado', i.fecha::timestamptz,
+    -- 'CONTADO' en mayusculas: asi lo pide el CHECK de la tabla.
+    'completada', 'CONTADO', i.fecha::timestamptz,
     'Importado del diario de Palmeras (fila ' || i.fila_excel || ')',
     v_suc,
     CASE
@@ -194,7 +197,7 @@ BEGIN
     empresa_id, cliente_id, tipo, monto, origen,
     referencia_tipo, referencia_numero, observaciones
   )
-  SELECT v_emp, i.cliente_id, 'ENTRADA', i.credito_generado, 'importacion',
+  SELECT v_emp, i.cliente_id, 'ENTRADA', i.credito_generado, 'recepcion',
          'import', 'FILA-' || i.fila_excel,
          'Prendas recibidas el ' || to_char(i.fecha, 'DD/MM/YYYY')
     FROM pronimerp.import_palmeras i
@@ -206,7 +209,7 @@ BEGIN
     empresa_id, cliente_id, tipo, monto, origen,
     referencia_id, referencia_tipo, referencia_numero, observaciones
   )
-  SELECT v_emp, i.cliente_id, 'SALIDA', i.credito_utilizado, 'importacion',
+  SELECT v_emp, i.cliente_id, 'SALIDA', i.credito_utilizado, 'venta',
          i.venta_id, 'venta', 'H-' || lpad(i.fila_excel::text, 6, '0'),
          'Credito usado el ' || to_char(i.fecha, 'DD/MM/YYYY')
     FROM pronimerp.import_palmeras i
@@ -246,7 +249,7 @@ BEGIN
       tipo, cantidad, costo_unitario, origen, referencia, fecha
     ) VALUES (
       v_emp, v_prod, 'Stock historico Palmeras (a inventariar)', 'HIST-PALMERAS',
-      'ENTRADA', v_prendas, v_costo, 'importacion', 'IMPORT-PALMERAS', now()
+      'ENTRADA', v_prendas, v_costo, 'inventario_inicial', 'IMPORT-PALMERAS', now()
     );
 
     RAISE NOTICE '5) stock: % prendas a un costo promedio de % Gs', v_prendas, v_costo;
@@ -277,7 +280,7 @@ WITH saldo AS (
   SELECT cliente_id,
          sum(CASE WHEN tipo = 'ENTRADA' THEN monto ELSE -monto END) AS s
     FROM pronimerp.cliente_creditos_movimientos
-   WHERE origen = 'importacion'
+   WHERE cliente_id IN (SELECT cliente_id FROM pronimerp.import_palmeras_clientes)
    GROUP BY cliente_id
 )
 SELECT count(*) FILTER (WHERE s > 0)                       AS con_saldo_a_favor,
