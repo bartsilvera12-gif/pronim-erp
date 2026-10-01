@@ -370,9 +370,22 @@ function renderCopia(opts: {
   const e = factura?.emisor;
   const cabeceraFiscal = factura && e
     ? `<div class="fiscal-head">
-         ${e.logo_url ? `<img class="logo" src="${escapeHtml(e.logo_url)}" alt="">` : ""}
+         ${(() => {
+           // El MISMO logo que el ticket. Antes la factura solo miraba el del
+           // emisor, asi que una sucursal con logo propio salia con uno en el
+           // ticket y con otro en la factura.
+           const l = (opts.logoUrl ?? e.logo_url ?? "").trim();
+           return l ? `<img class="logo" src="${escapeHtml(l)}" alt="">` : "";
+         })()}
          <div class="razon">${escapeHtml(e.razon_social_emisor ?? opts.negocio)}</div>
-         ${e.nombre_fantasia ? `<div class="fantasia">${escapeHtml(e.nombre_fantasia)}</div>` : ""}
+         ${(() => {
+           // Debajo de la razon social va el nombre con el que la clienta
+           // conoce el local, para que el ticket y la factura se lean igual.
+           const razon = (e.razon_social_emisor ?? opts.negocio ?? "").trim().toUpperCase();
+           const marca = (opts.negocio ?? "").trim() || (e.nombre_fantasia ?? "").trim();
+           return marca && marca.toUpperCase() !== razon
+             ? `<div class="fantasia">${escapeHtml(marca)}</div>` : "";
+         })()}
          ${(() => {
            // Dirección del ESTABLECIMIENTO que emite, no la de la matriz:
            // cada establecimiento está declarado con la suya ante la SET.
