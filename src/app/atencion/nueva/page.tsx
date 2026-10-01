@@ -175,10 +175,10 @@ export default function NuevaAtencionPage() {
   // Si el endpoint falla, cae a la lista default hard-coded.
   const [motivosDesc, setMotivosDesc] = useState<Array<{ codigo: string; label: string }>>([
     { codigo: "redondeo", label: "Redondeo" },
-    { codigo: "negociacion", label: "Negociación" },
-    { codigo: "defecto", label: "Producto con defecto" },
-    { codigo: "promocion", label: "Promoción" },
-    { codigo: "cortesia", label: "Cortesía" },
+    { codigo: "negociacion", label: tt("Negociación") },
+    { codigo: "defecto", label: tt("Producto con defecto") },
+    { codigo: "promocion", label: tt("Promoción") },
+    { codigo: "cortesia", label: tt("Cortesía") },
     { codigo: "intercambio", label: "Intercambio (BR)" },
     { codigo: "otro", label: "Otro" },
   ]);
@@ -1260,7 +1260,7 @@ export default function NuevaAtencionPage() {
                     value={cajaSeleccionadaId ?? ""}
                     onChange={(e) => setCajaSeleccionadaId(e.target.value || null)}
                     className="rounded border border-emerald-300 bg-white px-1 py-0.5 text-xs text-emerald-900 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                    aria-label="Seleccionar caja abierta"
+                    aria-label={tt("Seleccionar caja abierta")}
                   >
                     <option value="">— Elegir —</option>
                     {cajasAbiertas.map((c) => (
@@ -1345,7 +1345,7 @@ export default function NuevaAtencionPage() {
                 type="button"
                 onClick={() => setError(null)}
                 className="text-rose-500 hover:text-rose-700 text-lg leading-none px-1"
-                aria-label="Cerrar aviso"
+                aria-label={tt("Cerrar aviso")}
               >
                 ×
               </button>
@@ -1366,7 +1366,7 @@ export default function NuevaAtencionPage() {
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <button type="button" onClick={() => setDetalleClienteOpen(true)}
-                  title="Ver detalle completo del cliente"
+                  title={tt("Ver detalle completo del cliente")}
                   className="font-semibold text-slate-800 hover:text-[#3F8E91] hover:underline decoration-dotted underline-offset-2">
                   {cliente.nombre}
                 </button>
@@ -1376,13 +1376,13 @@ export default function NuevaAtencionPage() {
                 {clienteSegmento && (
                   <div className="flex flex-wrap items-center gap-2 animate-seg-chip-in">
                     {clienteSegmento.categoria === "vip" && (
-                      <StickerBadge type="vip">Cliente VIP</StickerBadge>
+                      <StickerBadge type="vip">{tt("Cliente VIP")}</StickerBadge>
                     )}
                     {clienteSegmento.categoria === "habitual" && (
-                      <StickerBadge type="frecuente" tilt="right">Cliente frecuente</StickerBadge>
+                      <StickerBadge type="frecuente" tilt="right">{tt("Cliente frecuente")}</StickerBadge>
                     )}
                     {clienteSegmento.categoria === "nuevo" && (
-                      <StickerBadge type="nuevo">Cliente nuevo</StickerBadge>
+                      <StickerBadge type="nuevo">{tt("Cliente nuevo")}</StickerBadge>
                     )}
                     {clienteSegmento.categoria === "dormido" && (
                       <StickerBadge
@@ -1472,7 +1472,7 @@ export default function NuevaAtencionPage() {
                   Cargar nuevo cliente
                 </button>
                 {clientesFiltrados.length === 0 ? (
-                  <p className="px-3 py-2 text-xs text-gray-400">Sin clientes que coincidan.</p>
+                  <p className="px-3 py-2 text-xs text-gray-400">{tt("Sin clientes que coincidan.")}</p>
                 ) : clientesFiltrados.map((c) => (
                   <button
                     key={c.id}
@@ -1512,7 +1512,7 @@ export default function NuevaAtencionPage() {
                 type="button"
                 onClick={() => setCambioDirectoOpen(true)}
                 className="inline-flex items-center gap-1.5 rounded-md border border-emerald-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-50"
-                title="Cliente cambia una prenda por otra del mismo precio, sin pagar diferencia"
+                title={tt("Cliente cambia una prenda por otra del mismo precio, sin pagar diferencia")}
               >
                 ⇄ {t("Cambio directo")}
               </button>
@@ -1524,14 +1524,14 @@ export default function NuevaAtencionPage() {
                     ? "border-emerald-500 bg-emerald-500 text-white"
                     : "border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-50"
                 }`}
-                title="Cargar N prendas por un monto total sin elegir franja"
+                title={tt("Cargar N prendas por un monto total sin elegir franja")}
               >
                 ⚡ {t("Carga rápida")}
               </button>
               {cargaRapidaOpen && (
                 <div className="w-full mt-2 rounded-lg border border-emerald-300 bg-emerald-50/70 p-3">
                   <p className="text-[11px] text-emerald-900 mb-2">
-                    Ingresá <strong>cuántas prendas</strong> trae y el <strong>monto total</strong> que le pagás.
+                    Ingresá <strong>{tt("cuántas prendas")}</strong> {tt("trae y el")} <strong>{tt("monto total")}</strong> que le pagás.
                     Se crearán N unidades prorrateadas; después ajustás las franjas al ingresar al stock.
                   </p>
                   <div className="flex flex-wrap items-end gap-2">
@@ -1606,7 +1606,7 @@ export default function NuevaAtencionPage() {
                         type="button"
                         onClick={() => setTraeMontoFinal("")}
                         className="text-xs text-slate-500 hover:text-slate-700 underline decoration-dotted"
-                        title="Volver al subtotal de los items"
+                        title={tt("Volver al subtotal de los items")}
                       >
                         limpiar
                       </button>
@@ -1675,13 +1675,13 @@ export default function NuevaAtencionPage() {
                 <span className="font-medium text-slate-700 sm:block">{fmtGs(creditoDisponible)}</span>
               </div>
               <div className="flex justify-between sm:block">
-                <span className="text-slate-500 text-xs">Nuevo (por lo que trajo hoy)</span>
+                <span className="text-slate-500 text-xs">{tt("Nuevo (por lo que trajo hoy)")}</span>
                 <span className={`font-medium sm:block ${totalTrae > 0 ? "text-emerald-700" : "text-slate-500"}`}>
                   {totalTrae > 0 ? "+ " : ""}{fmtGs(totalTrae)}
                 </span>
               </div>
               <div className="flex justify-between sm:block border-t sm:border-t-0 sm:border-l border-slate-200 pt-1 sm:pt-0 sm:pl-3">
-                <span className="text-slate-500 text-xs">Total disponible</span>
+                <span className="text-slate-500 text-xs">{tt("Total disponible")}</span>
                 <span className="font-bold text-slate-900 sm:block">{fmtGs(creditoTotalDisponible)}</span>
               </div>
             </div>
@@ -1691,7 +1691,7 @@ export default function NuevaAtencionPage() {
         {/* Promoción / cupón — solo cuando el cliente lleva algo */}
         {totalLleva > 0 && (
           <div className="rounded-lg border border-fuchsia-200 bg-fuchsia-50/40 p-3 space-y-2">
-            <p className="text-[11px] uppercase font-semibold text-fuchsia-700">Promoción / cupón</p>
+            <p className="text-[11px] uppercase font-semibold text-fuchsia-700">{tt("Promoción / cupón")}</p>
             {promoAplicada ? (
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="text-sm text-fuchsia-900">
@@ -1712,7 +1712,7 @@ export default function NuevaAtencionPage() {
                   type="text"
                   value={cuponInput}
                   onChange={(e) => setCuponInput(e.target.value.toUpperCase())}
-                  placeholder="Código de cupón (opcional)"
+                  placeholder={tt("Código de cupón (opcional)")}
                   className="flex-1 min-w-[140px] rounded-lg border border-fuchsia-200 px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-fuchsia-400"
                 />
                 <button
@@ -1745,7 +1745,7 @@ export default function NuevaAtencionPage() {
                       ? "border-[#4FAEB2] bg-[#4FAEB2]/10 text-[#3F8E91] ring-2 ring-[#4FAEB2]/20"
                       : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
                   }`}
-                  title="Usar todo el crédito que pueda"
+                  title={tt("Usar todo el crédito que pueda")}
                 >
                   💰 Usar el máximo ({fmtGs(creditoMaxAplicable)})
                 </button>
@@ -1757,12 +1757,12 @@ export default function NuevaAtencionPage() {
                       ? "border-slate-400 bg-slate-100 text-slate-800 ring-2 ring-slate-300"
                       : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
                   }`}
-                  title="No usar crédito ahora — guardarlo para otra venta"
+                  title={tt("No usar crédito ahora — guardarlo para otra venta")}
                 >
                   🔒 No usar (guardar para otra venta)
                 </button>
               </div>
-              <label className="block text-[11px] text-slate-400 mb-1">O ingresá un monto exacto:</label>
+              <label className="block text-[11px] text-slate-400 mb-1">{tt("O ingresá un monto exacto:")}</label>
               <MontoInput
                 value={aplicarCredito}
                 onChange={(n) => setAplicarCredito(n === 0 ? "0" : String(n))}
@@ -1779,7 +1779,7 @@ export default function NuevaAtencionPage() {
             {totalLleva > 0 && (
               <div className="rounded-lg border border-amber-200 bg-amber-50/40 p-3 space-y-2">
                 <div className="flex items-center justify-between">
-                  <p className="text-[11px] uppercase font-semibold text-amber-800">Descuento general</p>
+                  <p className="text-[11px] uppercase font-semibold text-amber-800">{tt("Descuento general")}</p>
                   {descuentoGeneralNum > 0 && (
                     <span className="text-xs font-bold text-amber-800">−{fmtGs(descuentoGeneralNum)}</span>
                   )}
@@ -1796,7 +1796,7 @@ export default function NuevaAtencionPage() {
                     value={descuentoMotivo}
                     onChange={(e) => setDescuentoMotivo(e.target.value)}
                     className="w-full rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300"
-                    aria-label="Motivo del descuento"
+                    aria-label={tt("Motivo del descuento")}
                   >
                     {motivosDesc.map((m) => (
                       <option key={m.codigo} value={m.codigo}>{m.label}</option>
@@ -2079,7 +2079,7 @@ export default function NuevaAtencionPage() {
           >
             <div className="flex items-start justify-between gap-3 mb-4">
               <div>
-                <h3 className="text-lg font-bold text-slate-900">Antes de cerrar la atención</h3>
+                <h3 className="text-lg font-bold text-slate-900">{tt("Antes de cerrar la atención")}</h3>
                 <p className="text-sm text-slate-500 mt-0.5">
                   Repasá los recordatorios y marcá los beneficios que entregaste.
                 </p>
@@ -2184,7 +2184,7 @@ export default function NuevaAtencionPage() {
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
             {cajaModalOpen === "abrir" && (
               <>
-                <h3 className="text-base font-semibold text-slate-900">Abrir caja</h3>
+                <h3 className="text-base font-semibold text-slate-900">{tt("Abrir caja")}</h3>
                 {puntoCajaNombre && <p className="mt-0.5 text-xs text-slate-500">Punto: <strong>{puntoCajaNombre}</strong></p>}
                 {aperturaError && (
                   <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{aperturaError}</div>
@@ -2199,10 +2199,10 @@ export default function NuevaAtencionPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Observación (opcional)</label>
+                    <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">{tt("Observación (opcional)")}</label>
                     <input
                       type="text" value={aperturaObs} onChange={(e) => setAperturaObs(e.target.value)}
-                      placeholder="Ej: turno mañana"
+                      placeholder={tt("Ej: turno mañana")}
                       className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
                     />
                   </div>
@@ -2218,7 +2218,7 @@ export default function NuevaAtencionPage() {
 
             {cajaModalOpen === "cerrar" && (
               <div className="max-h-[85vh] overflow-y-auto pr-1">
-                <h3 className="text-base font-semibold text-slate-900">Cerrar caja</h3>
+                <h3 className="text-base font-semibold text-slate-900">{tt("Cerrar caja")}</h3>
 
                 {cierreError && (
                   <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{cierreError}</div>
@@ -2228,43 +2228,43 @@ export default function NuevaAtencionPage() {
                 {cierreResumen ? (
                   <>
                     <div className="mt-4">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Resumen de ventas del turno</p>
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1.5">{tt("Resumen de ventas del turno")}</p>
                       <div className="rounded-lg border border-slate-200 divide-y divide-slate-100 text-sm">
-                        <ResumenRow label="Cantidad de ventas" value={String(cierreResumen.cantidad_ventas)} />
+                        <ResumenRow label={tt("Cantidad de ventas")} value={String(cierreResumen.cantidad_ventas)} />
                         <ResumenRow label="Ventas en efectivo" value={fmtGs(cierreResumen.total_efectivo)} />
-                        <ResumenRow label="Ventas por transferencia" value={fmtGs(cierreResumen.total_transferencia)} />
-                        <ResumenRow label="Ventas con tarjeta" value={fmtGs(cierreResumen.total_tarjeta)} />
-                        <ResumenRow label="Total vendido" value={fmtGs(cierreResumen.total_vendido)} bold />
+                        <ResumenRow label={tt("Ventas por transferencia")} value={fmtGs(cierreResumen.total_transferencia)} />
+                        <ResumenRow label={tt("Ventas con tarjeta")} value={fmtGs(cierreResumen.total_tarjeta)} />
+                        <ResumenRow label={tt("Total vendido")} value={fmtGs(cierreResumen.total_vendido)} bold />
                       </div>
                     </div>
 
                     <div className="mt-4">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Cierre total del turno</p>
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1.5">{tt("Cierre total del turno")}</p>
                       <div className="rounded-lg border border-sky-200 bg-sky-50/60 p-3 text-sm">
-                        <div className="flex justify-between text-slate-700"><span>Monto de apertura</span><span>{fmtGs(cierreResumen.monto_apertura)}</span></div>
-                        <div className="flex justify-between text-slate-700 border-b border-sky-200 pb-2"><span>Total vendido</span><span>+ {fmtGs(cierreResumen.total_vendido)}</span></div>
+                        <div className="flex justify-between text-slate-700"><span>{tt("Monto de apertura")}</span><span>{fmtGs(cierreResumen.monto_apertura)}</span></div>
+                        <div className="flex justify-between text-slate-700 border-b border-sky-200 pb-2"><span>{tt("Total vendido")}</span><span>+ {fmtGs(cierreResumen.total_vendido)}</span></div>
                         <div className="flex justify-between items-baseline pt-2">
-                          <span className="font-semibold text-sky-800">Cierre total esperado</span>
+                          <span className="font-semibold text-sky-800">{tt("Cierre total esperado")}</span>
                           <span className="text-xl font-bold text-sky-900">{fmtGs(cierreResumen.monto_apertura + cierreResumen.total_vendido)}</span>
                         </div>
                       </div>
                     </div>
 
                     <div className="mt-4">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Desglose del cierre</p>
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1.5">{tt("Desglose del cierre")}</p>
                       <div className="rounded-lg border border-slate-200 divide-y divide-slate-100 text-sm">
-                        <ResumenRow label="Efectivo físico esperado" value={fmtGs(cierreResumen.efectivo_esperado)} />
+                        <ResumenRow label={tt("Efectivo físico esperado")} value={fmtGs(cierreResumen.efectivo_esperado)} />
                         <ResumenRow label="Transferencias registradas" value={"+ " + fmtGs(cierreResumen.total_transferencia)} />
                         <ResumenRow label="Tarjetas registradas" value={"+ " + fmtGs(cierreResumen.total_tarjeta)} />
-                        <ResumenRow label="Total cierre esperado" value={fmtGs(cierreResumen.efectivo_esperado + cierreResumen.total_transferencia + cierreResumen.total_tarjeta)} bold />
+                        <ResumenRow label={tt("Total cierre esperado")} value={fmtGs(cierreResumen.efectivo_esperado + cierreResumen.total_transferencia + cierreResumen.total_tarjeta)} bold />
                       </div>
                       <p className="text-[11px] text-slate-500 mt-1.5">
-                        El <strong>efectivo físico esperado</strong> es apertura + ventas en efectivo + ingresos − egresos − retiros. Transferencias y tarjetas suman al cierre total, pero <strong>no</strong> al efectivo físico.
+                        El <strong>{tt("efectivo físico esperado")}</strong> es apertura + ventas en efectivo + ingresos − egresos − retiros. Transferencias y tarjetas suman al cierre total, pero <strong>no</strong> al efectivo físico.
                       </p>
                     </div>
                   </>
                 ) : (
-                  <p className="mt-3 text-xs text-slate-400 animate-pulse">Cargando resumen del turno…</p>
+                  <p className="mt-3 text-xs text-slate-400 animate-pulse">{tt("Cargando resumen del turno…")}</p>
                 )}
 
                 <div className="mt-4 space-y-3">
@@ -2284,7 +2284,7 @@ export default function NuevaAtencionPage() {
                     const contado = Number(cierreContado) || 0;
                     const dif = contado - cierreResumen.efectivo_esperado;
                     return dif === 0 ? (
-                      <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">✓ Cuadra: sin diferencia.</div>
+                      <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{tt("✓ Cuadra: sin diferencia.")}</div>
                     ) : dif > 0 ? (
                       <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-800">Sobrante: <strong>{fmtGs(dif)}</strong></div>
                     ) : (
@@ -2292,10 +2292,10 @@ export default function NuevaAtencionPage() {
                     );
                   })()}
                   <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Observación (opcional)</label>
+                    <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">{tt("Observación (opcional)")}</label>
                     <input
                       type="text" value={cierreObs} onChange={(e) => setCierreObs(e.target.value)}
-                      placeholder="Ej: cierre turno mañana"
+                      placeholder={tt("Ej: cierre turno mañana")}
                       className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
                     />
                   </div>
@@ -2345,7 +2345,7 @@ export default function NuevaAtencionPage() {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Método</label>
+                      <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">{tt("Método")}</label>
                       <select value={movMedio} onChange={(e) => setMovMedio(e.target.value as "efectivo"|"tarjeta"|"transferencia"|"otro")}
                         className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]">
                         <option value="efectivo">Efectivo</option>
@@ -2356,7 +2356,7 @@ export default function NuevaAtencionPage() {
                     </div>
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Observación (opcional)</label>
+                    <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">{tt("Observación (opcional)")}</label>
                     <input
                       type="text" value={movObs} onChange={(e) => setMovObs(e.target.value)}
                       className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
@@ -2465,7 +2465,7 @@ function NuevoClienteRapidoModal({
       <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
         <div className="mb-1 flex items-start justify-between gap-2">
           <div>
-            <h3 className="text-base font-semibold text-slate-900">Nuevo cliente</h3>
+            <h3 className="text-base font-semibold text-slate-900">{tt("Nuevo cliente")}</h3>
             <p className="mt-1 text-xs text-slate-500">
               Solo los datos mínimos. Podés completar dirección, SIFEN y condiciones más tarde desde la ficha del cliente.
             </p>
@@ -2529,7 +2529,7 @@ function NuevoClienteRapidoModal({
               type="text"
               value={comoConocio}
               onChange={(e) => setComoConocio(e.target.value)}
-              placeholder="Ej: Instagram, referida por María, pasó por la puerta…"
+              placeholder={tt("Ej: Instagram, referida por María, pasó por la puerta…")}
               className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
             />
           </div>
@@ -2632,15 +2632,15 @@ function ColumnaAtencion(props: {
       </div>
 
       {cargando ? (
-        <p className="text-xs text-slate-400 py-4 text-center animate-pulse">Cargando categorías…</p>
+        <p className="text-xs text-slate-400 py-4 text-center animate-pulse">{tt("Cargando categorías…")}</p>
       ) : franjas.length === 0 ? (
         <p className="text-xs text-amber-700 py-4 text-center">
-          No hay franjas de precio configuradas. Un administrador debe crearlas en <Link href="/admin/franjas" className="underline">Categorías</Link>.
+          No hay franjas de precio configuradas. Un administrador debe crearlas en <Link href="/admin/franjas" className="underline">{tt("Categorías")}</Link>.
         </p>
       ) : (
         <>
           <div className="mb-2 flex items-center gap-2 text-xs text-slate-600">
-            <label className="font-medium">Cantidad por click</label>
+            <label className="font-medium">{tt("Cantidad por click")}</label>
             <input
               type="number"
               min={1}
@@ -2648,7 +2648,7 @@ function ColumnaAtencion(props: {
               onChange={(e) => setCantMult(e.target.value)}
               onFocus={(e) => e.currentTarget.select()}
               className="w-16 rounded-md border border-slate-200 px-2 py-1 text-right text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
-              title="Cuántas prendas se agregan al tocar una franja (ej: 15 para 15 prendas del mismo precio)"
+              title={tt("Cuántas prendas se agregan al tocar una franja (ej: 15 para 15 prendas del mismo precio)")}
             />
             {cantN > 1 && (
               <>
@@ -2693,11 +2693,11 @@ function ColumnaAtencion(props: {
           <table className="w-full text-sm">
             <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
-                <th className="text-left text-[11px] font-semibold text-slate-500 px-3 py-2 uppercase tracking-wide">Categoría</th>
+                <th className="text-left text-[11px] font-semibold text-slate-500 px-3 py-2 uppercase tracking-wide">{tt("Categoría")}</th>
                 <th className="text-right text-[11px] font-semibold text-slate-500 px-3 py-2 uppercase tracking-wide w-20">Cant.</th>
-                <th className="text-right text-[11px] font-semibold text-slate-500 px-3 py-2 uppercase tracking-wide w-32">Precio unit.</th>
+                <th className="text-right text-[11px] font-semibold text-slate-500 px-3 py-2 uppercase tracking-wide w-32">{tt("Precio unit.")}</th>
                 {permitirDescuento && (
-                  <th className="text-right text-[11px] font-semibold text-slate-500 px-3 py-2 uppercase tracking-wide w-24" title="Descuento por unidad (ej: intercambio Brasil, defecto, negociación)">Desc.</th>
+                  <th className="text-right text-[11px] font-semibold text-slate-500 px-3 py-2 uppercase tracking-wide w-24" title={tt("Descuento por unidad (ej: intercambio Brasil, defecto, negociación)")}>Desc.</th>
                 )}
                 <th className="text-right text-[11px] font-semibold text-slate-500 px-3 py-2 uppercase tracking-wide w-28">Subtotal</th>
                 <th className="w-8"></th>
@@ -2717,8 +2717,8 @@ function ColumnaAtencion(props: {
                           onActualizar(idx, { tipo_prenda_id: e.target.value || null })
                         }
                         className="ml-2 rounded border border-slate-200 bg-white px-1 py-0.5 text-[11px] text-slate-600 focus:outline-none focus:ring-1 focus:ring-emerald-400"
-                        aria-label="Tipo de prenda"
-                        title="Tipo de prenda (opcional)"
+                        aria-label={tt("Tipo de prenda")}
+                        title={tt("Tipo de prenda (opcional)")}
                       >
                         <option value="">— tipo —</option>
                         {tiposPrenda.map((t) => (
@@ -2861,7 +2861,7 @@ function CambioDirectoModal({
           <div>
             <h3 className="text-lg font-bold text-slate-900">Cambio directo</h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              El cliente entrega una prenda y se lleva otra del <span className="font-semibold text-slate-700">mismo precio</span>. No hay dinero de por medio.
+              El cliente entrega una prenda y se lleva otra del <span className="font-semibold text-slate-700">{tt("mismo precio")}</span>. No hay dinero de por medio.
             </p>
           </div>
           <button
@@ -2919,7 +2919,7 @@ function CambioDirectoModal({
 
           {franjaSel && (
             <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 p-3 text-sm text-emerald-900">
-              Se agregará <span className="font-semibold">{cantidad}× {franjaSel.nombre}</span> a <span className="font-semibold">Trae</span> y también a <span className="font-semibold">Lleva</span>, por {fmtGs((Number(franjaSel.precio_venta) || 0) * cantidad)}. El balance queda en cero.
+              Se agregará <span className="font-semibold">{cantidad}× {franjaSel.nombre}</span> a <span className="font-semibold">Trae</span> {tt("y también a")} <span className="font-semibold">Lleva</span>, por {fmtGs((Number(franjaSel.precio_venta) || 0) * cantidad)}. El balance queda en cero.
             </div>
           )}
         </div>

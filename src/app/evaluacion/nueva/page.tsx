@@ -696,7 +696,7 @@ export default function NuevaEvaluacionPage() {
                 Otro
               </button>
               <div className="flex items-center gap-2 ml-auto">
-                <span className="text-xs text-slate-500">Monto final:</span>
+                <span className="text-xs text-slate-500">{tt("Monto final:")}</span>
                 <div className="w-40">
                   <MontoInput
                     value={traeMontoFinal}

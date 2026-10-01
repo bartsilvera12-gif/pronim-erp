@@ -96,10 +96,10 @@ export default function NuevaVentaPage() {
   const [descuentoMotivo, setDescuentoMotivo] = useState<string>("redondeo");
   const [motivosDesc, setMotivosDesc] = useState<Array<{ codigo: string; label: string }>>([
     { codigo: "redondeo", label: "Redondeo" },
-    { codigo: "negociacion", label: "Negociación" },
-    { codigo: "defecto", label: "Producto con defecto" },
-    { codigo: "promocion", label: "Promoción" },
-    { codigo: "cortesia", label: "Cortesía" },
+    { codigo: "negociacion", label: tt("Negociación") },
+    { codigo: "defecto", label: tt("Producto con defecto") },
+    { codigo: "promocion", label: tt("Promoción") },
+    { codigo: "cortesia", label: tt("Cortesía") },
     { codigo: "intercambio", label: "Intercambio (BR)" },
     { codigo: "otro", label: "Otro" },
   ]);
@@ -937,7 +937,7 @@ export default function NuevaVentaPage() {
             {totalLleva > 0 && (
               <div className="rounded-lg border border-amber-200 bg-amber-50/40 p-3 space-y-2">
                 <div className="flex items-center justify-between">
-                  <p className="text-[11px] uppercase font-semibold text-amber-800">Descuento general</p>
+                  <p className="text-[11px] uppercase font-semibold text-amber-800">{tt("Descuento general")}</p>
                   {descuentoGeneralNum > 0 && (
                     <span className="text-xs font-bold text-amber-800">−{fmtGs(descuentoGeneralNum)}</span>
                   )}

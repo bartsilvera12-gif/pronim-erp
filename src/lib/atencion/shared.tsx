@@ -185,7 +185,7 @@ export function ColumnaAtencion(props: {
       <PromptModal
         open={modalManualOpen}
         title={t("Franja con precio manual")}
-        description="Escribí el precio exacto. Se crea la categoría al vuelo y se agrega al carrito."
+        description={tt("Escribí el precio exacto. Se crea la categoría al vuelo y se agrega al carrito.")}
         inputType="number"
         placeholder={t("Ej: 27.500")}
         confirmLabel={creandoManual ? "Creando…" : "Crear y agregar"}

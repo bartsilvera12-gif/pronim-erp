@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { tt } from "@/lib/i18n/dict";
 import { useEffect, useRef, useState } from "react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 
@@ -107,7 +108,7 @@ export default function PendientesIngresoPage() {
 
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm ring-1 ring-[#4FAEB2]/15 overflow-x-auto">
         {cargando ? (
-          <p className="py-16 text-center text-sm text-gray-400 animate-pulse">Cargando…</p>
+          <p className="py-16 text-center text-sm text-gray-400 animate-pulse">{tt("Cargando…")}</p>
         ) : recepciones.length === 0 ? (
           <p className="py-16 text-center text-sm text-gray-400">No hay recepciones pendientes de ingreso.</p>
         ) : (
@@ -117,7 +118,7 @@ export default function PendientesIngresoPage() {
                 <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3 uppercase tracking-wide">Fecha</th>
                 <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3 uppercase tracking-wide">Cliente</th>
                 <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3 uppercase tracking-wide">N° control</th>
-                <th className="text-right text-xs font-semibold text-gray-500 px-4 py-3 uppercase tracking-wide">Total compra</th>
+                <th className="text-right text-xs font-semibold text-gray-500 px-4 py-3 uppercase tracking-wide">{tt("Total compra")}</th>
                 <th className="text-left text-xs font-semibold text-gray-500 px-4 py-3 uppercase tracking-wide">Antigüedad</th>
                 <th className="text-right text-xs font-semibold text-gray-500 px-4 py-3 uppercase tracking-wide">Acciones</th>
               </tr>
@@ -329,7 +330,7 @@ function PreviewIngresoModal({
         </div>
 
         <div className="overflow-auto flex-1 p-5">
-          {loading && !data && <p className="py-8 text-center text-sm text-slate-400">Cargando detalle…</p>}
+          {loading && !data && <p className="py-8 text-center text-sm text-slate-400">{tt("Cargando detalle…")}</p>}
           {err && <div className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{err}</div>}
           {data && (
             <>
@@ -341,12 +342,12 @@ function PreviewIngresoModal({
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <MarginStat label="Prendas" value={data.totales.prendas.toLocaleString("es-PY")} />
                   <MarginStat
-                    label="Costo (evaluación)"
+                    label={tt("Costo (evaluación)")}
                     value={"Gs. " + data.totales.costo_total.toLocaleString("es-PY")}
                     valueClass="text-slate-800"
                   />
                   <MarginStat
-                    label="Venta esperada"
+                    label={tt("Venta esperada")}
                     value={"Gs. " + data.totales.venta_total_esperada.toLocaleString("es-PY")}
                     valueClass="text-sky-800"
                   />
@@ -431,7 +432,7 @@ function PreviewIngresoModal({
                           <h5 className="text-xs font-bold uppercase text-slate-600">
                             Prendas compradas
                           </h5>
-                          <p className="text-[10px] text-slate-500">Agrupadas por item · costo unitario prorrateado</p>
+                          <p className="text-[10px] text-slate-500">{tt("Agrupadas por item · costo unitario prorrateado")}</p>
                         </div>
                         <ul className="divide-y divide-slate-100 max-h-[420px] overflow-y-auto">
                           {data.items.map((it, i) => (
@@ -474,7 +475,7 @@ function PreviewIngresoModal({
                         </div>
                         {/* Cantidad por click */}
                         <div className="px-3 py-2 bg-emerald-50/50 border-b border-emerald-100 flex items-center gap-2 text-xs">
-                          <label className="font-semibold text-emerald-800">Cantidad por click</label>
+                          <label className="font-semibold text-emerald-800">{tt("Cantidad por click")}</label>
                           <input
                             type="number" min={1} value={cantMult}
                             onChange={(e) => setCantMult(e.target.value)}
@@ -619,8 +620,8 @@ function PreviewIngresoModal({
                         : "border-rose-300 bg-gradient-to-br from-rose-50 to-slate-50"
                     }`}>
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                        <MarginStat label="Costo total" value={"Gs. " + Math.round(totalCosto).toLocaleString("es-PY")} />
-                        <MarginStat label="Venta esperada" value={"Gs. " + Math.round(totalVenta).toLocaleString("es-PY")} valueClass="text-sky-800" />
+                        <MarginStat label={tt("Costo total")} value={"Gs. " + Math.round(totalCosto).toLocaleString("es-PY")} />
+                        <MarginStat label={tt("Venta esperada")} value={"Gs. " + Math.round(totalVenta).toLocaleString("es-PY")} valueClass="text-sky-800" />
                         <MarginStat
                           label="Ganancia bruta"
                           value={"Gs. " + Math.round(totalMargen).toLocaleString("es-PY")}
@@ -648,16 +649,16 @@ function PreviewIngresoModal({
                       }`}>
                         {restan > 0 ? (
                           <>
-                            Evaluación: <strong>{totalUnidades}</strong> prendas · Ingresando: <strong>{totalUnidades - restan}</strong> (<strong>−{restan}</strong>).
+                            Evaluación: <strong>{totalUnidades}</strong> {tt("prendas · Ingresando:")} <strong>{totalUnidades - restan}</strong> (<strong>−{restan}</strong>).
                             Está bien si ingresás menos — el monto pagado al cliente ({"Gs. " + Math.round(totalCosto).toLocaleString("es-PY")}) queda fijo.
                           </>
                         ) : restan < 0 ? (
                           <>
-                            Evaluación: <strong>{totalUnidades}</strong> prendas · Ingresando: <strong>{totalUnidades + Math.abs(restan)}</strong> (<strong>+{Math.abs(restan)}</strong>).
+                            Evaluación: <strong>{totalUnidades}</strong> {tt("prendas · Ingresando:")} <strong>{totalUnidades + Math.abs(restan)}</strong> (<strong>+{Math.abs(restan)}</strong>).
                             Está bien si ingresás más — el monto pagado al cliente ({"Gs. " + Math.round(totalCosto).toLocaleString("es-PY")}) queda fijo.
                           </>
                         ) : totalMargen < 0 ? (
-                          <>⚠ Vas a <strong>perder Gs. {Math.round(Math.abs(totalMargen)).toLocaleString("es-PY")}</strong> con estos precios. Revisá antes de ingresar.</>
+                          <>⚠ Vas a <strong>perder Gs. {Math.round(Math.abs(totalMargen)).toLocaleString("es-PY")}</strong> {tt("con estos precios. Revisá antes de ingresar.")}</>
                         ) : (
                           <>
                             ✓ Coincide con la evaluación. Vas a ganar <strong>Gs. {Math.round(totalMargen).toLocaleString("es-PY")}</strong> si se vende todo al precio de la franja.
@@ -791,7 +792,7 @@ function PrecioManualQuickInput({
         onBlur={() => { if (precioTipeado != null) asignar(); }}
         placeholder={`ej: ${ventaOriginal.toLocaleString("es-PY")}`}
         className="flex-1 min-w-0 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs tabular-nums focus:outline-none focus:ring-2 focus:ring-emerald-400 disabled:opacity-60"
-        title="Tipeá el precio de venta y presioná Enter"
+        title={tt("Tipeá el precio de venta y presioná Enter")}
       />
       {gananciaPreview != null && (
         <span className={`shrink-0 text-[10px] font-semibold tabular-nums ${

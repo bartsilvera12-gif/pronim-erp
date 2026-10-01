@@ -391,7 +391,7 @@ export function CajaControlBanner({ state }: { state: CajaState }) {
                   value={cajaSeleccionadaId ?? ""}
                   onChange={(e) => setCajaSeleccionadaId(e.target.value || null)}
                   className="rounded border border-emerald-300 bg-white px-1 py-0.5 text-xs text-emerald-900 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                  aria-label="Seleccionar caja abierta"
+                  aria-label={tt("Seleccionar caja abierta")}
                 >
                   <option value="">— Elegir —</option>
                   {cajasAbiertas.map((c) => (
@@ -450,7 +450,7 @@ export function CajaControlBanner({ state }: { state: CajaState }) {
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
             {modal === "abrir" && (
               <div className="max-h-[85vh] overflow-y-auto pr-1">
-                <h3 className="text-base font-semibold text-slate-900">Abrir caja</h3>
+                <h3 className="text-base font-semibold text-slate-900">{tt("Abrir caja")}</h3>
                 {puntoCajaNombre && <p className="mt-0.5 text-xs text-slate-500">Punto: <strong>{puntoCajaNombre}</strong></p>}
                 {aperturaError && <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{aperturaError}</div>}
 
@@ -510,7 +510,7 @@ export function CajaControlBanner({ state }: { state: CajaState }) {
 
             {modal === "cerrar" && (
               <div className="max-h-[85vh] overflow-y-auto pr-1">
-                <h3 className="text-base font-semibold text-slate-900">Cerrar caja</h3>
+                <h3 className="text-base font-semibold text-slate-900">{tt("Cerrar caja")}</h3>
                 {cierreError && <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{cierreError}</div>}
 
                 {cierreResumen ? (
@@ -518,11 +518,11 @@ export function CajaControlBanner({ state }: { state: CajaState }) {
                     <div className="mt-4">
                       <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1.5">{tt("Resumen de ventas del turno")}</p>
                       <div className="rounded-lg border border-slate-200 divide-y divide-slate-100 text-sm">
-                        <ResumenRow label="Cantidad de ventas" value={String(cierreResumen.cantidad_ventas)} />
+                        <ResumenRow label={tt("Cantidad de ventas")} value={String(cierreResumen.cantidad_ventas)} />
                         <ResumenRow label="Ventas en efectivo" value={fmtGs(cierreResumen.total_efectivo)} />
-                        <ResumenRow label="Ventas por transferencia" value={fmtGs(cierreResumen.total_transferencia)} />
-                        <ResumenRow label="Ventas con tarjeta" value={fmtGs(cierreResumen.total_tarjeta)} />
-                        <ResumenRow label="Total vendido" value={fmtGs(cierreResumen.total_vendido)} bold />
+                        <ResumenRow label={tt("Ventas por transferencia")} value={fmtGs(cierreResumen.total_transferencia)} />
+                        <ResumenRow label={tt("Ventas con tarjeta")} value={fmtGs(cierreResumen.total_tarjeta)} />
+                        <ResumenRow label={tt("Total vendido")} value={fmtGs(cierreResumen.total_vendido)} bold />
                       </div>
                     </div>
                     <div className="mt-4">
@@ -665,7 +665,7 @@ export function CajaControlBanner({ state }: { state: CajaState }) {
                           </li>
                         ))}
                       {consigClientes.length === 0 && (
-                        <li className="px-3 py-4 text-center text-xs text-slate-400">Cargando clientes…</li>
+                        <li className="px-3 py-4 text-center text-xs text-slate-400">{tt("Cargando clientes…")}</li>
                       )}
                     </ul>
                   </div>
@@ -679,7 +679,7 @@ export function CajaControlBanner({ state }: { state: CajaState }) {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Monto a pagar</label>
+                      <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">{tt("Monto a pagar")}</label>
                       <MontoInput value={consigMonto} onChange={(n) => setConsigMonto(String(n))}
                         className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-300" />
                       <button type="button" onClick={() => setConsigMonto(String(Math.round(consigSaldo)))}
