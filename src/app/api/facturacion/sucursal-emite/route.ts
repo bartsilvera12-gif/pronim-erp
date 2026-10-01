@@ -26,26 +26,30 @@ export async function GET(request: NextRequest) {
   if (!auth) return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
 
   const sucursalId = auth.sucursal_id ?? request.nextUrl.searchParams.get("sucursal_id");
-  if (!sucursalId) return NextResponse.json(successResponse({ emite: false }));
 
   const pool = getChatPostgresPool();
-  if (!pool) return NextResponse.json(successResponse({ emite: false }));
+  if (!pool) return NextResponse.json(successResponse({ emite: false, emiten: [] }));
 
   try {
     const schema = assertAllowedChatDataSchema(await fetchDataSchemaForEmpresaId(auth.empresa_id));
     const tCfg = quoteSchemaTable(schema, "sucursal_autoimpresor_config");
-    const r = await pool.query<{ emite: boolean }>(
-      `SELECT true AS emite
+    // Se devuelven TODAS las que facturan, no solo la actual: el historial las
+    // necesita para no ofrecer "Factura" en ventas de sucursales que no emiten.
+    const r = await pool.query<{ sucursal_id: string }>(
+      `SELECT sucursal_id::text
          FROM ${tCfg}
-        WHERE sucursal_id = $1::uuid AND empresa_id = $2::uuid AND activo = true
-        LIMIT 1`,
-      [sucursalId, auth.empresa_id],
+        WHERE empresa_id = $1::uuid AND activo = true`,
+      [auth.empresa_id],
     );
-    return NextResponse.json(successResponse({ emite: r.rows.length > 0 }));
+    const emiten = r.rows.map((x) => x.sucursal_id);
+    return NextResponse.json(successResponse({
+      emite: sucursalId ? emiten.includes(String(sucursalId)) : false,
+      emiten,
+    }));
   } catch (e) {
     // Si la tabla todavía no existe (migración sin aplicar), la respuesta
     // honesta es "no emite": el POS muestra solo ticket y nadie se traba.
     console.error("[facturacion/sucursal-emite]", e instanceof Error ? e.message : e);
-    return NextResponse.json(successResponse({ emite: false }));
+    return NextResponse.json(successResponse({ emite: false, emiten: [] }));
   }
 }

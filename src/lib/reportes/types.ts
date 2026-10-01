@@ -118,6 +118,10 @@ export interface VentaProductoTotal {
 export interface VentaReporteRow {
   id: string;
   numero_control: string;
+  /** Número de la factura del autoimpresor, si se emitió. */
+  factura_numero: string | null;
+  /** Sucursal donde se hizo la venta. */
+  sucursal: string | null;
   fecha: string;
   cliente: string | null;
   metodo_pago: string | null;

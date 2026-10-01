@@ -96,7 +96,8 @@ export default function VentasReportePage() {
                   <thead>
                     <tr className="border-b text-slate-500">
                       <th className="py-2.5 pr-4 font-medium">Fecha</th>
-                      <th className="py-2.5 pr-4 font-medium">N° Venta</th>
+                      <th className="py-2.5 pr-4 font-medium">Comprobante</th>
+                      <th className="py-2.5 pr-4 font-medium">Sucursal</th>
                       <th className="py-2.5 pr-4 font-medium">Cliente</th>
                       <th className="py-2.5 pr-4 font-medium">Pago</th>
                       <th className="py-2.5 pr-4 font-medium text-right">Ítems</th>
@@ -107,7 +108,15 @@ export default function VentasReportePage() {
                     {data.ventas.map((v) => (
                       <tr key={v.id} className="border-b border-slate-100 last:border-0">
                         <td className="py-3 pr-4 text-slate-600 text-xs tabular-nums">{formatFecha(v.fecha)}</td>
-                        <td className="py-3 pr-4 font-mono text-xs text-slate-500">{v.numero_control}</td>
+                        {/* Si se facturó, lo que importa es el número de factura;
+                            el V- interno queda abajo como referencia. */}
+                        <td className="py-3 pr-4 font-mono text-xs text-slate-600">
+                          {v.factura_numero || v.numero_control}
+                          {v.factura_numero && (
+                            <span className="block text-[10px] text-slate-400">{v.numero_control}</span>
+                          )}
+                        </td>
+                        <td className="py-3 pr-4 text-slate-600">{v.sucursal ?? "—"}</td>
                         <td className="py-3 pr-4 text-slate-700">{v.cliente ?? "—"}</td>
                         <td className="py-3 pr-4 text-slate-600 capitalize">{v.metodo_pago ?? "—"}</td>
                         <td className="py-3 pr-4 text-right tabular-nums text-slate-700">{v.items_count}</td>

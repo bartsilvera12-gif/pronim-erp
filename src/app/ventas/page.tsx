@@ -10,6 +10,7 @@ import { useSearchParams } from "next/navigation";
 import EdgeScrollArea from "@/components/ui/EdgeScrollArea";
 import { FancySelect } from "@/components/ui/FancySelect";
 import { getVentas } from "@/lib/ventas/storage";
+import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { useT } from "@/lib/i18n/context";
 import PedidosPendientesCaja from "./PedidosPendientesCaja";
 import CambioModal from "./CambioModal";
@@ -115,6 +116,9 @@ export default function VentasPage() {
   // para cualquier otro rol (super_admin queda incluido por isAdmin).
   const { isAdmin: puedeAnular, loaded: rolLoaded } = useIsAdmin();
   const [todas,      setTodas]      = useState<Venta[]>([]);
+  const [pagina,     setPagina]     = useState(1);
+  /** Sucursales con timbrado activo: solo ahí tiene sentido ofrecer Factura. */
+  const [sucursalesQueFacturan, setSucursalesQueFacturan] = useState<Set<string>>(new Set());
   const [busqueda,   setBusqueda]   = useState("");
   const [filtroTipo, setFiltroTipo] = useState<TipoVenta | "">("");
   const [filtroIva,  setFiltroIva]  = useState<TipoIvaVenta | "">("");
@@ -395,6 +399,17 @@ export default function VentasPage() {
     return true;
   });
 
+  // Cualquier cambio de filtro u orden reinicia la paginación: quedarse en la
+  // página 7 de un resultado que ahora tiene 2 páginas deja la tabla vacía.
+  useEffect(() => { setPagina(1); }, [busqueda, filtroTipo, filtroIva, filtroSucursal, filtroEstado, segmento, sortKey, sortDir, fechaDesde, fechaHasta]);
+
+  useEffect(() => {
+    fetchWithSupabaseSession("/api/facturacion/sucursal-emite", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => setSucursalesQueFacturan(new Set((j?.data?.emiten ?? []) as string[])))
+      .catch(() => { /* sin dato: no se ofrece factura en ningún lado */ });
+  }, []);
+
   const filtradasOrdenadas = (() => {
     if (!sortKey) return filtradas;
     const dir = sortDir === "asc" ? 1 : -1;
@@ -415,6 +430,17 @@ export default function VentasPage() {
   })();
 
   const hayFiltros = busqueda || filtroTipo || filtroIva || filtroSucursal;
+
+  // ── Paginación ──────────────────────────────────────────────────────
+  // El historial crece sin techo; mostrar todo de una vuelve la pantalla
+  // pesada y hace imposible encontrar algo.
+  const POR_PAGINA = 50;
+  const totalPaginas = Math.max(1, Math.ceil(filtradasOrdenadas.length / POR_PAGINA));
+  const paginaSegura = Math.min(pagina, totalPaginas);
+  const visibles = filtradasOrdenadas.slice(
+    (paginaSegura - 1) * POR_PAGINA,
+    paginaSegura * POR_PAGINA,
+  );
 
   return (
     <div className="space-y-8">
@@ -729,7 +755,7 @@ export default function VentasPage() {
                   </td>
                 </tr>
               ) : (
-                filtradasOrdenadas.map((v) => {
+                visibles.map((v) => {
                   const cantTotal = v.items.reduce((s, i) => s + i.cantidad, 0);
                   return (
                     <tr key={v.id} className="border-b border-slate-200 last:border-0 hover:bg-[#4FAEB2]/[0.04] transition-colors">
@@ -796,8 +822,10 @@ export default function VentasPage() {
                               </a>
                               {/* Factura del autoimpresor. Consume un número
                                   del rango, por eso va aparte de "Imprimir" y
-                                  pide confirmación. Si la sucursal no factura,
-                                  el endpoint responde con el motivo. */}
+                                  pide confirmación. Solo se ofrece donde la
+                                  sucursal tiene timbrado: en Brasil no existe
+                                  factura que emitir. */}
+                              {(v.factura_numero || (v.sucursal_id && sucursalesQueFacturan.has(v.sucursal_id))) && (
                               <a
                                 href={`/api/ventas/${v.id}/ticket?factura=1`}
                                 target="_blank" rel="noopener"
@@ -813,6 +841,7 @@ export default function VentasPage() {
                               >
                                 Factura
                               </a>
+                              )}
                               {v.genera_nota_remision && (
                                 <a
                                   href={`/api/ventas/${v.id}/ticket?tipo=remision`}
@@ -878,6 +907,40 @@ export default function VentasPage() {
             })()}
           </table>
         </EdgeScrollArea>
+
+        {/* Paginación. Solo aparece si hay más de una página. */}
+        {!cargandoLista && totalPaginas > 1 && (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4 print:hidden">
+            <p className="text-xs text-slate-500">
+              Mostrando{" "}
+              <strong className="text-slate-700 tabular-nums">
+                {(paginaSegura - 1) * POR_PAGINA + 1}–{Math.min(paginaSegura * POR_PAGINA, filtradasOrdenadas.length)}
+              </strong>{" "}
+              de <strong className="text-slate-700 tabular-nums">{filtradasOrdenadas.length}</strong> ventas
+            </p>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setPagina((p) => Math.max(1, p - 1))}
+                disabled={paginaSegura <= 1}
+                className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-white"
+              >
+                ← Anterior
+              </button>
+              <span className="px-2 text-xs text-slate-500 tabular-nums">
+                {paginaSegura} / {totalPaginas}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPagina((p) => Math.min(totalPaginas, p + 1))}
+                disabled={paginaSegura >= totalPaginas}
+                className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-white"
+              >
+                Siguiente →
+              </button>
+            </div>
+          </div>
+        )}
 
       </div>
 

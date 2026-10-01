@@ -22,6 +22,9 @@ type VentaHeader = {
   metodo_pago: string | null;
   total: number | string;
   estado: string | null;
+  /** Solo donde corrieron las migraciones correspondientes. */
+  sucursal_id?: string | null;
+  factura_numero?: string | null;
 };
 
 type VentaItem = {
@@ -64,13 +67,27 @@ export async function GET(request: NextRequest) {
     const jwt = await getAccessTokenForRequest(request);
 
     // 1) Cabeceras
-    const qsHead =
-      `select=id,numero_control,fecha,cliente_id,metodo_pago,total,estado` +
+    // `sucursal_id` y `factura_numero` dependen de migraciones que pueden no
+    // estar aplicadas: se piden primero y, si PostgREST rechaza la consulta,
+    // se reintenta con el set mínimo para que el reporte igual salga.
+    const COLS_MIN = "id,numero_control,fecha,cliente_id,metodo_pago,total,estado";
+    const filtros =
       `&empresa_id=eq.${encodeURIComponent(empresaId)}` +
       `&fecha=gte.${encodeURIComponent(range.desde)}` +
       `&fecha=lt.${encodeURIComponent(range.hasta)}` +
       `&order=fecha.desc&limit=5000`;
-    const rHead = await postgrestGet<VentaHeader>("ventas", qsHead, { role: "jwt", jwt, noStore: true });
+    let rHead = await postgrestGet<VentaHeader>(
+      "ventas",
+      `select=${COLS_MIN},sucursal_id,factura_numero${filtros}`,
+      { role: "jwt", jwt, noStore: true },
+    );
+    if (!rHead.ok) {
+      rHead = await postgrestGet<VentaHeader>(
+        "ventas",
+        `select=${COLS_MIN}${filtros}`,
+        { role: "jwt", jwt, noStore: true },
+      );
+    }
     if (!rHead.ok) {
       console.error("[/api/reportes/ventas][ventas]", rHead.error);
       return NextResponse.json(errorResponse("No se pudo cargar el reporte de ventas."), { status: 502 });
@@ -103,10 +120,24 @@ export async function GET(request: NextRequest) {
       itemsByVenta.set(it.venta_id, arr);
     }
 
+    // Nombre de cada sucursal, para no mostrar el uuid.
+    const nombreSucursal = new Map<string, string>();
+    const sucIds = [...new Set(cabeceras.map((v) => v.sucursal_id).filter(Boolean))] as string[];
+    if (sucIds.length > 0) {
+      const rSuc = await postgrestGet<{ id: string; nombre: string }>(
+        "sucursales",
+        `select=id,nombre&id=in.(${sucIds.join(",")})`,
+        { role: "jwt", jwt, noStore: true },
+      );
+      if (rSuc.ok) for (const s of rSuc.rows ?? []) nombreSucursal.set(s.id, s.nombre);
+    }
+
     // Mapear cabeceras al formato del reporte.
     const ventas: VentaReporteRow[] = cabeceras.map((v) => ({
       id: v.id,
       numero_control: v.numero_control ?? "",
+      factura_numero: v.factura_numero ?? null,
+      sucursal: v.sucursal_id ? (nombreSucursal.get(v.sucursal_id) ?? null) : null,
       fecha: v.fecha,
       cliente: null, // no resolvemos join aqui (opcional)
       metodo_pago: v.metodo_pago,
