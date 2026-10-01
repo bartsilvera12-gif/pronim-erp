@@ -21,15 +21,41 @@ export async function fetchWithSupabaseSession(
 ): Promise<Response> {
   try {
     const token = await resolveAccessToken();
-    const headers = new Headers(init?.headers);
-    if (token) {
-      headers.set("Authorization", `Bearer ${token}`);
-    }
-    return await fetch(input, {
-      ...init,
-      headers,
-      credentials: init?.credentials ?? "include",
-    });
+    const pedir = async (jwt: string | null) => {
+      const headers = new Headers(init?.headers);
+      if (jwt) headers.set("Authorization", `Bearer ${jwt}`);
+      return fetch(input, {
+        ...init,
+        headers,
+        credentials: init?.credentials ?? "include",
+      });
+    };
+
+    const res = await pedir(token);
+    if (res.status !== 401) return res;
+
+    // Un 401 casi nunca significa "no tenés permiso": lo normal es que la
+    // sesión todavía no estuviera lista cuando salió el pedido (recién
+    // cargó la pantalla) o que el token acabara de vencer. Antes eso se le
+    // mostraba al usuario como "No autenticado" con un botón Reintentar que
+    // funcionaba — justamente porque bastaba con volver a pedirlo.
+    //
+    // Reintentar es seguro aunque sea un POST: un 401 se rechaza antes de
+    // tocar nada. Solo se omite si el body es un stream, que no se puede
+    // volver a leer.
+    const bodyReusable = init?.body === undefined || typeof init.body === "string";
+    if (!bodyReusable) return res;
+
+    let nuevo: string | null = null;
+    try {
+      const { data } = await supabase.auth.refreshSession();
+      nuevo = data.session?.access_token ?? null;
+    } catch { /* sin refresh: se prueba con lo que haya */ }
+    if (!nuevo) nuevo = await resolveAccessToken();
+
+    // Si no conseguimos un token distinto, el 401 es real.
+    if (!nuevo || nuevo === token) return res;
+    return pedir(nuevo);
   } catch (e) {
     // Preservar AbortError tal cual para que el caller pueda hacer
     //   catch (err) { if (err instanceof DOMException && err.name === "AbortError") return; }
