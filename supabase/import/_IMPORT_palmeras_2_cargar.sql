@@ -37,6 +37,7 @@ DECLARE
   v_emp    uuid;
   v_scope  text;
   v_prod   uuid;
+  v_punto  uuid;
   v_costo  numeric;
   v_prendas bigint;
   v_valor  bigint;
@@ -169,15 +170,56 @@ BEGIN
   END IF;
 
 
+  -- ── 2c) Una caja por dia ───────────────────────────────────────────────
+  -- El efectivo no puede quedar colgado: la tabla exige que todo pago en
+  -- efectivo pertenezca a una caja. Y no sirve una sola caja gigante para los
+  -- 17 meses, porque entonces el cierre de caja por dia no diria nada. Se crea
+  -- una caja cerrada por cada dia que hubo efectivo, con lo que entro ese dia.
+  SELECT id INTO v_punto FROM pronimerp.puntos_caja
+   WHERE sucursal_id = v_suc ORDER BY orden NULLS LAST LIMIT 1;
+
+  CREATE TEMP TABLE _cajas_dia ON COMMIT DROP AS
+  SELECT i.fecha,
+         gen_random_uuid()  AS caja_id,
+         sum(i.efectivo_in) AS efectivo
+    FROM pronimerp.import_palmeras i
+   WHERE i.tipo = 'venta' AND i.efectivo_in > 0
+   GROUP BY i.fecha;
+
+  INSERT INTO pronimerp.cajas (
+    id, empresa_id, sucursal_id, punto_caja_id, numero_caja, estado,
+    fecha_apertura, fecha_cierre, monto_apertura,
+    monto_cierre_contado, monto_esperado_efectivo, diferencia,
+    observacion_apertura
+  )
+  SELECT c.caja_id, v_emp, v_suc, v_punto,
+         coalesce((SELECT max(numero_caja) FROM pronimerp.cajas WHERE sucursal_id = v_suc), 0)
+           + row_number() OVER (ORDER BY c.fecha),
+         'cerrada',
+         c.fecha::timestamptz,
+         (c.fecha + 1)::timestamptz,
+         0, c.efectivo, c.efectivo, 0,
+         'Caja reconstruida del diario de Palmeras'
+    FROM _cajas_dia c;
+
+  GET DIAGNOSTICS n = ROW_COUNT;
+  RAISE NOTICE '2c) cajas diarias reconstruidas: %', n;
+
+
   -- ── 3) Como se pago cada venta ─────────────────────────────────────────
   -- Una fila por medio de pago usado. El credito NO va aca: no es plata que
   -- entro a la caja, y queda registrado como consumo de saldo en el paso 4.
   INSERT INTO pronimerp.ventas_pagos_detalle (
-    empresa_id, venta_id, sucursal_id, metodo_pago, monto, observacion, direccion
+    empresa_id, venta_id, sucursal_id, caja_id, metodo_pago, monto, observacion, direccion
   )
-  SELECT v_emp, i.venta_id, v_suc, p.metodo, p.monto,
+  SELECT v_emp, i.venta_id, v_suc,
+         -- Solo el efectivo necesita caja; tarjeta y transferencia no pasan
+         -- por el cajon, van directo al banco.
+         CASE WHEN p.metodo = 'efectivo' THEN c.caja_id ELSE NULL END,
+         p.metodo, p.monto,
          'Importado del diario de Palmeras', 'ingreso'
     FROM pronimerp.import_palmeras i
+    LEFT JOIN _cajas_dia c ON c.fecha = i.fecha
     CROSS JOIN LATERAL (VALUES
       ('efectivo',      i.efectivo_in),
       ('transferencia', i.transf_in),
