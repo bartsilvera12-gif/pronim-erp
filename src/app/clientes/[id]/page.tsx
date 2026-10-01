@@ -61,6 +61,7 @@ import {
 import { ClienteDatosSifenReceptorForm } from "@/components/clientes/ClienteDatosSifenReceptorForm";
 import { SUPABASE_APP_SCHEMA as NEURA_CLIENT_SCHEMA } from "@/lib/supabase/schema";
 import ClienteVehiculoEditor from "@/components/clientes/ClienteVehiculoEditor";
+import PromocionClienteTab from "@/components/clientes/PromocionClienteTab";
 
 /** Detalle de clientes simplificado (sin campos SaaS/Neura como Tipo de
  *  servicio, Plan, Facturación al contado). Aplica a instancias monocliente
@@ -84,7 +85,7 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 
 // ── Tipos de pestaña ──────────────────────────────────────────────────────────
 
-type TabId = "informacion" | "vehiculos" | "estado_cuenta" | "consultas" | "suscripciones" | "marketing" | "proyectos" | "actividad" | "notas";
+type TabId = "informacion" | "vehiculos" | "estado_cuenta" | "consultas" | "suscripciones" | "marketing" | "proyectos" | "actividad" | "promociones" | "notas";
 
 const TABS: { id: TabId; label: string; showWhen?: (c: Cliente) => boolean; href?: (id: string) => string }[] = [
   { id: "informacion",   label: "Información"      },
@@ -100,7 +101,8 @@ const TABS: { id: TabId; label: string; showWhen?: (c: Cliente) => boolean; href
   { id: "marketing",     label: "Marketing",        showWhen: (c) => !SIMPLE_CLIENTE && c.tipo_servicio_cliente === "marketing" },
   { id: "proyectos",     label: "Proyectos",        showWhen: () => !SIMPLE_CLIENTE },
   { id: "actividad",     label: "Actividad"         },
-  { id: "notas",         label: "Notas"             },
+  { id: "promociones",   label: "Promociones",      showWhen: () => SIMPLE_CLIENTE },
+  { id: "notas",         label: "Notas",            showWhen: () => !SIMPLE_CLIENTE },
 ];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -2257,6 +2259,10 @@ export default function ClienteDetailPage() {
           )}
 
           {/* ── NOTAS ───────────────────────────────────────────────────── */}
+          {activeTab === "promociones" && (
+            <PromocionClienteTab clienteId={id} />
+          )}
+
           {activeTab === "notas" && (
             <div className="max-w-2xl space-y-6">
               <form onSubmit={handleAgregarNota}>

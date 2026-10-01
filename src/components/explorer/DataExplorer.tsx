@@ -71,6 +71,14 @@ export function DataExplorer<T>(props: {
   cargando?: boolean;
   /** Link al detalle de una fila (opcional). */
   detailHref?: (row: T) => string;
+  /**
+   * Detalle que se despliega DEBAJO de la fila al hacer clic, en vez de
+   * navegar a otra pantalla. Cuando está definido, el clic abre y cierra la
+   * fila; el ojito sigue llevando a la ficha completa.
+   */
+  expandir?: (row: T) => ReactNode;
+  /** Clave estable para recordar qué fila está abierta. */
+  rowKey?: (row: T) => string;
   /** Nombre base del archivo CSV. */
   csvName?: string;
   /** Barra extra (ej. rango de fechas del fetch). */
@@ -78,7 +86,7 @@ export function DataExplorer<T>(props: {
   /** Encabezado extra (ej. KPIs clickeables). */
   headerExtra?: ReactNode;
 }) {
-  const { titulo, descripcion, volverA, rows, columns, cargando, detailHref, csvName = "export", toolbarExtra, headerExtra } = props;
+  const { titulo, descripcion, volverA, rows, columns, cargando, detailHref, expandir, rowKey, csvName = "export", toolbarExtra, headerExtra } = props;
 
   const [visibles, setVisibles] = useState<Set<string>>(
     () => new Set(columns.filter((c) => c.defaultVisible !== false || c.required).map((c) => c.key)),
@@ -91,6 +99,10 @@ export function DataExplorer<T>(props: {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [groupKey, setGroupKey] = useState<string>(""); // "" = sin agrupar
   const [printOrient, setPrintOrient] = useState<"portrait" | "landscape">("landscape");
+  /** Fila desplegada. Una sola a la vez: dos paneles abiertos marean más de
+   *  lo que ayudan. */
+  const [abierta, setAbierta] = useState<string | null>(null);
+  const claveDe = (row: T, i: number) => (rowKey ? rowKey(row) : String(i));
 
   // Cerrar los dropdowns (Columnas / Filtros) al hacer click fuera o con Escape.
   const colPickerRef = useRef<HTMLDivElement>(null);
@@ -656,13 +668,19 @@ export function DataExplorer<T>(props: {
                       </td>
                     </tr>
                     {g.rows.slice(0, 500).map((row, i) => (
-                      <tr key={i} className={`transition-colors even:bg-slate-50/40 hover:bg-[#4FAEB2]/[0.07] ${detailHref ? "cursor-pointer" : ""}`}
-                        onClick={detailHref ? (e) => {
+                      <Fragment key={claveDe(row, i)}>
+                      <tr className={`transition-colors even:bg-slate-50/40 hover:bg-[#4FAEB2]/[0.07] ${(detailHref || expandir) ? "cursor-pointer" : ""} ${expandir && abierta === claveDe(row, i) ? "bg-[#4FAEB2]/[0.10]" : ""}`}
+                        onClick={(detailHref || expandir) ? (e) => {
                           // No robamos el click de links/botones internos
                           // (ej. la estrella de VIP o el propio "Ver").
                           const t = e.target as HTMLElement;
                           if (t.closest("a,button,input,select,label")) return;
-                          const href = detailHref(row);
+                          if (expandir) {
+                            const k = claveDe(row, i);
+                            setAbierta((prev) => (prev === k ? null : k));
+                            return;
+                          }
+                          const href = detailHref!(row);
                           if (href && href !== "#") window.location.href = href;
                         } : undefined}
                       >
@@ -683,6 +701,14 @@ export function DataExplorer<T>(props: {
                           </td>
                         )}
                       </tr>
+                      {expandir && abierta === claveDe(row, i) && (
+                        <tr className="bg-slate-50/80">
+                          <td colSpan={colsVis.length + (detailHref ? 1 : 0)} className="border-b border-slate-200 px-3.5 py-4">
+                            {expandir(row)}
+                          </td>
+                        </tr>
+                      )}
+                      </Fragment>
                     ))}
                     {sumCols.length > 0 && (
                       <tr className="bg-slate-100/80 border-t-2 border-slate-300 text-[11px]">
@@ -702,13 +728,19 @@ export function DataExplorer<T>(props: {
             ) : (
               <tbody className="divide-y divide-slate-100">
                 {ordenadas.slice(0, 1000).map((row, i) => (
-                  <tr key={i} className={`transition-colors even:bg-slate-50/40 hover:bg-[#4FAEB2]/[0.07] ${detailHref ? "cursor-pointer" : ""}`}
-                        onClick={detailHref ? (e) => {
+                  <Fragment key={claveDe(row, i)}>
+                  <tr className={`transition-colors even:bg-slate-50/40 hover:bg-[#4FAEB2]/[0.07] ${(detailHref || expandir) ? "cursor-pointer" : ""} ${expandir && abierta === claveDe(row, i) ? "bg-[#4FAEB2]/[0.10]" : ""}`}
+                        onClick={(detailHref || expandir) ? (e) => {
                           // No robamos el click de links/botones internos
                           // (ej. la estrella de VIP o el propio "Ver").
                           const t = e.target as HTMLElement;
                           if (t.closest("a,button,input,select,label")) return;
-                          const href = detailHref(row);
+                          if (expandir) {
+                            const k = claveDe(row, i);
+                            setAbierta((prev) => (prev === k ? null : k));
+                            return;
+                          }
+                          const href = detailHref!(row);
                           if (href && href !== "#") window.location.href = href;
                         } : undefined}
                       >
@@ -729,6 +761,14 @@ export function DataExplorer<T>(props: {
                       </td>
                     )}
                   </tr>
+                  {expandir && abierta === claveDe(row, i) && (
+                    <tr className="bg-slate-50/80">
+                      <td colSpan={colsVis.length + (detailHref ? 1 : 0)} className="border-b border-slate-200 px-3.5 py-4">
+                        {expandir(row)}
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 ))}
               </tbody>
             )}
