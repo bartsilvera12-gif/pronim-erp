@@ -17,7 +17,7 @@ import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session"
 import MontoInput from "@/components/ui/MontoInput";
 import { useT, useMoney } from "@/lib/i18n/context";
 import { fmtGs, ResumenRow } from "./shared";
-import { getSucursalActivaId } from "@/lib/sucursales/activa";
+import { getSucursalActivaId, useSucursalActivaId } from "@/lib/sucursales/activa";
 import { tt } from "@/lib/i18n/dict";
 
 type CajaAbierta = {
@@ -52,6 +52,7 @@ export type CajaState = {
 export function useCajaState(): CajaState {
   const [cajaChecked, setCajaChecked] = useState(false);
   const [cajaAbiertaId, setCajaAbiertaId] = useState<string | null>(null);
+  const sucursalActivaId = useSucursalActivaId();
   const [cajasAbiertas, setCajasAbiertas] = useState<CajaAbierta[]>([]);
   const [cajaSeleccionadaId, setCajaSeleccionadaId] = useState<string | null>(null);
 
@@ -77,9 +78,21 @@ export function useCajaState(): CajaState {
       });
     } catch { /* tolerar */ }
     finally { setCajaChecked(true); }
-  }, []);
+    // Depende de la sucursal activa: al cambiar de local hay que volver a
+    // preguntar qué caja está abierta ahí. Sin esto quedaba seleccionada la
+    // caja de la sucursal anterior y el backend rechazaba la venta con
+    // "sucursal distinta a la de la caja".
+  }, [sucursalActivaId]);
 
   useEffect(() => { void refrescar(); }, [refrescar]);
+
+  // Al cambiar de sucursal se suelta la caja elegida: es de otro local.
+  useEffect(() => {
+    setCajaSeleccionadaId(null);
+    setCajaAbiertaId(null);
+    setCajasAbiertas([]);
+    setCajaChecked(false);
+  }, [sucursalActivaId]);
 
   const cajaEnUsoId = cajaSeleccionadaId
     ?? (cajasAbiertas.length === 1 ? cajasAbiertas[0].id : null);
