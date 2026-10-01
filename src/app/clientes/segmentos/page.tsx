@@ -98,19 +98,19 @@ function ResumenCliente({ c }: { c: ClienteSeg }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
-        <Dato label="Teléfono">
+        <Dato label={tt("Teléfono")}>
           {c.telefono
             ? <a href={`tel:${c.telefono}`} className="text-[#3F8E91] hover:underline">{c.telefono}</a>
             : <span className="text-slate-400">{tt("Sin teléfono")}</span>}
         </Dato>
-        <Dato label="Email">{c.email || <span className="text-slate-400">—</span>}</Dato>
-        <Dato label="RUC / CI">{c.ruc || <span className="text-slate-400">—</span>}</Dato>
-        <Dato label="Cliente desde">{fmtFecha(c.primera_venta_at)}</Dato>
-        <Dato label="Cartera">{carteraLabel(c.scope_clientes)}</Dato>
+        <Dato label={tt("Email")}>{c.email || <span className="text-slate-400">—</span>}</Dato>
+        <Dato label={tt("RUC / CI")}>{c.ruc || <span className="text-slate-400">—</span>}</Dato>
+        <Dato label={tt("Cliente desde")}>{fmtFecha(c.primera_venta_at)}</Dato>
+        <Dato label={tt("Cartera")}>{carteraLabel(c.scope_clientes)}</Dato>
       </div>
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
-        <Dato label="Última transacción">
+        <Dato label={tt("Última transacción")}>
           {c.ultima_tx_fecha ? (
             <>
               {fmtFecha(c.ultima_tx_fecha)}
@@ -121,10 +121,10 @@ function ResumenCliente({ c }: { c: ClienteSeg }) {
             </>
           ) : <span className="text-slate-400">Nunca</span>}
         </Dato>
-        <Dato label="Transacciones">{c.cnt_transacciones}</Dato>
-        <Dato label="Total comprado">{fmtGs(c.total_comprado)}</Dato>
-        <Dato label="Total vendido (trae)">{fmtGs(c.total_vendido)}</Dato>
-        <Dato label="A favor">
+        <Dato label={tt("Transacciones")}>{c.cnt_transacciones}</Dato>
+        <Dato label={tt("Total comprado")}>{fmtGs(c.total_comprado)}</Dato>
+        <Dato label={tt("Total vendido (trae)")}>{fmtGs(c.total_vendido)}</Dato>
+        <Dato label={tt("A favor")}>
           {credito + cashback > 0 ? (
             <span className="font-semibold text-emerald-700">
               {fmtGs(credito + cashback)}
@@ -226,6 +226,22 @@ export default function ClientesSegmentosPage() {
     }
   }
 
+  // El nombre del segmento lo manda el servidor en espanol: una ruta de API no
+  // sabe en que idioma esta mirando quien pregunta. Se traduce aca, por slug,
+  // y si aparece un segmento nuevo que todavia no esta en el diccionario cae
+  // al texto que vino, que es mejor que mostrar el slug crudo.
+  const nombreSegmento = (sl: string, fallback: string) => {
+    const k: Record<string, string> = {
+      vip: "VIP",
+      con_credito: "Con crédito a favor",
+      con_cashback: "Con cashback",
+      inactivos_90d: "Inactivos +90 días",
+      nuevos_mes: "Nuevos este mes",
+      en_riesgo: "En riesgo",
+    };
+    return k[sl] ? tt(k[sl]) : fallback;
+  };
+
   const filtrosActivos = useMemo(() => segmentos.filter((s) => filtros.has(s.slug)), [segmentos, filtros]);
 
   const carteraOptions = useMemo(() => {
@@ -234,18 +250,18 @@ export default function ClientesSegmentosPage() {
   }, [clientes]);
 
   const columns = useMemo<ColumnDef<ClienteSeg>[]>(() => [
-    { key: "nombre", label: "Nombre", type: "text", required: true, get: (c) => c.nombre },
-    { key: "telefono", label: "Teléfono", type: "text", get: (c) => c.telefono ?? "" },
-    { key: "ruc", label: "RUC", type: "text", get: (c) => c.ruc ?? "" },
+    { key: "nombre", label: tt("Nombre"), type: "text", required: true, get: (c) => c.nombre },
+    { key: "telefono", label: tt("Teléfono"), type: "text", get: (c) => c.telefono ?? "" },
+    { key: "ruc", label: tt("RUC"), type: "text", get: (c) => c.ruc ?? "" },
     {
       key: "cartera",
-      label: "Cartera",
+      label: tt("Cartera"),
       type: "enum",
       get: (c) => carteraLabel(c.scope_clientes),
       enumOptions: carteraOptions,
     },
-    { key: "status", label: "Status", type: "enum", get: (c) => c.status ? (STATUS_LABEL[c.status] ?? c.status) : "",
-      enumOptions: [{ value: "VIP", label: "VIP" }, { value: "Frecuente", label: "Frecuente" }, { value: "Dormido", label: "Dormido" }, { value: "Nuevo", label: "Nuevo" }, { value: "Activo", label: "Activo" }],
+    { key: "status", label: tt("Status"), type: "enum", get: (c) => c.status ? (STATUS_LABEL[c.status] ?? c.status) : "",
+      enumOptions: [{ value: "VIP", label: tt("VIP") }, { value: "Frecuente", label: tt("Frecuente") }, { value: "Dormido", label: tt("Dormido") }, { value: "Nuevo", label: tt("Nuevo") }, { value: "Activo", label: tt("Activo") }],
       render: (c) => {
         const s = c.status ?? "";
         const cls = s === "vip" ? "bg-amber-50 text-amber-700 border-amber-200"
@@ -258,19 +274,19 @@ export default function ClientesSegmentosPage() {
           {STATUS_LABEL[s] ?? "—"}
         </span>;
       } },
-    { key: "ult_tipo", label: "Últ. transacción", type: "enum", get: (c) => c.ultima_tx_tipo ? (TX_LABEL[c.ultima_tx_tipo] ?? c.ultima_tx_tipo) : "",
-      enumOptions: [{ value: "Venta", label: "Venta" }, { value: "Compra", label: "Compra" }, { value: "Cambio", label: "Cambio" }] },
-    { key: "ult_fecha", label: "Últ. fecha", type: "date", get: (c) => c.ultima_tx_fecha },
-    { key: "ult_monto", label: "Últ. monto", type: "money", get: (c) => Number(c.ultima_tx_monto) || 0 },
-    { key: "primera", label: "Primera compra", type: "date", get: (c) => c.primera_venta_at, defaultVisible: false },
-    { key: "cnt_tx", label: "Total transacciones", type: "number", get: (c) => c.cnt_transacciones, total: "sum" },
-    { key: "total_comprado", label: "Total comprado", type: "money", get: (c) => Number(c.total_comprado) || 0, total: "sum" },
-    { key: "total_vendido", label: "Total vendido", type: "money", get: (c) => Number(c.total_vendido) || 0, total: "sum" },
-    { key: "credito", label: "Crédito disponible", type: "money", required: true, get: (c) => Number(c.saldo_credito) || 0, total: "sum" },
-    { key: "cashback", label: "Cashback disponible", type: "money", required: true, get: (c) => Number(c.saldo_cashback) || 0, total: "sum" },
-    { key: "expira", label: "Cashback expira", type: "date", get: (c) => c.cashback_expira, defaultVisible: false },
-    { key: "cb_vencido", label: "Cashback vencido", type: "money", get: (c) => Number(c.cashback_vencido) || 0, total: "sum", defaultVisible: false },
-    { key: "email", label: "Email", type: "text", get: (c) => c.email ?? "", defaultVisible: false },
+    { key: "ult_tipo", label: tt("Últ. transacción"), type: "enum", get: (c) => c.ultima_tx_tipo ? (TX_LABEL[c.ultima_tx_tipo] ?? c.ultima_tx_tipo) : "",
+      enumOptions: [{ value: "Venta", label: tt("Venta") }, { value: "Compra", label: tt("Compra") }, { value: "Cambio", label: tt("Cambio") }] },
+    { key: "ult_fecha", label: tt("Últ. fecha"), type: "date", get: (c) => c.ultima_tx_fecha },
+    { key: "ult_monto", label: tt("Últ. monto"), type: "money", get: (c) => Number(c.ultima_tx_monto) || 0 },
+    { key: "primera", label: tt("Primera compra"), type: "date", get: (c) => c.primera_venta_at, defaultVisible: false },
+    { key: "cnt_tx", label: tt("Total transacciones"), type: "number", get: (c) => c.cnt_transacciones, total: "sum" },
+    { key: "total_comprado", label: tt("Total comprado"), type: "money", get: (c) => Number(c.total_comprado) || 0, total: "sum" },
+    { key: "total_vendido", label: tt("Total vendido"), type: "money", get: (c) => Number(c.total_vendido) || 0, total: "sum" },
+    { key: "credito", label: tt("Crédito disponible"), type: "money", required: true, get: (c) => Number(c.saldo_credito) || 0, total: "sum" },
+    { key: "cashback", label: tt("Cashback disponible"), type: "money", required: true, get: (c) => Number(c.saldo_cashback) || 0, total: "sum" },
+    { key: "expira", label: tt("Cashback expira"), type: "date", get: (c) => c.cashback_expira, defaultVisible: false },
+    { key: "cb_vencido", label: tt("Cashback vencido"), type: "money", get: (c) => Number(c.cashback_vencido) || 0, total: "sum", defaultVisible: false },
+    { key: "email", label: tt("Email"), type: "text", get: (c) => c.email ?? "", defaultVisible: false },
   // eslint-disable-next-line react-hooks/exhaustive-deps
   ], [clientes]);
 
@@ -278,7 +294,7 @@ export default function ClientesSegmentosPage() {
     <div className="max-w-full space-y-4">
       <div className="flex items-start justify-between flex-wrap gap-3 print:hidden">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Clientes</h1>
+          <h1 className="text-2xl font-bold text-slate-900">{tt("Clientes")}</h1>
           <p className="text-sm text-slate-500 mt-0.5">
             {tt("Tildá segmentos para acotar, después filtrá y ordená cualquier columna como en Excel.")}
           </p>
@@ -296,7 +312,7 @@ export default function ClientesSegmentosPage() {
           reporteKey="segmentos_clientes"
           hayFiltros={filtros.size > 0}
           filtrosActuales={filtrosActualesObj}
-          nombreSugerido={filtrosActivos.map((s) => s.label).join(" + ")}
+          nombreSugerido={filtrosActivos.map((s) => nombreSegmento(s.slug, s.label)).join(" + ")}
           onAplicar={aplicarVistaGuardada}
           onError={(msg) => setError(msg)}
         />
@@ -326,7 +342,7 @@ export default function ClientesSegmentosPage() {
               <div className="flex items-center justify-end mb-1">
                 <span className={`text-xl font-bold tabular-nums ${activo ? "text-[#3F8E91]" : "text-slate-700"}`}>{s.count}</span>
               </div>
-              <p className={`text-xs font-bold ${activo ? "text-[#3F8E91]" : "text-slate-800"}`}>{s.label}</p>
+              <p className={`text-xs font-bold ${activo ? "text-[#3F8E91]" : "text-slate-800"}`}>{nombreSegmento(s.slug, s.label)}</p>
               {activo && <p className="text-[10px] text-[#3F8E91] mt-1 font-semibold">✓ segmento activo</p>}
             </button>
           );
@@ -338,7 +354,7 @@ export default function ClientesSegmentosPage() {
           <span className="text-xs text-slate-500 font-semibold">Segmentos:</span>
           {filtrosActivos.map((f) => (
             <span key={f.slug} className="inline-flex items-center gap-1 rounded-full bg-[#4FAEB2]/10 border border-[#4FAEB2]/30 px-2 py-0.5 text-xs text-[#3F8E91] font-semibold">
-              {f.label}
+              {nombreSegmento(f.slug, f.label)}
               <button type="button" onClick={() => toggleFiltro(f.slug)} className="ml-1 text-[#3F8E91] hover:text-[#2a6a6d]">×</button>
             </span>
           ))}

@@ -646,11 +646,11 @@ export default function NuevaEvaluacionPage() {
         <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider">Balance</h3>
         <div className="grid grid-cols-2 gap-3 text-sm">
           <BalanceItem
-            label="Subtotal (suma de franjas)"
+            label={tt("Subtotal (suma de franjas)")}
             value={fmtGs(totalTraeSubtotal)} tone="slate"
           />
           <BalanceItem
-            label={ajusteEvaluacion !== 0 ? "Total a pagar (evaluado)" : "Total a pagar"}
+            label={ajusteEvaluacion !== 0 ? tt("Total a pagar (evaluado)") : tt("Total a pagar")}
             value={fmtGs(totalTrae)}
             tone={totalTrae > 0 ? "emerald" : "slate"}
           />

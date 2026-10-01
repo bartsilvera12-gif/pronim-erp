@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { playCelebrationSound } from "@/lib/audio/notif-sounds";
 import { useT, useMoney } from "@/lib/i18n/context";
+import { tt } from "@/lib/i18n/dict";
 import { fmtActive } from "@/lib/i18n/currency";
 import { MetaCelebrationModal, MetaCumplidaBadge } from "@/components/metas/MetaCelebrationModal";
 import MontoInput from "@/components/ui/MontoInput";
@@ -1642,13 +1643,13 @@ export default function NuevaAtencionPage() {
 
       {/* ─── Balance + confirmar ─── */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 sm:p-5 space-y-4">
-        <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider">Balance</h3>
+        <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider">{tt("Balance")}</h3>
 
         {/* Fila 1: totales de la atención */}
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div>
             <BalanceItem
-              label={ajusteEvaluacion !== 0 ? "Total trae (evaluado)" : "Total trae"}
+              label={ajusteEvaluacion !== 0 ? tt("Total trae (evaluado)") : tt("Total trae")}
               value={fmtGs(totalTrae)}
               tone="emerald"
             />
@@ -1661,13 +1662,13 @@ export default function NuevaAtencionPage() {
               </p>
             )}
           </div>
-          <BalanceItem label="Total lleva" value={fmtGs(totalLleva)} tone="sky" />
+          <BalanceItem label={tt("Total lleva")} value={fmtGs(totalLleva)} tone="sky" />
         </div>
 
         {/* Bloque de crédito: solo si hay algo relevante (trajo, tiene previo, o va a llevar) */}
         {(totalTrae > 0 || creditoDisponible > 0 || totalLleva > 0) && (
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2">
-            <p className="text-[11px] uppercase font-semibold text-slate-500">Crédito del cliente</p>
+            <p className="text-[11px] uppercase font-semibold text-slate-500">{tt("Crédito del cliente")}</p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
               <div className="flex justify-between sm:block">
                 <span className="text-slate-500 text-xs">Previo</span>
@@ -1895,12 +1896,12 @@ export default function NuevaAtencionPage() {
         {/* Resumen final: cuánto crédito le queda al cliente después de esta atención */}
         <div className="grid grid-cols-2 gap-3">
           <BalanceItem
-            label={aCobrar > 0 ? "A cobrar ahora" : (totalLleva > 0 ? "A cobrar ahora" : "Sin cobro (solo entregó)")}
+            label={aCobrar > 0 || totalLleva > 0 ? tt("A cobrar ahora") : tt("Sin cobro (solo entregó)")}
             value={fmtGs(aCobrar)}
             tone={aCobrar > 0 ? "amber" : "slate"}
           />
           <BalanceItem
-            label="Crédito que le queda"
+            label={tt("Crédito que le queda")}
             value={fmtGs(creditoRestante)}
             tone={creditoRestante > 0 ? "emerald" : "slate"}
           />

@@ -860,11 +860,11 @@ export default function NuevaVentaPage() {
 
       {/* Balance + cobro */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 sm:p-5 space-y-4">
-        <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider">Balance</h3>
+        <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider">{tt("Balance")}</h3>
 
         <div className="grid grid-cols-2 gap-3 text-sm">
-          <BalanceItem label="Total lleva" value={fmtGs(totalLleva)} tone="sky" />
-          <BalanceItem label="Crédito disponible" value={fmtGs(creditoDisponible)} tone={creditoDisponible > 0 ? "emerald" : "slate"} />
+          <BalanceItem label={tt("Total lleva")} value={fmtGs(totalLleva)} tone="sky" />
+          <BalanceItem label={tt("Crédito disponible")} value={fmtGs(creditoDisponible)} tone={creditoDisponible > 0 ? "emerald" : "slate"} />
         </div>
 
         {/* Promo / cupón */}

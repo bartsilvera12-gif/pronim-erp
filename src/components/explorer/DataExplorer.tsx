@@ -460,7 +460,7 @@ export function DataExplorer<T>(props: {
         <div className="relative" ref={colPickerRef}>
           <button type="button" onClick={() => { setColPickerOpen((v) => !v); setFiltrosOpen(false); }}
             className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
-            Columnas ({colsVis.length})
+            {tt("Columnas")} ({colsVis.length})
           </button>
           {colPickerOpen && (
             <div className="absolute left-0 top-9 z-20 rounded-lg border border-slate-200 bg-white shadow-lg p-3 min-w-[200px] max-h-[360px] overflow-y-auto space-y-1">
@@ -477,7 +477,7 @@ export function DataExplorer<T>(props: {
         <div className="relative" ref={filtrosRef}>
           <button type="button" onClick={() => { setFiltrosOpen((v) => !v); setColPickerOpen(false); }}
             className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold ${filtrosActivos.length > 0 ? "border-[#4FAEB2] bg-[#4FAEB2]/10 text-[#3F8E91]" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"}`}>
-            Filtros{filtrosActivos.length > 0 ? ` (${filtrosActivos.length})` : ""}
+            {tt("Filtros")}{filtrosActivos.length > 0 ? ` (${filtrosActivos.length})` : ""}
           </button>
           {filtrosOpen && (
             <div className="absolute left-0 top-9 z-20 rounded-lg border border-slate-200 bg-white shadow-lg p-3 w-[320px] max-h-[460px] overflow-y-auto space-y-3">
@@ -485,7 +485,7 @@ export function DataExplorer<T>(props: {
                 <div key={c.key} className="space-y-1">
                   <p className="text-[11px] font-semibold text-slate-600">{c.label}</p>
                   {c.type === "text" && (
-                    <input type="text" placeholder="contiene…" value={filtros[c.key]?.text ?? ""}
+                    <input type="text" placeholder={tt("contiene…")} value={filtros[c.key]?.text ?? ""}
                       onChange={(e) => setFiltro(c.key, { text: e.target.value })}
                       className="w-full rounded-md border border-slate-200 px-2 py-1 text-xs" />
                   )}
@@ -556,7 +556,7 @@ export function DataExplorer<T>(props: {
         <button type="button" onClick={exportarXlsxSafe} disabled={ordenadas.length === 0}
           className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-40"
           title="Descargar en Excel (.xlsx)">
-          Exportar Excel
+          {tt("Exportar Excel")}
         </button>
         <button type="button" onClick={exportarCsv} disabled={ordenadas.length === 0}
           className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40"
