@@ -7,6 +7,8 @@ import type { Venta, LineaVenta, TipoIvaVenta } from "@/lib/ventas/types";
 import { postgrestGet, getAccessTokenForRequest } from "@/lib/supabase/postgrest-runtime";
 
 interface VentaRow {
+  /** Solo donde corrió la migración del autoimpresor. */
+  factura_numero?: string | null;
   id: string;
   empresa_id: string;
   cliente_id?: string | null;
@@ -83,6 +85,8 @@ const VENTAS_COLS_MIN = "id,empresa_id,cliente_id,numero_control,moneda,tipo_cam
 const VENTAS_COLS_ANULACION = `${VENTAS_COLS_MIN},anulada_at,anulacion_motivo`;
 const VENTAS_COLS_CON_DESCUENTO = `${VENTAS_COLS_ANULACION},descuento_general,descuento_motivo`;
 const VENTAS_COLS_CON_SUCURSAL = `${VENTAS_COLS_CON_DESCUENTO},sucursal_id,sucursal:sucursal_id(nombre)`;
+// factura_numero existe solo donde corrió la migración del autoimpresor.
+const VENTAS_COLS_CON_FACTURA = `${VENTAS_COLS_CON_SUCURSAL},factura_numero`;
 const VENTAS_ITEMS_COLS = "venta_id,producto_id,producto_nombre,sku,cantidad,precio_venta_original,precio_venta,tipo_iva,subtotal,monto_iva,total_linea,es_sin_cargo,motivo_sin_cargo,costo_promocional_total";
 
 export async function GET(request: NextRequest) {
@@ -110,7 +114,7 @@ export async function GET(request: NextRequest) {
     // conservamos el comportamiento historico de ver todas — hay tenants
     // como Joyeria donde los usuarios sin sucursal fija ven la empresa
     // entera.
-    const attempts = [VENTAS_COLS_CON_SUCURSAL, VENTAS_COLS_CON_DESCUENTO, VENTAS_COLS_ANULACION, VENTAS_COLS_MIN];
+    const attempts = [VENTAS_COLS_CON_FACTURA, VENTAS_COLS_CON_SUCURSAL, VENTAS_COLS_CON_DESCUENTO, VENTAS_COLS_ANULACION, VENTAS_COLS_MIN];
     let ventasRes: Awaited<ReturnType<typeof postgrestGet<VentaRow>>> | null = null;
     let lastError: unknown = null;
     for (const cols of attempts) {
@@ -180,6 +184,7 @@ export async function GET(request: NextRequest) {
       return {
         id: r.id,
         numero_control: r.numero_control,
+        factura_numero: r.factura_numero ?? null,
         cliente_id: r.cliente_id ?? null,
         cliente_nombre: r.cliente_id ? (nombreByCliente.get(r.cliente_id) ?? null) : null,
         items: mapItems(lineRows),

@@ -737,7 +737,14 @@ export default function VentasPage() {
                         switch (k) {
                           case "numero_control": return (
                             <td key={k} className="py-4 pr-4 font-mono text-xs align-middle">
-                              <Link href={`/ventas/${v.id}`} className="text-[#3F8E91] hover:underline" title={t("Ver detalle")}>{v.numero_control}</Link>
+                              {/* Si la venta se facturó, el número que importa es el
+                                  de la factura; el V- interno queda abajo chiquito. */}
+                              <Link href={`/ventas/${v.id}`} className="text-[#3F8E91] hover:underline" title={t("Ver detalle")}>
+                                {v.factura_numero || v.numero_control}
+                              </Link>
+                              {v.factura_numero && (
+                                <span className="block text-[10px] text-slate-400">{v.numero_control}</span>
+                              )}
                             </td>
                           );
                           case "productos": return <td key={k} className="py-4 pr-4 align-middle"><ResumenProductos v={v} /></td>;

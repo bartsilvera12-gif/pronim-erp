@@ -182,6 +182,8 @@ interface VentaRow {
   observaciones: string | null;
   metodo_pago: string | null;
   cliente_id: string | null;
+  /** Número ya asignado por el autoimpresor. Si está, se reimprime la factura. */
+  factura_numero?: string | null;
   /** Columnas opcionales: joyería no usa remisión, quedan en null. */
   genera_nota_remision?: boolean | null;
   nota_remision_numero?: string | null;
@@ -485,12 +487,24 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
   const empresaId = ctx.auth.empresa_id;
 
   // Venta
-  const vQ = await ctx.supabase
+  const COLS_BASE = "id, numero_control, fecha, subtotal, monto_iva, total, observaciones, metodo_pago, cliente_id";
+  // `factura_numero` es de la migración del autoimpresor. En un deploy que
+  // todavía no la aplicó, pedirla rompe el SELECT entero — así que si falla
+  // se reintenta sin ella y el ticket sigue saliendo.
+  let vQ = await ctx.supabase
     .from("ventas")
-    .select("id, numero_control, fecha, subtotal, monto_iva, total, observaciones, metodo_pago, cliente_id")
+    .select(`${COLS_BASE}, factura_numero`)
     .eq("id", id)
     .eq("empresa_id", empresaId)
     .maybeSingle();
+  if (vQ.error) {
+    vQ = await ctx.supabase
+      .from("ventas")
+      .select(COLS_BASE)
+      .eq("id", id)
+      .eq("empresa_id", empresaId)
+      .maybeSingle();
+  }
   if (vQ.error) return new NextResponse(`Error: ${vQ.error.message}`, { status: 500 });
   if (!vQ.data) return new NextResponse("Venta no encontrada", { status: 404 });
   const venta = vQ.data as unknown as VentaRow;
@@ -640,32 +654,39 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
   // ── Factura del autoimpresor ─────────────────────────────────────────
   // Solo si la pidieron explícitamente: asignar el número consume uno del
   // rango autorizado, así que no pasa por accidente al ver el ticket.
+  // Una venta que YA se facturó se reimprime como factura, con el mismo
+  // número: si saliera el ticket interno, el cliente tendría dos papeles
+  // distintos de la misma compra. Reimprimir no consume numeración —
+  // asignarNumeroFactura devuelve el número existente sin tocar el contador.
+  const yaFacturada = Boolean(venta.factura_numero);
   let factura: DatosFactura | null = null;
-  if (pidenFactura) {
-    let asignado;
+  if (pidenFactura || yaFacturada) {
+    /** Frena con un mensaje solo si la factura se pidió a propósito. */
+    const noSePudo = (motivo: string) =>
+      pidenFactura
+        ? new NextResponse(motivo, { status: 409, headers: { "Content-Type": "text/plain; charset=utf-8" } })
+        : null;
+
+    let asignado = null;
+    let fallo: NextResponse | null = null;
     try {
       asignado = await asignarNumeroFactura(empresaId, id);
     } catch (e) {
       // El caso típico: se agotó el rango autorizado.
-      return new NextResponse(e instanceof Error ? e.message : "No se pudo emitir la factura.", {
-        status: 409,
-        headers: { "Content-Type": "text/plain; charset=utf-8" },
-      });
+      fallo = noSePudo(e instanceof Error ? e.message : "No se pudo emitir la factura.");
     }
+    if (fallo) return fallo;
+
+    const emisor = asignado ? await leerDatosEmisor(empresaId) : null;
     if (!asignado) {
-      return new NextResponse(
-        "Esta sucursal no emite factura con timbrado. Revisá Configuración → Facturación.",
-        { status: 409, headers: { "Content-Type": "text/plain; charset=utf-8" } },
-      );
-    }
-    const emisor = await leerDatosEmisor(empresaId);
-    if (!emisor) {
-      return new NextResponse(
-        "Faltan los datos del emisor (RUC, razón social, timbrado). Cargalos en Configuración → Facturación.",
-        { status: 409, headers: { "Content-Type": "text/plain; charset=utf-8" } },
-      );
+      const r = noSePudo("Esta sucursal no emite factura con timbrado. Revisá Configuración → Facturación.");
+      if (r) return r;
+    } else if (!emisor) {
+      const r = noSePudo("Faltan los datos del emisor (RUC, razón social, timbrado). Cargalos en Configuración → Facturación.");
+      if (r) return r;
     }
 
+    if (asignado && emisor) {
     // Liquidación por tasa. Si la línea no trae el desglose (ventas viejas),
     // se cae al total de la cabecera para no imprimir ceros.
     let gravado5 = 0, gravado10 = 0, exentas = 0, iva5 = 0, iva10 = 0;
@@ -697,13 +718,14 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
       } catch { /* sin datos del cliente: va como consumidor final */ }
     }
 
-    factura = {
-      numero: asignado.numero,
-      emisor,
-      cliente_nombre: clienteNombre ?? "CONSUMIDOR FINAL",
-      cliente_documento: clienteDoc,
-      gravado5, gravado10, exentas, iva5, iva10,
-    };
+      factura = {
+        numero: asignado.numero,
+        emisor,
+        cliente_nombre: clienteNombre ?? "CONSUMIDOR FINAL",
+        cliente_documento: clienteDoc,
+        gravado5, gravado10, exentas, iva5, iva10,
+      };
+    }
   }
 
   const seccionesHtml = copias

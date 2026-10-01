@@ -27,6 +27,9 @@ export interface Venta {
   /** UUID en base de datos (antes del bloque DB-first era numérico local). */
   id:             string;
   numero_control: string;   // VTA-000001, VTA-000002, …
+  /** Número de la factura del autoimpresor (001-002-0000001). Null si todavía
+   *  no se facturó o si la sucursal no emite factura. */
+  factura_numero?: string | null;
   cliente_id?:    string | null;
   /** Nombre legible del cliente, resuelto en el endpoint de listado. */
   cliente_nombre?: string | null;
