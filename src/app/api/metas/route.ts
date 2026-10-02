@@ -275,7 +275,10 @@ export async function GET(request: NextRequest) {
       // Ritmo: por encima/dentro/debajo comparado con el necesario para meta.
       const promedioDiarioActual = diaDelMes > 0 ? kpi.mes / diaDelMes : 0;
       const proyeccionCierreMes = promedioDiarioActual * diasEnMes;
-      const diasRestantes = Math.max(0, diasEnMes - diaDelMes);
+      // Hoy cuenta: el día todavía no terminó y la sucursal sigue vendiendo.
+      // El 2 de un mes de 31 quedan 30 días para llegar, no 29; el último día
+      // del mes queda 1.
+      const diasRestantes = Math.max(0, diasEnMes - diaDelMes + 1);
       const necesarioPorDiaMes = diasRestantes > 0 ? Math.max(0, metaMes - kpi.mes) / diasRestantes : 0;
       let ritmo: "encima" | "dentro" | "debajo" | "sin_meta" = "sin_meta";
       if (metaMes > 0) {
