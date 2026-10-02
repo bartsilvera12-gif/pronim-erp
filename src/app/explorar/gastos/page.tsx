@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { tt } from "@/lib/i18n/dict";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { useSucursalActivaId } from "@/lib/sucursales/activa";
 import { DataExplorer, type ColumnDef } from "@/components/explorer/DataExplorer";
@@ -41,19 +42,19 @@ export default function ExplorarGastosPage() {
     const categorias = Array.from(new Set(rows.map((r) => r.categoria).filter(Boolean))) as string[];
     const sucursales = Array.from(new Set(rows.map((r) => r.sucursal).filter(Boolean))) as string[];
     const base: ColumnDef<Gasto>[] = [
-      { key: "fecha", label: "Fecha", type: "date", required: true, get: (r) => r.fecha },
-      { key: "categoria", label: "Categoría", type: "enum", required: true, get: (r) => r.categoria,
+      { key: "fecha", label: tt("Fecha"), type: "date", required: true, get: (r) => r.fecha },
+      { key: "categoria", label: tt("Categoría"), type: "enum", required: true, get: (r) => r.categoria,
         enumOptions: categorias.map((c) => ({ value: c, label: c })) },
-      { key: "descripcion", label: "Descripción", type: "text", get: (r) => r.descripcion },
+      { key: "descripcion", label: tt("Descripción"), type: "text", get: (r) => r.descripcion },
       { key: "tipo", label: "Tipo", type: "enum", get: (r) => r.tipo === "fijo" ? "Fijo" : "Variable",
         enumOptions: [{ value: "Fijo", label: "Fijo" }, { value: "Variable", label: "Variable" }] },
       { key: "recurrente", label: "Recurrente", type: "enum", get: (r) => r.recurrente ? "Sí" : "No",
         enumOptions: [{ value: "Sí", label: "Sí" }, { value: "No", label: "No" }], defaultVisible: false },
       { key: "frecuencia", label: "Frecuencia", type: "text", get: (r) => r.frecuencia ?? "", defaultVisible: false },
-      { key: "monto", label: "Monto", type: "money", required: true, get: (r) => r.monto, total: "sum" },
+      { key: "monto", label: tt("Monto"), type: "money", required: true, get: (r) => r.monto, total: "sum" },
     ];
     if (tieneSucursal) {
-      base.splice(1, 0, { key: "sucursal", label: "Sucursal", type: "enum", get: (r) => r.sucursal ?? "",
+      base.splice(1, 0, { key: "sucursal", label: tt("Sucursal"), type: "enum", get: (r) => r.sucursal ?? "",
         enumOptions: sucursales.map((s) => ({ value: s, label: s })) });
     }
     return base;
@@ -67,7 +68,7 @@ export default function ExplorarGastosPage() {
       rows={rows} columns={columns} cargando={cargando} csvName="gastos"
       toolbarExtra={
         <div className="flex items-center gap-1.5">
-          <span className="text-[11px] text-slate-500 whitespace-nowrap">Datos desde:</span>
+          <span className="text-[11px] text-slate-500 whitespace-nowrap">{tt("Datos desde:")}</span>
           <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm" />
           <span className="text-slate-400 text-xs">→</span>
           <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm" />

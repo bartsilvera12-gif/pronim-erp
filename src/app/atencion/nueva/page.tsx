@@ -2059,8 +2059,12 @@ export default function NuevaAtencionPage() {
                 style={{ borderRadius: "2px 2px 14px 2px" }}
               >
                 <span aria-hidden className={`absolute -top-2 left-1/2 -translate-x-1/2 h-4 w-16 ${s.tape} rotate-[-3deg] shadow-sm`} />
-                <p className={`text-[13px] font-bold leading-snug ${s.text}`}>{a.titulo}</p>
-                <p className={`text-[12px] mt-1 leading-snug ${s.text} opacity-90`}>{a.mensaje}</p>
+                {/* Se traduce al MOSTRARLO, no al guardarlo: el texto que vive
+                    en la configuracion sigue siendo uno solo. Si vos lo
+                    editaste, `tt` no lo encuentra en el diccionario y lo
+                    devuelve tal cual, que es lo que corresponde. */}
+                <p className={`text-[13px] font-bold leading-snug ${s.text}`}>{tt(a.titulo)}</p>
+                <p className={`text-[12px] mt-1 leading-snug ${s.text} opacity-90`}>{tt(a.mensaje)}</p>
               </div>
             );
           })}

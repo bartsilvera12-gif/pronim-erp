@@ -1176,8 +1176,8 @@ export default function NuevaVentaPage() {
                 className={`relative ${s.bg} ${s.tilt} pointer-events-auto shadow-[0_6px_16px_-4px_rgba(0,0,0,0.25)] px-4 pt-5 pb-4 transition-transform hover:rotate-0 hover:scale-[1.02]`}
                 style={{ borderRadius: "2px 2px 14px 2px" }}>
                 <span aria-hidden className={`absolute -top-2 left-1/2 -translate-x-1/2 h-4 w-16 ${s.tape} rotate-[-3deg] shadow-sm`} />
-                <p className={`text-[13px] font-bold leading-snug ${s.text}`}>{a.titulo}</p>
-                <p className={`text-[12px] mt-1 leading-snug ${s.text} opacity-90`}>{a.mensaje}</p>
+                <p className={`text-[13px] font-bold leading-snug ${s.text}`}>{tt(a.titulo)}</p>
+                <p className={`text-[12px] mt-1 leading-snug ${s.text} opacity-90`}>{tt(a.mensaje)}</p>
               </div>
             );
           })}

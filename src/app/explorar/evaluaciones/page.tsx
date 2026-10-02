@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { tt } from "@/lib/i18n/dict";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { useSucursalActivaId } from "@/lib/sucursales/activa";
 import { DataExplorer, type ColumnDef } from "@/components/explorer/DataExplorer";
@@ -42,15 +43,15 @@ export default function ExplorarEvaluacionesPage() {
     const evaluadoras = Array.from(new Set(rows.map((r) => r.usuario_nombre).filter(Boolean))) as string[];
     const estados = Array.from(new Set(rows.map((r) => r.estado).filter(Boolean))) as string[];
     return [
-      { key: "fecha", label: "Fecha", type: "date", required: true, get: (r) => r.fecha },
-      { key: "numero", label: "N° Recepción", type: "text", get: (r) => r.numero_control },
-      { key: "cliente", label: "Cliente", type: "text", get: (r) => r.cliente_nombre ?? "" },
+      { key: "fecha", label: tt("Fecha"), type: "date", required: true, get: (r) => r.fecha },
+      { key: "numero", label: tt("N° Recepción"), type: "text", get: (r) => r.numero_control },
+      { key: "cliente", label: tt("Cliente"), type: "text", get: (r) => r.cliente_nombre ?? "" },
       { key: "sucursal", label: "Tienda", type: "enum", get: (r) => r.sucursal_nombre ?? "", enumOptions: sucursales.map((s) => ({ value: s, label: s })) },
       { key: "evaluadora", label: "Evaluadora", type: "enum", get: (r) => r.usuario_nombre ?? "", enumOptions: evaluadoras.map((u) => ({ value: u, label: u })), defaultVisible: false },
-      { key: "prendas", label: "Prendas", type: "number", get: (r) => r.prendas, total: "sum" },
-      { key: "subtotal", label: "Valor venta est.", type: "money", get: (r) => r.subtotal, total: "sum", defaultVisible: false },
+      { key: "prendas", label: tt("Prendas"), type: "number", get: (r) => r.prendas, total: "sum" },
+      { key: "subtotal", label: tt("Valor venta est."), type: "money", get: (r) => r.subtotal, total: "sum", defaultVisible: false },
       { key: "ajuste", label: "Ajuste", type: "money", get: (r) => r.ajuste, defaultVisible: false },
-      { key: "total", label: "Total pagado", type: "money", required: true, get: (r) => r.total, total: "sum" },
+      { key: "total", label: tt("Total pagado"), type: "money", required: true, get: (r) => r.total, total: "sum" },
       // Markup: cuánto se estima ganar sobre lo pagado = (valor venta − pagado) / pagado.
       { key: "markup", label: "% Ganancia est.", type: "number",
         get: (r) => r.total > 0 ? Math.round(((r.subtotal - r.total) / r.total) * 1000) / 10 : 0,
@@ -68,7 +69,7 @@ export default function ExplorarEvaluacionesPage() {
       detailHref={(r) => r.cliente_id ? `/clientes/${r.cliente_id}` : `#`}
       toolbarExtra={
         <div className="flex items-center gap-1.5">
-          <span className="text-[11px] text-slate-500 whitespace-nowrap">Datos desde:</span>
+          <span className="text-[11px] text-slate-500 whitespace-nowrap">{tt("Datos desde:")}</span>
           <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm" />
           <span className="text-slate-400 text-xs">→</span>
           <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm" />

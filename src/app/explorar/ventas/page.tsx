@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { tt } from "@/lib/i18n/dict";
 import Link from "next/link";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { useSucursalActivaId } from "@/lib/sucursales/activa";
@@ -71,15 +72,15 @@ export default function ExplorarVentasPage() {
     const sucursales = Array.from(new Set(ventas.map((v) => v.sucursal_nombre).filter(Boolean))) as string[];
     const usuarios = Array.from(new Set(ventas.map((v) => v.usuario_nombre).filter(Boolean))) as string[];
     return [
-      { key: "fecha", label: "Fecha", type: "date", get: (v) => v.fecha, required: true, total: undefined },
-      { key: "numero", label: "N° Venta", type: "text", get: (v) => v.numero_control,
+      { key: "fecha", label: tt("Fecha"), type: "date", get: (v) => v.fecha, required: true, total: undefined },
+      { key: "numero", label: tt("N° Venta"), type: "text", get: (v) => v.numero_control,
         render: (v) => <Link href={`/ventas/${v.id}`} className="font-mono text-[#3F8E91] hover:underline">{v.numero_control}</Link> },
       { key: "sucursal", label: "Tienda", type: "enum", get: (v) => v.sucursal_nombre ?? "", enumOptions: sucursales.map((s) => ({ value: s, label: s })) },
-      { key: "cliente", label: "Cliente", type: "text", get: (v) => v.cliente_nombre ?? "" },
+      { key: "cliente", label: tt("Cliente"), type: "text", get: (v) => v.cliente_nombre ?? "" },
       { key: "usuario", label: "Vendedora", type: "enum", get: (v) => v.usuario_nombre ?? "", enumOptions: usuarios.map((u) => ({ value: u, label: u })), defaultVisible: false },
       { key: "metodo", label: "Forma de pago", type: "enum", get: (v) => v.metodo_pago ?? "", enumOptions: metodos.map((m) => ({ value: m, label: m })) },
       { key: "cant", label: "Cant. productos", type: "number", get: (v) => v.cant_productos, total: "sum" },
-      { key: "descuento", label: "Descuento", type: "money", get: (v) => v.descuento_general, total: "sum", defaultVisible: false },
+      { key: "descuento", label: tt("Descuento"), type: "money", get: (v) => v.descuento_general, total: "sum", defaultVisible: false },
       { key: "total", label: "Valor", type: "money", get: (v) => v.total, total: "sum", required: true },
       { key: "estado", label: "Estado", type: "enum", get: (v) => v.estado ?? "activa", enumOptions: [{ value: "activa", label: "Activa" }, { value: "anulada", label: "Anulada" }], defaultVisible: false },
     ];
@@ -87,7 +88,7 @@ export default function ExplorarVentasPage() {
 
   return (
     <DataExplorer<Venta>
-      volverA={{ href: "/ventas", label: "Órdenes de venta" }}
+      volverA={{ href: "/ventas", label: tt("Órdenes de venta") }}
       titulo="Explorar ventas"
       descripcion="Elegí columnas, filtrá cada campo, combiná filtros y ordená por cualquier columna. Todo instantáneo."
       rows={ventas}
@@ -97,7 +98,7 @@ export default function ExplorarVentasPage() {
       detailHref={(v) => `/ventas/${v.id}`}
       toolbarExtra={
         <div className="flex items-center gap-1.5">
-          <span className="text-[11px] text-slate-500 whitespace-nowrap">Datos desde:</span>
+          <span className="text-[11px] text-slate-500 whitespace-nowrap">{tt("Datos desde:")}</span>
           <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)}
             className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm" />
           <span className="text-slate-400 text-xs">→</span>

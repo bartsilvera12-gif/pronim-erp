@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { tt } from "@/lib/i18n/dict";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { useSucursalActivaId } from "@/lib/sucursales/activa";
 import { DataExplorer, type ColumnDef } from "@/components/explorer/DataExplorer";
@@ -39,13 +40,13 @@ export default function ExplorarCajaPage() {
   }, [desde, hasta, sucursalActivaId]);
 
   const columns = useMemo<ColumnDef<Caja>[]>(() => [
-    { key: "numero", label: "N° Caja", type: "number", required: true, get: (r) => r.numero_caja },
+    { key: "numero", label: tt("N° Caja"), type: "number", required: true, get: (r) => r.numero_caja },
     { key: "estado", label: "Estado", type: "enum", get: (r) => r.estado, enumOptions: [{ value: "abierta", label: "Abierta" }, { value: "cerrada", label: "Cerrada" }] },
     { key: "apertura", label: "Apertura", type: "date", required: true, get: (r) => r.fecha_apertura },
     { key: "cierre", label: "Cierre", type: "date", get: (r) => r.fecha_cierre, defaultVisible: false },
-    { key: "abrio", label: "Abrió", type: "text", get: (r) => r.abierta_por_nombre ?? "", defaultVisible: false },
-    { key: "cerro", label: "Cerró", type: "text", get: (r) => r.cerrada_por_nombre ?? "" },
-    { key: "apertura_monto", label: "Monto apertura", type: "money", get: (r) => r.monto_apertura, defaultVisible: false },
+    { key: "abrio", label: tt("Abrió"), type: "text", get: (r) => r.abierta_por_nombre ?? "", defaultVisible: false },
+    { key: "cerro", label: tt("Cerró"), type: "text", get: (r) => r.cerrada_por_nombre ?? "" },
+    { key: "apertura_monto", label: tt("Monto apertura"), type: "money", get: (r) => r.monto_apertura, defaultVisible: false },
     { key: "esperado", label: "Esperado", type: "money", get: (r) => r.monto_esperado },
     { key: "contado", label: "Contado", type: "money", get: (r) => r.monto_contado, total: "sum" },
     { key: "diferencia", label: "Diferencia", type: "money", required: true, get: (r) => r.diferencia, total: "sum" },
@@ -54,13 +55,13 @@ export default function ExplorarCajaPage() {
 
   return (
     <DataExplorer<Caja>
-      volverA={{ href: "/reportes/cierres-caja", label: "Cierres de caja" }}
+      volverA={{ href: "/reportes/cierres-caja", label: tt("Cierres de caja") }}
       titulo="Explorar cierres de caja"
       descripcion="Turnos con contado vs esperado. Filtrá (ej. Diferencia < 0), ordená y exportá a Excel."
       rows={rows} columns={columns} cargando={cargando} csvName="cajas"
       toolbarExtra={
         <div className="flex items-center gap-1.5">
-          <span className="text-[11px] text-slate-500 whitespace-nowrap">Datos desde:</span>
+          <span className="text-[11px] text-slate-500 whitespace-nowrap">{tt("Datos desde:")}</span>
           <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm" />
           <span className="text-slate-400 text-xs">→</span>
           <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm" />

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { tt } from "@/lib/i18n/dict";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { useSucursalActivaId } from "@/lib/sucursales/activa";
 import { DataExplorer, type ColumnDef } from "@/components/explorer/DataExplorer";
@@ -73,19 +74,19 @@ export default function ExplorarCajaMovimientosPage() {
     const metodos = Array.from(new Set(rows.map((r) => r.metodo).filter(Boolean))) as string[];
     const sucs = Array.from(new Set(rows.map((r) => r.sucursal).filter(Boolean))) as string[];
     return [
-      { key: "fecha", label: "Fecha y hora", type: "date", required: true, get: (r) => r.fecha },
+      { key: "fecha", label: tt("Fecha y hora"), type: "date", required: true, get: (r) => r.fecha },
       { key: "tipo", label: "Movimiento", type: "text", required: true, get: (r) => r.tipo },
       { key: "origen", label: "Origen", type: "enum", get: (r) => r.origen,
         enumOptions: origenes.map((o) => ({ value: o, label: o })), defaultVisible: false },
       { key: "concepto", label: "Concepto", type: "text", get: (r) => r.concepto },
-      { key: "cliente", label: "Cliente", type: "text", get: (r) => r.cliente ?? "" },
-      { key: "metodo", label: "Método", type: "enum", get: (r) => (r.metodo ? METODO_LABEL[r.metodo] ?? r.metodo : ""),
+      { key: "cliente", label: tt("Cliente"), type: "text", get: (r) => r.cliente ?? "" },
+      { key: "metodo", label: tt("Método"), type: "enum", get: (r) => (r.metodo ? METODO_LABEL[r.metodo] ?? r.metodo : ""),
         enumOptions: metodos.map((m) => ({ value: METODO_LABEL[m] ?? m, label: METODO_LABEL[m] ?? m })) },
       { key: "entidad", label: "Entidad", type: "text", get: (r) => r.entidad ?? "", defaultVisible: false },
       { key: "referencia", label: "Referencia", type: "text", get: (r) => r.referencia ?? "", defaultVisible: false },
-      { key: "sucursal", label: "Sucursal", type: "enum", get: (r) => r.sucursal ?? "",
+      { key: "sucursal", label: tt("Sucursal"), type: "enum", get: (r) => r.sucursal ?? "",
         enumOptions: sucs.map((s) => ({ value: s, label: s })) },
-      { key: "caja", label: "N° Caja", type: "text", get: (r) => r.caja_numero ?? "", defaultVisible: false },
+      { key: "caja", label: tt("N° Caja"), type: "text", get: (r) => r.caja_numero ?? "", defaultVisible: false },
       // Entra / Sale separados: sumarlos juntos no diría nada.
       { key: "entra", label: "Entra", type: "money", required: true, get: (r) => (r.neto > 0 ? r.neto : 0), total: "sum" },
       { key: "sale", label: "Sale", type: "money", required: true, get: (r) => (r.neto < 0 ? -r.neto : 0), total: "sum" },
@@ -96,13 +97,13 @@ export default function ExplorarCajaMovimientosPage() {
 
   return (
     <DataExplorer<Mov>
-      volverA={{ href: "/reportes/caja-movimientos", label: "Movimientos de caja" }}
+      volverA={{ href: "/reportes/caja-movimientos", label: tt("Movimientos de caja") }}
       titulo="Movimientos de caja"
       descripcion="Todo lo que movió plata en el período: cobros de ventas, pagos por evaluaciones, ingresos/egresos manuales y aperturas. Para cuadrar la caja del día."
       rows={rows} columns={columns} cargando={cargando} csvName="caja_movimientos"
       toolbarExtra={
         <div className="flex items-center gap-1.5">
-          <span className="text-[11px] text-slate-500 whitespace-nowrap">Del:</span>
+          <span className="text-[11px] text-slate-500 whitespace-nowrap">{tt("Del:")}</span>
           <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)}
             className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm" />
           <span className="text-slate-400 text-xs">→</span>
@@ -119,11 +120,11 @@ export default function ExplorarCajaMovimientosPage() {
         rows.length > 0 ? (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 px-3 py-2.5">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700/80">Entró</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700/80">{tt("Entró")}</p>
               <p className="text-lg font-bold tabular-nums text-emerald-700">Gs. {fmtGs(resumen.entra)}</p>
             </div>
             <div className="rounded-xl border border-rose-100 bg-rose-50/70 px-3 py-2.5">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-rose-700/80">Salió</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-rose-700/80">{tt("Salió")}</p>
               <p className="text-lg font-bold tabular-nums text-rose-700">Gs. {fmtGs(resumen.sale)}</p>
             </div>
             <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
@@ -135,7 +136,7 @@ export default function ExplorarCajaMovimientosPage() {
             <div className="rounded-xl border border-[#4FAEB2]/30 bg-[#4FAEB2]/10 px-3 py-2.5">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-[#3F8E91]">En efectivo</p>
               <p className="text-lg font-bold tabular-nums text-[#3F8E91]">Gs. {fmtGs(resumen.efectivo)}</p>
-              <p className="text-[10px] text-slate-500">lo que debería haber en la caja</p>
+              <p className="text-[10px] text-slate-500">{tt("lo que debería haber en la caja")}</p>
             </div>
           </div>
         ) : null

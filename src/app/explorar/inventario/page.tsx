@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { tt } from "@/lib/i18n/dict";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { DataExplorer, type ColumnDef } from "@/components/explorer/DataExplorer";
 
@@ -47,19 +48,19 @@ export default function ExplorarInventarioPage() {
     return [
       { key: "sku", label: "SKU", type: "text", required: true, get: (r) => r.sku ?? "" },
       { key: "nombre", label: "Producto", type: "text", required: true, get: (r) => r.nombre },
-      { key: "categorias", label: "Categorías", type: "text", get: (r) => r.categorias },
-      { key: "tipo", label: "Tipo prenda", type: "enum", get: (r) => r.tipo_prenda, enumOptions: tipos.map((t) => ({ value: t, label: t })), defaultVisible: false },
+      { key: "categorias", label: tt("Categorías"), type: "text", get: (r) => r.categorias },
+      { key: "tipo", label: tt("Tipo prenda"), type: "enum", get: (r) => r.tipo_prenda, enumOptions: tipos.map((t) => ({ value: t, label: t })), defaultVisible: false },
       { key: "stock", label: "Stock", type: "number", required: true, get: (r) => r.stock, total: "sum" },
-      { key: "stock_min", label: "Stock mín.", type: "number", get: (r) => r.stock_min, defaultVisible: false },
-      { key: "costo", label: "Costo prom.", type: "money", get: (r) => r.costo, defaultVisible: false },
-      { key: "precio", label: "Precio venta", type: "money", get: (r) => r.precio },
+      { key: "stock_min", label: tt("Stock mín."), type: "number", get: (r) => r.stock_min, defaultVisible: false },
+      { key: "costo", label: tt("Costo prom."), type: "money", get: (r) => r.costo, defaultVisible: false },
+      { key: "precio", label: tt("Precio venta"), type: "money", get: (r) => r.precio },
       // "Valor stock" = stock × PRECIO DE VENTA: cuánto vale la mercadería que
       // hay en el local. Antes se calculaba contra el costo promedio, que en
       // las franjas es 0 (las prendas entran por evaluación, no por compra),
       // así que la columna daba Gs. 0 en todo el inventario.
       { key: "valor", label: "Valor stock", type: "money", get: (r) => r.stock * r.precio, total: "sum" },
       // El valor a costo sigue disponible para quien lo necesite (contable).
-      { key: "valor_costo", label: "Valor a costo", type: "money", get: (r) => r.stock * r.costo, total: "sum", defaultVisible: false },
+      { key: "valor_costo", label: tt("Valor a costo"), type: "money", get: (r) => r.stock * r.costo, total: "sum", defaultVisible: false },
     ];
   }, [rows]);
 
@@ -77,18 +78,18 @@ export default function ExplorarInventarioPage() {
       toolbarExtra={
         sucursales.length > 1 ? (
           <div className="flex items-center gap-1.5">
-            <span className="whitespace-nowrap text-[11px] text-slate-500">Sucursal:</span>
+            <span className="whitespace-nowrap text-[11px] text-slate-500">{tt("Sucursal:")}</span>
             <select
               value={sucursalId}
               onChange={(e) => setSucursalId(e.target.value)}
-              aria-label="Filtrar el stock por sucursal"
+              aria-label={tt("Filtrar el stock por sucursal")}
               className={`rounded-lg border px-2 py-1.5 text-xs font-semibold ${
                 sucursalId
                   ? "border-[#4FAEB2] bg-[#4FAEB2]/10 text-[#3F8E91]"
                   : "border-slate-200 bg-white text-slate-700"
               }`}
             >
-              <option value="">Todas (stock total)</option>
+              <option value="">{tt("Todas (stock total)")}</option>
               {sucursales.map((s) => (
                 <option key={s.id} value={s.id}>{s.nombre}</option>
               ))}

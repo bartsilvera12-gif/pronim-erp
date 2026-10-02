@@ -405,6 +405,50 @@ export async function POST(request: NextRequest) {
     // por defecto). El scope puede editarse manualmente después.
     const scopeCliente = auth.scope_clientes ?? "lilo_palmeras";
 
+    // ── Anti-duplicados ──────────────────────────────────────────────
+    // El mismo cliente vuelve muchas veces; si cada visita crea una ficha
+    // nueva, su crédito y su historial quedan repartidos en varias y no
+    // sirven para nada. Antes de crear se busca por teléfono o por RUC.
+    // Con `permitir_duplicado: true` se crea igual (dos personas pueden
+    // compartir un teléfono).
+    const permitirDuplicado = body.permitir_duplicado === true;
+    const telBuscado = (telefono ?? "").replace(/\D/g, "");
+    const rucBuscado = (ruc ?? "").trim();
+    if (!permitirDuplicado && (telBuscado.length >= 6 || rucBuscado)) {
+      try {
+        let q = supabase
+          .from("clientes")
+          .select("id, nombre, nombre_contacto, empresa, telefono, ruc")
+          .eq("empresa_id", auth.empresa_id)
+          .is("deleted_at", null)
+          .limit(5);
+        if (auth.scope_clientes) q = q.eq("scope_clientes", auth.scope_clientes);
+        const { data: posibles } = await q;
+        const existente = (posibles ?? []).find((c) => {
+          const r = c as Record<string, string | null>;
+          const tel = (r.telefono ?? "").replace(/\D/g, "");
+          if (telBuscado.length >= 6 && tel.length >= 6 && tel === telBuscado) return true;
+          if (rucBuscado && (r.ruc ?? "").trim() === rucBuscado) return true;
+          return false;
+        }) as Record<string, string | null> | undefined;
+        if (existente) {
+          const nom = (existente.empresa || existente.nombre_contacto || existente.nombre || "ese cliente") as string;
+          return NextResponse.json(
+            {
+              success: false,
+              code: "CLIENTE_DUPLICADO",
+              error: `Ya existe un cliente con esos datos: ${nom}. Usá su ficha para que la compra se le sume ahí.`,
+              data: { id: existente.id, nombre: nom, telefono: existente.telefono, ruc: existente.ruc },
+            },
+            { status: 409 },
+          );
+        }
+      } catch {
+        // Si la búsqueda falla no bloqueamos el alta: peor que un duplicado
+        // es no poder registrar al cliente que está en el mostrador.
+      }
+    }
+
     const insertBase = {
       empresa_id:           auth.empresa_id,
       scope_clientes:        scopeCliente,

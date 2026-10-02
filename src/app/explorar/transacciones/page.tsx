@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { tt } from "@/lib/i18n/dict";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { useSucursalActivaId } from "@/lib/sucursales/activa";
 import { DataExplorer, type ColumnDef } from "@/components/explorer/DataExplorer";
@@ -45,25 +46,25 @@ export default function ExplorarTransaccionesPage() {
   const columns = useMemo<ColumnDef<Tx>[]>(() => {
     const sucursales = Array.from(new Set(rows.map((r) => r.sucursal).filter(Boolean))) as string[];
     return [
-    { key: "fecha", label: "Fecha", type: "date", required: true, get: (r) => r.fecha },
-    { key: "sucursal", label: "Sucursal", type: "enum", get: (r) => r.sucursal ?? "",
+    { key: "fecha", label: tt("Fecha"), type: "date", required: true, get: (r) => r.fecha },
+    { key: "sucursal", label: tt("Sucursal"), type: "enum", get: (r) => r.sucursal ?? "",
       enumOptions: sucursales.map((s) => ({ value: s, label: s })) },
-    { key: "cliente", label: "Cliente", type: "text", get: (r) => r.cliente_nombre ?? "" },
-    { key: "telefono", label: "Teléfono", type: "text", get: (r) => r.telefono ?? "", defaultVisible: false },
-    { key: "categoria", label: "Categoría", type: "enum", get: (r) => r.categoria ? (CAT_LABEL[r.categoria] ?? r.categoria) : "",
-      enumOptions: [{ value: "VIP", label: "VIP" }, { value: "Nuevo", label: "Nuevo" }, { value: "Dormido", label: "Dormido" }, { value: "Activo", label: "Activo" }] },
+    { key: "cliente", label: tt("Cliente"), type: "text", get: (r) => r.cliente_nombre ?? "" },
+    { key: "telefono", label: tt("Teléfono"), type: "text", get: (r) => r.telefono ?? "", defaultVisible: false },
+    { key: "categoria", label: tt("Categoría"), type: "enum", get: (r) => r.categoria ? (CAT_LABEL[r.categoria] ?? r.categoria) : "",
+      enumOptions: [{ value: "VIP", label: "VIP" }, { value: "Nuevo", label: tt("Nuevo") }, { value: "Dormido", label: "Dormido" }, { value: "Activo", label: "Activo" }] },
     { key: "tipo", label: "Tipo", type: "enum", get: (r) => TIPO_LABEL[r.tipo] ?? r.tipo, required: true,
-      enumOptions: [{ value: "Venta", label: "Venta" }, { value: "Compra", label: "Compra" }, { value: "Cambio", label: "Cambio" }] },
+      enumOptions: [{ value: "Venta", label: tt("Venta") }, { value: "Compra", label: tt("Compra") }, { value: "Cambio", label: "Cambio" }] },
     { key: "valor", label: "Valor", type: "money", required: true, get: (r) => r.valor, total: "sum" },
-    { key: "valor_stock", label: "Ingresó a stock", type: "money", get: (r) => r.valor_stock, total: "sum", defaultVisible: false },
+    { key: "valor_stock", label: tt("Ingresó a stock"), type: "money", get: (r) => r.valor_stock, total: "sum", defaultVisible: false },
     { key: "cantidad", label: "Cant. productos", type: "number", get: (r) => r.cantidad, total: "sum" },
     { key: "markup", label: "% Markup", type: "number",
       get: (r) => r.markup ?? 0, render: (r) => r.markup == null ? "—" : `${r.markup}%` },
-    { key: "tarjeta", label: "Tarjeta", type: "money", get: (r) => r.tarjeta, total: "sum", defaultVisible: false },
+    { key: "tarjeta", label: tt("Tarjeta"), type: "money", get: (r) => r.tarjeta, total: "sum", defaultVisible: false },
     { key: "efectivo", label: "Efectivo", type: "money", get: (r) => r.efectivo, total: "sum" },
-    { key: "transferencia", label: "Transferencia", type: "money", get: (r) => r.transferencia, total: "sum", defaultVisible: false },
-    { key: "credito", label: "Crédito", type: "money", get: (r) => r.credito, total: "sum", defaultVisible: false },
-    { key: "descuento", label: "Descuento", type: "money", get: (r) => r.descuento, total: "sum", defaultVisible: false },
+    { key: "transferencia", label: tt("Transferencia"), type: "money", get: (r) => r.transferencia, total: "sum", defaultVisible: false },
+    { key: "credito", label: tt("Crédito"), type: "money", get: (r) => r.credito, total: "sum", defaultVisible: false },
+    { key: "descuento", label: tt("Descuento"), type: "money", get: (r) => r.descuento, total: "sum", defaultVisible: false },
     { key: "beneficio", label: "Beneficio/Cashback", type: "money", get: (r) => r.beneficio, total: "sum", defaultVisible: false },
   ];
   }, [rows]);
@@ -76,7 +77,7 @@ export default function ExplorarTransaccionesPage() {
       detailHref={(r) => r.tipo === "compra" ? (r.cliente_id ? `/clientes/${r.cliente_id}` : "#") : `/ventas/${r.id}`}
       toolbarExtra={
         <div className="flex items-center gap-1.5">
-          <span className="text-[11px] text-slate-500 whitespace-nowrap">Datos desde:</span>
+          <span className="text-[11px] text-slate-500 whitespace-nowrap">{tt("Datos desde:")}</span>
           <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm" />
           <span className="text-slate-400 text-xs">→</span>
           <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm" />

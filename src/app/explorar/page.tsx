@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { tt } from "@/lib/i18n/dict";
 import Link from "next/link";
 import { ArrowLeftRight, Receipt, Shirt, Package, Wallet, Banknote, TrendingDown, TrendingUp, Users } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -20,15 +21,15 @@ type TabKey = "transacciones" | "items" | "ventas" | "evaluaciones" | "inventari
 
 const TABS: { key: TabKey; label: string; Icon: LucideIcon; Comp: React.ComponentType }[] = [
   { key: "transacciones", label: "Transacciones", Icon: ArrowLeftRight, Comp: Transacciones },
-  { key: "items",         label: "Ítems (prendas)", Icon: Shirt,       Comp: Items },
+  { key: "items",         label: tt("Ítems (prendas)"), Icon: Shirt,       Comp: Items },
   { key: "ventas",        label: "Ventas",        Icon: Receipt,        Comp: Ventas },
   { key: "evaluaciones",  label: "Compras/Eval.", Icon: Shirt,          Comp: Evaluaciones },
   { key: "inventario",    label: "Inventario",    Icon: Package,        Comp: Inventario },
-  { key: "creditos",      label: "Créditos",      Icon: Wallet,         Comp: Creditos },
+  { key: "creditos",      label: tt("Créditos"),      Icon: Wallet,         Comp: Creditos },
   { key: "gastos",        label: "Gastos",        Icon: TrendingDown,   Comp: Gastos },
-  { key: "caja_movs",     label: "Movimientos de caja", Icon: Banknote, Comp: CajaMovimientos },
-  { key: "caja",          label: "Cierres de caja", Icon: Banknote,     Comp: Caja },
-  { key: "comparativo",   label: "Comparar períodos", Icon: TrendingUp, Comp: Comparativo },
+  { key: "caja_movs",     label: tt("Movimientos de caja"), Icon: Banknote, Comp: CajaMovimientos },
+  { key: "caja",          label: tt("Cierres de caja"), Icon: Banknote,     Comp: Caja },
+  { key: "comparativo",   label: tt("Comparar períodos"), Icon: TrendingUp, Comp: Comparativo },
 ];
 
 export default function ExplorarHubPage() {
@@ -39,7 +40,7 @@ export default function ExplorarHubPage() {
     <div className="max-w-full space-y-4">
       <div className="flex items-start justify-between gap-3 flex-wrap print:hidden">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Explorar información del ERP</h1>
+          <h1 className="text-2xl font-bold text-slate-900">{tt("Explorar información del ERP")}</h1>
           <p className="text-sm text-slate-500 mt-0.5">
             Toda la data en un solo lugar. Cambiá de vista con las pestañas; en cada una elegí columnas, filtrá, agrupá y exportá a Excel.
           </p>

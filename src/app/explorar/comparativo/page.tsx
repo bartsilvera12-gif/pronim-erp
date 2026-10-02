@@ -215,7 +215,7 @@ export default function ExplorarComparativoPage() {
       </div>
 
       {cargando ? (
-        <p className="py-12 text-center text-sm text-slate-400 animate-pulse">Cargando…</p>
+        <p className="py-12 text-center text-sm text-slate-400 animate-pulse">{tt("Cargando…")}</p>
       ) : !data ? (
         <p className="py-12 text-center text-sm text-slate-400">{tt("Sin datos.")}</p>
       ) : (

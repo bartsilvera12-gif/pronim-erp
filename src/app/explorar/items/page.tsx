@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { tt } from "@/lib/i18n/dict";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { useSucursalActivaId } from "@/lib/sucursales/activa";
 import { DataExplorer, type ColumnDef } from "@/components/explorer/DataExplorer";
@@ -43,17 +44,17 @@ export default function ExplorarItemsPage() {
     const categorias = Array.from(new Set(rows.map((r) => r.categoria).filter(Boolean))) as string[];
     const productos = Array.from(new Set(rows.map((r) => r.producto).filter(Boolean))) as string[];
     return [
-      { key: "fecha", label: "Fecha", type: "date", required: true, get: (r) => r.fecha },
-      { key: "sucursal", label: "Sucursal", type: "enum", get: (r) => r.sucursal ?? "", enumOptions: sucursales.map((s) => ({ value: s, label: s })) },
+      { key: "fecha", label: tt("Fecha"), type: "date", required: true, get: (r) => r.fecha },
+      { key: "sucursal", label: tt("Sucursal"), type: "enum", get: (r) => r.sucursal ?? "", enumOptions: sucursales.map((s) => ({ value: s, label: s })) },
       { key: "tipo", label: "Tipo", type: "enum", get: (r) => TIPO_LABEL[r.tipo] ?? r.tipo, required: true,
-        enumOptions: [{ value: "Venta", label: "Venta" }, { value: "Compra", label: "Compra" }] },
+        enumOptions: [{ value: "Venta", label: tt("Venta") }, { value: "Compra", label: tt("Compra") }] },
       { key: "producto", label: "Rango / Producto", type: "enum", required: true, get: (r) => r.producto,
         enumOptions: productos.map((p) => ({ value: p, label: p })) },
-      { key: "categoria", label: "Categoría", type: "enum", get: (r) => r.categoria ?? "", enumOptions: categorias.map((c) => ({ value: c, label: c })) },
+      { key: "categoria", label: tt("Categoría"), type: "enum", get: (r) => r.categoria ?? "", enumOptions: categorias.map((c) => ({ value: c, label: c })) },
       { key: "sku", label: "SKU", type: "text", get: (r) => r.sku ?? "", defaultVisible: false },
-      { key: "cliente", label: "Cliente", type: "text", get: (r) => r.cliente ?? "", defaultVisible: false },
-      { key: "cantidad", label: "Cantidad", type: "number", required: true, get: (r) => r.cantidad, total: "sum" },
-      { key: "precio", label: "Precio unit.", type: "money", get: (r) => r.precio_unitario, defaultVisible: false },
+      { key: "cliente", label: tt("Cliente"), type: "text", get: (r) => r.cliente ?? "", defaultVisible: false },
+      { key: "cantidad", label: tt("Cantidad"), type: "number", required: true, get: (r) => r.cantidad, total: "sum" },
+      { key: "precio", label: tt("Precio unit."), type: "money", get: (r) => r.precio_unitario, defaultVisible: false },
       { key: "valor", label: "Valor", type: "money", required: true, get: (r) => r.valor, total: "sum" },
     ];
   }, [rows]);
@@ -65,7 +66,7 @@ export default function ExplorarItemsPage() {
       rows={rows} columns={columns} cargando={cargando} csvName="items"
       toolbarExtra={
         <div className="flex items-center gap-1.5">
-          <span className="text-[11px] text-slate-500 whitespace-nowrap">Datos desde:</span>
+          <span className="text-[11px] text-slate-500 whitespace-nowrap">{tt("Datos desde:")}</span>
           <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm" />
           <span className="text-slate-400 text-xs">→</span>
           <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm" />

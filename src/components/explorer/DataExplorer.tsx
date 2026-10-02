@@ -634,7 +634,7 @@ export function DataExplorer<T>(props: {
       {/* Tabla */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm ring-1 ring-slate-900/[0.03] overflow-auto max-h-[70vh] print:max-h-none print:overflow-visible">
         {cargando ? (
-          <p className="py-12 text-center text-sm text-slate-400 animate-pulse">Cargando…</p>
+          <p className="py-12 text-center text-sm text-slate-400 animate-pulse">{tt("Cargando…")}</p>
         ) : ordenadas.length === 0 ? (
           <p className="py-12 text-center text-sm text-slate-400">{tt("Sin resultados con los filtros actuales.")}</p>
         ) : (
@@ -692,7 +692,7 @@ export function DataExplorer<T>(props: {
                         ))}
                         {detailHref && (
                           <td className="border-b border-slate-100 px-3 py-2 text-center print:hidden">
-                            <a href={detailHref(row)} title="Ver detalle" aria-label="Ver detalle"
+                            <a href={detailHref(row)} title={tt("Ver detalle")} aria-label={tt("Ver detalle")}
                               className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-[#4FAEB2]/15 hover:text-[#3F8E91]">
                               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
                                 <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
@@ -752,7 +752,7 @@ export function DataExplorer<T>(props: {
                     ))}
                     {detailHref && (
                       <td className="border-b border-slate-100 px-3 py-2 text-center print:hidden">
-                        <a href={detailHref(row)} title="Ver detalle" aria-label="Ver detalle"
+                        <a href={detailHref(row)} title={tt("Ver detalle")} aria-label={tt("Ver detalle")}
                               className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-[#4FAEB2]/15 hover:text-[#3F8E91]">
                               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
                                 <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />

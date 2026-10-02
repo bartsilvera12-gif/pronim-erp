@@ -27,7 +27,10 @@ const usadas = new Map();   // clave -> archivos donde se usa
 for (const f of archivos) {
   if (f.includes("i18n")) continue;
   const s = fs.readFileSync(f, "utf8");
-  for (const m of s.matchAll(/\btt\(\s*"((?:[^"\\]|\\.)*)"/g)) {
+  // Las dos formas del traductor: `tt("…")` (sin hook) y `t("…")` (con useT).
+  // Mirar solo una dejaba media app sin medir. El lookbehind evita enganchar
+  // el final de otro identificador que termine en t, como `format(`.
+  for (const m of s.matchAll(/(?<![A-Za-z0-9_$.])tt?\(\s*"((?:[^"\\]|\\.)*)"/g)) {
     const k = m[1].replace(/\\"/g, '"');
     if (!usadas.has(k)) usadas.set(k, []);
     usadas.get(k).push(f);

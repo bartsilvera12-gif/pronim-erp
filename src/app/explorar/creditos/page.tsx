@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { tt } from "@/lib/i18n/dict";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { useSucursalActivaId } from "@/lib/sucursales/activa";
 import { DataExplorer, type ColumnDef } from "@/components/explorer/DataExplorer";
@@ -49,10 +50,10 @@ export default function ExplorarCreditosPage() {
   const columns = useMemo<ColumnDef<Mov>[]>(() => {
     const origenes = Array.from(new Set(rows.map((r) => r.origen).filter(Boolean))) as string[];
     return [
-      { key: "fecha", label: "Fecha", type: "date", required: true, get: (r) => r.created_at },
-      { key: "cliente", label: "Cliente", type: "text", get: (r) => r.cliente_nombre ?? "" },
+      { key: "fecha", label: tt("Fecha"), type: "date", required: true, get: (r) => r.created_at },
+      { key: "cliente", label: tt("Cliente"), type: "text", get: (r) => r.cliente_nombre ?? "" },
       { key: "tipo", label: "Tipo", type: "enum", get: (r) => r.tipo, enumOptions: [{ value: "ENTRADA", label: "ENTRADA" }, { value: "SALIDA", label: "SALIDA" }, { value: "AJUSTE", label: "AJUSTE" }] },
-      { key: "categoria", label: "Categoría", type: "enum", get: (r) => r.categoria ?? "credito", enumOptions: [{ value: "credito", label: "Crédito" }, { value: "cashback", label: "Cashback" }, { value: "consignacion", label: "Consignación" }] },
+      { key: "categoria", label: tt("Categoría"), type: "enum", get: (r) => r.categoria ?? "credito", enumOptions: [{ value: "credito", label: tt("Crédito") }, { value: "cashback", label: "Cashback" }, { value: "consignacion", label: tt("Consignación") }] },
       { key: "origen", label: "Origen", type: "enum", get: (r) => r.origen ?? "", enumOptions: origenes.map((o) => ({ value: o, label: o })), defaultVisible: false },
       { key: "referencia", label: "Referencia", type: "text", get: (r) => [r.referencia_tipo, r.referencia_numero].filter(Boolean).join(" "), defaultVisible: false },
       { key: "observaciones", label: "Observaciones", type: "text", get: (r) => r.observaciones ?? "", defaultVisible: false },
@@ -74,7 +75,7 @@ export default function ExplorarCreditosPage() {
       },
       // Se conserva el monto "crudo" del movimiento, pero SIN total: sumarlo
       // mezclaría entradas con salidas.
-      { key: "monto", label: "Monto del movimiento", type: "money", get: (r) => r.monto, defaultVisible: false },
+      { key: "monto", label: tt("Monto del movimiento"), type: "money", get: (r) => r.monto, defaultVisible: false },
     ];
   }, [rows]);
 
@@ -87,7 +88,7 @@ export default function ExplorarCreditosPage() {
       detailHref={(r) => r.cliente_id ? `/clientes/${r.cliente_id}` : `#`}
       toolbarExtra={
         <div className="flex items-center gap-1.5">
-          <span className="text-[11px] text-slate-500 whitespace-nowrap">Datos desde:</span>
+          <span className="text-[11px] text-slate-500 whitespace-nowrap">{tt("Datos desde:")}</span>
           <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm" />
           <span className="text-slate-400 text-xs">→</span>
           <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm" />
