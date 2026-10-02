@@ -43,13 +43,20 @@ SELECT count(*) AS recepciones_actuales FROM pronimerp.cliente_recepciones;
 -- Cuántas se van a crear, y cuántas van a quedar pendientes de ingresar.
 -- `estoque` es el monto que entró a stock: si es 0, la evaluación se registró
 -- pero las prendas todavía no se ingresaron.
-SELECT count(*)                                        AS se_crean,
-       count(*) FILTER (WHERE coalesce(estoque,0) = 0) AS quedan_pendientes,
-       count(*) FILTER (WHERE coalesce(estoque,0) > 0) AS ya_ingresadas,
-       to_char(sum(coalesce(credito_generado,0)), '999G999G999G999') AS credito_total
-  FROM pronimerp.import_palmeras
- WHERE cliente_id IS NOT NULL
-   AND (tipo = 'evaluacion' OR coalesce(credito_generado,0) > 0);
+-- `se_quedan_afuera` son evaluaciones de monto 0: la tabla no las admite
+-- (el CHECK exige un total mayor a cero). Si ese numero es grande, avisame.
+SELECT count(*) FILTER (WHERE monto > 0)                          AS se_crean,
+       count(*) FILTER (WHERE monto > 0 AND coalesce(estoque,0) = 0) AS quedan_pendientes,
+       count(*) FILTER (WHERE monto > 0 AND coalesce(estoque,0) > 0) AS ya_ingresadas,
+       count(*) FILTER (WHERE monto = 0)                          AS se_quedan_afuera,
+       to_char(sum(coalesce(credito_generado,0)) FILTER (WHERE monto > 0),
+               '999G999G999G999')                                 AS credito_total
+  FROM (
+    SELECT *, greatest(coalesce(evaluacion,0), coalesce(credito_generado,0)) AS monto
+      FROM pronimerp.import_palmeras
+     WHERE cliente_id IS NOT NULL
+       AND (tipo = 'evaluacion' OR coalesce(credito_generado,0) > 0)
+  ) x;
 
 
 -- ─────────────────────────────────────────────────────────────────────────
@@ -64,6 +71,7 @@ DECLARE
   n      bigint;
   tiene_compra  boolean;
   tiene_ingreso boolean;
+  tiene_eval    boolean;
   cols   text;
   vals   text;
 BEGIN
@@ -86,6 +94,11 @@ BEGIN
   SELECT EXISTS (SELECT 1 FROM information_schema.columns
                   WHERE table_schema='pronimerp' AND table_name='cliente_recepciones'
                     AND column_name='ingresada_at') INTO tiene_ingreso;
+  -- subtotal_evaluado / total_final son NOT NULL y el CHECK exige
+  -- total_final = subtotal_evaluado + ajuste_evaluacion, con total_final > 0.
+  SELECT EXISTS (SELECT 1 FROM information_schema.columns
+                  WHERE table_schema='pronimerp' AND table_name='cliente_recepciones'
+                    AND column_name='total_final')  INTO tiene_eval;
 
   cols := 'empresa_id, cliente_id, sucursal_id, numero_control, fecha, total_credito, estado, observaciones';
   vals := '$1, i.cliente_id, $2, ''FILA-'' || i.fila_excel, '
@@ -93,10 +106,19 @@ BEGIN
        || 'coalesce(i.credito_generado,0), ''registrada'', '
        || '''Evaluacion importada del diario de Palmeras (fila '' || i.fila_excel || '')''';
 
-  -- El monto evaluado: lo que se le reconocio por las prendas.
+  -- El monto evaluado: lo que se le reconocio por las prendas. En el Excel
+  -- casi siempre es la columna `evaluacion`; en las filas donde quedo en 0
+  -- pero si hubo credito, el credito ES el monto reconocido.
   IF tiene_compra THEN
     cols := cols || ', total_compra';
-    vals := vals || ', coalesce(i.evaluacion, 0)';
+    vals := vals || ', greatest(coalesce(i.evaluacion,0), coalesce(i.credito_generado,0))';
+  END IF;
+
+  IF tiene_eval THEN
+    cols := cols || ', subtotal_evaluado, total_final, ajuste_evaluacion';
+    vals := vals || ', greatest(coalesce(i.evaluacion,0), coalesce(i.credito_generado,0))'
+                 || ', greatest(coalesce(i.evaluacion,0), coalesce(i.credito_generado,0))'
+                 || ', 0';
   END IF;
 
   -- Pendiente de ingresar = la planilla no registro monto de ingreso a stock.
@@ -112,6 +134,9 @@ BEGIN
       FROM pronimerp.import_palmeras i
      WHERE i.cliente_id IS NOT NULL
        AND (i.tipo = 'evaluacion' OR coalesce(i.credito_generado,0) > 0)
+       -- La tabla no admite una evaluacion de monto 0: el CHECK exige
+       -- total_final > 0. Las filas en cero quedan afuera (ver control).
+       AND greatest(coalesce(i.evaluacion,0), coalesce(i.credito_generado,0)) > 0
        AND NOT EXISTS (
          SELECT 1 FROM pronimerp.cliente_recepciones r
           WHERE r.empresa_id = $1 AND r.numero_control = 'FILA-' || i.fila_excel)
