@@ -159,23 +159,31 @@ export async function GET(request: NextRequest) {
       ventasRes.rows.map((r) => r.cliente_id).filter((x): x is string => typeof x === "string" && x.length > 0),
     )];
     const nombreByCliente = new Map<string, string>();
-    if (clienteIds.length > 0) {
+    // De a 100. Un `in.(...)` con los 500 ids de una página entera arma una
+    // URL de ~18.000 caracteres que el gateway rechaza: la consulta fallaba
+    // sin aviso y TODAS las ventas aparecían como "Sin cliente".
+    const LOTE_IDS = 100;
+    for (let i = 0; i < clienteIds.length; i += LOTE_IDS) {
+      const lote = clienteIds.slice(i, i + LOTE_IDS);
       const cq = new URLSearchParams({
         select: "id,empresa,nombre_contacto,nombre",
         empresa_id: `eq.${empresaId}`,
-        id: `in.(${clienteIds.join(",")})`,
+        id: `in.(${lote.join(",")})`,
+        limit: String(LOTE_IDS),
       });
       const cRes = await postgrestGet<{ id: string; empresa: string | null; nombre_contacto: string | null; nombre: string | null }>(
         "clientes", cq.toString(), { role: "jwt", jwt, noStore: true },
       );
-      if (cRes.ok) {
-        for (const c of cRes.rows) {
-          const nom = (c.empresa && c.empresa.trim())
-            || (c.nombre_contacto && c.nombre_contacto.trim())
-            || (c.nombre && c.nombre.trim())
-            || "";
-          if (nom) nombreByCliente.set(c.id, nom);
-        }
+      if (!cRes.ok) {
+        console.error("[/api/ventas GET] no se pudieron resolver nombres de cliente", cRes);
+        continue;
+      }
+      for (const c of cRes.rows) {
+        const nom = (c.empresa && c.empresa.trim())
+          || (c.nombre_contacto && c.nombre_contacto.trim())
+          || (c.nombre && c.nombre.trim())
+          || "";
+        if (nom) nombreByCliente.set(c.id, nom);
       }
     }
 
