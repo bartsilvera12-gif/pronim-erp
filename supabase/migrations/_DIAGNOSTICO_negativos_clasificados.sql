@@ -1,28 +1,35 @@
 -- ============================================================================
 --  LOS NEGATIVOS, SEPARADOS POR LO QUE HAY QUE HACER CON CADA UNO
 --
---  El listado anterior mostró que "tiene gemelo" no alcanza como respuesta.
---  Mirando los 50 peores aparecieron tres situaciones muy distintas:
+--  Hay tres situaciones muy distintas mezcladas en los 217:
 --
 --    a) Michaal Baten / Michal Baten → −456.000 y +456.000.
 --       Es la misma persona escrita de dos formas. Unir arregla el caso.
 --
---    b) Cecilia Guerero / Cecilia Guerrero → −159.000 y 0.
+--    b) Devani Rojas / Devany Rojas → −900.000 y 0.
 --       Es la misma persona, pero la gemela está vacía. Unir limpia la base
 --       pero NO devuelve la plata: esa entrada nunca se importó.
 --
---    c) Ale Rolon / Yelsy Bogarin → mismo teléfono, otra persona.
---       Son dos clientas que comparten un número (familia, pareja, el
---       teléfono del local). Unirlas sería un error.
+--    c) Ale Rolon / Ale Demestri → mismo teléfono, otra persona.
+--       Dos clientas que comparten un número (familia, pareja, el teléfono
+--       del local). Unirlas sería un error.
 --
---  Esta consulta clasifica a LOS 217, no solo a los peores, y para cada uno
---  elige su mejor candidato a gemelo (no todos los cruces, que duplican el
---  conteo). Así se sabe cuánta plata se recupera uniendo y cuánta no.
+--  CÓMO MIDE EL PARECIDO (importa, porque la versión anterior se equivocaba):
+--  usa distancia de edición — cuántas letras hay que cambiar para pasar de un
+--  nombre al otro. "ceciliaguerero" → "ceciliaguerrero" es 1 letra: la misma
+--  persona. "antonellacattoni" → "antonellaboselli" son 7: dos personas que
+--  se llaman igual de nombre. El intento anterior comparaba las primeras
+--  letras y el largo, y por eso daba por gemelas a seis Andreas distintas.
 --
---  Solo CONSULTA. Son dos statements independientes: el editor de Supabase
---  no comparte vistas ni funciones temporales entre uno y otro, así que cada
---  uno se arma solo.
+--  Solo CONSULTA. Son tres statements; corré los tres de una.
 -- ============================================================================
+
+
+-- ─────────────────────────────────────────────────────────────────────────
+--  0) La función levenshtein() viene en esta extensión.
+--     Si diera error de permisos, avisame y lo resuelvo de otra forma.
+-- ─────────────────────────────────────────────────────────────────────────
+CREATE EXTENSION IF NOT EXISTS fuzzystrmatch;
 
 
 -- ─────────────────────────────────────────────────────────────────────────
@@ -38,59 +45,48 @@ WITH base AS (
    WHERE c.deleted_at IS NULL
    GROUP BY c.id, c.nombre_contacto, c.nombre, c.empresa, c.telefono
 ),
--- nom_norm: "Cecilia Guerero" → "ceciliaguerero", para comparar sin tildes
--- ni espacios. ape: la última palabra, para detectar "mismo apellido".
+-- "Cecilia Guerero" → "ceciliaguerero": sin tildes, sin espacios, minúsculas.
 saldos AS (
   SELECT id, nombre, tel, saldo,
          regexp_replace(lower(translate(nombre, 'áéíóúÁÉÍÓÚñÑ', 'aeiouAEIOUnN')),
-                        '[^a-z0-9]', '', 'g') AS nom_norm,
-         regexp_replace(lower(translate(regexp_replace(trim(nombre), '^.*\s', ''),
-                                        'áéíóúÁÉÍÓÚñÑ', 'aeiouAEIOUnN')),
-                        '[^a-z0-9]', '', 'g') AS ape
+                        '[^a-z0-9]', '', 'g') AS nom_norm
     FROM base
 ),
--- Para cada negativo UN solo gemelo: el más parecido y, a igual parecido,
--- el que mejor deja el saldo combinado.
-mejor AS (
-  SELECT DISTINCT ON (n.id)
-         n.id AS neg_id,
+-- Todos los cruces posibles de un negativo con otra ficha, por nombre o por
+-- teléfono. `dist` es cuántas letras de diferencia hay.
+cruces AS (
+  SELECT n.id AS neg_id, n.saldo AS neg_saldo,
+         o.id AS otro_id, o.nombre AS otro_nombre, o.saldo AS otro_saldo,
          n.saldo + o.saldo AS queda_en,
-         CASE
-           WHEN n.nom_norm = o.nom_norm                      THEN 'nombre idéntico'
-           WHEN left(n.nom_norm,5) = left(o.nom_norm,5)
-            AND abs(length(n.nom_norm) - length(o.nom_norm)) <= 3
-                                                             THEN 'nombre casi igual'
-           WHEN n.ape = o.ape AND length(n.ape) >= 4         THEN 'mismo apellido'
-           ELSE                                                   'nombre distinto'
-         END AS parecido
+         levenshtein(n.nom_norm, o.nom_norm) AS dist,
+         (length(n.tel) >= 6 AND o.tel = n.tel) AS mismo_tel,
+         -- Tolerancia: 2 letras, 3 si el nombre es largo.
+         CASE WHEN length(n.nom_norm) >= 14 THEN 3 ELSE 2 END AS tope
     FROM saldos n
-    JOIN saldos o
-      ON o.id <> n.id
-     AND ( (length(n.tel) >= 6 AND o.tel = n.tel)
-        OR (length(n.nom_norm) >= 5
-            AND left(n.nom_norm,5) = left(o.nom_norm,5)
-            AND abs(length(n.nom_norm) - length(o.nom_norm)) <= 3) )
+    JOIN saldos o ON o.id <> n.id
    WHERE n.saldo < 0
-   ORDER BY n.id,
-            CASE
-              WHEN n.nom_norm = o.nom_norm THEN 1
-              WHEN left(n.nom_norm,5) = left(o.nom_norm,5)
-               AND abs(length(n.nom_norm) - length(o.nom_norm)) <= 3 THEN 2
-              WHEN n.ape = o.ape AND length(n.ape) >= 4 THEN 3
-              ELSE 4
-            END,
-            (n.saldo + o.saldo) DESC
+     AND length(n.nom_norm) >= 6
+     AND length(o.nom_norm) >= 6
+     AND ( (length(n.tel) >= 6 AND o.tel = n.tel)
+        OR levenshtein(n.nom_norm, o.nom_norm)
+             <= CASE WHEN length(n.nom_norm) >= 14 THEN 3 ELSE 2 END )
+),
+-- Un solo gemelo por negativo: el más parecido, y a igual parecido el que
+-- mejor deja el saldo combinado.
+mejor AS (
+  SELECT DISTINCT ON (neg_id) *
+    FROM cruces
+   ORDER BY neg_id,
+            CASE WHEN dist = 0 THEN 1 WHEN dist <= tope THEN 2 ELSE 3 END,
+            queda_en DESC
 )
 SELECT CASE
-         WHEN m.neg_id IS NULL
-           THEN 'D - sin gemelo, falta la entrada'
-         WHEN m.parecido IN ('nombre idéntico','nombre casi igual') AND m.queda_en >= 0
-           THEN 'A - unir y queda sano'
-         WHEN m.parecido IN ('nombre idéntico','nombre casi igual')
-           THEN 'B - unir ayuda pero no alcanza'
-         ELSE 'C - gemelo dudoso, revisar a mano'
-       END         AS caja,
-       count(*)    AS clientes,
+         WHEN m.neg_id IS NULL                        THEN 'D - sin gemelo, falta la entrada'
+         WHEN m.dist <= m.tope AND m.queda_en >= 0    THEN 'A - unir y queda sano'
+         WHEN m.dist <= m.tope                        THEN 'B - unir ayuda pero no alcanza'
+         ELSE                                              'C - gemelo dudoso, revisar a mano'
+       END          AS caja,
+       count(*)     AS clientes,
        SUM(s.saldo) AS plata
   FROM saldos s
   LEFT JOIN mejor m ON m.neg_id = s.id
@@ -100,9 +96,9 @@ SELECT CASE
 
 
 -- ─────────────────────────────────────────────────────────────────────────
---  2) EL DETALLE: los 217, cada uno con su caja y su gemelo.
---     Mirá sobre todo la caja C: ahí hay teléfonos compartidos entre
---     personas distintas y unirlas sería peor que el problema.
+--  2) EL DETALLE: los 217, cada uno con su caja, su gemelo y cuántas letras
+--     de diferencia hay. Revisá que los de la caja A sean de verdad la misma
+--     persona antes de aprobar nada.
 -- ─────────────────────────────────────────────────────────────────────────
 WITH base AS (
   SELECT c.id,
@@ -117,58 +113,43 @@ WITH base AS (
 saldos AS (
   SELECT id, nombre, tel, saldo,
          regexp_replace(lower(translate(nombre, 'áéíóúÁÉÍÓÚñÑ', 'aeiouAEIOUnN')),
-                        '[^a-z0-9]', '', 'g') AS nom_norm,
-         regexp_replace(lower(translate(regexp_replace(trim(nombre), '^.*\s', ''),
-                                        'áéíóúÁÉÍÓÚñÑ', 'aeiouAEIOUnN')),
-                        '[^a-z0-9]', '', 'g') AS ape
+                        '[^a-z0-9]', '', 'g') AS nom_norm
     FROM base
 ),
-mejor AS (
-  SELECT DISTINCT ON (n.id)
-         n.id AS neg_id,
-         o.id AS otro_id,
-         o.nombre AS ficha_gemela,
-         o.saldo  AS saldo_gemela,
+cruces AS (
+  SELECT n.id AS neg_id, n.saldo AS neg_saldo,
+         o.id AS otro_id, o.nombre AS otro_nombre, o.saldo AS otro_saldo,
          n.saldo + o.saldo AS queda_en,
-         CASE
-           WHEN n.nom_norm = o.nom_norm                      THEN 'nombre idéntico'
-           WHEN left(n.nom_norm,5) = left(o.nom_norm,5)
-            AND abs(length(n.nom_norm) - length(o.nom_norm)) <= 3
-                                                             THEN 'nombre casi igual'
-           WHEN n.ape = o.ape AND length(n.ape) >= 4         THEN 'mismo apellido'
-           ELSE                                                   'nombre distinto'
-         END AS parecido,
-         CASE WHEN length(n.tel) >= 6 AND o.tel = n.tel THEN 'sí' ELSE 'no' END AS mismo_telefono
+         levenshtein(n.nom_norm, o.nom_norm) AS dist,
+         (length(n.tel) >= 6 AND o.tel = n.tel) AS mismo_tel,
+         CASE WHEN length(n.nom_norm) >= 14 THEN 3 ELSE 2 END AS tope
     FROM saldos n
-    JOIN saldos o
-      ON o.id <> n.id
-     AND ( (length(n.tel) >= 6 AND o.tel = n.tel)
-        OR (length(n.nom_norm) >= 5
-            AND left(n.nom_norm,5) = left(o.nom_norm,5)
-            AND abs(length(n.nom_norm) - length(o.nom_norm)) <= 3) )
+    JOIN saldos o ON o.id <> n.id
    WHERE n.saldo < 0
-   ORDER BY n.id,
-            CASE
-              WHEN n.nom_norm = o.nom_norm THEN 1
-              WHEN left(n.nom_norm,5) = left(o.nom_norm,5)
-               AND abs(length(n.nom_norm) - length(o.nom_norm)) <= 3 THEN 2
-              WHEN n.ape = o.ape AND length(n.ape) >= 4 THEN 3
-              ELSE 4
-            END,
-            (n.saldo + o.saldo) DESC
+     AND length(n.nom_norm) >= 6
+     AND length(o.nom_norm) >= 6
+     AND ( (length(n.tel) >= 6 AND o.tel = n.tel)
+        OR levenshtein(n.nom_norm, o.nom_norm)
+             <= CASE WHEN length(n.nom_norm) >= 14 THEN 3 ELSE 2 END )
+),
+mejor AS (
+  SELECT DISTINCT ON (neg_id) *
+    FROM cruces
+   ORDER BY neg_id,
+            CASE WHEN dist = 0 THEN 1 WHEN dist <= tope THEN 2 ELSE 3 END,
+            queda_en DESC
 )
 SELECT CASE
-         WHEN m.neg_id IS NULL
-           THEN 'D - sin gemelo, falta la entrada'
-         WHEN m.parecido IN ('nombre idéntico','nombre casi igual') AND m.queda_en >= 0
-           THEN 'A - unir y queda sano'
-         WHEN m.parecido IN ('nombre idéntico','nombre casi igual')
-           THEN 'B - unir ayuda pero no alcanza'
-         ELSE 'C - gemelo dudoso, revisar a mano'
+         WHEN m.neg_id IS NULL                        THEN 'D - sin gemelo, falta la entrada'
+         WHEN m.dist <= m.tope AND m.queda_en >= 0    THEN 'A - unir y queda sano'
+         WHEN m.dist <= m.tope                        THEN 'B - unir ayuda pero no alcanza'
+         ELSE                                              'C - gemelo dudoso, revisar a mano'
        END AS caja,
        s.nombre AS ficha_en_rojo, s.saldo AS saldo_rojo,
-       m.ficha_gemela, m.saldo_gemela, m.queda_en,
-       m.parecido, m.mismo_telefono,
+       m.otro_nombre AS ficha_gemela, m.otro_saldo AS saldo_gemela,
+       m.queda_en,
+       m.dist AS letras_de_diferencia,
+       CASE WHEN m.mismo_tel THEN 'sí' ELSE 'no' END AS mismo_telefono,
        s.id AS id_rojo, m.otro_id AS id_gemela
   FROM saldos s
   LEFT JOIN mejor m ON m.neg_id = s.id
