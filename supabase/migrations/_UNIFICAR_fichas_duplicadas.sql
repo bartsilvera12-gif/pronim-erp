@@ -144,12 +144,22 @@ BEGIN
       FROM pronimerp.clientes v
      WHERE q.id = p.queda AND v.id = p.se_va;
 
-    -- Baja lógica de la ficha vacía, dejando dicho adónde se fue.
+    -- Deja constancia en la bitácora de la ficha que se queda: de dónde vino
+    -- el historial. Así la unificación es rastreable desde la pantalla.
+    INSERT INTO pronimerp.cliente_eventos
+           (empresa_id, cliente_id, tipo, titulo, descripcion, fecha)
+    SELECT q.empresa_id, q.id, 'otro',
+           'Fichas unificadas',
+           'Se absorbió la ficha duplicada "' ||
+             COALESCE(v.nombre_contacto, v.nombre, v.id::text) ||
+             '" (' || v.id::text || '). Corrección de la importación del 01/10/2026.',
+           now()
+      FROM pronimerp.clientes q, pronimerp.clientes v
+     WHERE q.id = p.queda AND v.id = p.se_va;
+
+    -- Baja lógica de la ficha vacía. No se borra: el id sigue existiendo.
     UPDATE pronimerp.clientes
-       SET deleted_at   = now(),
-           observaciones = COALESCE(observaciones, '') ||
-             ' [unificada con ' || p.queda::text || ' el ' ||
-             to_char(now(), 'DD/MM/YYYY') || ']'
+       SET deleted_at = now()
      WHERE id = p.se_va;
   END LOOP;
 END $$;
