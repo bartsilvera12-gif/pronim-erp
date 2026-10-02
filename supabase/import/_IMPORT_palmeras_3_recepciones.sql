@@ -103,7 +103,12 @@ BEGIN
   cols := 'empresa_id, cliente_id, sucursal_id, numero_control, fecha, total_credito, estado, observaciones';
   vals := '$1, i.cliente_id, $2, ''FILA-'' || i.fila_excel, '
        || 'i.fecha::timestamptz + interval ''12 hours'', '
-       || 'coalesce(i.credito_generado,0), ''registrada'', '
+       -- Los estados validos son pendiente_ingreso / ingresada / anulada.
+       -- Si en la planilla no hubo monto de ingreso a stock, la evaluacion
+       -- quedo pendiente de ingresar: asi aparece en la bandeja.
+       || 'coalesce(i.credito_generado,0), '
+       || 'CASE WHEN coalesce(i.estoque,0) > 0 THEN ''ingresada'' '
+       || 'ELSE ''pendiente_ingreso'' END, '
        || '''Evaluacion importada del diario de Palmeras (fila '' || i.fila_excel || '')''';
 
   -- El monto evaluado: lo que se le reconocio por las prendas. En el Excel
