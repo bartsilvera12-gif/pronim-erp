@@ -6,6 +6,7 @@ import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session"
 import { useMoney } from "@/lib/i18n/context";
 import { ActiveFiltersBar, type ActiveChip } from "@/components/reportes/ActiveFiltersBar";
 import { VistasGuardadasBar } from "@/components/reportes/VistasGuardadasBar";
+import { fechaCorta } from "@/lib/fecha/mostrar";
 
 type Kpis = {
   entradas_periodo: number; salidas_periodo: number; ajustes_periodo: number; neto_periodo: number;
@@ -23,7 +24,7 @@ type Mov = {
 };
 
 function fmtFecha(iso: string) {
-  try { return new Date(iso).toLocaleDateString("es-PY", { day: "2-digit", month: "short", year: "numeric" }); }
+  try { return fechaCorta(iso); }
   catch { return iso; }
 }
 

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
+import { fechaCorta } from "@/lib/fecha/mostrar";
 
 type Ranking = {
   cliente_id: string;
@@ -18,7 +19,7 @@ function fmtGs(n: number): string {
 }
 function fmtFecha(iso?: string): string {
   if (!iso) return "—";
-  try { return new Date(iso).toLocaleDateString("es-PY"); } catch { return iso; }
+  return fechaCorta(iso);
 }
 
 export default function RankingClientesPage() {

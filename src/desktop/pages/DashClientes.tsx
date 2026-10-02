@@ -10,6 +10,7 @@ import {
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { useT } from "@/lib/i18n/context";
 import { tt } from "@/lib/i18n/dict";
+import { fechaCorta } from "@/lib/fecha/mostrar";
 
 /**
  * Dashboard operativo de Clientes con la estética cálida de Akakua'a:
@@ -407,7 +408,7 @@ function PanelClientes({ abierta, claves, filas, onCerrar }: {
                   <td className="px-4 py-2.5 text-xs text-slate-600 capitalize">{c.segmento}</td>
                   <td className="px-4 py-2.5 text-xs text-slate-600">{c.sucursal_preferida_nombre ?? "—"}</td>
                   <td className="px-4 py-2.5 text-xs text-slate-600">
-                    {c.ultima_visita ? new Date(c.ultima_visita).toLocaleDateString("es-PY") : "Nunca"}
+                    {c.ultima_visita ? fechaCorta(c.ultima_visita) : tt("Nunca")}
                     {c.dias_desde_ultima != null && (
                       <span className="ml-1 text-slate-400">({c.dias_desde_ultima} d)</span>
                     )}

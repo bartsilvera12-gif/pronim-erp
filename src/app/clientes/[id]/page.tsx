@@ -64,6 +64,7 @@ import { SUPABASE_APP_SCHEMA as NEURA_CLIENT_SCHEMA } from "@/lib/supabase/schem
 import ClienteVehiculoEditor from "@/components/clientes/ClienteVehiculoEditor";
 import PromocionClienteTab from "@/components/clientes/PromocionClienteTab";
 import { tt } from "@/lib/i18n/dict";
+import { fechaCorta } from "@/lib/fecha/mostrar";
 
 /** Detalle de clientes simplificado (sin campos SaaS/Neura como Tipo de
  *  servicio, Plan, Facturación al contado). Aplica a instancias monocliente
@@ -2854,14 +2855,14 @@ function CarteraPanel({ clienteId }: { clienteId: string }) {
                   </p>
                   {m.observaciones && <p className="text-slate-500 truncate">{m.observaciones}</p>}
                   {m.vencimiento_at && (
-                    <p className="text-[10px] text-amber-700">Vence: {new Date(m.vencimiento_at).toLocaleDateString(localeDate)}</p>
+                    <p className="text-[10px] text-amber-700">Vence: {fechaCorta(m.vencimiento_at, localeDate)}</p>
                   )}
                 </div>
                 <div className="text-right shrink-0 ml-3">
                   <p className={`font-bold tabular-nums ${m.tipo === "SALIDA" ? "text-rose-700" : "text-emerald-700"}`}>
                     {m.tipo === "SALIDA" ? "−" : "+"}{fmt(Number(m.monto))}
                   </p>
-                  <p className="text-[10px] text-slate-400">{new Date(m.fecha).toLocaleDateString(localeDate)}</p>
+                  <p className="text-[10px] text-slate-400">{fechaCorta(m.fecha, localeDate)}</p>
                 </div>
               </li>
             ))}

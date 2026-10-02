@@ -8,6 +8,7 @@ import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session"
 import { generarYAbrirRecibo } from "@/lib/recibos/client";
 import { RegistrarCobroModalCxc } from "@/components/cobros/RegistrarCobroModalCxc";
 import { tt } from "@/lib/i18n/dict";
+import { fechaCorta } from "@/lib/fecha/mostrar";
 
 type Mov = {
   id: string;
@@ -38,7 +39,7 @@ function fmtGs(n: number) {
 function fmtFecha(iso: string | null) {
   if (!iso) return "—";
   try {
-    return new Date(iso).toLocaleDateString("es-PY", { day: "2-digit", month: "2-digit", year: "numeric" });
+    return fechaCorta(iso);
   } catch {
     return iso;
   }
