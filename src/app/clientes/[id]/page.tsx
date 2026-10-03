@@ -192,6 +192,7 @@ export default function ClienteDetailPage() {
     diasDesdeUltimaCompra: number | null;
     comprasUltimos90d: number;
     totalHistorico: number;
+    primeraCompra: string | null;
   } | null>(null);
   const [confirmarEliminar, setConfirmarEliminar] = useState(false);
   const [deletionReason, setDeletionReason] = useState("");
@@ -550,6 +551,7 @@ export default function ClienteDetailPage() {
           diasDesdeUltimaCompra: typeof k.dias_desde_ultima_compra === "number" ? k.dias_desde_ultima_compra : null,
           comprasUltimos90d: Number(k.compras_ultimos_90d ?? 0),
           totalHistorico: Number(k.total_comprado_historico ?? 0),
+          primeraCompra: typeof k.primera_compra_fecha === "string" ? k.primera_compra_fecha : null,
         });
       })
       .catch(() => { /* tolerar */ });
@@ -1038,9 +1040,13 @@ export default function ClienteDetailPage() {
                   {/* Badges automáticos (Pronim/Akakua'a). Se derivan de KPIs. */}
                   {SIMPLE_CLIENTE && (() => {
                     const tags: { label: string; className: string; title: string }[] = [];
-                    // "Nuevo" si creado hace ≤30 días.
-                    const createdMs = cliente.created_at ? new Date(cliente.created_at).getTime() : 0;
-                    const diasDesdeAlta = createdMs ? Math.floor((Date.now() - createdMs) / (86400 * 1000)) : Infinity;
+                    // "Nuevo" si su PRIMERA operación fue hace ≤30 días. No
+                    // sirve la fecha de alta de la ficha: en los clientes que
+                    // vinieron de la importación el alta es el día de la carga,
+                    // y salían como nuevos aunque compren desde 2025.
+                    const inicioRaw = badgesKpis?.primeraCompra ?? cliente.created_at;
+                    const inicioMs = inicioRaw ? new Date(inicioRaw).getTime() : 0;
+                    const diasDesdeAlta = inicioMs ? Math.floor((Date.now() - inicioMs) / (86400 * 1000)) : Infinity;
                     if (diasDesdeAlta <= 30) {
                       tags.push({ label: "✨ Nuevo", className: "bg-blue-50 text-blue-700 border-blue-200", title: `Cliente desde hace ${diasDesdeAlta} día(s)` });
                     }
@@ -1069,7 +1075,11 @@ export default function ClienteDetailPage() {
                     ));
                   })()}
                   <span className="text-xs text-slate-500">
-                    {tt("Cliente desde")} <span className="font-medium text-slate-700">{formatFecha(cliente.created_at)}</span>
+                    {/* La primera operación real. El alta de la ficha no sirve:
+                        en los importados es el día de la carga. */}
+                    {tt("Cliente desde")} <span className="font-medium text-slate-700">
+                      {formatFecha(badgesKpis?.primeraCompra ?? cliente.created_at)}
+                    </span>
                   </span>
                 </div>
               </div>

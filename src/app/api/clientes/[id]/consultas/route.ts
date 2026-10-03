@@ -32,6 +32,9 @@ interface KPIs {
   saldo_credito: number;
   saldo_cashback: number;
   ultima_compra_fecha: string | null;
+  /** Primera operación real del cliente. No es la fecha de alta de la ficha:
+   *  en los clientes importados el alta es el día de la carga. */
+  primera_compra_fecha: string | null;
   dias_desde_ultima_compra: number | null;
   compras_ultimos_90d: number;
   total_comprado_historico: number;
@@ -99,11 +102,13 @@ export async function GET(
       // Última compra + cadencia + count 90d + total histórico.
       const ventasStatsQ = await client.query<{
         ultima_fecha: string | null;
+        primera_fecha: string | null;
         total_hist: string | null;
         count_90d: string | null;
       }>(
         `SELECT
            MAX(fecha) AS ultima_fecha,
+           MIN(fecha) AS primera_fecha,
            COALESCE(SUM(total), 0)::text AS total_hist,
            COUNT(*) FILTER (WHERE fecha >= now() - interval '90 days')::text AS count_90d
          FROM ${ventasT}
@@ -112,6 +117,7 @@ export async function GET(
       );
       const vs = ventasStatsQ.rows[0];
       const ultimaCompra = vs?.ultima_fecha ?? null;
+      const primeraCompra = vs?.primera_fecha ?? null;
       const totalComprado = Number(vs?.total_hist ?? 0);
       const compras90 = Number(vs?.count_90d ?? 0);
 
@@ -135,7 +141,9 @@ export async function GET(
       const consignQ = await client.query<{ total: string | null }>(
         `SELECT COALESCE(SUM(total_credito), 0)::text AS total
          FROM ${recepT}
-         WHERE empresa_id = $1 AND cliente_id = $2 AND estado = 'registrada'`,
+         -- 'registrada' ya no existe como estado: hoy son pendiente_ingreso /
+         -- ingresada / anulada. Filtrar por el viejo daba siempre 0.
+         WHERE empresa_id = $1 AND cliente_id = $2 AND estado <> 'anulada'`,
         [empresaId, clienteId],
       );
       const totalConsignado = Number(consignQ.rows[0]?.total ?? 0);
@@ -164,6 +172,7 @@ export async function GET(
         saldo_credito: saldoCreditoOtro,
         saldo_cashback: saldoCashback,
         ultima_compra_fecha: ultimaCompra,
+        primera_compra_fecha: primeraCompra,
         dias_desde_ultima_compra: diasDesdeUlt,
         compras_ultimos_90d: compras90,
         total_comprado_historico: totalComprado,
