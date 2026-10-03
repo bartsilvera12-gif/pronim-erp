@@ -682,7 +682,11 @@ function HeroCard({ iconType, label, value, delta, deltaTone, color, tip, onClic
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-[11px] uppercase tracking-wide text-slate-600 font-semibold">{label}</p>
-          <p className="mt-1 text-2xl font-bold text-slate-900 tabular-nums truncate">{value}</p>
+          {/* Sin `truncate`: los importes largos quedaban cortados. */}
+          <p title={value}
+             className="mt-1 text-2xl font-bold text-slate-900 tabular-nums leading-tight break-words">
+            {value}
+          </p>
           {delta && <p className={`text-[11px] mt-1 ${deltaColor}`}>{delta}</p>}
         </div>
       </div>
@@ -1227,7 +1231,12 @@ function SucMini({ label, value, valueClass }: { label: string; value: string; v
   return (
     <div className="rounded-lg bg-white/80 backdrop-blur-sm px-2.5 py-1.5 border border-white/60 shadow-sm">
       <p className="text-[10px] uppercase text-slate-500">{label}</p>
-      <p className={`text-sm font-semibold tabular-nums truncate ${valueClass ?? "text-slate-800"}`}>{value}</p>
+      {/* Sin `truncate`: un importe en guaraníes no entra en el ancho de la
+          baldosa y quedaba cortado ("Gs. 209,..."). Que baje de línea. */}
+      <p title={value}
+         className={`text-sm font-semibold tabular-nums leading-tight break-words ${valueClass ?? "text-slate-800"}`}>
+        {value}
+      </p>
     </div>
   );
 }
