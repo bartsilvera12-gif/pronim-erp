@@ -345,17 +345,77 @@ export default function NuevaVentaPage() {
   const clientesFiltrados = useMemo(() => {
     const q = clienteQuery.trim().toLowerCase();
     const qDigits = q.replace(/\D/g, "");
-    return clientes.filter((c) => {
+    // Palabra por palabra: el nombre puede venir con dos espacios o con el
+    // apellido primero, y buscarlo como texto corrido no lo encontraba.
+    const palabras = q.split(/\s+/).filter(Boolean);
+    const arr = clientes.filter((c) => {
       if (!q) return true;
-      if (c.nombre.toLowerCase().includes(q)) return true;
+      const nombre = c.nombre.toLowerCase().replace(/\s+/g, " ");
+      if (palabras.every((p) => nombre.includes(p))) return true;
       if ((c.ruc ?? "").toLowerCase().includes(q)) return true;
-      if (qDigits && c.telefono) {
+      if (qDigits.length >= 3 && c.telefono) {
         const tel = String(c.telefono).replace(/\D/g, "");
         if (tel.includes(qDigits)) return true;
       }
       return false;
-    }).slice(0, 50);
+    });
+    // Primero los que EMPIEZAN con lo tipeado: buscando "vani", las Vanina
+    // tienen que ir arriba de "Devani".
+    if (q) {
+      const rank = (c: Cliente) => {
+        const n = c.nombre.toLowerCase();
+        if (n.startsWith(q)) return 0;
+        if (n.split(/\s+/).some((p) => p.startsWith(q))) return 1;
+        return 2;
+      };
+      arr.sort((a, b) => rank(a) - rank(b) || a.nombre.localeCompare(b.nombre, "es"));
+    }
+    return arr.slice(0, 100);
   }, [clienteQuery, clientes]);
+
+  // Búsqueda contra el servidor.
+  //
+  // La carga inicial trae sólo las primeras ~1.000 fichas. Con una cartera de
+  // miles, filtrar sobre esa lista deja clientes reales sin aparecer nunca:
+  // Vanina Albertin estaba en el puesto 6.598 de 6.605. Al tipear se consulta
+  // al servidor y lo que vuelve se suma a lo que ya hay en pantalla.
+  useEffect(() => {
+    const texto = clienteQuery.trim();
+    if (texto.length < 2) return;
+    let cancel = false;
+    const t = setTimeout(async () => {
+      try {
+        const r = await fetchWithSupabaseSession(
+          `/api/clientes?q=${encodeURIComponent(texto)}`, { cache: "no-store" },
+        );
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok || j?.success === false) {
+          console.error("[venta] el servidor rechazó la búsqueda de clientes", r.status, j?.error);
+          return;
+        }
+        if (cancel || !Array.isArray(j?.data)) return;
+        const encontrados: Cliente[] = (j.data as Record<string, unknown>[]).map((c) => ({
+          id: String(c.id),
+          nombre:
+            (typeof c.empresa === "string" && c.empresa.trim())
+            || (typeof c.nombre_contacto === "string" && c.nombre_contacto.trim())
+            || (typeof c.nombre === "string" && c.nombre.trim())
+            || "Cliente",
+          ruc: typeof c.ruc === "string" ? c.ruc : null,
+          telefono: typeof c.telefono === "string" ? c.telefono : null,
+        }));
+        setClientes((prev) => {
+          const porId = new Map(prev.map((c) => [c.id, c]));
+          let nuevos = false;
+          for (const c of encontrados) if (!porId.has(c.id)) { porId.set(c.id, c); nuevos = true; }
+          return nuevos ? [...porId.values()] : prev;
+        });
+      } catch (e) {
+        console.error("[venta] búsqueda de clientes", e);
+      }
+    }, 300);
+    return () => { cancel = true; clearTimeout(t); };
+  }, [clienteQuery]);
 
   const alertasDisparadas = useMemo(() => {
     if (lleva.length === 0) return [] as { titulo: string; mensaje: string }[];
@@ -809,8 +869,18 @@ export default function NuevaVentaPage() {
                     className="block w-full text-left px-3 py-2 text-sm hover:bg-slate-50">
                     <span className="font-medium text-slate-800">{c.nombre}</span>
                     {c.ruc && <span className="ml-2 text-xs text-slate-400">RUC {c.ruc}</span>}
+                    {c.telefono && <span className="ml-2 text-xs text-slate-400">{c.telefono}</span>}
                   </button>
                 ))}
+                {/* La lista tiene scroll: sin este pie no se nota que hay más
+                    abajo y parece que el buscador no encontró al cliente. */}
+                {clientesFiltrados.length > 0 && (
+                  <p className="sticky bottom-0 border-t border-slate-100 bg-white px-3 py-1.5 text-[11px] text-slate-400">
+                    {clientesFiltrados.length >= 100
+                      ? tt("Más de 100 coincidencias · escribí un poco más")
+                      : `${clientesFiltrados.length} ${clientesFiltrados.length === 1 ? tt("cliente") : tt("clientes")}`}
+                  </p>
+                )}
               </div>
             )}
           </div>
