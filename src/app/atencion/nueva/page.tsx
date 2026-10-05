@@ -747,7 +747,20 @@ export default function NuevaAtencionPage() {
       }
       return false;
     });
-    return arr.slice(0, 50);
+    // Orden por relevancia: primero los que EMPIEZAN con lo tipeado, después
+    // los que lo contienen en el medio, y dentro de cada grupo alfabético.
+    // Sin esto, buscar "vani" mostraba "Devani Rojas" antes que "Vanina", y
+    // la clienta buscada quedaba abajo de todo.
+    if (q) {
+      const rank = (c: Cliente) => {
+        const n = c.nombre.toLowerCase();
+        if (n.startsWith(q)) return 0;
+        if (n.split(/\s+/).some((p) => p.startsWith(q))) return 1;
+        return 2;
+      };
+      arr.sort((a, b) => rank(a) - rank(b) || a.nombre.localeCompare(b.nombre, "es"));
+    }
+    return arr.slice(0, 100);
   }, [clienteQuery, clientes]);
 
   function agregarLineaEn(bucket: "trae" | "lleva", franja: Franja, cantidad: number = 1) {
@@ -1522,8 +1535,18 @@ export default function NuevaAtencionPage() {
                   >
                     <span className="font-medium text-slate-800">{c.nombre}</span>
                     {c.ruc && <span className="ml-2 text-xs text-slate-400">RUC {c.ruc}</span>}
+                    {c.telefono && <span className="ml-2 text-xs text-slate-400">{c.telefono}</span>}
                   </button>
                 ))}
+                {/* La lista tiene scroll: sin este pie no se nota que hay
+                    más abajo y parece que el buscador no encontró al cliente. */}
+                {clientesFiltrados.length > 0 && (
+                  <p className="sticky bottom-0 border-t border-slate-100 bg-white px-3 py-1.5 text-[11px] text-slate-400">
+                    {clientesFiltrados.length >= 100
+                      ? tt("Más de 100 coincidencias · escribí un poco más")
+                      : `${clientesFiltrados.length} ${clientesFiltrados.length === 1 ? tt("cliente") : tt("clientes")}`}
+                  </p>
+                )}
               </div>
             )}
           </div>

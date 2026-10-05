@@ -120,6 +120,8 @@ const es: Dict = {
   "Todos los orígenes": "Todos los orígenes",
   "Tipo servicio": "Tipo servicio",
   "clientes": "clientes",
+  "cliente": "cliente",
+  "Más de 100 coincidencias · escribí un poco más": "Mais de 100 correspondências · escreva um pouco mais",
   "activos": "activos",
   "empresas": "empresas",
   "Columnas": "Columnas",
