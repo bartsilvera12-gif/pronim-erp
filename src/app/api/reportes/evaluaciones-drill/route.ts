@@ -189,7 +189,7 @@ export async function GET(request: NextRequest) {
               ${totalExpr}::text AS total,
               COALESCE((SELECT SUM(it.cantidad) FROM ${tRI} it WHERE it.recepcion_id = r.id),0)::text AS prendas
          FROM ${from} WHERE ${condsConTipo.join(" AND ")}
-        ORDER BY r.fecha DESC LIMIT 1000`,
+        ORDER BY r.fecha DESC LIMIT 20000`,
       params,
     ).catch(() => ({ rows: [] as Array<{ id: string; numero_control: string; fecha: string; cliente_id: string | null; cliente_nombre: string | null; sucursal_id: string | null; sucursal_nombre: string | null; usuario_id: string | null; usuario_nombre: string | null; estado: string | null; subtotal: string; ajuste: string; total: string; prendas: string }> }));
 

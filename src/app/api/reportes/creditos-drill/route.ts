@@ -211,7 +211,7 @@ export async function GET(request: NextRequest) {
               m.referencia_tipo, m.referencia_numero, m.observaciones,
               COALESCE(u.nombre, u.email, m.usuario_nombre) AS usuario_nombre
          FROM ${from} WHERE ${conds.join(" AND ")}
-        ORDER BY m.created_at DESC LIMIT 1000`,
+        ORDER BY m.created_at DESC LIMIT 20000`,
       params,
     );
 

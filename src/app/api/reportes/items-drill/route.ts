@@ -108,7 +108,7 @@ export async function GET(request: NextRequest) {
         WHERE r.empresa_id = $1 AND (r.estado IS NULL OR r.estado <> 'anulada') ${fR}
       ) t
       ORDER BY fecha DESC
-      LIMIT 6000`;
+      LIMIT 20000`;
 
     const r = await pool.query<Record<string, unknown>>(sql, params);
     return NextResponse.json(successResponse({ items: r.rows }));

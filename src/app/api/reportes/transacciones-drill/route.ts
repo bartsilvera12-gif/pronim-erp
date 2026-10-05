@@ -83,6 +83,8 @@ export async function GET(request: NextRequest) {
            WHERE it.venta_id = v.id)`
       : "NULL::numeric";
 
+    // Techo de filas por consulta. Con rango acotado nunca se alcanza.
+    const TOPE = 4000;
     const sp = request.nextUrl.searchParams;
     const desde = sp.get("desde");
     const hasta = sp.get("hasta");
@@ -231,10 +233,18 @@ export async function GET(request: NextRequest) {
         WHERE r.empresa_id = $1 AND (r.estado IS NULL OR r.estado <> 'anulada') ${fRecep}
       ) t
       ORDER BY fecha DESC
-      LIMIT 4000`;
+      LIMIT ${TOPE + 1}`;
 
     const r = await pool.query<Record<string, unknown>>(sql, params);
-    return NextResponse.json(successResponse({ transacciones: r.rows }));
+    // Se pide una fila de mas que el tope: si vuelve, el rango tiene mas
+    // datos de los que entran y hay que avisarlo en pantalla. Cortar en
+    // silencio se lee como "faltan datos".
+    const truncado = r.rows.length > TOPE;
+    return NextResponse.json(successResponse({
+      transacciones: truncado ? r.rows.slice(0, TOPE) : r.rows,
+      truncado,
+      tope: TOPE,
+    }));
   } catch (err) {
     console.error("[/api/reportes/transacciones-drill GET]", err);
     return NextResponse.json(errorResponse(err instanceof Error ? err.message : "Error"), { status: 500 });

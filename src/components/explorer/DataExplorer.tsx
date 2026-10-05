@@ -86,8 +86,14 @@ export function DataExplorer<T>(props: {
   toolbarExtra?: ReactNode;
   /** Encabezado extra (ej. KPIs clickeables). */
   headerExtra?: ReactNode;
+  /**
+   * El servidor tuvo que cortar el resultado porque el rango pedido trae
+   * más filas de las que entran. Hay que decirlo: un listado recortado sin
+   * aviso se lee como "faltan datos".
+   */
+  truncado?: boolean;
 }) {
-  const { titulo, descripcion, volverA, rows, columns, cargando, detailHref, expandir, rowKey, csvName = "export", toolbarExtra, headerExtra } = props;
+  const { titulo, descripcion, volverA, rows, columns, cargando, detailHref, expandir, rowKey, csvName = "export", toolbarExtra, headerExtra, truncado } = props;
 
   const [visibles, setVisibles] = useState<Set<string>>(
     () => new Set(columns.filter((c) => c.defaultVisible !== false || c.required).map((c) => c.key)),
@@ -439,6 +445,13 @@ export function DataExplorer<T>(props: {
       </div>
 
       {headerExtra}
+
+      {truncado && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 print:hidden">
+          <strong>{tt("Hay más datos de los que entran en pantalla.")}</strong>{" "}
+          {tt("Se muestran las filas más recientes del rango elegido. Acotá las fechas para ver el resto.")}
+        </div>
+      )}
 
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2 print:hidden">

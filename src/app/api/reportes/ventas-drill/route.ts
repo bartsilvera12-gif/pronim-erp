@@ -158,7 +158,7 @@ export async function GET(request: NextRequest) {
               ${uNombreSel} AS usuario_nombre,
               COALESCE((SELECT SUM(it.cantidad) FROM ${tVI} it WHERE it.venta_id = v.id),0)::text AS cant_productos
          FROM ${from} WHERE ${conds.join(" AND ")}
-        ORDER BY v.fecha DESC LIMIT 2000`,
+        ORDER BY v.fecha DESC LIMIT 20000`,
       params,
     ).catch(() => ({ rows: [] as Array<{ id: string; numero_control: string; fecha: string; total: string; descuento_general: string; metodo_pago: string | null; estado: string | null; sucursal_id: string | null; sucursal_nombre: string | null; cliente_id: string | null; cliente_nombre: string | null; usuario_id: string | null; usuario_nombre: string | null; cant_productos: string }> }));
 

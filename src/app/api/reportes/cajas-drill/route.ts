@@ -161,7 +161,7 @@ export async function GET(request: NextRequest) {
               c.observacion_apertura, c.observacion_cierre,
               COALESCE((SELECT COUNT(*) FROM ${tCM} m WHERE m.caja_id = c.id),0)::text AS movs_count
          FROM ${from} WHERE ${conds.join(" AND ")}
-        ORDER BY c.fecha_apertura DESC LIMIT 500`,
+        ORDER BY c.fecha_apertura DESC LIMIT 20000`,
       params,
     );
 
