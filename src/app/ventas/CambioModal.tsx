@@ -257,6 +257,22 @@ export default function CambioModal({
                     <p className="text-[10px] text-sky-700">{tt("Elegí cuántas prendas devuelve el cliente")}</p>
                   </div>
                   <ul className="divide-y divide-slate-100 max-h-[380px] overflow-y-auto">
+                    {/* Las ventas anteriores al sistema no tienen detalle de
+                        prendas, así que no hay nada que tildar. Sin este aviso
+                        la caja ve un recuadro vacío y no sabe qué hacer. */}
+                    {devuelve.length === 0 && (
+                      <li className="px-3 py-4 text-xs text-slate-600 space-y-1">
+                        <p className="font-semibold text-slate-700">
+                          {tt("Esta venta no tiene prendas cargadas")}
+                        </p>
+                        <p>
+                          {tt("Es una venta del histórico: la planilla traía el total pero no el detalle de prendas, así que no hay qué devolver acá.")}
+                        </p>
+                        <p>
+                          {tt("Recibí la ropa como una evaluación nueva: se le genera crédito y lo usa en la compra.")}
+                        </p>
+                      </li>
+                    )}
                     {devuelve.map((l, i) => (
                       <li key={`${l.producto_id}-${i}`} className="flex items-center gap-2 px-3 py-2.5">
                         <div className="flex-1 min-w-0">

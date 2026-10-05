@@ -66,6 +66,22 @@ export async function GET(request: NextRequest) {
     const cHasVip = cc.has("es_vip");
     const vHasSuc = vc.has("sucursal_id");
     const rHasSuc = rc.has("sucursal_id");
+    const vi = await cols("ventas_items");
+    const viHasCosto = vi.has("costo_unitario_snapshot");
+
+    // Markup de una venta: cuánto se le ganó a lo que costó la prenda.
+    // El costo queda congelado en la línea al vender. Las ventas del
+    // histórico importado no tienen líneas, así que ahí da NULL y se
+    // muestra "—" en vez de un 0% que no significa nada.
+    const vMarkupExpr = viHasCosto
+      ? `(SELECT CASE WHEN SUM(it.cantidad * it.costo_unitario_snapshot) > 0
+                      THEN round(((SUM(it.cantidad * it.precio_unitario)
+                                   - SUM(it.cantidad * it.costo_unitario_snapshot))
+                                  / SUM(it.cantidad * it.costo_unitario_snapshot) * 100)::numeric, 1)
+                      ELSE NULL END
+            FROM ${tVI} it
+           WHERE it.venta_id = v.id)`
+      : "NULL::numeric";
 
     const sp = request.nextUrl.searchParams;
     const desde = sp.get("desde");
@@ -168,7 +184,7 @@ export async function GET(request: NextRequest) {
           COALESCE(v.total,0)::float8 AS valor,
           0::float8 AS valor_stock,
           -COALESCE((SELECT SUM(it.cantidad) FROM ${tVI} it WHERE it.venta_id = v.id),0)::float8 AS cantidad,
-          NULL::float8 AS markup,
+          ${vMarkupExpr}::float8 AS markup,
           COALESCE(vpay.tarjeta,0)::float8 AS tarjeta,
           COALESCE(vpay.efectivo,0)::float8 AS efectivo,
           COALESCE(vpay.transferencia,0)::float8 AS transferencia,
