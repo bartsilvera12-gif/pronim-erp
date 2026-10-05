@@ -489,7 +489,7 @@ function ProyeccionCierre({ meta, fmt, t }: {
       </div>
       {(meta.dias_restantes_mes ?? 0) > 0 && (
         <p className="text-[11px] text-slate-500">
-          {t("Quedan")} <strong className="text-slate-700">{meta.dias_restantes_mes}</strong> {t("días este mes")}.
+          {t("Quedan")} <strong className="text-slate-700">{meta.dias_restantes_mes}</strong> {t("días de venta este mes")}.
           {ritmo === "debajo" && (meta.necesario_por_dia_mes ?? 0) > 0 && (
             <> {t("Necesitás vender")} <strong className="text-rose-700">{fmt(meta.necesario_por_dia_mes ?? 0)}</strong> {t("por día para llegar")}.</>
           )}

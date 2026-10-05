@@ -739,6 +739,7 @@ const ptBR: Dict = {
   "bajó": "caiu",
   "días con meta": "dias com meta",
   "días este mes": "dias neste mês",
+  "días de venta este mes": "dias de venda neste mês",
   "hola {n}": "olá {n}",
   "mejor que el mes pasado": "melhor que o mês passado",
   "menos que ayer": "menos que ontem",

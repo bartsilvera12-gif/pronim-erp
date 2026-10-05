@@ -84,6 +84,8 @@ type LoteCredito = {
   monto_inicial: number;
   monto_consumido: number;
   saldo_restante: number;
+  monto_evaluado: number | null;
+  prendas: number | null;
   usos: LoteUso[];
 };
 
@@ -437,10 +439,12 @@ export default function ConsultasClientePage() {
             value={formatGs(kpis.total_comprado_historico)}
             hint="acumulado"
           />
+          {/* No es consignación: acá no se deja ropa a la venta. Es el
+              crédito que se le reconoció por las prendas que trajo. */}
           <KpiCard
-            label="Total consignado histórico"
+            label="Crédito generado histórico"
             value={formatGs(kpis.total_consignado_historico)}
-            hint="prendas entregadas"
+            hint="por las prendas que trajo"
           />
         </div>
       )}
@@ -461,7 +465,8 @@ export default function ConsultasClientePage() {
                   <th className="pb-2 pr-3">Origen</th>
                   <th className="pb-2 pr-3">{tt("Fecha")}</th>
                   <th className="pb-2 pr-3">Referencia</th>
-                  <th className="pb-2 pr-3 text-right">Monto inicial</th>
+                  <th className="pb-2 pr-3 text-right">Evaluado</th>
+                  <th className="pb-2 pr-3 text-right">Crédito generado</th>
                   <th className="pb-2 pr-3 text-right">Consumido</th>
                   <th className="pb-2 pr-3 text-right">Saldo restante</th>
                   <th className="pb-2"></th>
@@ -486,6 +491,14 @@ export default function ConsultasClientePage() {
                         </td>
                         <td className="py-2 pr-3 text-xs font-mono text-slate-500">
                           {l.referencia_numero ?? "—"}
+                        </td>
+                        {/* Cuánto se tasó la ropa. Puede ser mayor al crédito:
+                            parte se le pudo pagar en efectivo en el momento. */}
+                        <td className="py-2 pr-3 text-right tabular-nums text-slate-600">
+                          {l.monto_evaluado != null ? formatGs(l.monto_evaluado) : "—"}
+                          {l.prendas ? (
+                            <span className="block text-[10px] text-slate-400">{l.prendas} prendas</span>
+                          ) : null}
                         </td>
                         <td className="py-2 pr-3 text-right tabular-nums font-medium">
                           {formatGs(l.monto_inicial)}
@@ -514,7 +527,7 @@ export default function ConsultasClientePage() {
                       </tr>
                       {abierto && l.usos.length > 0 && (
                         <tr>
-                          <td colSpan={7} className="bg-slate-50 px-3 pb-3 pt-1">
+                          <td colSpan={8} className="bg-slate-50 px-3 pb-3 pt-1">
                             <div className="rounded-lg border border-slate-200 bg-white p-2">
                               <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                                 {tt("Usos de este crédito")}

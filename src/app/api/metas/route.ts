@@ -271,18 +271,24 @@ export async function GET(request: NextRequest) {
       // Se mantiene la comisión semanal previa para no romper consumidores viejos.
       const comisionEstimada = (kpi.semana * pctComision) / 100;
 
-      // Proyección de cierre del mes: extrapola el ritmo actual (mes / díaActual).
-      // Ritmo: por encima/dentro/debajo comparado con el necesario para meta.
-      const promedioDiarioActual = diaDelMes > 0 ? kpi.mes / diaDelMes : 0;
-      const proyeccionCierreMes = promedioDiarioActual * diasEnMes;
-      // Hoy cuenta: el día todavía no terminó y la sucursal sigue vendiendo.
-      // El 2 de un mes de 31 quedan 30 días para llegar, no 29; el último día
-      // del mes queda 1.
-      const diasRestantes = Math.max(0, diasEnMes - diaDelMes + 1);
+      // Todo el cálculo del mes va en días HÁBILES, no de calendario: la meta
+      // sólo se puede alcanzar los días que la sucursal abre. Cada local cierra
+      // días distintos, por eso sale de `diasCerrados` de ESTA sucursal.
+      // Hoy cuenta: el día no terminó y la tienda sigue vendiendo.
+      const finDeMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
+      const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+      const habilesTranscurridos = diasHabilesEnRango(inicioMes, hoy, diasCerrados);
+      const diasRestantes = diasHabilesEnRango(hoy, finDeMes, diasCerrados);
+
+      // Proyección de cierre: extrapola el ritmo por día hábil.
+      const promedioDiarioActual = habilesTranscurridos > 0 ? kpi.mes / habilesTranscurridos : 0;
+      const proyeccionCierreMes = promedioDiarioActual * diasHabilesMes;
       const necesarioPorDiaMes = diasRestantes > 0 ? Math.max(0, metaMes - kpi.mes) / diasRestantes : 0;
       let ritmo: "encima" | "dentro" | "debajo" | "sin_meta" = "sin_meta";
       if (metaMes > 0) {
-        const necesarioAcumulado = (metaMes / diasEnMes) * diaDelMes;
+        const necesarioAcumulado = diasHabilesMes > 0
+          ? (metaMes / diasHabilesMes) * habilesTranscurridos
+          : 0;
         const razon = kpi.mes / (necesarioAcumulado || 1);
         ritmo = razon >= 1.05 ? "encima" : razon >= 0.95 ? "dentro" : "debajo";
       }

@@ -23,6 +23,10 @@ interface Lote {
   monto_inicial: number;
   monto_consumido: number;
   saldo_restante: number;
+  /** Cuánto se evaluó la ropa que originó este crédito. No siempre coincide
+   *  con el crédito: parte de la evaluación puede haberse pagado en efectivo. */
+  monto_evaluado: number | null;
+  prendas: number | null;
   usos: Uso[];
 }
 
@@ -52,6 +56,8 @@ export async function GET(
     const creditosT = quoteSchemaTable(schema, "cliente_creditos_movimientos");
     const consumosT = quoteSchemaTable(schema, "cliente_creditos_consumos");
     const clientesT = quoteSchemaTable(schema, "clientes");
+    const recepT = quoteSchemaTable(schema, "cliente_recepciones");
+    const recepItemsT = quoteSchemaTable(schema, "cliente_recepciones_items");
 
     const client = await pool.connect();
     try {
@@ -79,7 +85,11 @@ export async function GET(
         observaciones: string | null;
         monto_inicial: string;
         monto_consumido: string;
+        monto_evaluado: string | null;
+        prendas: string | null;
       }>(
+        // La evaluación se busca por el enlace del movimiento con su recepción
+        // y, si quedara vacío, por el número de control que comparten.
         `SELECT
            e.id AS entrada_id,
            e.origen,
@@ -88,9 +98,19 @@ export async function GET(
            e.referencia_tipo,
            e.observaciones,
            e.monto::text AS monto_inicial,
-           COALESCE(SUM(c.monto_aplicado), 0)::text AS monto_consumido
+           COALESCE(SUM(c.monto_aplicado), 0)::text AS monto_consumido,
+           MAX(COALESCE(r.total_final, r.total_compra))::text AS monto_evaluado,
+           MAX(ri.prendas)::text AS prendas
          FROM ${creditosT} e
          LEFT JOIN ${consumosT} c ON c.entrada_id = e.id
+         LEFT JOIN ${recepT} r
+                ON r.empresa_id = e.empresa_id
+               AND (r.id = e.referencia_id OR r.numero_control = e.referencia_numero)
+         LEFT JOIN LATERAL (
+           SELECT SUM(it.cantidad) AS prendas
+             FROM ${recepItemsT} it
+            WHERE it.recepcion_id = r.id
+         ) ri ON TRUE
          WHERE e.empresa_id = $1
            AND e.cliente_id = $2
            AND e.tipo IN ('ENTRADA','AJUSTE')
@@ -112,6 +132,8 @@ export async function GET(
           monto_inicial: inicial,
           monto_consumido: consumido,
           saldo_restante: inicial - consumido,
+          monto_evaluado: r.monto_evaluado != null ? Number(r.monto_evaluado) : null,
+          prendas: r.prendas != null ? Number(r.prendas) : null,
           usos: [],
         };
       });
