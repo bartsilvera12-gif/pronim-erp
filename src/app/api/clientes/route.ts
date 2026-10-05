@@ -270,15 +270,23 @@ export async function GET(request: NextRequest) {
       .order("created_at", { ascending: false });
 
     if (buscar) {
-      const seguro = buscar.replace(/[,()*%]/g, " ").trim();
-      const digitos = buscar.replace(/\D/g, "");
-      if (seguro) {
+      // Por palabras sueltas, no como texto corrido: "vanina albertin" tiene
+      // que encontrar a "Vanina  Albertin" (dos espacios) y a "Albertin,
+      // Vanina". Cada palabra se exige por separado — los `.or()` encadenados
+      // se combinan con AND — y puede aparecer en cualquiera de los campos.
+      const palabras = buscar
+        .replace(/[,()*%]/g, " ")
+        .split(/\s+/)
+        .filter((p) => p.length > 0)
+        .slice(0, 4);
+      for (const p of palabras) {
         const campos = [
-          `nombre.ilike.*${seguro}*`,
-          `nombre_contacto.ilike.*${seguro}*`,
-          `empresa.ilike.*${seguro}*`,
-          `ruc.ilike.*${seguro}*`,
+          `nombre.ilike.*${p}*`,
+          `nombre_contacto.ilike.*${p}*`,
+          `empresa.ilike.*${p}*`,
+          `ruc.ilike.*${p}*`,
         ];
+        const digitos = p.replace(/\D/g, "");
         if (digitos.length >= 3) campos.push(`telefono.ilike.*${digitos}*`);
         q = q.or(campos.join(","));
       }

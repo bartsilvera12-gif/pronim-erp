@@ -603,6 +603,10 @@ export default function NuevaAtencionPage() {
           `/api/clientes?q=${encodeURIComponent(texto)}`, { cache: "no-store" },
         );
         const j = await r.json().catch(() => ({}));
+        if (!r.ok || j?.success === false) {
+          console.error("[atencion] el servidor rechazó la búsqueda de clientes", r.status, j?.error);
+          return;
+        }
         if (cancel || !Array.isArray(j?.data)) return;
         const encontrados: Cliente[] = (j.data as Record<string, unknown>[]).map((c) => ({
           id: String(c.id),
@@ -737,14 +741,18 @@ export default function NuevaAtencionPage() {
     // el teléfono con los no-dígitos removidos (así "981234" matchea
     // "0981-234-567" y "+595981234567").
     const qDigits = q.replace(/\D/g, "");
+    // Palabra por palabra: el nombre puede venir con dos espacios, con el
+    // apellido primero o con un salto de línea, y buscarlo como texto
+    // corrido no lo encontraba.
+    const palabras = q.split(/\s+/).filter(Boolean);
     const arr = clientes.filter((c) => {
       if (!q) return true;
-      if (c.nombre.toLowerCase().includes(q)) return true;
-      if ((c.ruc ?? "").toLowerCase().includes(q)) return true;
-      if (qDigits && c.telefono) {
-        const tel = String(c.telefono).replace(/\D/g, "");
-        if (tel.includes(qDigits)) return true;
-      }
+      const nombre = c.nombre.toLowerCase().replace(/\s+/g, " ");
+      const ruc = (c.ruc ?? "").toLowerCase();
+      const tel = String(c.telefono ?? "").replace(/\D/g, "");
+      if (palabras.every((p) => nombre.includes(p))) return true;
+      if (ruc.includes(q)) return true;
+      if (qDigits.length >= 3 && tel.includes(qDigits)) return true;
       return false;
     });
     // Orden por relevancia: primero los que EMPIEZAN con lo tipeado, después
