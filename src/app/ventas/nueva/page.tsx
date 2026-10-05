@@ -13,6 +13,7 @@ import type { TipoIvaVenta, TipoVenta, MonedaVenta, LineaVenta, MetodoPago, Tipo
 import type { Producto } from "@/lib/inventario/types";
 import { getSucursalActivaId } from "@/lib/sucursales/activa";
 import { tt } from "@/lib/i18n/dict";
+import { useUsuarioActual } from "@/shared/hooks/useUsuarioActual";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -144,6 +145,12 @@ export default function NuevaVentaPage() {
   // ── Condiciones de la venta ───────────────────────────────────────────────
   // Instancia dedicada: siempre Guaraníes.
   const moneda: MonedaVenta = "GS";
+
+  // Fecha de la venta. Vacío = hoy. Solo se ofrece a admin, para cargar los
+  // días que se vendieron antes de empezar a usar el sistema.
+  const [fechaVenta, setFechaVenta] = useState("");
+  const { usuario } = useUsuarioActual();
+  const esAdminVentas = (usuario?.rol ?? "").toLowerCase().includes("admin");
 
   // Contado / Crédito (campos ya existentes en `ventas`: tipo_venta + plazo_dias).
   const [tipoVenta, setTipoVenta] = useState<TipoVenta>("CONTADO");
@@ -826,6 +833,7 @@ export default function NuevaVentaPage() {
           genera_nota_remision: !!clienteId && generaNotaRemision,
           credito_cliente_usado: creditoAplicado,
           cambio_id: cambioId ?? null,
+          fecha: fechaVenta || null,
         },
         undefined,
         pagos,
@@ -1065,6 +1073,26 @@ export default function NuevaVentaPage() {
                 </div>
               )}
             </div>
+
+            {/* Carga retroactiva. Solo admin: el servidor ignora la fecha si
+                la manda otro usuario. Vacío = hoy, que es el caso normal. */}
+            {esAdminVentas && (
+              <div>
+                <label className={labelClass}>{tt("Fecha de la venta")}</label>
+                <input
+                  type="date"
+                  value={fechaVenta}
+                  max={new Date().toISOString().slice(0, 10)}
+                  onChange={(e) => setFechaVenta(e.target.value)}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                />
+                <p className="mt-1 text-[11px] text-slate-500">
+                  {fechaVenta
+                    ? tt("La venta queda con esta fecha y el cobro entra en la caja de ese día.")
+                    : tt("Dejalo vacío para hoy. Solo se usa para cargar días anteriores.")}
+                </p>
+              </div>
+            )}
 
             {/* Condición: Contado / Crédito */}
             <div>

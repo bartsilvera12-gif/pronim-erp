@@ -108,6 +108,8 @@ export async function saveVenta(
     genera_nota_remision?: boolean;
     credito_cliente_usado?: number | null;
     cambio_id?: string | null;
+    /** `YYYY-MM-DD` para cargar una venta de un día anterior. Solo admin. */
+    fecha?: string | null;
   },
   pedidoCocina?: PedidoCocinaInput,
   /**
@@ -179,6 +181,9 @@ export async function saveVenta(
         genera_nota_remision: datos.genera_nota_remision === true,
         pedido_id: opts?.pedidoId ?? null,
         pedido_caja_id: opts?.pedidoCajaId ?? null,
+        // Carga retroactiva. El servidor sólo la acepta de un admin y
+        // la imputa a la caja de ese día. Sin esto va con la de hoy.
+        fecha: datos.fecha ?? null,
       }),
     });
 

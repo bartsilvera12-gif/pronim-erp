@@ -92,6 +92,14 @@ export interface CreateVentaPgParams {
    * si hay más de una (multi-punto: hay que elegir).
    */
   cajaId?: string | null;
+  /**
+   * Fecha de la venta, en `YYYY-MM-DD`. Solo para carga retroactiva: sirve
+   * para registrar días que se vendieron antes de empezar a usar el sistema.
+   * La venta queda fechada ese día y el cobro impacta en la caja de ESE día,
+   * reabriéndola si hiciera falta, para que el cierre diario siga cuadrando.
+   * Sin esto, la venta lleva la fecha y la caja del momento.
+   */
+  fechaVenta?: string | null;
   /** Monto aplicado del saldo a favor. Distribución FIFO server-side. */
   creditoClienteUsado?: number | null;
   /** Pagos inmediatos (no incluir crédito acá). */
@@ -263,6 +271,7 @@ export async function createVentaEnClientePg(
   const pagosDetT = qTable(params.schema, "ventas_pagos_detalle");
   const eventosT = qTable(params.schema, "cliente_eventos");
   const entidadesT = qTable(params.schema, "entidades_bancarias");
+  const puntosCajaT = qTable(params.schema, "puntos_caja");
 
   {
 
@@ -460,8 +469,60 @@ export async function createVentaEnClientePg(
     // punto: si el cliente eligió `cajaId` en el body, se valida; si no, se
     // resuelve automáticamente cuando hay exactamente una abierta en la
     // sucursal.
+    // Carga retroactiva: solo una fecha pura `YYYY-MM-DD`, y nunca futura.
+    const fechaRetro = (() => {
+      const s = (params.fechaVenta ?? "").trim();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+      const hoy = new Date().toISOString().slice(0, 10);
+      if (s > hoy) throw new Error("No se puede registrar una venta con fecha futura.");
+      return s;
+    })();
+
+    // Mediodía de ese día: así la fecha del calendario no se corre en ningún
+    // huso. Se interpola porque las dos variantes del INSERT llevan distinta
+    // cantidad de parámetros; es seguro porque el regex de arriba sólo deja
+    // pasar `YYYY-MM-DD`.
+    const fechaExpr = fechaRetro
+      ? `(DATE '${fechaRetro}' + interval '12 hours')`
+      : "now()";
+
     let cajaIdActual: string | null = null;
-    if (params.cajaId) {
+    if (fechaRetro) {
+      // La venta va a la caja de SU día. Si ese día ya se cerró, se reabre
+      // para imputarla y después se recalcula el cierre: así el arqueo de ese
+      // día sigue reflejando lo que realmente entró.
+      const cq = await client.query<{ id: string }>(
+        `SELECT id FROM ${cajasT}
+          WHERE empresa_id=$1 AND sucursal_id=$2
+            AND (fecha_apertura AT TIME ZONE 'UTC')::date = $3::date
+          ORDER BY fecha_apertura DESC LIMIT 1`,
+        [params.empresaId, params.sucursalId, fechaRetro],
+      );
+      if (cq.rows.length > 0) {
+        cajaIdActual = cq.rows[0].id;
+      } else {
+        // No hubo caja ese día: se crea una, ya cerrada, igual que las que
+        // reconstruyó la importación del histórico.
+        const pq = await client.query<{ id: string }>(
+          `SELECT id FROM ${puntosCajaT}
+            WHERE sucursal_id = $1 ORDER BY orden NULLS LAST LIMIT 1`,
+          [params.sucursalId],
+        ).catch(() => ({ rows: [] as { id: string }[] }));
+        const ins = await client.query<{ id: string }>(
+          `INSERT INTO ${cajasT} (
+             empresa_id, sucursal_id, punto_caja_id, numero_caja, estado,
+             fecha_apertura, fecha_cierre, monto_apertura, observacion_apertura
+           ) VALUES (
+             $1, $2, $3,
+             COALESCE((SELECT max(numero_caja) FROM ${cajasT} WHERE sucursal_id = $2), 0) + 1,
+             'cerrada', $4::date + interval '9 hours', $4::date + interval '21 hours',
+             0, 'Caja creada para una venta cargada con fecha anterior'
+           ) RETURNING id`,
+          [params.empresaId, params.sucursalId, pq.rows[0]?.id ?? null, fechaRetro],
+        );
+        cajaIdActual = ins.rows[0].id;
+      }
+    } else if (params.cajaId) {
       const cq = await client.query<{ id: string; sucursal_id: string | null; estado: string }>(
         `SELECT id, sucursal_id, estado FROM ${cajasT}
           WHERE empresa_id=$1 AND id=$2 LIMIT 1`,
@@ -550,7 +611,7 @@ export async function createVentaEnClientePg(
              subtotal, monto_iva, total, estado, tipo_venta, plazo_dias, fecha,
              observaciones, caja_id, metodo_pago, sucursal_id, cambio_id,
              descuento_general, descuento_motivo
-           ) VALUES ($1,$2,$3,$4,$5, $6,$7,$8,'completada',$9,$10,now(),
+           ) VALUES ($1,$2,$3,$4,$5, $6,$7,$8,'completada',$9,$10,${fechaExpr},
                      $11,$12,$13,$14,$15, $16,$17)
            RETURNING id, fecha`,
           [
@@ -565,7 +626,7 @@ export async function createVentaEnClientePg(
              empresa_id, cliente_id, numero_control, moneda, tipo_cambio,
              subtotal, monto_iva, total, estado, tipo_venta, plazo_dias, fecha,
              observaciones, caja_id, metodo_pago, sucursal_id, cambio_id
-           ) VALUES ($1,$2,$3,$4,$5, $6,$7,$8,'completada',$9,$10,now(),
+           ) VALUES ($1,$2,$3,$4,$5, $6,$7,$8,'completada',$9,$10,${fechaExpr},
                      $11,$12,$13,$14,$15)
            RETURNING id, fecha`,
           [
@@ -721,6 +782,30 @@ export async function createVentaEnClientePg(
           pg.fecha_acreditacion ?? null, pg.observacion ?? null,
         ],
       );
+    }
+
+    // Carga retroactiva: si la caja de ese día ya estaba cerrada, el efectivo
+    // que acaba de entrar deja el arqueo desactualizado. Se recalcula lo
+    // esperado y la diferencia contra lo que se contó ese día, para que el
+    // cierre siga diciendo la verdad.
+    if (fechaRetro && cajaIdActual) {
+      await client.query(
+        `UPDATE ${cajasT} c
+            SET monto_esperado_efectivo = COALESCE(c.monto_apertura, 0) + COALESCE(e.efectivo, 0),
+                diferencia = COALESCE(c.monto_cierre_contado, 0)
+                             - (COALESCE(c.monto_apertura, 0) + COALESCE(e.efectivo, 0))
+           FROM (
+             SELECT COALESCE(SUM(CASE WHEN pd.direccion = 'egreso' THEN -pd.monto ELSE pd.monto END), 0) AS efectivo
+               FROM ${pagosDetT} pd
+              WHERE pd.caja_id = $1 AND pd.metodo_pago = 'efectivo'
+           ) e
+          WHERE c.id = $1 AND c.estado = 'cerrada'`,
+        [cajaIdActual],
+      ).catch((e) => {
+        // Si el esquema de caja no tiene esas columnas no se corta la venta:
+        // la venta ya es válida, lo que queda desactualizado es el arqueo.
+        console.error("[venta retroactiva] no se pudo recalcular el arqueo", e);
+      });
     }
 
     // El crédito aplicado NO va como pago_detalle (no es efectivo/banco).

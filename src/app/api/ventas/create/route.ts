@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAuthWithRol } from "@/lib/middleware/auth";
+import { getAuthWithRol, isAdmin } from "@/lib/middleware/auth";
 import { esRolAdminEmpresaOGlobal } from "@/lib/auth/rol-empresa";
 import { SIN_SUCURSAL_MENSAJE } from "@/lib/sucursales/enforce";
 import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema";
@@ -298,6 +298,9 @@ export async function POST(request: NextRequest) {
       })),
       sucursalId,
       cajaId: typeof o.caja_id === "string" && o.caja_id.trim() ? o.caja_id.trim() : null,
+      // Fecha pasada: solo admin. Sirve para cargar los días que se vendieron
+      // antes de empezar a usar el sistema. Una cajera no puede cambiarla.
+      fechaVenta: isAdmin(auth) && typeof o.fecha === "string" ? o.fecha.trim() : null,
       creditoClienteUsado,
       pagosInmediatos: pagosDetalle,
       createdBy: auth.user.id ?? null,
