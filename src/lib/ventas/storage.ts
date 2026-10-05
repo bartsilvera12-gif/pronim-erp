@@ -80,9 +80,17 @@ export type PagoDetalleInput = {
 /**
  * Lista ventas del tenant (misma fuente que el dashboard: tablas `ventas` / `ventas_items`).
  */
-export async function getVentas(): Promise<Venta[]> {
+export async function getVentas(
+  /** Rango a pedir al servidor. Sin esto vienen sólo las más recientes. */
+  rango?: { desde?: string | null; hasta?: string | null; limit?: number },
+): Promise<Venta[]> {
   try {
-    const res = await fetchWithSupabaseSession("/api/ventas", { cache: "no-store" });
+    const qs = new URLSearchParams();
+    if (rango?.desde) qs.set("desde", rango.desde);
+    if (rango?.hasta) qs.set("hasta", rango.hasta);
+    if (rango?.limit) qs.set("limit", String(rango.limit));
+    const url = qs.toString() ? `/api/ventas?${qs.toString()}` : "/api/ventas";
+    const res = await fetchWithSupabaseSession(url, { cache: "no-store" });
     const json = (await res.json()) as {
       success?: boolean;
       data?: { ventas?: Venta[] };

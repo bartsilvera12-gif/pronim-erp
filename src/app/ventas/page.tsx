@@ -228,10 +228,13 @@ export default function VentasPage() {
   const [anularError, setAnularError] = useState<string | null>(null);
   const [cambioVenta, setCambioVenta] = useState<Venta | null>(null);
 
+  // Se recarga cuando cambia el rango de fechas: el filtro se resuelve en la
+  // base, no sobre una lista ya recortada. Sin esto, con un histórico grande,
+  // pedir un mes viejo no devolvía nada porque esas ventas nunca llegaban.
   useEffect(() => {
     let cancelled = false;
     setCargandoLista(true);
-    getVentas().then((data) => {
+    getVentas({ desde: fechaDesde || null, hasta: fechaHasta || null }).then((data) => {
       if (cancelled) return;
       const ordenadas = [...data].sort((a, b) => {
         const ta = new Date(a.fecha).getTime();
@@ -245,7 +248,7 @@ export default function VentasPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [fechaDesde, fechaHasta]);
 
   // Sucursales (solo hace la fetch cuando confirmamos que el usuario es admin,
   // para no gastar la request en cajeros que no necesitan el filtro).

@@ -102,6 +102,14 @@ export async function GET(request: NextRequest) {
     // opcionalmente restringir con ?sucursal_id=... desde el frontend.
     const url = new URL(request.url);
     const querySucursalId = url.searchParams.get("sucursal_id");
+    const soloFecha = (v: string | null) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v.trim()) ? v.trim() : null);
+    const desde = soloFecha(url.searchParams.get("desde"));
+    const hasta = soloFecha(url.searchParams.get("hasta"));
+    // Con rango acotado se puede traer más sin castigar la carga inicial.
+    const limitePedido = Number(url.searchParams.get("limit") ?? "");
+    const limite = Number.isFinite(limitePedido) && limitePedido > 0
+      ? Math.min(limitePedido, 5000)
+      : (desde || hasta ? 5000 : 500);
     const authRol = await getAuthWithRol(request);
     const esAdmin = isAdmin(authRol);
     const sucursalFiltro = esAdmin
@@ -122,8 +130,14 @@ export async function GET(request: NextRequest) {
         select: cols,
         empresa_id: `eq.${empresaId}`,
         order: "fecha.desc",
-        limit: "500",
+        limit: String(limite),
       });
+      // Sin rango, la lista traía las 500 ventas más nuevas y el filtro de
+      // fechas de la pantalla trabajaba sobre eso: con un histórico grande,
+      // elegir un mes viejo no mostraba nada porque esas filas nunca
+      // llegaban. El rango ahora se aplica en la base.
+      if (desde) qs.append("fecha", `gte.${desde}T00:00:00`);
+      if (hasta) qs.append("fecha", `lte.${hasta}T23:59:59.999`);
       if (sucursalFiltro) qs.set("sucursal_id", `eq.${sucursalFiltro}`);
       const res = await postgrestGet<VentaRow>("ventas", qs.toString(), { role: "jwt", jwt, noStore: true });
       if (res.ok) { ventasRes = res; break; }
