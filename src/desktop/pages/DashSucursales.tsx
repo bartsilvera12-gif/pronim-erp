@@ -1115,10 +1115,13 @@ function SucursalCard({ s }: {
           border="border-emerald-100"
           chipBg="bg-white/80"
         >
-          <SucMini label="Generado" value={fmt(s.credito_generado)} />
-          <SucMini label="Usado" value={fmt(s.credito_usado)} />
+          {/* Las tres cifras son DEL PERÍODO elegido arriba, no saldos
+              acumulados: generado y usado son movimientos, no lo que las
+              clientas todavía tienen disponible para gastar. */}
+          <SucMini label="Generado en el período" value={fmt(s.credito_generado)} />
+          <SucMini label="Usado en el período" value={fmt(s.credito_usado)} />
           <SucMini
-            label="Neto"
+            label="Neto del período"
             value={(creditoNeto >= 0 ? "+" : "") + fmt(creditoNeto)}
             valueClass={creditoNeto >= 0 ? "text-emerald-700" : "text-rose-700"}
           />
