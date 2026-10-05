@@ -588,6 +588,46 @@ export default function NuevaAtencionPage() {
     return () => { cancel = true; };
   }, []);
 
+  // Búsqueda de clientes contra el servidor.
+  //
+  // La carga inicial trae sólo las primeras ~1.000 fichas. Con una cartera de
+  // miles, filtrar sobre esa lista deja clientes reales sin aparecer nunca.
+  // Al tipear se consulta al servidor y el resultado se suma a lo que ya hay.
+  useEffect(() => {
+    const texto = clienteQuery.trim();
+    if (texto.length < 2) return;
+    let cancel = false;
+    const t = setTimeout(async () => {
+      try {
+        const r = await fetchWithSupabaseSession(
+          `/api/clientes?q=${encodeURIComponent(texto)}`, { cache: "no-store" },
+        );
+        const j = await r.json().catch(() => ({}));
+        if (cancel || !Array.isArray(j?.data)) return;
+        const encontrados: Cliente[] = (j.data as Record<string, unknown>[]).map((c) => ({
+          id: String(c.id),
+          nombre:
+            (typeof c.empresa === "string" && c.empresa.trim())
+            || (typeof c.nombre_contacto === "string" && c.nombre_contacto.trim())
+            || (typeof c.nombre === "string" && c.nombre.trim())
+            || "Cliente",
+          empresa: typeof c.empresa === "string" ? c.empresa : null,
+          ruc: typeof c.ruc === "string" ? c.ruc : null,
+          telefono: typeof c.telefono === "string" ? c.telefono : null,
+        }));
+        setClientes((prev) => {
+          const porId = new Map(prev.map((c) => [c.id, c]));
+          let nuevos = false;
+          for (const c of encontrados) if (!porId.has(c.id)) { porId.set(c.id, c); nuevos = true; }
+          return nuevos ? [...porId.values()] : prev;
+        });
+      } catch (e) {
+        console.error("[atencion] búsqueda de clientes", e);
+      }
+    }, 300);
+    return () => { cancel = true; clearTimeout(t); };
+  }, [clienteQuery]);
+
   // Poll periódico de metas alcanzadas — cada 2 min. Permite que la
   // celebración salte durante el día aunque la caja ya esté abierta.
   useEffect(() => {

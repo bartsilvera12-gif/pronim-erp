@@ -209,21 +209,34 @@ export async function GET(
       const recepEv = await client.query<{
         fecha: string;
         total_credito: string;
+        evaluado: string | null;
         numero_control: string;
       }>(
-        `SELECT fecha, total_credito::text, numero_control
+        // 'registrada' ya no existe: hoy son pendiente_ingreso / ingresada /
+        // anulada. Filtrar por el viejo dejaba el historial sin recepciones,
+        // y se veía el "usó crédito" sin el "trajo ropa" que lo generó.
+        `SELECT fecha, total_credito::text,
+                COALESCE(total_final, total_compra)::text AS evaluado,
+                numero_control
          FROM ${recepT}
-         WHERE empresa_id = $1 AND cliente_id = $2 AND estado = 'registrada'
+         WHERE empresa_id = $1 AND cliente_id = $2 AND estado <> 'anulada'
          ORDER BY fecha DESC LIMIT 50`,
         [empresaId, clienteId],
       );
       for (const r of recepEv.rows) {
+        const evaluado = r.evaluado != null ? Number(r.evaluado) : null;
+        const credito = Number(r.total_credito);
+        // Si la evaluación fue mayor al crédito, la diferencia se le pagó en
+        // el momento. Decirlo acá evita que el historial parezca inconsistente.
+        const detalle = evaluado != null && evaluado > credito
+          ? `Trajo ropa por ${evaluado.toLocaleString("es-PY")} · generó ${credito.toLocaleString("es-PY")} de crédito`
+          : "Trajo ropa · crédito generado";
         eventos.push({
           tipo: "recepcion",
           fecha: r.fecha,
-          monto: Number(r.total_credito),
+          monto: credito,
           referencia: r.numero_control,
-          detalle: "Recepción de prendas (crédito generado)",
+          detalle,
         });
       }
 

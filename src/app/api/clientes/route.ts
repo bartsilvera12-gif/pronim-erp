@@ -257,11 +257,33 @@ export async function GET(request: NextRequest) {
     const incluirEliminados = sp.get("incluir_eliminados") === "1";
     const planActivo = sp.get("plan_activo") === "1";
 
+    // Búsqueda del lado del servidor. Sin esto el listado se corta en las
+    // ~1.000 filas que devuelve PostgREST por defecto, y en una cartera de
+    // miles de clientes los que quedan fuera son imposibles de encontrar
+    // desde la pantalla de venta, que filtra sobre lo que ya recibió.
+    const buscar = (sp.get("q") ?? "").trim();
+
     let q = supabase
       .from("clientes")
       .select("*")
       .eq("empresa_id", auth.empresa_id)
       .order("created_at", { ascending: false });
+
+    if (buscar) {
+      const seguro = buscar.replace(/[,()*%]/g, " ").trim();
+      const digitos = buscar.replace(/\D/g, "");
+      if (seguro) {
+        const campos = [
+          `nombre.ilike.*${seguro}*`,
+          `nombre_contacto.ilike.*${seguro}*`,
+          `empresa.ilike.*${seguro}*`,
+          `ruc.ilike.*${seguro}*`,
+        ];
+        if (digitos.length >= 3) campos.push(`telefono.ilike.*${digitos}*`);
+        q = q.or(campos.join(","));
+      }
+      q = q.limit(50);
+    }
     // Scope de cartera por sucursal (Lilo+Palmeras comparten, resto aisladas).
     // NULL scope = admin/sin sucursal → sin filtro.
     if (auth.scope_clientes) {
