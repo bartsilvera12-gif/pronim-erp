@@ -21,6 +21,7 @@ const TIPO_LABEL: Record<string, string> = { venta: "Venta", compra: "Compra", c
 export default function ExplorarTransaccionesPage() {
   const [rows, setRows] = useState<Tx[]>([]);
   const [truncado, setTruncado] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(true);
   const [desde, setDesde] = useState<string>(() => { const d = new Date(); d.setMonth(d.getMonth() - 3); return d.toISOString().slice(0, 10); });
   const [hasta, setHasta] = useState<string>(() => new Date().toISOString().slice(0, 10));
@@ -39,11 +40,19 @@ export default function ExplorarTransaccionesPage() {
     fetchWithSupabaseSession(`/api/reportes/transacciones-drill?${qs}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((j) => {
-        if (cancel || !j?.success) return;
+        if (cancel) return;
+        // Un fallo silencioso se ve igual que "no hay datos" y manda a buscar
+        // el problema donde no está. Mejor decirlo.
+        if (!j?.success) {
+          setError(typeof j?.error === "string" ? j.error : "Error del servidor.");
+          setRows([]);
+          return;
+        }
+        setError(null);
         setRows((j.data?.transacciones ?? []) as Tx[]);
         setTruncado(j.data?.truncado === true);
       })
-      .catch(() => {})
+      .catch((e) => { if (!cancel) setError(String(e?.message ?? e)); })
       .finally(() => { if (!cancel) setCargando(false); });
     return () => { cancel = true; };
   }, [desde, hasta, sucursalActivaId]);
@@ -77,6 +86,7 @@ export default function ExplorarTransaccionesPage() {
   return (
     <DataExplorer<Tx>
       truncado={truncado}
+      error={error}
       titulo="Explorar transacciones"
       descripcion="Todas las operaciones con clientes (ventas +, compras/cambios −) en un solo listado. Elegí columnas, filtrá, agrupá y exportá a Excel."
       rows={rows} columns={columns} cargando={cargando} csvName="transacciones"

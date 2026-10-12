@@ -67,7 +67,9 @@ export async function GET(request: NextRequest) {
     const vHasSuc = vc.has("sucursal_id");
     const rHasSuc = rc.has("sucursal_id");
     const vi = await cols("ventas_items");
-    const viHasCosto = vi.has("costo_unitario_snapshot");
+    // Las dos tienen que existir: el precio de la línea se llama
+    // `precio_venta`, no `precio_unitario`.
+    const viHasCosto = vi.has("costo_unitario_snapshot") && vi.has("precio_venta");
 
     // Markup de una venta: cuánto se le ganó a lo que costó la prenda.
     // El costo queda congelado en la línea al vender. Las ventas del
@@ -75,7 +77,7 @@ export async function GET(request: NextRequest) {
     // muestra "—" en vez de un 0% que no significa nada.
     const vMarkupExpr = viHasCosto
       ? `(SELECT CASE WHEN SUM(it.cantidad * it.costo_unitario_snapshot) > 0
-                      THEN round(((SUM(it.cantidad * it.precio_unitario)
+                      THEN round(((SUM(it.cantidad * it.precio_venta)
                                    - SUM(it.cantidad * it.costo_unitario_snapshot))
                                   / SUM(it.cantidad * it.costo_unitario_snapshot) * 100)::numeric, 1)
                       ELSE NULL END

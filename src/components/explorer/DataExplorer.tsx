@@ -92,8 +92,13 @@ export function DataExplorer<T>(props: {
    * aviso se lee como "faltan datos".
    */
   truncado?: boolean;
+  /**
+   * La consulta falló. Hay que mostrarlo: una tabla vacía por un error se
+   * lee como "no hay datos" y manda a buscar el problema donde no está.
+   */
+  error?: string | null;
 }) {
-  const { titulo, descripcion, volverA, rows, columns, cargando, detailHref, expandir, rowKey, csvName = "export", toolbarExtra, headerExtra, truncado } = props;
+  const { titulo, descripcion, volverA, rows, columns, cargando, detailHref, expandir, rowKey, csvName = "export", toolbarExtra, headerExtra, truncado, error } = props;
 
   const [visibles, setVisibles] = useState<Set<string>>(
     () => new Set(columns.filter((c) => c.defaultVisible !== false || c.required).map((c) => c.key)),
@@ -445,6 +450,12 @@ export function DataExplorer<T>(props: {
       </div>
 
       {headerExtra}
+
+      {error && (
+        <div className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs text-rose-900 print:hidden">
+          <strong>{tt("No se pudieron cargar los datos.")}</strong> {error}
+        </div>
+      )}
 
       {truncado && (
         <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 print:hidden">
