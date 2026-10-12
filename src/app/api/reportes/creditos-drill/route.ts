@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAuthWithRol } from "@/lib/middleware/auth";
+import { getAuthWithRol, isAdmin } from "@/lib/middleware/auth";
 import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema";
 import { getChatPostgresPool, quoteSchemaTable } from "@/lib/supabase/chat-pg-pool";
 import { assertAllowedChatDataSchema } from "@/lib/supabase/chat-data-schema";
@@ -76,7 +76,12 @@ export async function GET(request: NextRequest) {
     // El movimiento de crédito no tiene sucursal propia: el crédito es del
     // cliente y el cliente pertenece a una cartera (scope_clientes), que a su
     // vez corresponde a una sucursal. Se filtra por esa cadena.
-    const sucursalFiltro = auth.sucursal_id ?? (sp.get("sucursal_id") || null);
+    // El admin elige sucursal con el selector del header; un usuario con
+    // sucursal fija ve sólo la suya. Antes la fija ganaba siempre, así que
+    // un admin asignado a una sucursal veía todo vacío al cambiar arriba.
+    const sucursalFiltro = isAdmin(auth)
+      ? (sp.get("sucursal_id") || null)
+      : (auth.sucursal_id ?? null);
     const params: unknown[] = [auth.empresa_id];
     const push = (sql: string, val: unknown) => {
       params.push(val);

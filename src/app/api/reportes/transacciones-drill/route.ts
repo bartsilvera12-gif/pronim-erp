@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAuthWithRol } from "@/lib/middleware/auth";
+import { getAuthWithRol, isAdmin } from "@/lib/middleware/auth";
 import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema";
 import { getChatPostgresPool, quoteSchemaTable } from "@/lib/supabase/chat-pg-pool";
 import { assertAllowedChatDataSchema } from "@/lib/supabase/chat-data-schema";
@@ -107,7 +107,12 @@ export async function GET(request: NextRequest) {
 
     // Sucursal: la fija del usuario manda; el admin elige con el selector
     // del header, que viaja como ?sucursal_id. Sin nada, se ve la empresa.
-    const sucursalFiltro = auth.sucursal_id ?? (sp.get("sucursal_id") || null);
+    // El admin elige sucursal con el selector del header; un usuario con
+    // sucursal fija ve sólo la suya. Antes la fija ganaba siempre, así que
+    // un admin asignado a una sucursal veía todo vacío al cambiar arriba.
+    const sucursalFiltro = isAdmin(auth)
+      ? (sp.get("sucursal_id") || null)
+      : (auth.sucursal_id ?? null);
     let idxSuc = 0;
     if (sucursalFiltro) { params.push(sucursalFiltro); idxSuc = params.length; }
     const sucCond = (col: string) =>
