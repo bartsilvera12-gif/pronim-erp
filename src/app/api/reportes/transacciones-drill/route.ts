@@ -154,8 +154,28 @@ export async function GET(request: NextRequest) {
          ) cb ON cb.referencia_id = v.id`
       : "";
 
+    const tP = quoteSchemaTable(schema, "productos");
     const totalFinalExpr = rHasTotalFinal ? "COALESCE(r.total_final, r.total_compra, 0)" : "COALESCE(r.total_compra, 0)";
     const subtotalEvExpr = rHasSubtotalEv ? "COALESCE(r.subtotal_evaluado, 0)" : "0";
+
+    // Markup de una evaluación: cuánto se le va a ganar a la ropa que se le
+    // compró a la clienta. Es el precio al que se va a vender contra lo que se
+    // le pagó, no el ajuste manual de la tasación — que era lo que mostraba
+    // antes y por eso daba 0% siempre.
+    //
+    // Necesita el detalle de prendas. Las evaluaciones del histórico
+    // importado no lo tienen (la planilla traía el total, no las prendas),
+    // así que ahí queda en NULL y se muestra "—": un 0% ahí sería mentira.
+    const rMarkupExpr = `(
+      SELECT CASE
+               WHEN ${totalFinalExpr} > 0 AND COALESCE(SUM(ri.cantidad * p.precio_venta), 0) > 0
+               THEN round(((COALESCE(SUM(ri.cantidad * p.precio_venta), 0) - ${totalFinalExpr})
+                           / ${totalFinalExpr} * 100)::numeric, 1)
+               ELSE NULL
+             END
+        FROM ${tRI} ri
+        LEFT JOIN ${tP} p ON p.id = ri.producto_id
+       WHERE ri.recepcion_id = r.id)`;
 
     const sql = `
       WITH ult AS (
@@ -223,7 +243,7 @@ export async function GET(request: NextRequest) {
           -${totalFinalExpr}::float8 AS valor,
           ${subtotalEvExpr}::float8 AS valor_stock,
           COALESCE((SELECT SUM(it.cantidad) FROM ${tRI} it WHERE it.recepcion_id = r.id),0)::float8 AS cantidad,
-          (CASE WHEN ${totalFinalExpr} > 0 THEN round(((${subtotalEvExpr} - ${totalFinalExpr}) / ${totalFinalExpr} * 100)::numeric, 1) ELSE NULL END)::float8 AS markup,
+          ${rMarkupExpr}::float8 AS markup,
           0::float8 AS tarjeta,
           -COALESCE(rpay.efectivo,0)::float8 AS efectivo,
           -COALESCE(rpay.transferencia,0)::float8 AS transferencia,
