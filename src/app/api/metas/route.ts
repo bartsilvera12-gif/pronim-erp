@@ -274,11 +274,16 @@ export async function GET(request: NextRequest) {
       // Todo el cálculo del mes va en días HÁBILES, no de calendario: la meta
       // sólo se puede alcanzar los días que la sucursal abre. Cada local cierra
       // días distintos, por eso sale de `diasCerrados` de ESTA sucursal.
-      // Hoy cuenta: el día no terminó y la tienda sigue vendiendo.
+      //
+      // El día de hoy NO se cuenta entre los que quedan: la tienda lo trabaja
+      // pero ya está en curso, y el criterio del negocio es mirar los días
+      // que vienen. Así, el 2 de un mes de 31 con domingos cerrados quedan
+      // 25, no 29 como mostraba antes.
       const finDeMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
       const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+      const manana = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() + 1);
       const habilesTranscurridos = diasHabilesEnRango(inicioMes, hoy, diasCerrados);
-      const diasRestantes = diasHabilesEnRango(hoy, finDeMes, diasCerrados);
+      const diasRestantes = diasHabilesEnRango(manana, finDeMes, diasCerrados);
 
       // Proyección de cierre: extrapola el ritmo por día hábil.
       const promedioDiarioActual = habilesTranscurridos > 0 ? kpi.mes / habilesTranscurridos : 0;
