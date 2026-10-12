@@ -38,6 +38,7 @@ export async function GET(request: NextRequest) {
     const tS = quoteSchemaTable(schema, "sucursales");
     const tC = quoteSchemaTable(schema, "clientes");
     const tTP = quoteSchemaTable(schema, "tipos_prenda");
+    const tP = quoteSchemaTable(schema, "productos");
     const uSchemaQ = await pool.query<{ table_schema: string }>(
       `SELECT table_schema FROM information_schema.tables
         WHERE table_name = 'usuarios' AND table_schema IN ('public','pronimerp',$1) LIMIT 1`,
@@ -175,7 +176,7 @@ export async function GET(request: NextRequest) {
       usuario_id: string | null; usuario_nombre: string | null;
       estado: string | null;
       subtotal: string; ajuste: string; total: string;
-      prendas: string;
+      prendas: string; valor_venta: string;
     }>(
       `SELECT r.id::text, r.numero_control, r.fecha,
               r.cliente_id::text,
@@ -187,11 +188,18 @@ export async function GET(request: NextRequest) {
               ${hasSubtotalEv ? "COALESCE(r.subtotal_evaluado,0)" : "0"}::text AS subtotal,
               ${hasAjusteEv ? "COALESCE(r.ajuste_evaluacion,0)" : "0"}::text AS ajuste,
               ${totalExpr}::text AS total,
-              COALESCE((SELECT SUM(it.cantidad) FROM ${tRI} it WHERE it.recepcion_id = r.id),0)::text AS prendas
+              COALESCE((SELECT SUM(it.cantidad) FROM ${tRI} it WHERE it.recepcion_id = r.id),0)::text AS prendas,
+              -- Lo que vale en vitrina lo que entro: cantidad x precio de
+              -- venta de cada prenda. Sin detalle de prendas da 0 y arriba
+              -- se muestra "—": el historico importado no lo tiene.
+              COALESCE((SELECT SUM(it.cantidad * p.precio_venta)
+                          FROM ${tRI} it
+                          LEFT JOIN ${tP} p ON p.id = it.producto_id
+                         WHERE it.recepcion_id = r.id),0)::text AS valor_venta
          FROM ${from} WHERE ${condsConTipo.join(" AND ")}
         ORDER BY r.fecha DESC LIMIT 20000`,
       params,
-    ).catch(() => ({ rows: [] as Array<{ id: string; numero_control: string; fecha: string; cliente_id: string | null; cliente_nombre: string | null; sucursal_id: string | null; sucursal_nombre: string | null; usuario_id: string | null; usuario_nombre: string | null; estado: string | null; subtotal: string; ajuste: string; total: string; prendas: string }> }));
+    ).catch(() => ({ rows: [] as Array<{ id: string; numero_control: string; fecha: string; cliente_id: string | null; cliente_nombre: string | null; sucursal_id: string | null; sucursal_nombre: string | null; usuario_id: string | null; usuario_nombre: string | null; estado: string | null; subtotal: string; ajuste: string; total: string; prendas: string; valor_venta: string }> }));
 
     const opSuc = await pool.query<{ id: string; nombre: string }>(
       `SELECT id::text, nombre FROM ${tS} WHERE empresa_id = $1 ORDER BY nombre`,
@@ -221,13 +229,28 @@ export async function GET(request: NextRequest) {
       por_usuario:  byUsr.rows.map((r) => ({ usuario_id: r.usuario_id, usuario_nombre: r.usuario_nombre ?? "Sin usuario", total: Number(r.total), cnt: Number(r.cnt) })),
       por_estado:   byEst.rows.map((r) => ({ estado: r.estado, total: Number(r.total), cnt: Number(r.cnt) })),
       por_tipo_prenda: byTP.rows.map((r) => ({ tipo_id: r.tipo_id, tipo_nombre: r.tipo_nombre ?? "Sin tipo", prendas: Number(r.prendas), total: Number(r.total) })),
-      evaluaciones: evals.rows.map((r) => ({
-        ...r,
-        subtotal: Number(r.subtotal),
-        ajuste: Number(r.ajuste),
-        total: Number(r.total),
-        prendas: Number(r.prendas),
-      })),
+      evaluaciones: evals.rows.map((r) => {
+        const total = Number(r.total);
+        const prendas = Number(r.prendas);
+        const valorVenta = Number(r.valor_venta);
+        // Sin detalle de prendas no hay precio de venta con el cual
+        // comparar: markup y margen quedan en null y la tabla muestra "—".
+        const hayDetalle = valorVenta > 0 && total > 0;
+        return {
+          ...r,
+          subtotal: Number(r.subtotal),
+          ajuste: Number(r.ajuste),
+          total,
+          prendas,
+          valor_venta: valorVenta,
+          costo_unitario: prendas > 0 ? total / prendas : null,
+          precio_venta_prom: prendas > 0 && valorVenta > 0 ? valorVenta / prendas : null,
+          margen: hayDetalle ? valorVenta - total : null,
+          markup_pct: hayDetalle
+            ? Math.round(((valorVenta - total) / total) * 1000) / 10
+            : null,
+        };
+      }),
       opciones: {
         sucursales: opSuc.rows,
         usuarios: opUsr.rows.map((r) => ({ id: r.id, nombre: r.nombre ?? r.email ?? "—" })),
