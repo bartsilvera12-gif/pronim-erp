@@ -8,6 +8,29 @@
 -- Cada consulta devuelve una fila con `estado`. Lo que diga OK esta cerrado.
 -- Lo que diga REVISAR viene con el numero al lado para saber cuanto falta.
 --
+-- ─────────────────────────────────────────────────────────────────────────
+--  RESIDUOS ESPERADOS (al 13/10/2026)
+--
+--  Tres controles no van a dar OK, y no es un error: son datos que la
+--  planilla no trae y no se pueden inventar. Si los numeros coinciden con
+--  estos, esta todo como debe estar. Si crecen, hay algo nuevo.
+--
+--  3) credito usado ↔ lotes · 149 salidas, 21.222.000
+--     Clientas que evaluaron en LILLO y gastaron ese credito en PALMERAS.
+--     Se cierra cuando se importe el diario de Lillo.
+--
+--  4) credito usado ↔ venta · 1 salida sin venta
+--     El canje de Alice Lopez de Fretes del 14/06/2025: se llevo 2 prendas
+--     por 113.000 pagando con credito, pero la planilla lo anoto como
+--     devolucion y no como venta, asi que no hay venta a la cual apuntar.
+--
+--  5) venta ↔ metodo de pago · 40 ventas, 7.826.000
+--     Ventas que en el Excel no tienen NINGUNA columna de cobro: ni
+--     efectivo, ni tarjeta, ni transferencia, ni credito. Ejemplo: la venta
+--     del 13/06/2025 a Alice Lopez de Fretes por 391.000. No se les pone un
+--     metodo inventado; quedan sin metodo y se consultan con la tienda.
+-- ─────────────────────────────────────────────────────────────────────────
+--
 -- Solo CONSULTA. Correr entera.
 -- =============================================================================
 
