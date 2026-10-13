@@ -82,13 +82,14 @@ export type PagoDetalleInput = {
  */
 export async function getVentas(
   /** Rango a pedir al servidor. Sin esto vienen sólo las más recientes. */
-  rango?: { desde?: string | null; hasta?: string | null; limit?: number },
+  rango?: { desde?: string | null; hasta?: string | null; limit?: number; q?: string | null },
 ): Promise<Venta[]> {
   try {
     const qs = new URLSearchParams();
     if (rango?.desde) qs.set("desde", rango.desde);
     if (rango?.hasta) qs.set("hasta", rango.hasta);
     if (rango?.limit) qs.set("limit", String(rango.limit));
+    if (rango?.q) qs.set("q", rango.q);
     const url = qs.toString() ? `/api/ventas?${qs.toString()}` : "/api/ventas";
     const res = await fetchWithSupabaseSession(url, { cache: "no-store" });
     const json = (await res.json()) as {

@@ -344,7 +344,7 @@ export async function GET(request: NextRequest) {
         ORDER BY COALESCE(a.total_comprado,0) DESC NULLS LAST,
                  a.ultima_venta_at DESC NULLS LAST,
                  c.created_at DESC
-        LIMIT 2000`,
+        LIMIT 20000`,
       params,
     );
 

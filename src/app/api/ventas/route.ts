@@ -105,11 +105,37 @@ export async function GET(request: NextRequest) {
     const soloFecha = (v: string | null) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v.trim()) ? v.trim() : null);
     const desde = soloFecha(url.searchParams.get("desde"));
     const hasta = soloFecha(url.searchParams.get("hasta"));
-    // Con rango acotado se puede traer más sin castigar la carga inicial.
+    // Texto libre: número de venta o nombre del cliente. Sin esto el
+    // historial busca sobre las ventas que ya recibió, que son las más
+    // recientes, y un cliente con compras viejas no aparece nunca.
+    const buscar = (url.searchParams.get("q") ?? "").trim();
+
+    // Con rango acotado o con búsqueda se puede traer más sin castigar la
+    // carga inicial.
     const limitePedido = Number(url.searchParams.get("limit") ?? "");
     const limite = Number.isFinite(limitePedido) && limitePedido > 0
       ? Math.min(limitePedido, 5000)
-      : (desde || hasta ? 5000 : 500);
+      : (desde || hasta || buscar ? 5000 : 500);
+
+    // El nombre del cliente vive en otra tabla, así que primero se resuelven
+    // los ids que coinciden y después se filtran las ventas por ellos.
+    let idsPorNombre: string[] = [];
+    if (buscar) {
+      const seguro = buscar.replace(/[,()*%]/g, " ").trim();
+      if (seguro) {
+        const cq = new URLSearchParams({
+          select: "id",
+          empresa_id: `eq.${empresaId}`,
+          or: `(nombre.ilike.*${seguro}*,nombre_contacto.ilike.*${seguro}*,empresa.ilike.*${seguro}*,ruc.ilike.*${seguro}*)`,
+          limit: "300",
+        });
+        const cRes = await postgrestGet<{ id: string }>(
+          "clientes", cq.toString(), { role: "jwt", jwt, noStore: true },
+        );
+        if (cRes.ok) idsPorNombre = cRes.rows.map((r) => r.id);
+        else console.error("[/api/ventas GET] búsqueda de clientes", cRes.error);
+      }
+    }
     const authRol = await getAuthWithRol(request);
     const esAdmin = isAdmin(authRol);
     const sucursalFiltro = esAdmin
@@ -139,6 +165,12 @@ export async function GET(request: NextRequest) {
       if (desde) qs.append("fecha", `gte.${desde}T00:00:00`);
       if (hasta) qs.append("fecha", `lte.${hasta}T23:59:59.999`);
       if (sucursalFiltro) qs.set("sucursal_id", `eq.${sucursalFiltro}`);
+      if (buscar) {
+        const seguro = buscar.replace(/[,()*%]/g, " ").trim();
+        const partes = [`numero_control.ilike.*${seguro}*`];
+        if (idsPorNombre.length > 0) partes.push(`cliente_id.in.(${idsPorNombre.join(",")})`);
+        qs.set("or", `(${partes.join(",")})`);
+      }
       const res = await postgrestGet<VentaRow>("ventas", qs.toString(), { role: "jwt", jwt, noStore: true });
       if (res.ok) { ventasRes = res; break; }
       // Si el fallback es al MIN (sin sucursal_id) y estabamos filtrando,

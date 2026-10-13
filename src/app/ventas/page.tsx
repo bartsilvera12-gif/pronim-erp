@@ -124,6 +124,15 @@ export default function VentasPage() {
   /** Sucursales con timbrado activo: solo ahí tiene sentido ofrecer Factura. */
   const [sucursalesQueFacturan, setSucursalesQueFacturan] = useState<Set<string>>(new Set());
   const [busqueda,   setBusqueda]   = useState("");
+  // Lo que se le pide al servidor. El cuadro de búsqueda filtra en pantalla
+  // al instante, pero sobre las ventas que ya llegaron: con un histórico de
+  // miles, un cliente con compras viejas no aparecía nunca. Con medio segundo
+  // de pausa se vuelve a consultar la base con ese texto.
+  const [busquedaServidor, setBusquedaServidor] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setBusquedaServidor(busqueda.trim()), 500);
+    return () => clearTimeout(t);
+  }, [busqueda]);
   const [filtroTipo, setFiltroTipo] = useState<TipoVenta | "">("");
   // Solo para admin: filtro por sucursal del histórico completo. Los cajeros
   // ya reciben la lista scopeada por su sucursal desde la API.
@@ -234,7 +243,7 @@ export default function VentasPage() {
   useEffect(() => {
     let cancelled = false;
     setCargandoLista(true);
-    getVentas({ desde: fechaDesde || null, hasta: fechaHasta || null }).then((data) => {
+    getVentas({ desde: fechaDesde || null, hasta: fechaHasta || null, q: busquedaServidor || null }).then((data) => {
       if (cancelled) return;
       const ordenadas = [...data].sort((a, b) => {
         const ta = new Date(a.fecha).getTime();
@@ -248,7 +257,7 @@ export default function VentasPage() {
     return () => {
       cancelled = true;
     };
-  }, [fechaDesde, fechaHasta]);
+  }, [fechaDesde, fechaHasta, busquedaServidor]);
 
   // Sucursales (solo hace la fetch cuando confirmamos que el usuario es admin,
   // para no gastar la request en cajeros que no necesitan el filtro).
