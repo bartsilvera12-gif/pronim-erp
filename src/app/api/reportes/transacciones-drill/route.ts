@@ -66,6 +66,7 @@ export async function GET(request: NextRequest) {
     const cHasVip = cc.has("es_vip");
     const vHasSuc = vc.has("sucursal_id");
     const rHasSuc = rc.has("sucursal_id");
+    const rHasValorStock = rc.has("valor_venta_estimado");
     const vi = await cols("ventas_items");
     // Las dos tienen que existir: el precio de la línea se llama
     // `precio_venta`, no `precio_unitario`.
@@ -156,7 +157,6 @@ export async function GET(request: NextRequest) {
 
     const tP = quoteSchemaTable(schema, "productos");
     const totalFinalExpr = rHasTotalFinal ? "COALESCE(r.total_final, r.total_compra, 0)" : "COALESCE(r.total_compra, 0)";
-    const subtotalEvExpr = rHasSubtotalEv ? "COALESCE(r.subtotal_evaluado, 0)" : "0";
 
     // Markup de una evaluación: cuánto se le va a ganar a la ropa que se le
     // compró a la clienta. Es el precio al que se va a vender contra lo que se
@@ -166,16 +166,20 @@ export async function GET(request: NextRequest) {
     // Necesita el detalle de prendas. Las evaluaciones del histórico
     // importado no lo tienen (la planilla traía el total, no las prendas),
     // así que ahí queda en NULL y se muestra "—": un 0% ahí sería mentira.
-    const rMarkupExpr = `(
-      SELECT CASE
-               WHEN ${totalFinalExpr} > 0 AND COALESCE(SUM(ri.cantidad * p.precio_venta), 0) > 0
-               THEN round(((COALESCE(SUM(ri.cantidad * p.precio_venta), 0) - ${totalFinalExpr})
-                           / ${totalFinalExpr} * 100)::numeric, 1)
-               ELSE NULL
-             END
-        FROM ${tRI} ri
-        LEFT JOIN ${tP} p ON p.id = ri.producto_id
-       WHERE ri.recepcion_id = r.id)`;
+    // El valor en vitrina sale del detalle de prendas; si no lo hay, del
+    // valor con que la mercadería entró al stock, que la planilla sí trae.
+    const rValorVentaExpr = `COALESCE(
+        NULLIF((SELECT SUM(ri.cantidad * p.precio_venta)
+                  FROM ${tRI} ri
+                  LEFT JOIN ${tP} p ON p.id = ri.producto_id
+                 WHERE ri.recepcion_id = r.id), 0),
+        ${rHasValorStock ? "r.valor_venta_estimado" : "NULL"},
+        0)`;
+
+    const rMarkupExpr = `(CASE
+        WHEN ${totalFinalExpr} > 0 AND ${rValorVentaExpr} > 0
+        THEN round(((${rValorVentaExpr} - ${totalFinalExpr}) / ${totalFinalExpr} * 100)::numeric, 1)
+        ELSE NULL END)`;
 
     const sql = `
       WITH ult AS (
@@ -241,7 +245,7 @@ export async function GET(request: NextRequest) {
           c.telefono AS telefono,
           ${catExpr} AS categoria,
           -${totalFinalExpr}::float8 AS valor,
-          ${subtotalEvExpr}::float8 AS valor_stock,
+          ${rValorVentaExpr}::float8 AS valor_stock,
           COALESCE((SELECT SUM(it.cantidad) FROM ${tRI} it WHERE it.recepcion_id = r.id),0)::float8 AS cantidad,
           ${rMarkupExpr}::float8 AS markup,
           0::float8 AS tarjeta,

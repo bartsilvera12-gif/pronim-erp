@@ -56,6 +56,7 @@ export async function GET(request: NextRequest) {
     const hasTotalFinal = cols.has("total_final");
     const hasSubtotalEv = cols.has("subtotal_evaluado");
     const hasAjusteEv   = cols.has("ajuste_evaluacion");
+    const hasValorStock = cols.has("valor_venta_estimado");
     const totalExpr = hasTotalFinal ? "COALESCE(r.total_final, r.total_compra, 0)" : "COALESCE(r.total_compra, 0)";
 
     const sp = request.nextUrl.searchParams;
@@ -192,10 +193,16 @@ export async function GET(request: NextRequest) {
               -- Lo que vale en vitrina lo que entro: cantidad x precio de
               -- venta de cada prenda. Sin detalle de prendas da 0 y arriba
               -- se muestra "—": el historico importado no lo tiene.
-              COALESCE((SELECT SUM(it.cantidad * p.precio_venta)
+              -- Si hay detalle de prendas se usa, que es exacto. Si no, el
+              -- valor con que la mercaderia entro al stock, que la planilla
+              -- si trae aunque no diga que prendas eran.
+              COALESCE(
+                NULLIF((SELECT SUM(it.cantidad * p.precio_venta)
                           FROM ${tRI} it
                           LEFT JOIN ${tP} p ON p.id = it.producto_id
-                         WHERE it.recepcion_id = r.id),0)::text AS valor_venta
+                         WHERE it.recepcion_id = r.id), 0),
+                ${hasValorStock ? "r.valor_venta_estimado" : "NULL"},
+                0)::text AS valor_venta
          FROM ${from} WHERE ${condsConTipo.join(" AND ")}
         ORDER BY r.fecha DESC LIMIT 20000`,
       params,
