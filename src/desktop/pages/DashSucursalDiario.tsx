@@ -39,11 +39,10 @@ type Payload = {
 };
 
 function fmtGs(n: number) { return "Gs. " + Math.round(n || 0).toLocaleString("es-PY"); }
+// Importe completo. Abreviar obliga a adivinar si "18M" son 18.000.000 o
+// 18.400.000, y estas cifras se usan para controlar plata.
 function fmtGsCompact(n: number) {
-  const v = Math.round(n || 0);
-  if (v >= 1_000_000) return "Gs. " + (v / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
-  if (v >= 1_000) return "Gs. " + (v / 1_000).toFixed(0) + " mil";
-  return "Gs. " + v.toLocaleString("es-PY");
+  return "Gs. " + Math.round(n || 0).toLocaleString("es-PY");
 }
 function fmtN(n: number) { return (n || 0).toLocaleString("es-PY"); }
 function fmtHora(iso: string) {

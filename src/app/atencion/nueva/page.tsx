@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState , useRef } from "react";
 import { getSucursalActivaId, useSucursalActivaId } from "@/lib/sucursales/activa";
 import { useRouter } from "next/navigation";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
@@ -21,6 +21,7 @@ import {
 } from "@/lib/atencion/alertas-config";
 import { StickerBadge } from "@/components/ui/StickerBadge";
 import { ClienteDetalleModal } from "@/components/clientes/ClienteDetalleModal";
+import { useCerrarAlClickAfuera } from "@/lib/ui/use-cerrar-al-click-afuera";
 
 // ═══════════════════════════════════════════════════════════════════════
 // POS UNIFICADO — "Nueva atención"
@@ -95,6 +96,10 @@ export default function NuevaAtencionPage() {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [cliente, setCliente] = useState<Cliente | null>(null);
   const [clienteOpen, setClienteOpen] = useState(false);
+  // Clic afuera (o Escape) cierra el buscador de clientes: antes quedaba
+  // abierto tapando la pantalla hasta que elegías a alguien.
+  const clienteBoxRef = useRef<HTMLDivElement>(null);
+  useCerrarAlClickAfuera(clienteOpen, clienteBoxRef, () => setClienteOpen(false));
   const [creditoDisponible, setCreditoDisponible] = useState(0);
   const [saldoCredito, setSaldoCredito] = useState(0);
   const [saldoCashback, setSaldoCashback] = useState(0);

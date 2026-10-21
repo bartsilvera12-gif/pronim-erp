@@ -14,6 +14,7 @@ import type { Producto } from "@/lib/inventario/types";
 import { getSucursalActivaId } from "@/lib/sucursales/activa";
 import { tt } from "@/lib/i18n/dict";
 import { useUsuarioActual } from "@/shared/hooks/useUsuarioActual";
+import { useCerrarAlClickAfuera } from "@/lib/ui/use-cerrar-al-click-afuera";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -165,6 +166,10 @@ export default function NuevaVentaPage() {
   const [clienteId, setClienteId] = useState("");
   const [clienteQuery, setClienteQuery] = useState("");
   const [clienteOpen, setClienteOpen] = useState(false);
+  // Clic afuera (o Escape) cierra el buscador de clientes: antes quedaba
+  // abierto tapando la pantalla hasta que elegías a alguien.
+  const clienteBoxRef = useRef<HTMLDivElement>(null);
+  useCerrarAlClickAfuera(clienteOpen, clienteBoxRef, () => setClienteOpen(false));
   const clienteContainerRef = useRef<HTMLDivElement>(null);
   // Nota de remisión: activada si el cliente la usa; toggle manual solo con cliente.
   const [generaNotaRemision, setGeneraNotaRemision] = useState(false);

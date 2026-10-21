@@ -29,6 +29,7 @@ import {
 } from "@/lib/atencion/shared";
 import { CajaControlBanner, useCajaState } from "@/lib/atencion/caja-control";
 import { tt } from "@/lib/i18n/dict";
+import { useCerrarAlClickAfuera } from "@/lib/ui/use-cerrar-al-click-afuera";
 
 type ClienteSegmento = {
   categoria: "nuevo" | "habitual" | "vip" | "dormido";
@@ -53,6 +54,10 @@ export default function NuevaVentaPage() {
   const [clienteQuery, setClienteQuery] = useState("");
   const [cliente, setCliente] = useState<Cliente | null>(null);
   const [clienteOpen, setClienteOpen] = useState(false);
+  // Clic afuera (o Escape) cierra el buscador de clientes: antes quedaba
+  // abierto tapando la pantalla hasta que elegías a alguien.
+  const clienteBoxRef = useRef<HTMLDivElement>(null);
+  useCerrarAlClickAfuera(clienteOpen, clienteBoxRef, () => setClienteOpen(false));
   const [nuevoClienteOpen, setNuevoClienteOpen] = useState(false);
   const [creditoDisponible, setCreditoDisponible] = useState(0);
   const [saldoCredito, setSaldoCredito] = useState(0);

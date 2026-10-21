@@ -10,7 +10,7 @@
 // ═══════════════════════════════════════════════════════════════════════
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState , useRef } from "react";
 import { useRouter } from "next/navigation";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { getSucursalActivaId, useSucursalActivaId } from "@/lib/sucursales/activa";
@@ -23,6 +23,7 @@ import {
 } from "@/lib/atencion/shared";
 import { CajaControlBanner, useCajaState } from "@/lib/atencion/caja-control";
 import { tt } from "@/lib/i18n/dict";
+import { useCerrarAlClickAfuera } from "@/lib/ui/use-cerrar-al-click-afuera";
 
 export default function NuevaEvaluacionPage() {
   const router = useRouter();
@@ -37,6 +38,10 @@ export default function NuevaEvaluacionPage() {
   const [clienteQuery, setClienteQuery] = useState("");
   const [cliente, setCliente] = useState<Cliente | null>(null);
   const [clienteOpen, setClienteOpen] = useState(false);
+  // Clic afuera (o Escape) cierra el buscador de clientes: antes quedaba
+  // abierto tapando la pantalla hasta que elegías a alguien.
+  const clienteBoxRef = useRef<HTMLDivElement>(null);
+  useCerrarAlClickAfuera(clienteOpen, clienteBoxRef, () => setClienteOpen(false));
   const [nuevoClienteOpen, setNuevoClienteOpen] = useState(false);
   const [creditoDisponible, setCreditoDisponible] = useState(0);
 

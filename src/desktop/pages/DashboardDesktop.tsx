@@ -238,15 +238,7 @@ function formatGsFull(n: number): string {
 function formatGsM(n: number): string {
   const num = Number(n);
   if (!Number.isFinite(num) || num < 0) return "0";
-  if (num >= 1_000_000_000) {
-    const b = num / 1_000_000_000;
-    return b % 1 === 0 ? `${b}B` : `${b.toFixed(1)}B`;
-  }
-  if (num >= 1_000_000) {
-    const m = num / 1_000_000;
-    return m % 1 === 0 ? `${m}M` : `${m.toFixed(1)}M`;
-  }
-  if (num >= 1_000) return `${Math.round(num / 1_000)} mil`;
+  // Siempre el importe completo, por grande que sea.
   return num.toLocaleString("es-PY");
 }
 
