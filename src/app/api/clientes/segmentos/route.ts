@@ -22,11 +22,12 @@ import { assertAllowedChatDataSchema } from "@/lib/supabase/chat-data-schema";
  */
 
 type SegmentoSlug =
-  | "vip" | "con_credito" | "con_cashback"
+  | "vip" | "destacado" | "con_credito" | "con_cashback"
   | "inactivos_90d" | "nuevos_mes" | "en_riesgo";
 
 const SEGMENTOS: { slug: SegmentoSlug; label: string; descripcion: string; emoji: string }[] = [
-  { slug: "vip",           label: "VIP",                 descripcion: "Marcados manualmente como VIP.",                    emoji: "⭐" },
+  { slug: "vip",           label: "VIP",                 descripcion: "Gastaron Gs. 5.000.000 o más, o vinieron 6+ veces en los últimos 90 días.", emoji: "👑" },
+  { slug: "destacado",     label: "Destacados",          descripcion: "Marcados a mano con la estrella.",                  emoji: "⭐" },
   { slug: "con_credito",   label: "Con crédito a favor", descripcion: "Saldo de crédito disponible mayor a cero.",        emoji: "💰" },
   { slug: "con_cashback",  label: "Con cashback",        descripcion: "Cashback acreditado pendiente de usar.",            emoji: "🎁" },
   { slug: "inactivos_90d", label: "Inactivos +90 días",  descripcion: "Ya operaron alguna vez, pero hace 90 días o más que no vuelven.", emoji: "📅" },
@@ -42,6 +43,7 @@ export async function GET(request: NextRequest) {
     const url = new URL(request.url);
     const flags: Record<SegmentoSlug, boolean> = {
       vip:            url.searchParams.get("vip") === "1",
+      destacado:      url.searchParams.get("destacado") === "1",
       con_credito:    url.searchParams.get("con_credito") === "1",
       con_cashback:   url.searchParams.get("con_cashback") === "1",
       inactivos_90d:  url.searchParams.get("inactivos_90d") === "1",
@@ -217,10 +219,16 @@ export async function GET(request: NextRequest) {
       COALESCE(recact.primera_recep_at, 'infinity'::timestamptz)
     ), 'infinity'::timestamptz)`;
     const txPrev90 = `(COALESCE(a.cnt_prev_90d,0) + COALESCE(recact.rec_prev_90d,0))`;
+    const tx90 = `(COALESCE(a.cnt_90d,0) + COALESCE(recact.rec_90d,0))`;
+    // VIP es CALCULADO y usa exactamente la misma regla que el dashboard:
+    // si cada pantalla define VIP a su manera, los números no coinciden y
+    // nadie sabe cuál creer. La marca manual vive aparte, en "destacado".
+    const esVipCalc = `(COALESCE(a.total_comprado,0) >= 5000000 OR ${tx90} >= 6)`;
 
     // Expresiones booleanas por segmento (reutilizables en filtros y counts)
     const expr: Record<SegmentoSlug, string> = {
-      vip:            `${hasEsVip ? "COALESCE(c.es_vip,false)" : "false"} = true`,
+      vip:            esVipCalc,
+      destacado:      `${hasEsVip ? "COALESCE(c.es_vip,false)" : "false"} = true`,
       con_credito:    `COALESCE(cr.saldo_credito,0)  > 0`,
       con_cashback:   `COALESCE(cr.saldo_cashback,0) > 0`,
       // Inactivo = YA fue cliente y hace 90+ días que no vuelve. Un cliente
@@ -282,7 +290,7 @@ export async function GET(request: NextRequest) {
       cbexp.expira                                  AS cashback_expira,
       -- Status: vip > nuevo > dormido > frecuente > activo
       CASE
-        WHEN ${hasEsVip ? "COALESCE(c.es_vip,false)" : "false"} THEN 'vip'
+        WHEN ${esVipCalc} THEN 'vip'
         WHEN a.ultima_venta_at IS NULL AND recact.ultima_recep_at IS NULL THEN 'nuevo'
         WHEN ${ultimaTxFecha} < now() - interval '90 days' THEN 'dormido'
         WHEN COALESCE(a.cnt_ventas,0) + COALESCE(recact.cnt_recep,0) >= 3 THEN 'frecuente'

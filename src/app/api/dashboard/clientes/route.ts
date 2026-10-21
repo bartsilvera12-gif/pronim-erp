@@ -217,7 +217,9 @@ export async function GET(request: NextRequest) {
         const cat: FilaOut["segmento"] =
           totalHist >= 5_000_000 || c90 >= 6 ? "vip"
           : totalHist <= 0 ? "nuevo"
-          : (diasUlt != null && diasUlt > 120) ? "dormido"
+          // 90 días, igual que "Inactivos +90 días" del explorador. Con 120
+          // los dos tableros contaban dormidos distintos.
+          : (diasUlt != null && diasUlt > 90) ? "dormido"
           : "habitual";
         const suc = sucPrefByCli.get(c.id) ?? null;
         const tieneV = Boolean(v?.tiene_venta);

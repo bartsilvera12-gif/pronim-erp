@@ -8,7 +8,7 @@ import { DataExplorer, type ColumnDef } from "@/components/explorer/DataExplorer
 import { tt } from "@/lib/i18n/dict";
 
 type SegmentoSlug =
-  | "vip" | "con_credito" | "con_cashback"
+  | "vip" | "destacado" | "con_credito" | "con_cashback"
   | "inactivos_90d" | "nuevos_mes" | "en_riesgo";
 
 type Segmento = {
@@ -61,7 +61,7 @@ function carteraLabel(v: string | null): string {
   return CARTERA_LABEL[v] ?? v;
 }
 
-const FLAGS_POS = ["vip","con_credito","con_cashback","inactivos_90d","nuevos_mes","en_riesgo"] as const;
+const FLAGS_POS = ["vip","destacado","con_credito","con_cashback","inactivos_90d","nuevos_mes","en_riesgo"] as const;
 
 /** Bloque de un dato suelto del panel. */
 function Dato({ label, children }: { label: string; children: React.ReactNode }) {
@@ -270,7 +270,7 @@ export default function ClientesSegmentosPage() {
           : s === "nuevo" ? "bg-sky-50 text-sky-700 border-sky-200"
           : "bg-slate-50 text-slate-600 border-slate-200";
         return <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${cls}`}>
-          <button type="button" onClick={() => toggleVip(c)} title={c.es_vip ? "Quitar VIP" : "Marcar VIP"} className="leading-none print:hidden">{c.es_vip ? "★" : "☆"}</button>
+          <button type="button" onClick={() => toggleVip(c)} title={c.es_vip ? "Quitar de destacados" : "Marcar como destacado"} className="leading-none print:hidden">{c.es_vip ? "★" : "☆"}</button>
           {STATUS_LABEL[s] ?? "—"}
         </span>;
       } },
