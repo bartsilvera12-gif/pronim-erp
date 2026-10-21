@@ -189,7 +189,7 @@ export async function GET(request: NextRequest) {
          LEFT JOIN ${clientesT} c ON c.id = v.cliente_id AND c.empresa_id = v.empresa_id
          WHERE v.empresa_id = $1 ${filtroSucursalV} ${filtroEstadoV}
            AND v.cliente_id IS NOT NULL
-           AND v.fecha::date BETWEEN ${iD}::date AND ${iH}::date
+           AND v.fecha::date BETWEEN $${iD}::date AND $${iH}::date
          GROUP BY v.cliente_id
          ORDER BY MAX(v.fecha) DESC
          LIMIT 10`,
