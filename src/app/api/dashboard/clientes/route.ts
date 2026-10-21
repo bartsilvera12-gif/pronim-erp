@@ -66,6 +66,13 @@ export async function GET(request: NextRequest) {
 
       // 1) Lista de clientes (nombres). Pasa SOLO los params que el SQL
       // realmente referencia (Postgres exige match exacto — bind vs prep).
+      //
+      // SIN LIMIT a propósito. Tenía LIMIT 2000, y como TODOS los KPIs de
+      // abajo se calculan sobre esta lista, con más de 2000 clientes el
+      // tablero mentía: el total se clavaba en 2.000 y los conteos de VIP,
+      // dormidos y el crédito disponible quedaban recortados.
+      // La consulta trae solo id y nombre, y las agregaciones que siguen ya
+      // recorren toda la empresa igual, así que no cambia el costo.
       const cliArgs: unknown[] = [auth.empresa_id];
       let qClause = "";
       if (q) {
@@ -77,8 +84,7 @@ export async function GET(request: NextRequest) {
          FROM ${cliT}
          WHERE empresa_id = $1
            ${qClause}
-         ORDER BY nombre ASC
-         LIMIT 2000`,
+         ORDER BY nombre ASC`,
         cliArgs,
       );
       const clientes = clientesQ.rows;
