@@ -47,14 +47,13 @@ type Suc = {
 
 // Formateo compacto por moneda de LA SUCURSAL (no la del viewer).
 // Betim/BH/El Dorado se ven en R$ aunque el admin PY las esté mirando.
+// Importe completo, sin abreviar. Un "18M" obliga a adivinar si son
+// 18.000.000 o 18.400.000, y estas tarjetas se usan para controlar plata.
 function fmtCompact(n: number, moneda: Moneda = "PYG"): string {
-  const abs = Math.abs(n);
   const sym = moneda === "BRL" ? "R$" : moneda === "USD" ? "US$" : moneda === "ARS" ? "$" : "Gs.";
   const locale = moneda === "BRL" ? "pt-BR" : "es-PY";
-  if (abs >= 1_000_000) return `${sym} ${(n / 1_000_000).toFixed(abs >= 10_000_000 ? 0 : 1)}M`;
-  if (abs >= 1_000) return `${sym} ${(n / 1_000).toFixed(0)} mil`;
   const decimals = moneda === "PYG" || moneda === "ARS" ? 0 : 2;
-  return `${sym} ${n.toLocaleString(locale, { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
+  return `${sym} ${(n || 0).toLocaleString(locale, { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
 }
 function fmtN(n: number): string { return (n || 0).toLocaleString("es-PY"); }
 

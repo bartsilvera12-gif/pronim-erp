@@ -65,17 +65,11 @@ export function fmtMoneda(n: number, m: Moneda, lang: Lang): string {
   return `${monedaSymbol(m)} ${val}`;
 }
 
+/**
+ * Importe completo. El nombre quedó por compatibilidad con los llamadores,
+ * pero ya no abrevia: un "18M" obliga a adivinar si son 18.000.000 o
+ * 18.400.000, y estas cifras se usan para controlar plata.
+ */
 export function fmtMonedaCompact(n: number, m: Moneda, lang: Lang): string {
-  const abs = Math.abs(n);
-  const sym = monedaSymbol(m);
-  const locale = localeOf(m, lang);
-  if (abs >= 1_000_000) {
-    const v = n / 1_000_000;
-    return `${sym} ${v.toLocaleString(locale, { minimumFractionDigits: abs >= 10_000_000 ? 0 : 1, maximumFractionDigits: 1 })}M`;
-  }
-  if (abs >= 1_000) {
-    const v = n / 1_000;
-    return `${sym} ${v.toLocaleString(locale, { maximumFractionDigits: 0 })} mil`;
-  }
   return fmtMoneda(n, m, lang);
 }

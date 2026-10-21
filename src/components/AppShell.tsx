@@ -4,6 +4,8 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import Sidebar from "./layout/Sidebar";
 import Header from "./layout/Header";
+import BotonVolver from "./layout/BotonVolver";
+import { RutaAnteriorProvider } from "@/lib/navegacion/ruta-anterior";
 
 const STANDALONE_ROUTES = ["/login", "/bloqueado"];
 
@@ -31,6 +33,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
+    <RutaAnteriorProvider>
     <div id="neura-app-shell" className="flex h-svh min-h-0 overflow-hidden bg-[#F8FAFC]">
       <Sidebar />
       <div id="neura-main-column" className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
@@ -42,9 +45,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           id="neura-main-content"
           className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain p-4 sm:p-6"
         >
+          {/* Botón Volver global: una sola pieza en vez de un link distinto
+              (o ninguno) en cada pantalla. Sabe de dónde venís. */}
+          <BotonVolver />
           {children}
         </main>
       </div>
     </div>
+    </RutaAnteriorProvider>
   );
 }
