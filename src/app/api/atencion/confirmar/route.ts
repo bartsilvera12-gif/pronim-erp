@@ -4,6 +4,7 @@ import { errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
 import { procesarConfirmarAtencion } from "@/lib/atencion/server/procesar-confirmar-atencion";
 import { enforceSucursalForOperation } from "@/lib/sucursales/enforce";
+import { esRolAdminEmpresaOGlobal } from "@/lib/auth/rol-empresa";
 
 /**
  * POST /api/atencion/confirmar
@@ -49,6 +50,9 @@ export async function POST(request: NextRequest) {
       usuario_fijo: enforce.usuarioFijo,
       user_id: auth.user.id ?? null,
       nombre: auth.nombre ?? null,
+      // Cargar una venta con fecha pasada mueve la caja, las metas y las
+      // comisiones de ESE día: queda reservado al administrador.
+      puede_fechar: esRolAdminEmpresaOGlobal(auth.rol),
     });
     console.log(`[atencion/confirmar] status=${resp.status} ms=${Date.now() - t0}`);
     return NextResponse.json(resp.body, { status: resp.status });

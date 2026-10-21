@@ -30,6 +30,7 @@ import {
 import { CajaControlBanner, useCajaState } from "@/lib/atencion/caja-control";
 import { tt } from "@/lib/i18n/dict";
 import { useCerrarAlClickAfuera } from "@/lib/ui/use-cerrar-al-click-afuera";
+import { useIsAdmin } from "@/lib/auth/use-is-admin";
 
 type ClienteSegmento = {
   categoria: "nuevo" | "habitual" | "vip" | "dormido";
@@ -53,7 +54,11 @@ export default function NuevaVentaPage() {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [clienteQuery, setClienteQuery] = useState("");
   const [cliente, setCliente] = useState<Cliente | null>(null);
+  const { isAdmin: esAdmin } = useIsAdmin();
   const [clienteOpen, setClienteOpen] = useState(false);
+  // Carga retroactiva: vacío = hoy. Solo el admin ve el campo, y el backend
+  // lo vuelve a verificar (el front nunca decide permisos).
+  const [fechaVenta, setFechaVenta] = useState("");
   // Clic afuera (o Escape) cierra el buscador de clientes: antes quedaba
   // abierto tapando la pantalla hasta que elegías a alguien.
   const clienteBoxRef = useRef<HTMLDivElement>(null);
@@ -509,6 +514,7 @@ export default function NuevaVentaPage() {
     setPagos([{ metodo: "efectivo", monto: "", referencia: "" }]);
     setPromoAplicada(null); setCuponInput(""); setPromoError(null);
     setError(null); setCliente(null); setClienteQuery(""); setClienteOpen(false);
+    setFechaVenta("");
   }
 
   async function aplicarPromocion(cuponManual: string | null) {
@@ -675,6 +681,7 @@ export default function NuevaVentaPage() {
           // Sucursal en la que está parado el admin (selector del header). Los
           // usuarios con sucursal fija lo ignoran: el backend impone la suya.
           sucursal_id: getSucursalActivaId(),
+          fecha: fechaVenta || null,
           cliente_id: cliente.id,
           observaciones: observaciones || null,
           trae: null,
@@ -1399,6 +1406,30 @@ export default function NuevaVentaPage() {
                       </>
                     )}
                   </div>
+                )}
+              </div>
+            )}
+
+            {/* Carga retroactiva. Solo administrador: fechar una venta mueve
+                la caja, las metas y las comisiones de ese día. */}
+            {esAdmin && (
+              <div className="mb-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Fecha de la venta</p>
+                <input
+                  type="date"
+                  value={fechaVenta}
+                  max={new Date().toLocaleDateString("sv-SE")}
+                  onChange={(e) => setFechaVenta(e.target.value)}
+                  className="mt-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
+                />
+                {fechaVenta ? (
+                  <p className="mt-1.5 text-[11px] font-medium text-amber-700">
+                    La venta va a quedar con esta fecha y el cobro entra en la caja de ese día.
+                  </p>
+                ) : (
+                  <p className="mt-1.5 text-[11px] text-slate-400">
+                    Vacío = hoy. Se usa solo para cargar días anteriores.
+                  </p>
                 )}
               </div>
             )}

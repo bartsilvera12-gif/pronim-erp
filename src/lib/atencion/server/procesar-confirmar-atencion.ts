@@ -32,6 +32,8 @@ export interface HandlerAuth {
   sucursal_id: string | null;
   user_id: string | null;
   nombre: string | null;
+  /** true = puede cargar ventas con fecha pasada (solo administrador). */
+  puede_fechar?: boolean;
 }
 
 export interface HandlerResponse {
@@ -357,6 +359,11 @@ async function runProcesar(
         promo: promocion ? { id: promocion.promocionId ?? "", cupon: promocion.cuponCodigo ?? "" } : null,
         beneficios: beneficiosCredito.map(b => ({ id: b.id, m: b.monto })),
       },
+      // Carga retroactiva. Se ignora si quien llama no es administrador:
+      // fechar una venta mueve caja, metas y comisiones de ese día.
+      fechaVenta: auth.puede_fechar === true && typeof body.fecha === "string"
+        ? body.fecha.trim() || null
+        : null,
     } satisfies ConfirmarAtencionInput;
 
     // Si viene client externo (tests con SAVEPOINT), ejecutamos la variante

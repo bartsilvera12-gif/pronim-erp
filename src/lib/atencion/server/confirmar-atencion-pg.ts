@@ -51,6 +51,12 @@ export interface ConfirmarAtencionInput {
   idempotencyKey: string;
   requestPayloadForHash: unknown;
   observaciones: string | null;
+  /**
+   * Carga retroactiva (YYYY-MM-DD). Solo la manda el admin; el handler la
+   * descarta para cualquier otro rol. La venta queda fechada ese día y el
+   * cobro impacta en la caja de ESE día. Sin esto, va con la fecha de hoy.
+   */
+  fechaVenta?: string | null;
 
   // TRAE (opcional; si viene y items > 0, se crea recepción)
   trae?: {
@@ -435,6 +441,7 @@ export async function confirmarAtencionEnClientePg(
         cambioId,
         descuentoGeneral: v.descuentoGeneral ?? 0,
         descuentoMotivo: v.descuentoMotivo ?? null,
+        fechaVenta: p.fechaVenta ?? null,
       });
       ventaOut = { id: r.ventaId, numero_control: r.numeroControl, total: r.total };
       // Auditoría: si la venta llevó descuento manual (línea o general),
