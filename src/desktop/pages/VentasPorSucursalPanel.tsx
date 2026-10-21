@@ -30,6 +30,9 @@ type Suc = {
     promociones_aplicadas: number; cashback_total: number;
     descuento_total: number; beneficios_entregados: number;
     cambios: number; anulaciones_venta: number; anulaciones_recep: number;
+    /** Ventas sin detalle de lineas (importadas): no entran en el margen. */
+    ventas_sin_detalle?: number;
+    total_con_detalle?: number;
     pagos: { metodo: string; ops: number; total: number }[];
   };
 };
@@ -133,6 +136,14 @@ export default function VentasPorSucursalPanel({ desde, hasta }: { desde?: strin
                   tone={v.margen_pct != null && v.margen_pct >= 0 ? "pos" : "neg"}
                 />
               </MetricBlock>
+              {/* Si hay ventas sin detalle hay que decirlo: el margen se
+                  calculó sin ellas y si no el número parece incompleto. */}
+              {(v.ventas_sin_detalle ?? 0) > 0 && (
+                <p className="-mt-1 mb-2 px-1 text-[10px] leading-snug text-amber-700">
+                  {fmtN(v.ventas_sin_detalle ?? 0)} venta{(v.ventas_sin_detalle ?? 0) === 1 ? "" : "s"} sin detalle de prendas
+                  {" "}(importadas): entran en el total pero no en el margen.
+                </p>
+              )}
 
               {/* Ventas — rosa */}
               <MetricBlock tone="rose" titulo="Ventas">

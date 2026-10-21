@@ -85,17 +85,31 @@ export async function GET(request: NextRequest) {
         sucursal_id: string;
         cantidad: string; total: string; prendas: string;
         costo_total: string; anuladas: string;
+        total_con_detalle: string; sin_detalle: string;
       }>(
-        `SELECT
+        `WITH v AS (
+           SELECT ve.*,
+                  (SELECT COALESCE(SUM(vi.cantidad),0)
+                     FROM ${ventasItT} vi WHERE vi.venta_id = ve.id) AS u_prendas,
+                  (SELECT COALESCE(SUM(vi.cantidad * vi.costo_unitario_snapshot),0)
+                     FROM ${ventasItT} vi WHERE vi.venta_id = ve.id) AS u_costo,
+                  EXISTS (SELECT 1 FROM ${ventasItT} vi WHERE vi.venta_id = ve.id) AS u_tiene_detalle
+             FROM ${ventasT} ve
+            WHERE ve.empresa_id = $1
+              AND ve.fecha::date BETWEEN $2 AND $3
+         )
+         SELECT
            v.sucursal_id::text AS sucursal_id,
            COUNT(*)::text AS cantidad,
            COALESCE(SUM(CASE WHEN v.estado IN ('pendiente','completada') THEN v.total ELSE 0 END), 0)::text AS total,
-           COALESCE(SUM((SELECT COALESCE(SUM(vi.cantidad),0) FROM ${ventasItT} vi WHERE vi.venta_id = v.id)), 0)::text AS prendas,
-           COALESCE(SUM((SELECT COALESCE(SUM(vi.cantidad * vi.costo_unitario_snapshot),0) FROM ${ventasItT} vi WHERE vi.venta_id = v.id)), 0)::text AS costo_total,
-           COUNT(*) FILTER (WHERE v.estado = 'anulada')::text AS anuladas
-         FROM ${ventasT} v
-         WHERE v.empresa_id = $1
-           AND v.fecha::date BETWEEN $2 AND $3
+           COALESCE(SUM(v.u_prendas), 0)::text AS prendas,
+           COALESCE(SUM(v.u_costo), 0)::text AS costo_total,
+           COUNT(*) FILTER (WHERE v.estado = 'anulada')::text AS anuladas,
+           -- Base comparable del margen: solo lo que tiene detalle cargado.
+           COALESCE(SUM(CASE WHEN v.u_tiene_detalle AND v.estado IN ('pendiente','completada')
+                             THEN v.total ELSE 0 END), 0)::text AS total_con_detalle,
+           COUNT(*) FILTER (WHERE NOT v.u_tiene_detalle)::text AS sin_detalle
+         FROM v
          GROUP BY v.sucursal_id`,
         args,
       );
@@ -172,7 +186,7 @@ export async function GET(request: NextRequest) {
       );
 
       // Ensamblado
-      type VentaRow = { sucursal_id: string; cantidad: string; total: string; prendas: string; costo_total: string; anuladas: string };
+      type VentaRow = { sucursal_id: string; cantidad: string; total: string; prendas: string; costo_total: string; anuladas: string; total_con_detalle: string; sin_detalle: string };
       type PromoRow = { sucursal_id: string; cantidad: string; cashback: string; descuento: string };
       type CountRow = { sucursal_id: string; cantidad: string };
       type PagoRow = { sucursal_id: string; metodo: string; ops: string; total: string };
@@ -195,8 +209,17 @@ export async function GET(request: NextRequest) {
         const cantidad = Number(v?.cantidad ?? 0);
         const prendas = Number(v?.prendas ?? 0);
         const costo = Number(v?.costo_total ?? 0);
-        const margen = total - costo;
-        const margenPct = total > 0 ? Math.round((margen / total) * 1000) / 10 : null;
+        // El margen se mide SOLO sobre las ventas que tienen detalle de
+        // líneas. Las importadas (cabecera sin ítems) no tienen costo, y
+        // metidas en la cuenta daban "margen 100%": el total entero parecía
+        // ganancia. Si no hay ninguna venta con detalle, el margen es null
+        // (la pantalla muestra —) en vez de un número inventado.
+        const totalConDetalle = Number(v?.total_con_detalle ?? 0);
+        const sinDetalle = Number(v?.sin_detalle ?? 0);
+        const margen = totalConDetalle - costo;
+        const margenPct = totalConDetalle > 0
+          ? Math.round((margen / totalConDetalle) * 1000) / 10
+          : null;
         const ticketProm = cantidad > 0 ? Math.round(total / cantidad) : 0;
         const prendasPorVenta = cantidad > 0 ? Math.round((prendas / cantidad) * 10) / 10 : null;
         return {
@@ -212,6 +235,10 @@ export async function GET(request: NextRequest) {
             costo_total: costo,
             margen_bruto: margen,
             margen_pct: margenPct,
+            /** Ventas del período sin líneas cargadas (importadas). */
+            ventas_sin_detalle: sinDetalle,
+            /** Base sobre la que se calculó el margen. */
+            total_con_detalle: totalConDetalle,
             promociones_aplicadas: Number(p?.cantidad ?? 0),
             cashback_total: Number(p?.cashback ?? 0),
             descuento_total: Number(p?.descuento ?? 0),
