@@ -850,7 +850,7 @@ export default function NuevaVentaPage() {
             </button>
           </div>
         ) : (
-          <div className="relative">
+          <div ref={clienteBoxRef} className="relative">
             <input type="text" value={clienteQuery}
               onChange={(e) => { setClienteQuery(e.target.value); setClienteOpen(true); }}
               onFocus={() => setClienteOpen(true)}

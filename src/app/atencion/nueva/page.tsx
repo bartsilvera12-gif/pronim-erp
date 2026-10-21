@@ -1515,7 +1515,7 @@ export default function NuevaAtencionPage() {
             </button>
           </div>
         ) : (
-          <div className="relative">
+          <div ref={clienteBoxRef} className="relative">
             <input
               type="text"
               value={clienteQuery}
