@@ -47,7 +47,12 @@ function fmtCompact(n: number, moneda: Moneda = "PYG"): string {
 }
 function fmtN(n: number): string { return (n || 0).toLocaleString("es-PY"); }
 
-export default function VentasPorSucursalPanel() {
+/**
+ * El panel recibe el período del dashboard. Antes llamaba al endpoint SIN
+ * fechas, y el endpoint cae por defecto en "últimos 30 días": las tarjetas
+ * mostraban siempre lo mismo aunque arriba se eligiera Hoy o Este mes.
+ */
+export default function VentasPorSucursalPanel({ desde, hasta }: { desde?: string; hasta?: string }) {
   const [sucursales, setSucursales] = useState<Suc[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -55,7 +60,13 @@ export default function VentasPorSucursalPanel() {
   useEffect(() => {
     let cancel = false;
     setLoading(true);
-    fetchWithSupabaseSession("/api/dashboard/ventas-desglose", { cache: "no-store" })
+    const qs = new URLSearchParams();
+    if (desde) qs.set("desde", desde);
+    if (hasta) qs.set("hasta", hasta);
+    const url = qs.toString()
+      ? `/api/dashboard/ventas-desglose?${qs.toString()}`
+      : "/api/dashboard/ventas-desglose";
+    fetchWithSupabaseSession(url, { cache: "no-store" })
       .then(r => r.json())
       .then(j => {
         if (cancel) return;
@@ -65,7 +76,7 @@ export default function VentasPorSucursalPanel() {
       .catch(e => { if (!cancel) setErr(e instanceof Error ? e.message : "Error"); })
       .finally(() => { if (!cancel) setLoading(false); });
     return () => { cancel = true; };
-  }, []);
+  }, [desde, hasta]);
 
   if (loading) return <div className="text-sm text-slate-500">{tt("Cargando ventas por sucursal…")}</div>;
   if (err) return <div className="text-sm text-rose-700">{err}</div>;

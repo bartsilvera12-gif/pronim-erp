@@ -2110,7 +2110,7 @@ function DashVentas({
     <div className="space-y-6">
       {/* Desglose de ventas POR SUCURSAL — reemplaza la sección global
           'Ventas — detalle' que Karen tenía en el dash de sucursales. */}
-      <VentasPorSucursalPanel />
+      <VentasPorSucursalPanel desde={ymdLocal(desde)} hasta={ymdLocal(hasta)} />
 
     </div>
   );
