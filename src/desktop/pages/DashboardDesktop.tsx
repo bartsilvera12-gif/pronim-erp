@@ -2040,9 +2040,14 @@ function DashFinanciero({
 function DashInventario({
   productos,
   compras,
+  desde,
+  hasta,
 }: {
   productos: ProductoRaw[];
   compras:   CompraRaw[];
+  /** Período elegido arriba, en YYYY-MM-DD. */
+  desde?: string;
+  hasta?: string;
 }) {
   const totalProductos = productos.length;
   const totalUnidades  = productos.reduce((s, p) => s + p.stock_actual, 0);
@@ -2059,7 +2064,7 @@ function DashInventario({
       {/* Desglose por sucursal (recepciones + inventario). Movido desde
           el dash de Sucursales — Karen prefiere consultarlo dividido acá,
           en el contexto de inventario. */}
-      <InventarioPorSucursalPanels />
+      <InventarioPorSucursalPanels desde={desde} hasta={hasta} />
     </div>
   );
 }
@@ -2512,6 +2517,8 @@ export default function DashboardPage() {
         <DashInventario
           productos={productos}
           compras={compras}
+          desde={ymdLocal(getRango(periodo, customDesde, customHasta).desde)}
+          hasta={ymdLocal(getRango(periodo, customDesde, customHasta).hasta)}
         />
       )}
 

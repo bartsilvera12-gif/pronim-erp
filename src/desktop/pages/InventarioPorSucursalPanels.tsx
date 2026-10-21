@@ -58,7 +58,12 @@ function fmtCompact(n: number, moneda: Moneda = "PYG"): string {
 }
 function fmtN(n: number): string { return (n || 0).toLocaleString("es-PY"); }
 
-export default function InventarioPorSucursalPanels() {
+/**
+ * Recibe el período del dashboard. Antes llamaba al endpoint sin fechas y
+ * este cae por defecto en los últimos 30 días: el panel mostraba siempre
+ * la misma ventana aunque arriba se eligiera otra.
+ */
+export default function InventarioPorSucursalPanels({ desde, hasta }: { desde?: string; hasta?: string }) {
   const [sucursales, setSucursales] = useState<Suc[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -66,7 +71,13 @@ export default function InventarioPorSucursalPanels() {
   useEffect(() => {
     let cancel = false;
     setLoading(true);
-    fetchWithSupabaseSession("/api/dashboard/inventario-desglose", { cache: "no-store" })
+    const qs = new URLSearchParams();
+    if (desde) qs.set("desde", desde);
+    if (hasta) qs.set("hasta", hasta);
+    const url = qs.toString()
+      ? `/api/dashboard/inventario-desglose?${qs.toString()}`
+      : "/api/dashboard/inventario-desglose";
+    fetchWithSupabaseSession(url, { cache: "no-store" })
       .then(r => r.json())
       .then(j => {
         if (cancel) return;
@@ -76,7 +87,7 @@ export default function InventarioPorSucursalPanels() {
       .catch(e => { if (!cancel) setErr(e instanceof Error ? e.message : "Error"); })
       .finally(() => { if (!cancel) setLoading(false); });
     return () => { cancel = true; };
-  }, []);
+  }, [desde, hasta]);
 
   if (loading) return <div className="text-sm text-slate-500">Cargando desglose por sucursal…</div>;
   if (err) return <div className="text-sm text-rose-700">{err}</div>;
