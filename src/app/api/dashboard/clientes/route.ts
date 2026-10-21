@@ -244,7 +244,17 @@ export async function GET(request: NextRequest) {
         };
       });
 
-      const filtrados = enriquecidos.filter((c) => !segmento || c.segmento === segmento);
+      // El chip de sucursal tiene que acotar TAMBIÉN el conteo de clientes.
+      // Antes solo acotaba las ventas y recepciones, así que con LILLO elegido
+      // el total seguía siendo el de toda la empresa: el tablero decía una
+      // cosa y el filtro indicaba otra.
+      // Un cliente "es de" una sucursal si tiene actividad ahí; como las dos
+      // agregaciones ya vienen filtradas, alcanza con que aparezca en alguna.
+      const esDeLaSucursal = (id: string) =>
+        !sucursalFiltro || ventasByCli.has(id) || recepByCli.has(id);
+      const filtrados = enriquecidos.filter(
+        (c) => (!segmento || c.segmento === segmento) && esDeLaSucursal(c.cliente_id),
+      );
       const kpis = {
         total: filtrados.length,
         vip: filtrados.filter((c) => c.segmento === "vip").length,
