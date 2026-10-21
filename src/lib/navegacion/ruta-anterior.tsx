@@ -8,17 +8,21 @@
  * el dashboard, el link te mandaba a Órdenes de venta igual. Y en la mayoría
  * de las pantallas directamente no había salida.
  *
- * Acá se registra la ruta anterior DENTRO del ERP, así el botón puede decir
- * "Volver al dashboard" o "Volver a Clientes" según por dónde entraste.
+ * Cómo funciona: en cada cambio de ruta se guarda la ruta ACTUAL en
+ * sessionStorage. La próxima pantalla la lee y ya sabe de dónde viene.
  *
- * Se guarda en sessionStorage para que sobreviva a un F5: si recargás una
- * ficha, el botón sigue sabiendo de dónde venías.
+ * Guardar la actual (y no la anterior) es lo que hace que funcione también
+ * con las navegaciones que recargan el documento entero —como el clic en una
+ * fila de los exploradores, que usa window.location—. Si guardáramos la
+ * anterior, al recargar leeríamos la de dos pantallas atrás: entrabas a una
+ * venta desde Explorar y el botón ofrecía volver al Inicio.
  */
 
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 
-const LS_KEY = "neura.erp.ruta_anterior.v1";
+/** Última ruta visitada. La próxima pantalla la usa como "de dónde vengo". */
+const SS_ULTIMA = "neura.erp.ultima_ruta.v1";
 
 type Ctx = { anterior: string | null };
 const RutaAnteriorCtx = createContext<Ctx>({ anterior: null });
@@ -26,29 +30,29 @@ const RutaAnteriorCtx = createContext<Ctx>({ anterior: null });
 export function RutaAnteriorProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() ?? "";
   const [anterior, setAnterior] = useState<string | null>(null);
-  /** Última ruta vista. Ref y no state: cambiarla no debe re-renderizar. */
+  /** Ruta que estamos viendo. Ref y no state: cambiarla no debe re-renderizar. */
   const actual = useRef<string | null>(null);
 
   useEffect(() => {
     if (!pathname) return;
 
-    // Primera carga del tab: recuperar lo que había guardado.
     if (actual.current === null) {
+      // Primera pantalla de este documento (carga directa, F5 o navegación
+      // dura). Lo que haya quedado guardado es de dónde venimos.
       try {
-        const guardada = window.sessionStorage.getItem(LS_KEY);
-        if (guardada && guardada !== pathname) setAnterior(guardada);
+        const ultima = window.sessionStorage.getItem(SS_ULTIMA);
+        if (ultima && ultima !== pathname) setAnterior(ultima);
       } catch { /* sessionStorage bloqueado: el botón simplemente no aparece */ }
-      actual.current = pathname;
-      return;
+    } else if (actual.current !== pathname) {
+      // Navegación dentro de la misma carga: la anterior la tenemos en memoria.
+      setAnterior(actual.current);
     }
 
-    if (actual.current === pathname) return;
-
-    const previa = actual.current;
     actual.current = pathname;
-    setAnterior(previa);
+    // Siempre se deja la ruta actual anotada, para la pantalla que venga
+    // después aunque llegue recargando el documento.
     try {
-      window.sessionStorage.setItem(LS_KEY, previa);
+      window.sessionStorage.setItem(SS_ULTIMA, pathname);
     } catch { /* ídem */ }
   }, [pathname]);
 

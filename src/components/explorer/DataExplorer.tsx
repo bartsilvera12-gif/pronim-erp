@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { tt } from "@/lib/i18n/dict";
 // xlsx se carga dinámicamente al exportar (chunk aparte) para no inflar el
 // bundle de cada página de explorador ni la memoria del build.
@@ -100,6 +101,7 @@ export function DataExplorer<T>(props: {
 }) {
   const { titulo, descripcion, volverA, rows, columns, cargando, detailHref, expandir, rowKey, csvName = "export", toolbarExtra, headerExtra, truncado, error } = props;
 
+  const router = useRouter();
   const [visibles, setVisibles] = useState<Set<string>>(
     () => new Set(columns.filter((c) => c.defaultVisible !== false || c.required).map((c) => c.key)),
   );
@@ -706,7 +708,9 @@ export function DataExplorer<T>(props: {
                             return;
                           }
                           const href = detailHref!(row);
-                          if (href && href !== "#") window.location.href = href;
+                          // router.push y no window.location: mantiene la SPA, no recarga todo
+                          // y el boton Volver sabe de donde venis.
+                          if (href && href !== "#") router.push(href);
                         } : undefined}
                       >
                         {colsVis.map((c) => (
@@ -766,7 +770,9 @@ export function DataExplorer<T>(props: {
                             return;
                           }
                           const href = detailHref!(row);
-                          if (href && href !== "#") window.location.href = href;
+                          // router.push y no window.location: mantiene la SPA, no recarga todo
+                          // y el boton Volver sabe de donde venis.
+                          if (href && href !== "#") router.push(href);
                         } : undefined}
                       >
                     {colsVis.map((c) => (
