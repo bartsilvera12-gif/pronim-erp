@@ -94,6 +94,9 @@ export async function GET(request: NextRequest) {
       // Las cuatro fechas van al final, despues de empresa y sucursal.
       const iD = paramsBase.length + 1, iH = iD + 1, iPD = iH + 1, iPH = iPD + 1;
       const paramsPeriodo: unknown[] = [...paramsBase, desde, hasta, prevDesde, prevHasta];
+      // Las consultas que solo miran el periodo reciben 4, no 6: Postgres
+      // rechaza la consulta si le sobran parametros.
+      const paramsSoloPeriodo: unknown[] = [...paramsBase, desde, hasta];
       const enPeriodo = `fecha::date BETWEEN $${iD}::date AND $${iH}::date`;
       const enPrevio  = `fecha::date BETWEEN $${iPD}::date AND $${iPH}::date`;
 
@@ -143,7 +146,7 @@ export async function GET(request: NextRequest) {
          FROM ${ventasT}
          WHERE empresa_id = $1 ${filtroSucursal} ${filtroEstado} AND ${enPeriodo}
          ORDER BY fecha DESC LIMIT 10`,
-        paramsPeriodo,
+        paramsSoloPeriodo,
       );
 
       // Clientes: total con al menos 1 venta en esta sucursal + últimos atendidos.
