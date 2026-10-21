@@ -768,6 +768,53 @@ export default function NuevaVentaPage() {
 
       <CajaControlBanner state={caja} />
 
+      {/* Carga retroactiva. Solo administrador: fechar una venta mueve la
+          caja, las metas y las comisiones de ese día. Va arriba y no en el
+          modal de cierre, porque hay que saberlo ANTES de cargar. */}
+      {esAdmin && (
+        <div className={`rounded-xl border px-4 py-3 ${
+          fechaVenta
+            ? "border-amber-300 bg-amber-50"
+            : "border-slate-200 bg-white"
+        }`}>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Fecha de la venta
+            </span>
+            <input
+              type="date"
+              value={fechaVenta}
+              max={new Date().toLocaleDateString("sv-SE")}
+              onChange={(e) => setFechaVenta(e.target.value)}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
+            />
+            {fechaVenta ? (
+              <>
+                <span className="rounded-full bg-amber-200/70 px-2.5 py-0.5 text-[11px] font-bold text-amber-900">
+                  CARGA RETROACTIVA
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setFechaVenta("")}
+                  className="text-[11px] font-medium text-slate-500 underline hover:text-slate-700"
+                >
+                  Volver a hoy
+                </button>
+              </>
+            ) : (
+              <span className="text-[11px] text-slate-400">
+                Vacío = hoy. Se usa solo para cargar días anteriores.
+              </span>
+            )}
+          </div>
+          {fechaVenta && (
+            <p className="mt-2 text-[11px] font-medium text-amber-800">
+              La venta va a quedar con esta fecha y el cobro entra en la caja de ese día.
+            </p>
+          )}
+        </div>
+      )}
+
       {error && (
         <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 flex items-start justify-between gap-3">
           <p className="text-sm text-rose-800">{error}</p>
@@ -1410,29 +1457,6 @@ export default function NuevaVentaPage() {
               </div>
             )}
 
-            {/* Carga retroactiva. Solo administrador: fechar una venta mueve
-                la caja, las metas y las comisiones de ese día. */}
-            {esAdmin && (
-              <div className="mb-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Fecha de la venta</p>
-                <input
-                  type="date"
-                  value={fechaVenta}
-                  max={new Date().toLocaleDateString("sv-SE")}
-                  onChange={(e) => setFechaVenta(e.target.value)}
-                  className="mt-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
-                />
-                {fechaVenta ? (
-                  <p className="mt-1.5 text-[11px] font-medium text-amber-700">
-                    La venta va a quedar con esta fecha y el cobro entra en la caja de ese día.
-                  </p>
-                ) : (
-                  <p className="mt-1.5 text-[11px] text-slate-400">
-                    Vacío = hoy. Se usa solo para cargar días anteriores.
-                  </p>
-                )}
-              </div>
-            )}
 
             <div className="mb-2">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Beneficios entregados</p>
