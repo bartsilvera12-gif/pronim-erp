@@ -127,10 +127,12 @@ export async function GET(request: NextRequest) {
         prendas_periodo: string;
         tiene_recep: boolean;
         rec_90d: string;
+        recep_periodo: string;
       }>(
         `SELECT r.cliente_id,
                 MAX(r.fecha)::text AS ultima_recep,
                 COUNT(*) FILTER (WHERE r.fecha >= now() - interval '90 days')::text AS rec_90d,
+                COUNT(*) FILTER (WHERE r.fecha::date BETWEEN $2 AND $3)::text AS recep_periodo,
                 COALESCE(SUM(
                   CASE WHEN r.fecha::date BETWEEN $2 AND $3 THEN ri_c.cant ELSE 0 END
                 ), 0)::text AS prendas_periodo,
@@ -204,6 +206,8 @@ export async function GET(request: NextRequest) {
         saldo_credito: number;
         sucursal_preferida_id: string | null; sucursal_preferida_nombre: string | null;
         actividad: "solo_trae" | "solo_lleva" | "ambos" | "sin_actividad";
+        /** Compró o trajo algo dentro del rango elegido arriba. */
+        opero_en_periodo: boolean;
       };
       const enriquecidos: FilaOut[] = clientes.map((c) => {
         const v = ventasByCli.get(c.id);
@@ -244,6 +248,8 @@ export async function GET(request: NextRequest) {
           dias_desde_ultima: diasUlt,
           prendas_traidas_periodo: Number(rc?.prendas_periodo ?? 0),
           compras_periodo: Number(v?.compras_periodo ?? 0),
+          opero_en_periodo:
+            Number(v?.compras_periodo ?? 0) > 0 || Number(rc?.recep_periodo ?? 0) > 0,
           saldo_credito: saldoByCli.get(c.id) ?? 0,
           sucursal_preferida_id: suc?.sucursal_id ?? null,
           sucursal_preferida_nombre: suc?.nombre ?? null,
@@ -259,8 +265,14 @@ export async function GET(request: NextRequest) {
       // agregaciones ya vienen filtradas, alcanza con que aparezca en alguna.
       const esDeLaSucursal = (id: string) =>
         !sucursalFiltro || ventasByCli.has(id) || recepByCli.has(id);
+      // Las tarjetas cuentan SOLO a los que operaron dentro del período
+      // elegido arriba. Antes miraban toda la base y el selector de fechas
+      // no movía ni un número.
       const filtrados = enriquecidos.filter(
-        (c) => (!segmento || c.segmento === segmento) && esDeLaSucursal(c.cliente_id),
+        (c) =>
+          (!segmento || c.segmento === segmento) &&
+          esDeLaSucursal(c.cliente_id) &&
+          c.opero_en_periodo,
       );
       const kpis = {
         total: filtrados.length,

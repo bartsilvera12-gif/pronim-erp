@@ -177,7 +177,7 @@ export default function DashClientes({ desde, hasta }: { desde: string; hasta: s
           vez de saltar a otra pantalla: se perdía el hilo del tablero. */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         <KpiCard icon={<Users className="h-5 w-5" />} tone="rose"
-          label={t("Total clientes")} value={fmtN(k.total)}
+          label={t("Clientes del período")} value={fmtN(k.total)}
           tip="Total de clientes que matchean el filtro actual (segmento, sucursal, búsqueda)."
           panelKey="total" abierta={abierta} onToggle={setAbierta} />
         <KpiCard icon={<Crown className="h-5 w-5" />} tone="amber"
