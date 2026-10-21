@@ -83,11 +83,38 @@ export function useSucursalActivaId(): string | null {
 }
 
 export function useSucursalActivaMoneda(): string | null {
-  return useSyncExternalStore(
+  const cacheada = useSyncExternalStore(
     subscribeSucursalActiva,
     getSucursalActivaMoneda,
     () => null,
   );
+  const activa = useSyncExternalStore(
+    subscribeSucursalActiva,
+    getSucursalActivaId,
+    () => null,
+  );
+  const [resuelta, setResuelta] = useState<string | null>(null);
+
+  // Si hay sucursal elegida pero su moneda no quedó en el navegador, se
+  // consulta. Sin esto el sistema cae a la moneda del usuario, y un admin
+  // configurado en reales veía Paraguay en portugués.
+  useEffect(() => {
+    if (!activa || cacheada) { setResuelta(null); return; }
+    let cancel = false;
+    fetchWithSupabaseSession("/api/sucursales", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        if (cancel) return;
+        const lista = (j?.data?.sucursales ?? j?.sucursales ?? []) as SucursalMin[];
+        const suc = lista.find((x) => x.id === activa);
+        const m = suc?.moneda ?? null;
+        if (m) { setSucursalActivaId(activa, m); setResuelta(m); }
+      })
+      .catch(() => { /* sin red: queda la preferencia del usuario */ });
+    return () => { cancel = true; };
+  }, [activa, cacheada]);
+
+  return cacheada ?? resuelta;
 }
 
 export function useSucursalActiva() {
