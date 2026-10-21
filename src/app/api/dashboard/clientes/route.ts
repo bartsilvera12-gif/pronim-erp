@@ -126,9 +126,11 @@ export async function GET(request: NextRequest) {
         ultima_recep: string | null;
         prendas_periodo: string;
         tiene_recep: boolean;
+        rec_90d: string;
       }>(
         `SELECT r.cliente_id,
                 MAX(r.fecha)::text AS ultima_recep,
+                COUNT(*) FILTER (WHERE r.fecha >= now() - interval '90 days')::text AS rec_90d,
                 COALESCE(SUM(
                   CASE WHEN r.fecha::date BETWEEN $2 AND $3 THEN ri_c.cant ELSE 0 END
                 ), 0)::text AS prendas_periodo,
@@ -207,7 +209,10 @@ export async function GET(request: NextRequest) {
         const v = ventasByCli.get(c.id);
         const rc = recepByCli.get(c.id);
         const totalHist = Number(v?.total_hist ?? 0);
-        const c90 = Number(v?.compras_90d ?? 0);
+        // Una visita es comprar O traer prendas. Contando solo ventas, el
+        // dashboard daba menos VIP que el explorador de clientes, que sí suma
+        // las recepciones. Misma cuenta en los dos lados.
+        const c90 = Number(v?.compras_90d ?? 0) + Number(rc?.rec_90d ?? 0);
         const ultimaVentaMs = v?.ultima_venta ? new Date(v.ultima_venta).getTime() : 0;
         const ultimaRecepMs = rc?.ultima_recep ? new Date(rc.ultima_recep).getTime() : 0;
         const ultimaMs = Math.max(ultimaVentaMs, ultimaRecepMs);
