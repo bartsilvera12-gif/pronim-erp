@@ -117,6 +117,41 @@ function fechaCorta(ymd: string | null | undefined): string {
   return m ? `${m[3]}/${m[2]}/${m[1]}` : String(ymd);
 }
 
+/**
+ * Fecha de EMISIÓN para la cabecera de la factura. Si por algo faltara,
+ * cae a la fecha de la venta antes que imprimir un comprobante sin fecha.
+ */
+function formatFechaEmision(emitida: string, fechaVenta: string): string {
+  const d = parseTimestampPg(emitida);
+  return d ? formatFecha(d.toISOString()) : formatFecha(fechaVenta);
+}
+
+/**
+ * Parsea el timestamptz tal como lo devuelve Postgres convertido a texto:
+ *   "2026-10-21 10:26:27.123+00"
+ * Viene con un espacio en vez de "T" y con el huso sin minutos, y ese "+00"
+ * le da Invalid Date a Date. Se normalizan los dos antes de parsear.
+ */
+function parseTimestampPg(v: string | null | undefined): Date | null {
+  const t = String(v ?? "").trim();
+  if (!t) return null;
+  const norm = t
+    .replace(" ", "T")
+    .replace(/([+-]\d{2})$/, "$1:00");
+  const d = new Date(norm);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** ¿Se emitió el mismo día en que se hizo la venta? */
+function mismoDia(a: string, b: string): boolean {
+  const dia = (v: string) => {
+    const d = parseTimestampPg(v);
+    return d ? `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}` : "";
+  };
+  const da = dia(a);
+  return da !== "" && da === dia(b);
+}
+
 function formatFecha(iso: string): string {
   try {
     const d = new Date(iso);
@@ -201,6 +236,13 @@ interface VentaRow {
 /** Todo lo que la factura impresa necesita además de la venta. */
 interface DatosFactura {
   numero: string;
+  /**
+   * Fecha de EMISIÓN (cuando se apretó Factura), no la de la venta.
+   * Es la que va impresa: el número correlativo se asigna al emitir, así
+   * que si la factura llevara la fecha de la operación quedarían números
+   * crecientes con fechas para atrás y eso no pasa en la SET.
+   */
+  emitida_at: string;
   emisor: AutoimpresorEmpresa;
   cliente_nombre: string | null;
   cliente_documento: string | null;
@@ -406,7 +448,8 @@ function renderCopia(opts: {
        </div>
        <hr>
        <div class="fiscal-cliente">
-         <div>Fecha: ${formatFecha(venta.fecha)}</div>
+         <div>Fecha: ${formatFechaEmision(factura.emitida_at, venta.fecha)}</div>
+         ${mismoDia(factura.emitida_at, venta.fecha) ? "" : `<div>Operación: ${formatFecha(venta.fecha)}</div>`}
          <div>Cliente: ${escapeHtml(factura.cliente_nombre || "SIN NOMBRE")}</div>
          <div>RUC/CI: ${escapeHtml(factura.cliente_documento || "X")}</div>
          <div>Condición: CONTADO</div>
@@ -793,6 +836,7 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
 
       factura = {
         numero: asignado.numero,
+        emitida_at: asignado.emitida_at,
         emisor,
         cliente_nombre: clienteNombre ?? "CONSUMIDOR FINAL",
         cliente_documento: clienteDoc,
