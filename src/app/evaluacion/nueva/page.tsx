@@ -24,6 +24,7 @@ import {
 import { CajaControlBanner, useCajaState } from "@/lib/atencion/caja-control";
 import { tt } from "@/lib/i18n/dict";
 import { useCerrarAlClickAfuera } from "@/lib/ui/use-cerrar-al-click-afuera";
+import { useIsAdmin } from "@/lib/auth/use-is-admin";
 
 export default function NuevaEvaluacionPage() {
   const router = useRouter();
@@ -37,6 +38,10 @@ export default function NuevaEvaluacionPage() {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [clienteQuery, setClienteQuery] = useState("");
   const [cliente, setCliente] = useState<Cliente | null>(null);
+  const { isAdmin: esAdmin } = useIsAdmin();
+  // Carga retroactiva: vacío = hoy. Solo el admin ve el campo, y el backend
+  // lo vuelve a verificar (el front nunca decide permisos).
+  const [fechaEvaluacion, setFechaEvaluacion] = useState("");
   const [clienteOpen, setClienteOpen] = useState(false);
   // Clic afuera (o Escape) cierra el buscador de clientes: antes quedaba
   // abierto tapando la pantalla hasta que elegías a alguien.
@@ -304,6 +309,7 @@ export default function NuevaEvaluacionPage() {
     setTrae([]); setTraeMontoFinal(""); setIngresarAlStock(false);
     setObservaciones(""); setError(null);
     setCliente(null); setClienteQuery(""); setClienteOpen(false);
+    setFechaEvaluacion("");
     setDivisor(2.5);
     setPagoCredito(""); setPagoEfectivo(""); setPagoTransf("");
     setTransfEntidadId(""); setTransfReferencia("");
@@ -391,6 +397,7 @@ export default function NuevaEvaluacionPage() {
           // Sucursal en la que está parado el admin (selector del header). Los
           // usuarios con sucursal fija lo ignoran: el backend impone la suya.
           sucursal_id: getSucursalActivaId(),
+          fecha: fechaEvaluacion || null,
           cliente_id: cliente.id,
           observaciones: observaciones || null,
           trae: traePayload,
@@ -459,6 +466,53 @@ export default function NuevaEvaluacionPage() {
       </div>
 
       <CajaControlBanner state={caja} />
+
+      {/* Carga retroactiva. Solo administrador: fechar una evaluación mueve
+          la caja y el crédito del cliente de ese día. */}
+      {esAdmin && (
+        <div className={`rounded-xl border px-4 py-3 ${
+          fechaEvaluacion
+            ? "border-amber-300 bg-amber-50"
+            : "border-slate-200 bg-white"
+        }`}>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Fecha de la evaluación
+            </span>
+            <input
+              type="date"
+              value={fechaEvaluacion}
+              max={new Date().toLocaleDateString("sv-SE")}
+              onChange={(e) => setFechaEvaluacion(e.target.value)}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
+            />
+            {fechaEvaluacion ? (
+              <>
+                <span className="rounded-full bg-amber-200/70 px-2.5 py-0.5 text-[11px] font-bold text-amber-900">
+                  CARGA RETROACTIVA
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setFechaEvaluacion("")}
+                  className="text-[11px] font-medium text-slate-500 underline hover:text-slate-700"
+                >
+                  Volver a hoy
+                </button>
+              </>
+            ) : (
+              <span className="text-[11px] text-slate-400">
+                Vacío = hoy. Se usa solo para cargar días anteriores.
+              </span>
+            )}
+          </div>
+          {fechaEvaluacion && (
+            <p className="mt-2 text-[11px] font-medium text-amber-800">
+              La evaluación y el ingreso de las prendas quedan con esta fecha, y
+              el pago al cliente entra en la caja de ese día.
+            </p>
+          )}
+        </div>
+      )}
 
       {error && (
         <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 flex items-start justify-between gap-3">

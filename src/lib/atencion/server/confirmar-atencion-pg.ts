@@ -53,8 +53,9 @@ export interface ConfirmarAtencionInput {
   observaciones: string | null;
   /**
    * Carga retroactiva (YYYY-MM-DD). Solo la manda el admin; el handler la
-   * descarta para cualquier otro rol. La venta queda fechada ese día y el
-   * cobro impacta en la caja de ESE día. Sin esto, va con la fecha de hoy.
+   * descarta para cualquier otro rol. La venta (o la evaluación) queda
+   * fechada ese día y el cobro impacta en la caja de ESE día. Sin esto, va
+   * con la fecha de hoy.
    */
   fechaVenta?: string | null;
 
@@ -348,6 +349,7 @@ export async function confirmarAtencionEnClientePg(
         ingresarAhora: t.ingresarAlStock !== false,
         cambioId,
         totalFinalEvaluado: totalFinal,
+        fechaRecepcion: p.fechaVenta ?? null,
       });
       // Si hay cambio, linkeamos la recepción también:
       if (cambioId) {

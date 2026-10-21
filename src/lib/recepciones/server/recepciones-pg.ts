@@ -77,6 +77,12 @@ export interface RecepcionCreateInput {
    * Si no viene, el server usa el subtotal crudo (comportamiento legacy).
    */
   totalFinalEvaluado?: number | null;
+  /**
+   * Carga retroactiva (YYYY-MM-DD). Solo la manda el admin; el endpoint lo
+   * verifica. La evaluación queda fechada ese día, igual que la compra que
+   * genera y el movimiento de stock si se ingresa en el momento.
+   */
+  fechaRecepcion?: string | null;
 }
 
 export interface RecepcionCreated {
@@ -217,6 +223,20 @@ export async function crearRecepcionEnClientePg(
 
   if (!p.items.length) throw new Error("La recepción debe tener al menos una prenda.");
   if (!p.pagos.length) throw new Error("La recepción debe tener al menos una forma de pago.");
+
+  // Carga retroactiva: solo una fecha pura `YYYY-MM-DD`, y nunca futura.
+  const fechaRetro = (() => {
+    const v = (p.fechaRecepcion ?? "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return null;
+    const hoy = new Date().toISOString().slice(0, 10);
+    if (v > hoy) throw new Error("No se puede registrar una evaluación con fecha futura.");
+    return v;
+  })();
+  // Mediodía de ese día: así la fecha del calendario no se corre en ningún
+  // huso. Se interpola, pero el regex de arriba solo deja pasar YYYY-MM-DD.
+  const fechaExpr = fechaRetro
+    ? `(DATE '${fechaRetro}' + interval '12 hours')`
+    : "now()";
   if (!p.sucursalId) {
     throw new Error("Sucursal requerida: no se pudo determinar la sucursal.");
   }
@@ -455,9 +475,9 @@ export async function crearRecepcionEnClientePg(
          empresa_id, cliente_id, sucursal_id, numero_control,
          total_compra, total_credito, observaciones, estado, cambio_id,
          origen_datos, created_by, usuario_nombre,
-         subtotal_evaluado, ajuste_evaluacion, total_final
+         subtotal_evaluado, ajuste_evaluacion, total_final, fecha
        ) VALUES ($1,$2,$3,$4,$5,$6,$7,'pendiente_ingreso',$8,'nuevo_modelo',$9,$10,
-                 $11,$12,$13)
+                 $11,$12,$13,${fechaExpr})
        RETURNING id, fecha`,
       [
         p.empresaId, p.clienteId, p.sucursalId, numero,
@@ -695,7 +715,7 @@ export async function crearRecepcionEnClientePg(
       const r = await ingresarRecepcionPgInternal(client, {
         schema, empresaId: p.empresaId, recepcionId,
         actorId: p.createdBy, actorNombre: p.usuarioNombre,
-      });
+      }, fechaExpr);
       estadoFinal = "ingresada";
       ingresadaAt = r.ingresada_at;
     }
@@ -754,6 +774,8 @@ export async function ingresarRecepcionPg(p: RecepcionIngresarInput): Promise<Re
 async function ingresarRecepcionPgInternal(
   client: import("pg").PoolClient,
   p: RecepcionIngresarInput,
+  /** Expresión SQL para la fecha del movimiento. Por defecto, ahora. */
+  fechaExpr = "now()",
 ): Promise<RecepcionIngresada> {
   const schema = p.schema;
   const recepT = quoteSchemaTable(schema, "cliente_recepciones");
@@ -856,7 +878,7 @@ async function ingresarRecepcionPgInternal(
          empresa_id, producto_id, producto_nombre, producto_sku,
          tipo, cantidad, costo_unitario, origen, referencia, fecha,
          created_by, usuario_nombre
-       ) VALUES ($1,$2,$3,$4,'ENTRADA',$5,$6,'compra',$7,now(),$8,$9)`,
+       ) VALUES ($1,$2,$3,$4,'ENTRADA',$5,$6,'compra',$7,${fechaExpr},$8,$9)`,
       [
         p.empresaId, it.producto_id, it.producto_nombre, it.sku,
         qty, costo, rec.numero_control, p.actorId, p.actorNombre,
