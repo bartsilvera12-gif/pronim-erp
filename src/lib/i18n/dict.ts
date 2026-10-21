@@ -120,6 +120,7 @@ const es: Dict = {
   "Todos los orígenes": "Todos los orígenes",
   "Tipo servicio": "Tipo servicio",
   "clientes": "clientes",
+  "Del período": "Do período",
   "Ventas del período": "Vendas do período",
   "Compras del período": "Compras do período",
   "Operaciones del período": "Operações do período",

@@ -196,6 +196,48 @@ export default function DashboardSucursalSimple({ sucursalId, volverA }: {
 
         {data && (
           <>
+            {/* El bloque del período va primero: es lo que responde al
+                filtro de arriba, y abajo del todo parecía que no andaba. */}
+            <div className="flex items-baseline justify-between">
+              <h2 className="text-sm font-bold text-slate-800">{t("Del período")}</h2>
+              <span className="text-[11px] text-slate-400 tabular-nums">
+                {desde.split("-").reverse().join("/")} → {hasta.split("-").reverse().join("/")}
+              </span>
+            </div>
+            {/* KPIs secundarios: mes / operaciones / clientes atendidos */}
+            <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <KpiCard
+                href="/ventas?segmento=mes"
+                label={t("Ventas del período")}
+                value={fmtGs(data.ventas.total_mes)}
+                sub={diffMesPct != null
+                  ? (diffMesPct >= 0 ? `↑ ${diffMesPct}% ${t("vs período anterior")}` : `↓ ${Math.abs(diffMesPct)}% ${t("vs período anterior")}`)
+                  : `${data.ventas.count_mes} ${t("operación(es)")}`}
+                tone="sky"
+              />
+              <KpiCard
+                href="/compras"
+                label={t("Compras del período")}
+                value={fmtGs(data.compras?.total_mes ?? 0)}
+                sub={`${data.compras?.count_mes ?? 0} ${t("operación(es)")}`}
+                tone="slate"
+              />
+              <KpiCard
+                href="/ventas"
+                label={t("Operaciones del período")}
+                value={String(data.ventas.count_mes)}
+                sub={`${t("período anterior")}: ${data.ventas.count_mes_prev}`}
+                tone="slate"
+              />
+              <KpiCard
+                href="/clientes"
+                label={t("Clientes atendidos")}
+                value={String(data.clientes.total_atendidos)}
+                sub={t("acumulado")}
+                tone="fuchsia"
+              />
+            </section>
+
             {meta && (
               <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-4">
                 <h2 className="text-sm font-bold text-slate-800">{t("Meta de la sucursal")}</h2>
@@ -247,6 +289,7 @@ export default function DashboardSucursalSimple({ sucursalId, volverA }: {
                 )}
               </section>
             )}
+            <h2 className="text-sm font-bold text-slate-800 pt-1">{t("Hoy")}</h2>
             {/* KPIs principales: Ventas / Compras / Resultado líquido / Meta % — todos clicables */}
             {(() => {
               const comprasHoy = data.compras?.total_hoy ?? 0;
@@ -285,40 +328,6 @@ export default function DashboardSucursalSimple({ sucursalId, volverA }: {
                 </section>
               );
             })()}
-
-            {/* KPIs secundarios: mes / operaciones / clientes atendidos */}
-            <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <KpiCard
-                href="/ventas?segmento=mes"
-                label={t("Ventas del período")}
-                value={fmtGs(data.ventas.total_mes)}
-                sub={diffMesPct != null
-                  ? (diffMesPct >= 0 ? `↑ ${diffMesPct}% ${t("vs período anterior")}` : `↓ ${Math.abs(diffMesPct)}% ${t("vs período anterior")}`)
-                  : `${data.ventas.count_mes} ${t("operación(es)")}`}
-                tone="sky"
-              />
-              <KpiCard
-                href="/compras"
-                label={t("Compras del período")}
-                value={fmtGs(data.compras?.total_mes ?? 0)}
-                sub={`${data.compras?.count_mes ?? 0} ${t("operación(es)")}`}
-                tone="slate"
-              />
-              <KpiCard
-                href="/ventas"
-                label={t("Operaciones del período")}
-                value={String(data.ventas.count_mes)}
-                sub={`${t("período anterior")}: ${data.ventas.count_mes_prev}`}
-                tone="slate"
-              />
-              <KpiCard
-                href="/clientes"
-                label={t("Clientes atendidos")}
-                value={String(data.clientes.total_atendidos)}
-                sub={t("acumulado")}
-                tone="fuchsia"
-              />
-            </section>
 
             {/* Panel de comparativas + interpretación (Tanda 16) */}
             <ComparativasPanel data={data} fmt={fmtGs} t={t} />
