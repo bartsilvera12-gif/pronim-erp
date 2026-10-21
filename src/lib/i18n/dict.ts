@@ -1428,6 +1428,10 @@ const ptBR: Dict = {
   "Subtotal (suma de franjas)": "Subtotal (soma das faixas)",
   "Total a pagar": "Total a pagar",
   "Total a pagar (evaluado)": "Total a pagar (avaliado)",
+
+  "Sin compras": "Sem compras",
+  "Dormidos +90 días": "Adormecidos +90 dias",
+  "Destacados": "Destaques",
 };
 
 const dicts: Record<Lang, Dict> = { "es": es, "pt-BR": ptBR, "en": es };

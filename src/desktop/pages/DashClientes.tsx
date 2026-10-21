@@ -189,11 +189,11 @@ export default function DashClientes({ desde, hasta }: { desde: string; hasta: s
           tip="Con compras pero no VIP y no Dormido."
           panelKey="habitual" abierta={abierta} onToggle={setAbierta} />
         <KpiCard icon={<UserPlus className="h-5 w-5" />} tone="sky"
-          label={t("Nuevos")} value={fmtN(k.nuevo)}
+          label={t("Sin compras")} value={fmtN(k.nuevo)}
           tip="Alta este mes."
           panelKey="nuevo" abierta={abierta} onToggle={setAbierta} />
         <KpiCard icon={<Moon className="h-5 w-5" />} tone="lavender"
-          label={t("Dormidos")} value={fmtN(k.dormido)}
+          label={t("Dormidos +90 días")} value={fmtN(k.dormido)}
           tip="Más de 90 días sin visita."
           panelKey="dormido" abierta={abierta} onToggle={setAbierta} />
       </div>
