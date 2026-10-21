@@ -101,10 +101,16 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     const m = monedaSucursal;
     const moneda: Moneda =
       m === "BRL" || m === "USD" || m === "ARS" || m === "PYG" ? m : cfg.moneda;
-    // La moneda manda el idioma: si el local cobra en reales es de Brasil, así
-    // que la pantalla va en portugués sin importar cómo tenga configurado el
-    // idioma el usuario. Karen: "traducí todo lo que tenga como moneda real".
-    const lang: Lang = moneda === "BRL" ? "pt-BR" : cfg.lang;
+    // La moneda manda el idioma, en los dos sentidos. Si el local cobra en
+    // reales es de Brasil y va en portugués; si cobra en guaraníes o pesos
+    // es de Paraguay o Argentina y va en español. Sin importar cómo tenga
+    // configurado el idioma el usuario: un admin con preferencia en
+    // portugués veía Palmeras en portugués, que es justo lo que no queremos.
+    // La preferencia personal sólo decide cuando no hay sucursal elegida.
+    const lang: Lang =
+      moneda === "BRL" ? "pt-BR"
+      : moneda === "PYG" || moneda === "ARS" ? "es"
+      : cfg.lang;
     return { lang, moneda };
   }, [cfg, monedaSucursal]);
 
