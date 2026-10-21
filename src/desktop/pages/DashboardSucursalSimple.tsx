@@ -84,7 +84,17 @@ type MetaSuc = {
   ticket_promedio_mes?: number;
 };
 
-export default function DashboardSucursalSimple() {
+/**
+ * Panel de una sucursal.
+ *
+ * Es la misma vista que ve la gente del local. El admin la abre para una
+ * sucursal concreta pasando `sucursalId`, asi acompana a las chicas mirando
+ * exactamente lo que ellas tienen delante.
+ */
+export default function DashboardSucursalSimple({ sucursalId, volverA }: {
+  sucursalId?: string;
+  volverA?: { href: string; label: string };
+} = {}) {
   const t = useT();
   const money = useMoney();
   const locale = money.moneda === "BRL" ? "pt-BR" : "es-PY";
@@ -94,12 +104,20 @@ export default function DashboardSucursalSimple() {
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Periodo. Por defecto el mes en curso, que es como venia funcionando.
+  const hoyStr = new Date().toISOString().slice(0, 10);
+  const [desde, setDesde] = useState(() => hoyStr.slice(0, 8) + "01");
+  const [hasta, setHasta] = useState(hoyStr);
+
   useEffect(() => {
     let cancel = false;
     setLoading(true);
+    const qs = new URLSearchParams({ desde, hasta });
+    if (sucursalId) qs.set("sucursal_id", sucursalId);
+    const qsMetas = sucursalId ? `?sucursal_id=${encodeURIComponent(sucursalId)}` : "";
     Promise.all([
-      fetchWithSupabaseSession("/api/dashboard/sucursal-simple", { cache: "no-store" }).then((r) => r.json()),
-      fetchWithSupabaseSession("/api/metas", { cache: "no-store" }).then((r) => r.json()).catch(() => null),
+      fetchWithSupabaseSession(`/api/dashboard/sucursal-simple?${qs}`, { cache: "no-store" }).then((r) => r.json()),
+      fetchWithSupabaseSession(`/api/metas${qsMetas}`, { cache: "no-store" }).then((r) => r.json()).catch(() => null),
     ])
       .then(([jDash, jMetas]) => {
         if (cancel) return;
@@ -143,7 +161,7 @@ export default function DashboardSucursalSimple() {
       .catch((e) => { if (!cancel) setErr(e instanceof Error ? e.message : "Error"); })
       .finally(() => { if (!cancel) setLoading(false); });
     return () => { cancel = true; };
-  }, []);
+  }, [sucursalId, desde, hasta]);
 
   const diffMesPct = data && data.ventas.total_mes_prev > 0
     ? Math.round(((data.ventas.total_mes - data.ventas.total_mes_prev) / data.ventas.total_mes_prev) * 1000) / 10
@@ -152,13 +170,25 @@ export default function DashboardSucursalSimple() {
   return (
     <div className="min-h-screen bg-slate-50 p-4 sm:p-6">
       <div className="max-w-5xl mx-auto space-y-5">
-        <header>
-          <h1 className="text-2xl font-bold text-slate-900">{t("Dashboard")}</h1>
-          <p className="text-sm text-slate-500 mt-0.5">
-            {data?.sucursal.nombre
-              ? <>{t("Datos de")} <strong>{data.sucursal.nombre}</strong>.</>
-              : t("Datos de tu sucursal.")}
-          </p>
+        <header className="space-y-3">
+          {volverA && (
+            <a href={volverA.href} className="inline-flex items-center gap-1 text-xs font-medium text-[#4FAEB2] hover:underline">
+              ← {volverA.label}
+            </a>
+          )}
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">{t("Dashboard")}</h1>
+            <p className="text-sm text-slate-500 mt-0.5">
+              {data?.sucursal.nombre
+                ? <>{t("Datos de")} <strong>{data.sucursal.nombre}</strong>.</>
+                : t("Datos de tu sucursal.")}
+            </p>
+          </div>
+          <RangoFechas
+            desde={desde} hasta={hasta}
+            onCambio={(d, h) => { setDesde(d); setHasta(h); }}
+            t={t}
+          />
         </header>
 
         {err && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div>}
@@ -612,5 +642,70 @@ function QuickLink({ href, label }: { href: string; label: string }) {
     >
       {label}
     </Link>
+  );
+}
+
+/**
+ * Selector de periodo: atajos + las dos fechas. Mismo criterio que el resto
+ * del sistema, para que un numero del panel se pueda comparar con el de
+ * Explorar sin tener que traducir rangos.
+ */
+function RangoFechas({ desde, hasta, onCambio, t }: {
+  desde: string; hasta: string;
+  onCambio: (desde: string, hasta: string) => void;
+  t: (s: string) => string;
+}) {
+  const ymd = (d: Date) => d.toISOString().slice(0, 10);
+  const hoy = new Date();
+  const inicioSemana = new Date(hoy);
+  inicioSemana.setDate(hoy.getDate() - ((hoy.getDay() + 6) % 7));
+  const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+  const inicioMesPrev = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
+  const finMesPrev = new Date(hoy.getFullYear(), hoy.getMonth(), 0);
+  const hace30 = new Date(hoy); hace30.setDate(hoy.getDate() - 29);
+
+  const atajos = [
+    { label: t("Hoy"), d: ymd(hoy), h: ymd(hoy) },
+    { label: t("Esta semana"), d: ymd(inicioSemana), h: ymd(hoy) },
+    { label: t("Este mes"), d: ymd(inicioMes), h: ymd(hoy) },
+    { label: t("Mes pasado"), d: ymd(inicioMesPrev), h: ymd(finMesPrev) },
+    { label: t("Ultimos 30 dias"), d: ymd(hace30), h: ymd(hoy) },
+  ];
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {atajos.map((a) => {
+        const activo = desde === a.d && hasta === a.h;
+        return (
+          <button
+            key={a.label}
+            type="button"
+            onClick={() => onCambio(a.d, a.h)}
+            className={`rounded-full px-3 py-1 text-xs font-medium border transition ${
+              activo
+                ? "bg-[#4FAEB2] text-white border-[#4FAEB2]"
+                : "bg-white text-slate-600 border-slate-200 hover:border-[#4FAEB2]/50"
+            }`}
+          >
+            {a.label}
+          </button>
+        );
+      })}
+      <span className="ml-1 flex items-center gap-1.5">
+        <input
+          type="date" value={desde} max={hasta}
+          onChange={(ev) => onCambio(ev.target.value, hasta)}
+          aria-label={t("Desde")}
+          className="rounded-lg border border-slate-200 px-2 py-1 text-xs"
+        />
+        <span className="text-slate-400">→</span>
+        <input
+          type="date" value={hasta} min={desde}
+          onChange={(ev) => onCambio(desde, ev.target.value)}
+          aria-label={t("Hasta")}
+          className="rounded-lg border border-slate-200 px-2 py-1 text-xs"
+        />
+      </span>
+    </div>
   );
 }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAuthWithRol } from "@/lib/middleware/auth";
+import { getAuthWithRol, isAdmin } from "@/lib/middleware/auth";
 import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema";
 import { getChatPostgresPool, quoteSchemaTable } from "@/lib/supabase/chat-pg-pool";
 import { assertAllowedChatDataSchema } from "@/lib/supabase/chat-data-schema";
@@ -25,9 +25,34 @@ export async function GET(request: NextRequest) {
   try {
     const auth = await getAuthWithRol(request);
     if (!auth) return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
-    if (!auth.sucursal_id) {
-      return NextResponse.json(errorResponse("Este dashboard es solo para usuarios de sucursal."), { status: 403 });
+    // El admin puede mirar la sucursal que elija: es la misma vista que ve
+    // la gente del local, para poder acompanarlas con lo que ellas ven.
+    // Quien tiene sucursal fija sigue viendo solo la suya.
+    const sucursalPedida = (request.nextUrl.searchParams.get("sucursal_id") ?? "").trim();
+    const sucursalId = isAdmin(auth) && sucursalPedida ? sucursalPedida : auth.sucursal_id;
+    if (!sucursalId) {
+      return NextResponse.json(
+        errorResponse("Elegi una sucursal para ver su panel."), { status: 400 });
     }
+
+    // Rango del periodo. Sin rango, el mes en curso — que es como venia
+    // funcionando. El bloque "del periodo" se calcula sobre estas fechas y la
+    // comparativa contra el tramo inmediatamente anterior, del mismo largo.
+    const hoyStr = new Date().toISOString().slice(0, 10);
+    const soloFecha = (v: string | null) =>
+      v && /^\d{4}-\d{2}-\d{2}$/.test(v.trim()) ? v.trim() : null;
+    const qDesde = soloFecha(request.nextUrl.searchParams.get("desde"));
+    const qHasta = soloFecha(request.nextUrl.searchParams.get("hasta"));
+    const desde = qDesde ?? hoyStr.slice(0, 8) + "01";
+    const hasta = qHasta ?? hoyStr;
+    const dias = Math.max(
+      1,
+      Math.round((Date.parse(hasta) - Date.parse(desde)) / 86400000) + 1,
+    );
+    const menos = (f: string, n: number) =>
+      new Date(Date.parse(f) - n * 86400000).toISOString().slice(0, 10);
+    const prevHasta = menos(desde, 1);
+    const prevDesde = menos(desde, dias);
 
     const schema = await fetchDataSchemaForEmpresaId(auth.empresa_id);
     assertAllowedChatDataSchema(schema);
@@ -46,7 +71,7 @@ export async function GET(request: NextRequest) {
       try {
         const s = await client.query<{ nombre: string }>(
           `SELECT nombre FROM ${sucursalesT} WHERE id = $1 AND empresa_id = $2 LIMIT 1`,
-          [auth.sucursal_id, auth.empresa_id],
+          [sucursalId, auth.empresa_id],
         );
         sucursalNombre = s.rows[0]?.nombre ?? null;
       } catch { /* schema sin sucursales — ok */ }
@@ -64,8 +89,13 @@ export async function GET(request: NextRequest) {
       const selectClienteNombre = ventaCols.has("cliente_nombre") ? "cliente_nombre" : "NULL::text AS cliente_nombre";
       const selectNumeroControl = ventaCols.has("numero_control") ? "numero_control" : "NULL::text AS numero_control";
       const paramsBase: unknown[] = ventaCols.has("sucursal_id")
-        ? [auth.empresa_id, auth.sucursal_id]
+        ? [auth.empresa_id, sucursalId]
         : [auth.empresa_id];
+      // Las cuatro fechas van al final, despues de empresa y sucursal.
+      const iD = paramsBase.length + 1, iH = iD + 1, iPD = iH + 1, iPH = iPD + 1;
+      const paramsPeriodo: unknown[] = [...paramsBase, desde, hasta, prevDesde, prevHasta];
+      const enPeriodo = `fecha::date BETWEEN $${iD}::date AND $${iH}::date`;
+      const enPrevio  = `fecha::date BETWEEN $${iPD}::date AND $${iPH}::date`;
 
       // Ventas hoy + mes + comparativas temporales (fase 2 tanda 16).
       // - hoy vs ayer
@@ -87,22 +117,20 @@ export async function GET(request: NextRequest) {
            COUNT(*) FILTER (WHERE fecha::date = CURRENT_DATE)::text AS count_hoy,
            COALESCE(SUM(CASE WHEN fecha::date = CURRENT_DATE - interval '1 day' THEN total ELSE 0 END),0)::text AS total_ayer,
            COALESCE(SUM(CASE WHEN fecha::date = CURRENT_DATE - interval '7 days' THEN total ELSE 0 END),0)::text AS total_mismo_dia_sem_pasada,
-           COALESCE(SUM(CASE WHEN date_trunc('month', fecha) = date_trunc('month', CURRENT_DATE) THEN total ELSE 0 END),0)::text AS total_mes,
-           COUNT(*) FILTER (WHERE date_trunc('month', fecha) = date_trunc('month', CURRENT_DATE))::text AS count_mes,
-           COALESCE(SUM(CASE WHEN date_trunc('month', fecha) = date_trunc('month', CURRENT_DATE - interval '1 month') THEN total ELSE 0 END),0)::text AS total_mes_prev,
-           COUNT(*) FILTER (WHERE date_trunc('month', fecha) = date_trunc('month', CURRENT_DATE - interval '1 month'))::text AS count_mes_prev,
-           -- mes anterior hasta el mismo día del mes (rango justo comparable)
-           COALESCE(SUM(CASE
-             WHEN date_trunc('month', fecha) = date_trunc('month', CURRENT_DATE - interval '1 month')
-              AND fecha::date <= (CURRENT_DATE - interval '1 month')::date
-             THEN total ELSE 0 END),0)::text AS total_mes_prev_hasta_hoy,
+           COALESCE(SUM(CASE WHEN ${enPeriodo} THEN total ELSE 0 END),0)::text AS total_mes,
+           COUNT(*) FILTER (WHERE ${enPeriodo})::text AS count_mes,
+           COALESCE(SUM(CASE WHEN ${enPrevio} THEN total ELSE 0 END),0)::text AS total_mes_prev,
+           COUNT(*) FILTER (WHERE ${enPrevio})::text AS count_mes_prev,
+           -- El tramo anterior ya es del mismo largo, asi que la comparativa
+           -- "hasta el mismo dia" es la misma cifra.
+           COALESCE(SUM(CASE WHEN ${enPrevio} THEN total ELSE 0 END),0)::text AS total_mes_prev_hasta_hoy,
            COALESCE(SUM(CASE WHEN fecha::date >= CURRENT_DATE - interval '7 days'
                               AND fecha::date <  CURRENT_DATE THEN total ELSE 0 END),0)::text AS total_ultimos_7,
-           COALESCE(AVG(CASE WHEN date_trunc('month', fecha) = date_trunc('month', CURRENT_DATE) THEN total END),0)::text AS ticket_prom_mes,
-           COALESCE(AVG(CASE WHEN date_trunc('month', fecha) = date_trunc('month', CURRENT_DATE - interval '1 month') THEN total END),0)::text AS ticket_prom_mes_prev
+           COALESCE(AVG(CASE WHEN ${enPeriodo} THEN total END),0)::text AS ticket_prom_mes,
+           COALESCE(AVG(CASE WHEN ${enPrevio} THEN total END),0)::text AS ticket_prom_mes_prev
          FROM ${ventasT}
          WHERE empresa_id = $1 ${filtroSucursal} ${filtroEstado}`,
-        paramsBase,
+        paramsPeriodo,
       );
       const vs = ventasStatsQ.rows[0];
 
@@ -113,9 +141,9 @@ export async function GET(request: NextRequest) {
       }>(
         `SELECT id, fecha, total::text, ${selectNumeroControl}, ${selectClienteNombre}
          FROM ${ventasT}
-         WHERE empresa_id = $1 ${filtroSucursal} ${filtroEstado}
+         WHERE empresa_id = $1 ${filtroSucursal} ${filtroEstado} AND ${enPeriodo}
          ORDER BY fecha DESC LIMIT 10`,
-        paramsBase,
+        paramsPeriodo,
       );
 
       // Clientes: total con al menos 1 venta en esta sucursal + últimos atendidos.
@@ -176,8 +204,10 @@ export async function GET(request: NextRequest) {
         const compraTieneSucursal = compraColSet.has("sucursal_id");
         const filtroSucC = compraTieneSucursal ? "AND sucursal_id = $2" : "";
         const paramsC: unknown[] = compraTieneSucursal
-          ? [auth.empresa_id, auth.sucursal_id]
-          : [auth.empresa_id];
+          ? [auth.empresa_id, sucursalId, desde, hasta]
+          : [auth.empresa_id, desde, hasta];
+        const iCD = compraTieneSucursal ? 3 : 2, iCH = iCD + 1;
+        const enPeriodoC = `fecha::date BETWEEN $${iCD}::date AND $${iCH}::date`;
         const filtroEstadoC = compraColSet.has("estado") ? "AND (estado IS NULL OR estado <> 'anulada')" : "";
         const compraStatsQ = await client.query<{
           total_hoy: string; count_hoy: string;
@@ -186,8 +216,8 @@ export async function GET(request: NextRequest) {
           `SELECT
              COALESCE(SUM(CASE WHEN fecha::date = CURRENT_DATE THEN total ELSE 0 END),0)::text AS total_hoy,
              COUNT(*) FILTER (WHERE fecha::date = CURRENT_DATE)::text AS count_hoy,
-             COALESCE(SUM(CASE WHEN date_trunc('month', fecha) = date_trunc('month', CURRENT_DATE) THEN total ELSE 0 END),0)::text AS total_mes,
-             COUNT(*) FILTER (WHERE date_trunc('month', fecha) = date_trunc('month', CURRENT_DATE))::text AS count_mes
+             COALESCE(SUM(CASE WHEN ${enPeriodoC} THEN total ELSE 0 END),0)::text AS total_mes,
+             COUNT(*) FILTER (WHERE ${enPeriodoC})::text AS count_mes
            FROM ${comprasT}
            WHERE empresa_id = $1 ${filtroSucC} ${filtroEstadoC}`,
           paramsC,
@@ -201,9 +231,10 @@ export async function GET(request: NextRequest) {
 
       return NextResponse.json(successResponse({
         sucursal: {
-          id: auth.sucursal_id,
+          id: sucursalId,
           nombre: sucursalNombre,
         },
+        periodo: { desde, hasta, dias },
         compras: {
           total_hoy: comprasHoy,
           total_mes: comprasMes,

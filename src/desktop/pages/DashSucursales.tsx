@@ -1036,7 +1036,16 @@ function SucursalCard({ s }: {
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <h4 className="text-lg font-bold text-slate-900 truncate">{s.nombre}</h4>
+            {/* El nombre abre el panel de esa sucursal: la misma pantalla
+                que ve la gente del local, para acompañarlas con lo que
+                ellas tienen delante. */}
+            <a
+              href={`/dashboard/sucursal/${s.sucursal_id}`}
+              className="text-lg font-bold text-slate-900 truncate hover:text-[#0F5D60] hover:underline"
+              title={`Ver el panel de ${s.nombre}`}
+            >
+              {s.nombre}
+            </a>
             <span className={`shrink-0 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
               activa
                 ? "bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200"
