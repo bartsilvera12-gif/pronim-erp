@@ -39,11 +39,26 @@ export function getSucursalActivaId(): string | null {
   }
 }
 
-/** Moneda de la sucursal activa (null = usar la del usuario). */
+/**
+ * Moneda de la sucursal activa. null = desconocida, hay que resolverla.
+ *
+ * Se guarda junto al id de la sucursal, separados por "|". Antes se guardaba
+ * sola, y si alguien pasaba de BETIM a PALMERAS podía quedar un "BRL" viejo
+ * pegado a una sucursal paraguaya: el valor no estaba vacío, así que nadie
+ * lo corregía y la pantalla salía en portugués. Si el id guardado no es el
+ * de la sucursal activa, se descarta.
+ */
 export function getSucursalActivaMoneda(): string | null {
   if (typeof window === "undefined") return null;
   try {
-    return window.localStorage.getItem(LS_MONEDA) || null;
+    const crudo = window.localStorage.getItem(LS_MONEDA);
+    if (!crudo) return null;
+    const corte = crudo.indexOf("|");
+    // Formato viejo, sin id: no se puede confiar en a qué sucursal pertenece.
+    if (corte < 0) return null;
+    const id = crudo.slice(0, corte);
+    const moneda = crudo.slice(corte + 1);
+    return id && moneda && id === getSucursalActivaId() ? moneda : null;
   } catch {
     return null;
   }
@@ -54,7 +69,7 @@ export function setSucursalActivaId(id: string | null, moneda?: string | null): 
   try {
     if (id) window.localStorage.setItem(LS_KEY, id);
     else window.localStorage.removeItem(LS_KEY);
-    if (id && moneda) window.localStorage.setItem(LS_MONEDA, moneda);
+    if (id && moneda) window.localStorage.setItem(LS_MONEDA, `${id}|${moneda}`);
     else window.localStorage.removeItem(LS_MONEDA);
     window.dispatchEvent(new CustomEvent(EVENTO, { detail: id }));
   } catch { /* storage bloqueado: la sesión sigue funcionando sin recordar */ }
