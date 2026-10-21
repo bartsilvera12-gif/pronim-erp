@@ -153,8 +153,9 @@ export async function GET(request: NextRequest) {
       const clientesStatsQ = await client.query<{ total_atendidos: string }>(
         `SELECT COUNT(DISTINCT cliente_id)::text AS total_atendidos
          FROM ${ventasT}
-         WHERE empresa_id = $1 ${filtroSucursal} AND cliente_id IS NOT NULL`,
-        paramsBase,
+         WHERE empresa_id = $1 ${filtroSucursal} AND cliente_id IS NOT NULL
+           AND ${enPeriodo}`,
+        paramsSoloPeriodo,
       );
 
       // Detectamos también los campos de clientes que podamos usar.
@@ -188,10 +189,11 @@ export async function GET(request: NextRequest) {
          LEFT JOIN ${clientesT} c ON c.id = v.cliente_id AND c.empresa_id = v.empresa_id
          WHERE v.empresa_id = $1 ${filtroSucursalV} ${filtroEstadoV}
            AND v.cliente_id IS NOT NULL
+           AND v.fecha::date BETWEEN ${iD}::date AND ${iH}::date
          GROUP BY v.cliente_id
          ORDER BY MAX(v.fecha) DESC
          LIMIT 10`,
-        paramsBase,
+        paramsSoloPeriodo,
       );
 
       // Compras del día / mes — best effort. Si el schema no tiene columna

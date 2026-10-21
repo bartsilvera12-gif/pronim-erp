@@ -199,6 +199,11 @@ export default function DashboardSucursalSimple({ sucursalId, volverA }: {
             {meta && (
               <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-4">
                 <h2 className="text-sm font-bold text-slate-800">{t("Meta de la sucursal")}</h2>
+                {/* La meta es de hoy, la semana y el mes en curso — no del
+                    período de arriba. Decirlo evita leerla como si lo fuera. */}
+                <p className="-mt-3 text-[11px] text-slate-400">
+                  {t("Siempre hoy, esta semana y el mes en curso. No sigue al filtro de fechas.")}
+                </p>
                 {meta.meta_diaria > 0 ? (
                   <>
                     <MetaBar
@@ -285,25 +290,25 @@ export default function DashboardSucursalSimple({ sucursalId, volverA }: {
             <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <KpiCard
                 href="/ventas?segmento=mes"
-                label={t("Ventas del mes")}
+                label={t("Ventas del período")}
                 value={fmtGs(data.ventas.total_mes)}
                 sub={diffMesPct != null
-                  ? (diffMesPct >= 0 ? `↑ ${diffMesPct}% ${t("vs mes pasado")}` : `↓ ${Math.abs(diffMesPct)}% ${t("vs mes pasado")}`)
+                  ? (diffMesPct >= 0 ? `↑ ${diffMesPct}% ${t("vs período anterior")}` : `↓ ${Math.abs(diffMesPct)}% ${t("vs período anterior")}`)
                   : `${data.ventas.count_mes} ${t("operación(es)")}`}
                 tone="sky"
               />
               <KpiCard
                 href="/compras"
-                label={t("Compras del mes")}
+                label={t("Compras del período")}
                 value={fmtGs(data.compras?.total_mes ?? 0)}
                 sub={`${data.compras?.count_mes ?? 0} ${t("operación(es)")}`}
                 tone="slate"
               />
               <KpiCard
                 href="/ventas"
-                label={t("Operaciones del mes")}
+                label={t("Operaciones del período")}
                 value={String(data.ventas.count_mes)}
-                sub={`${t("mes pasado")}: ${data.ventas.count_mes_prev}`}
+                sub={`${t("período anterior")}: ${data.ventas.count_mes_prev}`}
                 tone="slate"
               />
               <KpiCard
