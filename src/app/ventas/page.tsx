@@ -14,6 +14,7 @@ import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session"
 import { useT } from "@/lib/i18n/context";
 import PedidosPendientesCaja from "./PedidosPendientesCaja";
 import CambioModal from "./CambioModal";
+import EditarVentaModal from "./EditarVentaModal";
 import FacturaModal from "./FacturaModal";
 import { useIsAdmin } from "@/lib/auth/use-is-admin";
 import type { Venta, TipoVenta, TipoIvaVenta } from "@/lib/ventas/types";
@@ -119,6 +120,9 @@ export default function VentasPage() {
   const { isAdmin: puedeAnular, loaded: rolLoaded } = useIsAdmin();
   const [todas,      setTodas]      = useState<Venta[]>([]);
   const [pagina,     setPagina]     = useState(1);
+  /** Venta que se está corrigiendo (solo admin). */
+  const [editarVenta, setEditarVenta] = useState<Venta | null>(null);
+  const [avisoCorreccion, setAvisoCorreccion] = useState<string | null>(null);
   /** Venta para la que se está por emitir (o reimprimir) la factura. */
   const [facturaVenta, setFacturaVenta] = useState<Venta | null>(null);
   /** Sucursales con timbrado activo: solo ahí tiene sentido ofrecer Factura. */
@@ -479,6 +483,11 @@ export default function VentasPage() {
 
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-xl font-semibold">{t("Órdenes de venta")}</h2>
+          {avisoCorreccion && (
+            <p className="w-full rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800">
+              {avisoCorreccion}
+            </p>
+          )}
           <div className="flex items-center gap-2">
             <Link
               href="/explorar/ventas"
@@ -850,6 +859,18 @@ export default function VentasPage() {
                                   {tt("Nota de remisión")}
                                 </a>
                               )}
+                              {/* Corregir: anula y recrea. Solo admin, igual
+                                  que anular, porque rehace stock y credito. */}
+                              {puedeAnular && (
+                                <button
+                                  type="button"
+                                  onClick={() => setEditarVenta(v)}
+                                  className="inline-flex items-center justify-center rounded-md border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-700 hover:bg-sky-100 transition-colors"
+                                  title={tt("Corregir esta venta (la anula y crea una corregida)")}
+                                >
+                                  Editar
+                                </button>
+                              )}
                               {puedeAnular && (
                                 <button
                                   type="button"
@@ -951,6 +972,27 @@ export default function VentasPage() {
             // Refrescar: la venta ya tiene numero de factura y la columna
             // Numero tiene que mostrarlo.
             getVentas().then(setTodas);
+          }}
+        />
+      )}
+
+      {editarVenta && (
+        <EditarVentaModal
+          venta={editarVenta}
+          onClose={() => setEditarVenta(null)}
+          onDone={(nro) => {
+            setEditarVenta(null);
+            setAvisoCorreccion(nro ? `Venta corregida. Nuevo número: ${nro}.` : "Venta corregida.");
+            setTimeout(() => setAvisoCorreccion(null), 8000);
+            // Recargar: la vieja queda anulada y aparece la corregida.
+            getVentas().then((data) => {
+              const ordenadas = [...data].sort((a, b) => {
+                const ta = new Date(a.fecha).getTime();
+                const tb = new Date(b.fecha).getTime();
+                return tb - ta || b.numero_control.localeCompare(a.numero_control);
+              });
+              setTodas(ordenadas);
+            });
           }}
         />
       )}
