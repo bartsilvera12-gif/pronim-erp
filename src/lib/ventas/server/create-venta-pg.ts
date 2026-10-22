@@ -764,11 +764,16 @@ export async function createVentaEnClientePg(
         );
         restante -= aplicar;
       }
-      if (restante > TOL) {
+      if (restante > TOL && !params.permitirSobregiroCredito) {
         throw new Error(
           `El crédito del cliente cambió durante la operación. Faltaron Gs. ${Math.round(restante)}.`,
         );
       }
+      // Sobregiro permitido: lo que no se pudo imputar a un lote FIFO queda
+      // sin contrapartida a propósito. La SALIDA ya está registrada, así que
+      // el saldo del cliente pasa a NEGATIVO por ese resto — que es lo que se
+      // quiere mientras se termina de cargar la planilla de Lillo. Cuando esos
+      // créditos se carguen como ENTRADA, el saldo se acomoda solo.
     }
 
     // ── Pagos inmediatos: ventas_pagos_detalle (fuente única) ────────
