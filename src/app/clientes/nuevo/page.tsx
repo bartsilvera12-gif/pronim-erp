@@ -218,7 +218,22 @@ function NuevoClienteForm() {
     let normalized = value;
     if (lower.includes(name) || type === "email") normalized = value.toLowerCase();
     else if (upper.includes(name)) normalized = value.toUpperCase();
+
+    // Al cambiar mayúsculas/minúsculas, el texto que guardamos no es el que
+    // el navegador tiene escrito. React reemplaza el contenido del campo y el
+    // cursor se va al final: escribir "Prueba" sobre "@gmail.com" terminaba
+    // en "p@gmail.comrueba". Guardamos dónde estaba el cursor y lo devolvemos
+    // a su lugar después de pintar.
+    const campo = e.target as HTMLInputElement;
+    const cursor = normalized !== value ? campo.selectionStart : null;
+
     setForm((prev) => ({ ...prev, [name]: normalized }));
+
+    if (cursor != null) {
+      requestAnimationFrame(() => {
+        try { campo.setSelectionRange(cursor, cursor); } catch { /* select/textarea sin soporte */ }
+      });
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -424,7 +439,10 @@ function NuevoClienteForm() {
       )}
 
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6 max-w-3xl">
-        <form className="space-y-8" onSubmit={handleSubmit}>
+        {/* Sin autocompletado del navegador: es una ficha de OTRA persona,
+            no los datos de quien está cargando. Chrome ofrecía el correo
+            de la cajera en el campo de email del cliente. */}
+        <form className="space-y-8" onSubmit={handleSubmit} autoComplete="off">
 
           {/* ── Identificación ───────────────────────────────────────────── */}
           <section className="space-y-4">

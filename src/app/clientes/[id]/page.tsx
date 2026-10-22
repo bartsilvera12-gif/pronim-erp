@@ -580,7 +580,19 @@ export default function ClienteDetailPage() {
     let normalized = value;
     if (lower.includes(name) || type === "email") normalized = value.toLowerCase();
     else if (upper.includes(name)) normalized = value.toUpperCase();
+
+    // El cursor se iba al final cada vez que cambiábamos mayúsculas por
+    // minúsculas: lo guardamos y lo devolvemos a su lugar.
+    const campo = e.target as HTMLInputElement;
+    const cursor = normalized !== value ? campo.selectionStart : null;
+
     setForm((prev) => ({ ...prev, [name]: normalized }));
+
+    if (cursor != null) {
+      requestAnimationFrame(() => {
+        try { campo.setSelectionRange(cursor, cursor); } catch { /* sin soporte */ }
+      });
+    }
   }
 
   async function handleGuardar(e: React.FormEvent) {
