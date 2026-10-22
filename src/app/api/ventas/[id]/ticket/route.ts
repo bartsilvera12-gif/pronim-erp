@@ -118,12 +118,25 @@ function fechaCorta(ymd: string | null | undefined): string {
 }
 
 /**
+ * Huso del local. El servidor corre en UTC, así que sin esto el ticket
+ * imprimía tres horas de más: una venta de las 14:40 de Asunción salía
+ * como 17:40. Se resuelve por la moneda de la sucursal, que es lo que
+ * distingue a los locales de Paraguay de los de Brasil.
+ */
+const TZ_DEFAULT = "America/Asuncion";
+function tzDeMoneda(moneda: string | null | undefined): string {
+  return String(moneda ?? "").trim().toUpperCase() === "BRL"
+    ? "America/Sao_Paulo"
+    : TZ_DEFAULT;
+}
+
+/**
  * Fecha de EMISIÓN para la cabecera de la factura. Si por algo faltara,
  * cae a la fecha de la venta antes que imprimir un comprobante sin fecha.
  */
-function formatFechaEmision(emitida: string, fechaVenta: string): string {
+function formatFechaEmision(emitida: string, fechaVenta: string, tz: string): string {
   const d = parseTimestampPg(emitida);
-  return d ? formatFecha(d.toISOString()) : formatFecha(fechaVenta);
+  return d ? formatFecha(d.toISOString(), tz) : formatFecha(fechaVenta, tz);
 }
 
 /**
@@ -142,25 +155,33 @@ function parseTimestampPg(v: string | null | undefined): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
-/** ¿Se emitió el mismo día en que se hizo la venta? */
-function mismoDia(a: string, b: string): boolean {
+/** ¿Se emitió el mismo día en que se hizo la venta, en el huso del local? */
+function mismoDia(a: string, b: string, tz: string): boolean {
   const dia = (v: string) => {
     const d = parseTimestampPg(v);
-    return d ? `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}` : "";
+    if (!d) return "";
+    // en-CA da AAAA-MM-DD, que compara bien como texto.
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit",
+    }).format(d);
   };
   const da = dia(a);
   return da !== "" && da === dia(b);
 }
 
-function formatFecha(iso: string): string {
+/** dd/mm/aaaa hh:mm en la hora del local, no en la del servidor. */
+function formatFecha(iso: string, tz: string = TZ_DEFAULT): string {
   try {
     const d = new Date(iso);
-    const dd = String(d.getDate()).padStart(2, "0");
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    const yyyy = d.getFullYear();
-    const hh = String(d.getHours()).padStart(2, "0");
-    const min = String(d.getMinutes()).padStart(2, "0");
-    return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
+    if (Number.isNaN(d.getTime())) return iso;
+    const partes = new Intl.DateTimeFormat("es-PY", {
+      timeZone: tz,
+      day: "2-digit", month: "2-digit", year: "numeric",
+      // h23 y no hour12:false: con hour12 la medianoche sale como 24:00.
+      hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+    }).formatToParts(d);
+    const g = (t: string) => partes.find((x) => x.type === t)?.value ?? "";
+    return `${g("day")}/${g("month")}/${g("year")} ${g("hour")}:${g("minute")}`;
   } catch {
     return iso;
   }
@@ -296,8 +317,10 @@ function renderCopia(opts: {
   contacto?: { direccion?: string | null; telefono?: string | null };
   /** QR de la tienda (data URI), al pie de la factura. */
   qrDataUri?: string | null;
+  /** Huso del local: el servidor corre en UTC. */
+  tz: string;
 }): string {
-  const { tipo, venta, brief, fontPx, isLast } = opts;
+  const { tipo, venta, brief, fontPx, isLast, tz } = opts;
   const factura = opts.factura ?? null;
   const showPrices = tipo === "cliente";
   const sectorBadge = tipo === "pizzeria" ? "COMANDA PIZZERÍA" : tipo === "plancha" ? "COMANDA PLANCHA" : "";
@@ -406,7 +429,7 @@ function renderCopia(opts: {
          ¡Gracias por tu compra!<br>
          Comprobante interno — no válido como factura legal.
        </div>`
-    : `<div class="footer-cocina">${formatFecha(venta.fecha)}</div>`;
+    : `<div class="footer-cocina">${formatFecha(venta.fecha, tz)}</div>`;
 
   // Cabecera fiscal: reemplaza al membrete común cuando es factura.
   const e = factura?.emisor;
@@ -448,8 +471,8 @@ function renderCopia(opts: {
        </div>
        <hr>
        <div class="fiscal-cliente">
-         <div>Fecha: ${formatFechaEmision(factura.emitida_at, venta.fecha)}</div>
-         ${mismoDia(factura.emitida_at, venta.fecha) ? "" : `<div>Operación: ${formatFecha(venta.fecha)}</div>`}
+         <div>Fecha: ${formatFechaEmision(factura.emitida_at, venta.fecha, tz)}</div>
+         ${mismoDia(factura.emitida_at, venta.fecha, tz) ? "" : `<div>Operación: ${formatFecha(venta.fecha, tz)}</div>`}
          <div>Cliente: ${escapeHtml(factura.cliente_nombre || "SIN NOMBRE")}</div>
          <div>RUC/CI: ${escapeHtml(factura.cliente_documento || "X")}</div>
          <div>Condición: CONTADO</div>
@@ -460,7 +483,7 @@ function renderCopia(opts: {
     ${cabeceraFiscal || headerCocina || membreteTicket(opts.logoUrl, opts.negocio, opts.contacto)}
     ${factura ? "" : `<div class="meta">
       ${escapeHtml(venta.numero_control)}<br>
-      ${formatFecha(venta.fecha)}
+      ${formatFecha(venta.fecha, tz)}
     </div>`}
     ${datosPedido.length > 0 ? `<hr><div class="pedido">${datosPedido.join("")}</div>` : ""}
     <hr>
@@ -489,8 +512,9 @@ function renderNotaRemision(opts: {
   venta: VentaRow;
   items: Array<ItemRow & { unidad: string }>;
   cliente: ClienteRemision | null;
+  tz: string;
 }): string {
-  const { negocio, venta, items, cliente } = opts;
+  const { negocio, venta, items, cliente, tz } = opts;
   const numeroNota = venta.nota_remision_numero || "—";
   const filas = items
     .map(
@@ -539,7 +563,7 @@ function renderNotaRemision(opts: {
   <div class="row">
     <div class="box"><h3>Documento</h3>
       <div><strong>N°:</strong> ${escapeHtml(numeroNota)}</div>
-      <div><strong>Fecha:</strong> ${escapeHtml(formatFecha(venta.fecha))}</div>
+      <div><strong>Fecha:</strong> ${escapeHtml(formatFecha(venta.fecha, tz))}</div>
       <div><strong>Venta:</strong> ${escapeHtml(venta.numero_control)}</div>
     </div>
     <div class="box"><h3>Cliente</h3>${cli}</div>
@@ -614,24 +638,28 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
   let logoSucursal: string | null = null;
   let dirSucursal: string | null = null;
   let telSucursal: string | null = null;
+  let monedaSucursal: string | null = null;
   if (venta.sucursal_id) {
     try {
       const sQ = await ctx.supabase
         .from("sucursales")
-        .select("nombre_comercial, logo_url, direccion, telefono")
+        .select("nombre_comercial, logo_url, direccion, telefono, moneda")
         .eq("id", venta.sucursal_id)
         .maybeSingle();
       const row = sQ.data as {
         nombre_comercial?: string | null; logo_url?: string | null;
         direccion?: string | null; telefono?: string | null;
+        moneda?: string | null;
       } | null;
       marcaSucursal = (row?.nombre_comercial ?? null) || null;
       logoSucursal = (row?.logo_url ?? null) || null;
       dirSucursal = (row?.direccion ?? null) || null;
       telSucursal = (row?.telefono ?? null) || null;
+      monedaSucursal = (row?.moneda ?? null) || null;
     } catch { /* sin columnas: se usa la marca de la empresa */ }
   }
   const negocio = resolveNegocio(nombreEmpresa, marcaSucursal);
+  const tz = tzDeMoneda(monedaSucursal);
 
   // Items
   const iQ = await ctx.supabase
@@ -679,7 +707,7 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
       }
     }
     const itemsRem = itemsRaw.map((it) => ({ ...it, unidad: unidadByProd.get(it.producto_id) ?? "UNIDAD" }));
-    const htmlRem = renderNotaRemision({ negocio, venta, items: itemsRem, cliente: clienteRem });
+    const htmlRem = renderNotaRemision({ negocio, venta, items: itemsRem, cliente: clienteRem, tz });
     return new NextResponse(htmlRem, { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } });
   }
 
@@ -853,7 +881,7 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
       renderCopia({
         tipo, venta, items, brief, fontPx,
         isLast: idx === copias.length - 1,
-        negocio, factura, logoUrl, qrDataUri,
+        negocio, factura, logoUrl, qrDataUri, tz,
         contacto: { direccion: dirSucursal, telefono: telSucursal },
       })
     )
