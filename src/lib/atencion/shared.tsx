@@ -121,6 +121,9 @@ export function ColumnaAtencion(props: {
   const title = tono === "emerald" ? "text-emerald-700" : "text-sky-700";
   const delta = subtotalItems != null ? total - subtotalItems : 0;
   const hayAjuste = subtotalItems != null && delta !== 0;
+  // Cuántas prendas hay cargadas. Estaba solo al pie de la tabla y chiquito;
+  // es el número que se canta en voz alta al cliente, así que va arriba.
+  const totalPrendas = lineas.reduce((acc, l) => acc + (Number(l.cantidad) || 0), 0);
 
   return (
     <div className={`rounded-xl border ${border} ${bg} p-4 sm:p-5`}>
@@ -131,6 +134,11 @@ export function ColumnaAtencion(props: {
           {accionesHeader && <div className="mt-2">{accionesHeader}</div>}
         </div>
         <div className="text-right shrink-0">
+          {totalPrendas > 0 && (
+            <p className="mb-1 inline-flex items-center gap-1.5 rounded-full bg-white/80 px-2.5 py-0.5 text-xs font-bold text-slate-700 ring-1 ring-slate-200">
+              {totalPrendas} {totalPrendas === 1 ? tt("prenda") : tt("prendas")}
+            </p>
+          )}
           <p className="text-[11px] uppercase text-slate-500">{hayAjuste ? "A pagar (final)" : "Subtotal"}</p>
           <p className="text-lg font-bold text-slate-800">{fmtGs(total)}</p>
           {hayAjuste && subtotalItems != null && (
@@ -247,20 +255,41 @@ export function ColumnaAtencion(props: {
                       </select>
                     )}
                   </td>
-                  <td className="px-3 py-2 text-right">
-                    <input
-                      type="number"
-                      min={0}
-                      value={l.cantidad === 0 ? "" : l.cantidad}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        const n = v === "" ? 0 : Number(v);
-                        onActualizar(idx, { cantidad: Number.isFinite(n) && n >= 0 ? n : 0 });
-                      }}
-                      onBlur={() => { if (l.cantidad <= 0) onQuitar(idx); }}
-                      placeholder="0"
-                      className="w-16 rounded-md border border-slate-200 px-2 py-1 text-right text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
-                    />
+                  <td className="px-3 py-2">
+                    {/* Botones propios en vez del spinner nativo: el del
+                        navegador es diminuto, no se puede usar en pantalla
+                        táctil y al bajar a 0 borraba la línea de golpe. */}
+                    <div className="flex items-center justify-end gap-1">
+                      <button
+                        type="button"
+                        onClick={() => onActualizar(idx, { cantidad: Math.max(1, (Number(l.cantidad) || 0) - 1) })}
+                        disabled={(Number(l.cantidad) || 0) <= 1}
+                        title={tt("Quitar una")}
+                        aria-label={tt("Quitar una")}
+                        className="h-7 w-7 shrink-0 rounded-md border border-slate-200 bg-white text-base leading-none text-slate-600 transition-colors hover:border-[#4FAEB2] hover:text-[#3F8E91] disabled:opacity-35 disabled:hover:border-slate-200 disabled:hover:text-slate-600"
+                      >−</button>
+                      <input
+                        type="number"
+                        min={1}
+                        value={l.cantidad === 0 ? "" : l.cantidad}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          const n = v === "" ? 0 : Number(v);
+                          onActualizar(idx, { cantidad: Number.isFinite(n) && n >= 0 ? n : 0 });
+                        }}
+                        // Vaciar el campo no borra la línea: vuelve a 1. Para
+                        // sacarla está la × de la derecha.
+                        onBlur={() => { if ((Number(l.cantidad) || 0) <= 0) onActualizar(idx, { cantidad: 1 }); }}
+                        className="w-14 rounded-md border border-slate-200 px-2 py-1 text-center text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => onActualizar(idx, { cantidad: (Number(l.cantidad) || 0) + 1 })}
+                        title={tt("Agregar una")}
+                        aria-label={tt("Agregar una")}
+                        className="h-7 w-7 shrink-0 rounded-md border border-slate-200 bg-white text-base leading-none text-slate-600 transition-colors hover:border-[#4FAEB2] hover:text-[#3F8E91]"
+                      >+</button>
+                    </div>
                   </td>
                   <td className="px-3 py-2 text-right">
                     {permitirEditarPrecio ? (

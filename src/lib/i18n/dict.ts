@@ -1442,6 +1442,11 @@ const ptBR: Dict = {
   "Dormidos +90 días": "Adormecidos +90 dias",
   "Destacados": "Destaques",
 
+
+  "Quitar una": "Tirar uma",
+  "Agregar una": "Adicionar uma",
+  "prenda": "peça",
+  "prendas": "peças",
 };
 
 const dicts: Record<Lang, Dict> = { "es": es, "pt-BR": ptBR, "en": es };
