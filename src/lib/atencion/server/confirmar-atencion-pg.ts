@@ -444,6 +444,9 @@ export async function confirmarAtencionEnClientePg(
         descuentoGeneral: v.descuentoGeneral ?? 0,
         descuentoMotivo: v.descuentoMotivo ?? null,
         fechaVenta: p.fechaVenta ?? null,
+        // El saldo puede quedar negativo a propósito: ver la nota del
+        // parámetro en create-venta-pg.
+        permitirSobregiroCredito: true,
       });
       ventaOut = { id: r.ventaId, numero_control: r.numeroControl, total: r.total };
       // Auditoría: si la venta llevó descuento manual (línea o general),

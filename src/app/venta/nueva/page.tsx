@@ -323,15 +323,22 @@ export default function NuevaVentaPage() {
     return Number.isFinite(n) && n > 0 ? Math.min(n, Math.max(0, totalLleva - descuentoPromo)) : 0;
   }, [descuentoGeneral, totalLleva, descuentoPromo]);
   const totalLlevaConDescuento = Math.max(0, totalLleva - descuentoPromo - descuentoGeneralNum);
+  // Tope del botón "usar el máximo": lo que el cliente tiene.
   const creditoMaxAplicable = Math.min(creditoDisponible, totalLlevaConDescuento);
   const creditoAplicadoNum = useMemo(() => {
     if (aplicarCredito.trim() === "") return creditoMaxAplicable;
     const n = Number(aplicarCredito);
     if (!Number.isFinite(n)) return 0;
-    return Math.max(0, Math.min(n, creditoMaxAplicable));
-  }, [aplicarCredito, creditoMaxAplicable]);
+    // Se puede aplicar MÁS de lo que el cliente tiene: el saldo queda en
+    // negativo a propósito mientras se termina de cargar la planilla de
+    // Lillo. El único tope es el total de la venta: aplicar más que eso no
+    // significaría nada.
+    return Math.max(0, Math.min(n, totalLlevaConDescuento));
+  }, [aplicarCredito, creditoMaxAplicable, totalLlevaConDescuento]);
   const aCobrar = Math.max(0, totalLlevaConDescuento - creditoAplicadoNum);
-  const creditoRestante = Math.max(0, creditoDisponible - creditoAplicadoNum);
+  // Puede dar negativo: es justamente lo que hay que mostrar.
+  const creditoRestante = creditoDisponible - creditoAplicadoNum;
+  const quedaEnNegativo = creditoRestante < 0;
 
   // ── Cálculos derivados del pago partido ────────────────────────────
   const totalPagos = useMemo(
@@ -1066,8 +1073,17 @@ export default function NuevaVentaPage() {
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]" />
               <p className="text-[11px] text-slate-500 mt-1">
                 Aplicando ahora: <strong className="text-slate-800">{fmtGs(creditoAplicadoNum)}</strong>.
-                {" "}Queda a favor: <strong className="text-emerald-700">{fmtGs(creditoRestante)}</strong>.
+                {" "}Queda a favor:{" "}
+                <strong className={quedaEnNegativo ? "text-rose-700" : "text-emerald-700"}>
+                  {quedaEnNegativo ? "−" : ""}{fmtGs(Math.abs(creditoRestante))}
+                </strong>.
               </p>
+              {quedaEnNegativo && (
+                <p className="mt-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-800">
+                  El cliente va a quedar debiendo {fmtGs(Math.abs(creditoRestante))}. Se permite a
+                  propósito mientras se termina de cargar la planilla de Lillo.
+                </p>
+              )}
             </div>
             {/* Descuento general sobre el total (redondeo/negociación/defecto/…) */}
             {totalLleva > 0 && (

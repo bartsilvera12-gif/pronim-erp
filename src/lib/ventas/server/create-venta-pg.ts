@@ -100,6 +100,13 @@ export interface CreateVentaPgParams {
    * Sin esto, la venta lleva la fecha y la caja del momento.
    */
   fechaVenta?: string | null;
+  /**
+   * Permite aplicar más crédito del que el cliente tiene, dejando el saldo
+   * en negativo. Akakua'a lo necesita mientras carga la planilla vieja de
+   * Lillo: los créditos existen pero todavía no están en el sistema.
+   * Sin esto, la venta se rechaza.
+   */
+  permitirSobregiroCredito?: boolean;
   /** Monto aplicado del saldo a favor. Distribución FIFO server-side. */
   creditoClienteUsado?: number | null;
   /** Pagos inmediatos (no incluir crédito acá). */
@@ -447,7 +454,7 @@ export async function createVentaEnClientePg(
         [params.empresaId, params.clienteId],
       );
       const saldoActual = Number(saldoQ.rows[0]?.saldo ?? 0);
-      if (creditoUsado > saldoActual + TOL) {
+      if (creditoUsado > saldoActual + TOL && !params.permitirSobregiroCredito) {
         throw new Error(
           `El crédito disponible del cliente cambió porque fue utilizado en otra operación. Saldo actual: Gs. ${Math.round(saldoActual)}.`,
         );
