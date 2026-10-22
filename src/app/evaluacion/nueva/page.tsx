@@ -309,7 +309,10 @@ export default function NuevaEvaluacionPage() {
     setTrae([]); setTraeMontoFinal(""); setIngresarAlStock(false);
     setObservaciones(""); setError(null);
     setCliente(null); setClienteQuery(""); setClienteOpen(false);
-    setFechaEvaluacion("");
+    // La fecha retroactiva NO se limpia: al cargar un día entero se hacen
+    // muchas evaluaciones seguidas y borrarla despues de la primera mandaba
+    // el resto al día de hoy sin que nadie lo note. Se limpia con el botón
+    // "Volver a hoy".
     setDivisor(2.5);
     setPagoCredito(""); setPagoEfectivo(""); setPagoTransf("");
     setTransfEntidadId(""); setTransfReferencia("");

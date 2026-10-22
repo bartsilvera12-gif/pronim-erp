@@ -514,7 +514,13 @@ export default function NuevaVentaPage() {
     setPagos([{ metodo: "efectivo", monto: "", referencia: "" }]);
     setPromoAplicada(null); setCuponInput(""); setPromoError(null);
     setError(null); setCliente(null); setClienteQuery(""); setClienteOpen(false);
-    setFechaVenta("");
+    // El descuento general NO se arrastra a la venta siguiente.
+    setDescuentoGeneral("");
+    // OJO: la fecha retroactiva NO se limpia a propósito. Cuando se carga un
+    // día entero se hacen decenas de ventas seguidas; si se borrara después
+    // de la primera, el resto se guardaria con la fecha de hoy sin que nadie
+    // lo note. Se limpia con el botón "Volver a hoy", y mientras tanto el
+    // bloque ámbar queda a la vista.
   }
 
   async function aplicarPromocion(cuponManual: string | null) {
