@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { tt } from "@/lib/i18n/dict";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 
 type Recepcion = {
@@ -294,6 +294,39 @@ function PreviewIngresoModal({
   const [cantMult, setCantMult] = useState<string>("1");
   const cantN = Math.max(1, Math.floor(Number(cantMult) || 1));
 
+  /**
+   * Costo, venta esperada y markup recalculados con las franjas que se
+   * están asignando ahora. El panel de arriba mostraba `data.totales`, que
+   * es la foto que armó el servidor al abrir: cambiabas un precio y los
+   * números no se movían.
+   */
+  const vivo = useMemo(() => {
+    if (!data) return null;
+    const costo = data.items.reduce((acc, it) => acc + it.costo_total, 0);
+    const venta = data.items.reduce((acc, it) => {
+      const sp = splits[it.id] ?? [];
+      if (sp.length === 0) return acc + it.venta_unit * it.cantidad;
+      let sub = 0;
+      let asignadas = 0;
+      for (const x of sp) {
+        const f = franjas.find((ff) => ff.id === x.franjaId);
+        if (f && x.cantidad > 0) { sub += Number(f.precio_venta) * x.cantidad; asignadas += x.cantidad; }
+      }
+      // Lo que todavía no tiene franja vale al precio original, así el
+      // estimado no se cae a cero mientras se edita.
+      return acc + sub + Math.max(0, it.cantidad - asignadas) * it.venta_unit;
+    }, 0);
+    const prendas = data.items.reduce((acc, it) => acc + it.cantidad, 0);
+    const margen = venta - costo;
+    return {
+      prendas,
+      costo,
+      venta,
+      margen,
+      markupPct: costo > 0 ? Math.round((margen / costo) * 1000) / 10 : null,
+    };
+  }, [data, splits, franjas]);
+
   useEffect(() => {
     let cancel = false;
     setLoading(true);
@@ -340,24 +373,27 @@ function PreviewIngresoModal({
                   Margen de ganancia estimado si se vende TODO al precio de la franja
                 </h4>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <MarginStat label="Prendas" value={data.totales.prendas.toLocaleString("es-PY")} />
+                  <MarginStat label="Prendas" value={(vivo?.prendas ?? 0).toLocaleString("es-PY")} />
                   <MarginStat
                     label={tt("Costo (evaluación)")}
-                    value={"Gs. " + data.totales.costo_total.toLocaleString("es-PY")}
+                    value={"Gs. " + Math.round(vivo?.costo ?? 0).toLocaleString("es-PY")}
                     valueClass="text-slate-800"
+                    sub={(vivo?.costo ?? 0) <= 0
+                      ? "La evaluación se cargó sin costo por prenda"
+                      : undefined}
                   />
                   <MarginStat
                     label={tt("Venta esperada")}
-                    value={"Gs. " + data.totales.venta_total_esperada.toLocaleString("es-PY")}
+                    value={"Gs. " + Math.round(vivo?.venta ?? 0).toLocaleString("es-PY")}
                     valueClass="text-sky-800"
                   />
                   <MarginStat
                     label="Ganancia bruta"
-                    value={"Gs. " + data.totales.margen_bruto_esperado.toLocaleString("es-PY")}
-                    valueClass={data.totales.margen_bruto_esperado >= 0 ? "text-emerald-800" : "text-rose-800"}
-                    sub={data.totales.costo_total > 0
-                      ? `${Math.round((data.totales.margen_bruto_esperado / data.totales.costo_total) * 1000) / 10}% markup`
-                      : "—"}
+                    value={"Gs. " + Math.round(vivo?.margen ?? 0).toLocaleString("es-PY")}
+                    valueClass={(vivo?.margen ?? 0) >= 0 ? "text-emerald-800" : "text-rose-800"}
+                    sub={vivo?.markupPct != null
+                      ? `${vivo.markupPct}% markup`
+                      : "— markup (sin costo)"}
                   />
                 </div>
               </div>
