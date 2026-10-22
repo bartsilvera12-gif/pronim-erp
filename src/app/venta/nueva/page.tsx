@@ -33,7 +33,7 @@ import { useCerrarAlClickAfuera } from "@/lib/ui/use-cerrar-al-click-afuera";
 import { useIsAdmin } from "@/lib/auth/use-is-admin";
 
 type ClienteSegmento = {
-  categoria: "nuevo" | "habitual" | "vip" | "dormido";
+  categoria: "nuevo" | "ocasional" | "frecuente" | "habitual" | "vip" | "dormido";
   totalHistorico: number;
   comprasUltimos90d: number;
   diasDesdeUltima: number | null;
@@ -849,7 +849,8 @@ export default function NuevaVentaPage() {
                 {clienteSegmento && (
                   <div className="flex flex-wrap items-center gap-2">
                     {clienteSegmento.categoria === "vip" && <StickerBadge type="vip">{tt("Cliente VIP")}</StickerBadge>}
-                    {clienteSegmento.categoria === "habitual" && <StickerBadge type="frecuente" tilt="right">{tt("Cliente frecuente")}</StickerBadge>}
+                    {clienteSegmento.categoria === "frecuente" && <StickerBadge type="frecuente" tilt="right">{tt("Cliente frecuente")}</StickerBadge>}
+                    {clienteSegmento.categoria === "ocasional" && <StickerBadge type="frecuente" tilt="right">{tt("Cliente ocasional")}</StickerBadge>}
                     {clienteSegmento.categoria === "nuevo" && <StickerBadge type="nuevo">{tt("Cliente nuevo")}</StickerBadge>}
                     {clienteSegmento.categoria === "dormido" && (
                       <StickerBadge type="inactivo"

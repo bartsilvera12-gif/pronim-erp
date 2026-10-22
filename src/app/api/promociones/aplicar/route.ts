@@ -10,7 +10,9 @@ type Body = {
   cupon?: string | null;
   /** Segmento del cliente actual (nuevo/habitual/vip/dormido) — usado
    *  para matchear promociones con ámbito 'segmento'. */
-  cliente_segmento?: "nuevo" | "habitual" | "vip" | "dormido" | null;
+  /** "habitual" quedó por compatibilidad: las promos viejas apuntan a ese
+   *  nombre y ahora el ERP devuelve "frecuente" u "ocasional". */
+  cliente_segmento?: "nuevo" | "ocasional" | "frecuente" | "habitual" | "vip" | "dormido" | null;
   items: ItemCart[];
 };
 
@@ -64,7 +66,7 @@ export async function POST(request: NextRequest) {
   const clienteId = typeof body.cliente_id === "string" ? body.cliente_id : null;
   const sucursalId = typeof body.sucursal_id === "string" ? body.sucursal_id : ctx.auth.sucursal_id ?? null;
   const clienteSegmento = typeof body.cliente_segmento === "string"
-    && ["nuevo","habitual","vip","dormido"].includes(body.cliente_segmento)
+    && ["nuevo","ocasional","frecuente","habitual","vip","dormido"].includes(body.cliente_segmento)
       ? body.cliente_segmento : null;
   const hoy = new Date().toISOString().slice(0, 10);
 

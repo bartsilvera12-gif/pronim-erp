@@ -45,7 +45,9 @@ type ClienteSeg = {
   ultima_tx_monto: string | null;
 };
 
-const STATUS_LABEL: Record<string, string> = { vip: "VIP", frecuente: "Frecuente", dormido: "Dormido", nuevo: "Nuevo", activo: "Activo" };
+// "Ocasional" reemplaza al viejo "Activo": con 1 o 2 operaciones el cliente
+// no es frecuente, y antes no había escalón en el medio.
+const STATUS_LABEL: Record<string, string> = { vip: "VIP", frecuente: "Frecuente", ocasional: "Ocasional", dormido: "Dormido", nuevo: "Nuevo" };
 const TX_LABEL: Record<string, string> = { venta: "Venta", compra: "Compra", cambio: "Cambio" };
 
 /** Nombre legible de cada cartera. Lo que no esté mapeado se muestra tal cual. */
@@ -261,7 +263,7 @@ export default function ClientesSegmentosPage() {
       enumOptions: carteraOptions,
     },
     { key: "status", label: tt("Status"), type: "enum", get: (c) => c.status ? (STATUS_LABEL[c.status] ?? c.status) : "",
-      enumOptions: [{ value: "VIP", label: tt("VIP") }, { value: "Frecuente", label: tt("Frecuente") }, { value: "Dormido", label: tt("Dormido") }, { value: "Nuevo", label: tt("Nuevo") }, { value: "Activo", label: tt("Activo") }],
+      enumOptions: [{ value: "VIP", label: tt("VIP") }, { value: "Frecuente", label: tt("Frecuente") }, { value: "Dormido", label: tt("Dormido") }, { value: "Nuevo", label: tt("Nuevo") }, { value: "Ocasional", label: tt("Ocasional") }],
       render: (c) => {
         const s = c.status ?? "";
         const cls = s === "vip" ? "bg-amber-50 text-amber-700 border-amber-200"

@@ -288,13 +288,15 @@ export async function GET(request: NextRequest) {
       COALESCE(cr.saldo_cashback,0)::text           AS saldo_cashback,
       COALESCE(cr.cashback_vencido,0)::text         AS cashback_vencido,
       cbexp.expira                                  AS cashback_expira,
-      -- Status: vip > nuevo > dormido > frecuente > activo
+      -- Status: vip > nuevo > dormido > frecuente > ocasional.
+      -- "Frecuente" exige 3+ transacciones; con 1 o 2 es "ocasional", que
+      -- antes se llamaba "activo" y se confundía con frecuente.
       CASE
         WHEN ${esVipCalc} THEN 'vip'
         WHEN a.ultima_venta_at IS NULL AND recact.ultima_recep_at IS NULL THEN 'nuevo'
         WHEN ${ultimaTxFecha} < now() - interval '90 days' THEN 'dormido'
         WHEN COALESCE(a.cnt_ventas,0) + COALESCE(recact.cnt_recep,0) >= 3 THEN 'frecuente'
-        ELSE 'activo'
+        ELSE 'ocasional'
       END AS status,
       -- Última transacción (tipo / fecha / monto)
       CASE

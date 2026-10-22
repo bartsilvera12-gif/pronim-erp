@@ -38,11 +38,13 @@ export async function GET(
         ultima_fecha: string | null;
         total_hist: string | null;
         count_90d: string | null;
+        cnt_total: string | null;
       }>(
         `SELECT
            MAX(fecha)                                                  AS ultima_fecha,
            COALESCE(SUM(total), 0)::text                               AS total_hist,
-           COUNT(*) FILTER (WHERE fecha >= now() - interval '90 days')::text AS count_90d
+           COUNT(*) FILTER (WHERE fecha >= now() - interval '90 days')::text AS count_90d,
+           COUNT(*)::text                                              AS cnt_total
          FROM ${ventasT}
          WHERE empresa_id = $1 AND cliente_id = $2`,
         [empresaId, clienteId],
@@ -66,24 +68,31 @@ export async function GET(
       const ultimaCompra = vs?.ultima_fecha ?? null;
       const totalHistorico = Number(vs?.total_hist ?? 0);
       const comprasUltimos90d = Number(vs?.count_90d ?? 0);
+      const comprasTotales = Number(vs?.cnt_total ?? 0);
       const diasDesdeUltima = ultimaCompra
         ? Math.max(0, Math.floor((Date.now() - new Date(ultimaCompra).getTime()) / 86400000))
         : null;
       const reclamosCount = Number(es?.reclamos ?? 0);
       const beneficiosCount = Number(es?.beneficios ?? 0);
 
-      const categoria: "nuevo" | "habitual" | "vip" | "dormido" =
+      // Un cliente con UNA sola compra salía "frecuente" porque la única
+      // alternativa era "nuevo" (cero compras). Ahora hay un escalón en el
+      // medio: frecuente recién a partir de 3 operaciones.
+      const categoria: "nuevo" | "ocasional" | "frecuente" | "vip" | "dormido" =
         totalHistorico >= 5_000_000 || comprasUltimos90d >= 6
           ? "vip"
-          : totalHistorico <= 0
+          : comprasTotales <= 0
             ? "nuevo"
-            : diasDesdeUltima != null && diasDesdeUltima > 120
+            : diasDesdeUltima != null && diasDesdeUltima > 90
               ? "dormido"
-              : "habitual";
+              : comprasTotales >= 3
+                ? "frecuente"
+                : "ocasional";
 
       return NextResponse.json(
         successResponse({
           categoria,
+          comprasTotales,
           totalHistorico,
           comprasUltimos90d,
           diasDesdeUltima,

@@ -110,7 +110,7 @@ export default function NuevaAtencionPage() {
   // Categorías (mutuamente excluyentes): nuevo | habitual | vip | dormido
   // Flags (coexisten con la categoría): reclamos previos, beneficios recibidos.
   type ClienteSegmento = {
-    categoria: "nuevo" | "habitual" | "vip" | "dormido";
+    categoria: "nuevo" | "ocasional" | "frecuente" | "habitual" | "vip" | "dormido";
     totalHistorico: number;
     comprasUltimos90d: number;
     diasDesdeUltima: number | null;

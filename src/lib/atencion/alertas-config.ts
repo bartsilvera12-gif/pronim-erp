@@ -6,7 +6,11 @@
 
 export type SegmentoKey =
   | "vip"
+  // "habitual" es el nombre viejo de "frecuente": se conserva para que las
+  // reglas ya configuradas sigan aplicando.
   | "habitual"
+  | "frecuente"
+  | "ocasional"
   | "nuevo"
   | "dormido"
   | "con_reclamos"
@@ -15,6 +19,8 @@ export type SegmentoKey =
 export const SEGMENTO_LABELS: Record<SegmentoKey, string> = {
   vip: "Cliente VIP",
   habitual: "Cliente frecuente",
+  frecuente: "Cliente frecuente",
+  ocasional: "Cliente ocasional",
   nuevo: "Cliente nuevo",
   dormido: "Hace tiempo que no visita",
   con_reclamos: "Con reclamos previos",
@@ -138,14 +144,22 @@ export function mergeConfig(raw: unknown): AlertasConfig {
  * la categoría (mutuamente excluyente) y las flags booleanas.
  */
 export function segmentoKeysAplicables(opts: {
-  categoria: "vip" | "habitual" | "nuevo" | "dormido" | null | undefined;
+  /** "habitual" se conserva: las alertas y promos viejas apuntan a ese
+   *  nombre, y el ERP ahora devuelve "frecuente" u "ocasional". */
+  categoria: "vip" | "frecuente" | "ocasional" | "habitual" | "nuevo" | "dormido" | null | undefined;
   tieneReclamos?: boolean;
   recibioBeneficios?: boolean;
 }): SegmentoKey[] {
   const out: SegmentoKey[] = [];
   if (opts.tieneReclamos) out.push("con_reclamos");
   if (opts.recibioBeneficios) out.push("con_beneficios");
-  if (opts.categoria) out.push(opts.categoria);
+  if (opts.categoria) {
+    out.push(opts.categoria);
+    // Una regla configurada para "habitual" tiene que seguir alcanzando a
+    // quienes ahora son frecuentes u ocasionales: si no, al renombrar los
+    // segmentos esas promos dejaban de aplicarse en silencio.
+    if (opts.categoria === "frecuente" || opts.categoria === "ocasional") out.push("habitual");
+  }
   return out;
 }
 

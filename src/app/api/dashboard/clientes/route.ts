@@ -102,13 +102,14 @@ export async function GET(request: NextRequest) {
       const ventasAggQ = await client.query<{
         cliente_id: string;
         total_hist: string; compras_90d: string;
-        compras_periodo: string; ultima_venta: string | null;
+        compras_periodo: string; ultima_venta: string | null; cnt_total: string;
         tiene_venta: boolean;
       }>(
         `SELECT cliente_id,
                 COALESCE(SUM(total),0)::text AS total_hist,
                 COUNT(*) FILTER (WHERE fecha >= now() - interval '90 days')::text AS compras_90d,
                 COUNT(*) FILTER (WHERE fecha::date BETWEEN $2 AND $3)::text AS compras_periodo,
+                COUNT(*)::text AS cnt_total,
                 MAX(fecha)::text AS ultima_venta,
                 true AS tiene_venta
          FROM ${ventasT}
@@ -128,11 +129,13 @@ export async function GET(request: NextRequest) {
         tiene_recep: boolean;
         rec_90d: string;
         recep_periodo: string;
+        cnt_total: string;
       }>(
         `SELECT r.cliente_id,
                 MAX(r.fecha)::text AS ultima_recep,
                 COUNT(*) FILTER (WHERE r.fecha >= now() - interval '90 days')::text AS rec_90d,
                 COUNT(*) FILTER (WHERE r.fecha::date BETWEEN $2 AND $3)::text AS recep_periodo,
+                COUNT(*)::text AS cnt_total,
                 COALESCE(SUM(
                   CASE WHEN r.fecha::date BETWEEN $2 AND $3 THEN ri_c.cant ELSE 0 END
                 ), 0)::text AS prendas_periodo,
@@ -199,7 +202,7 @@ export async function GET(request: NextRequest) {
       const now = Date.now();
       type FilaOut = {
         cliente_id: string; nombre: string;
-        segmento: "vip" | "habitual" | "nuevo" | "dormido";
+        segmento: "vip" | "frecuente" | "ocasional" | "nuevo" | "dormido";
         total_historico: number; compras_90d: number;
         ultima_visita: string | null; dias_desde_ultima: number | null;
         prendas_traidas_periodo: number; compras_periodo: number;
@@ -217,6 +220,9 @@ export async function GET(request: NextRequest) {
         // dashboard daba menos VIP que el explorador de clientes, que sí suma
         // las recepciones. Misma cuenta en los dos lados.
         const c90 = Number(v?.compras_90d ?? 0) + Number(rc?.rec_90d ?? 0);
+        // Transacciones totales = compras + evaluaciones. Con 1 o 2 el
+        // cliente es ocasional; frecuente recién con 3.
+        const cntTx = Number(v?.cnt_total ?? 0) + Number(rc?.cnt_total ?? 0);
         const ultimaVentaMs = v?.ultima_venta ? new Date(v.ultima_venta).getTime() : 0;
         const ultimaRecepMs = rc?.ultima_recep ? new Date(rc.ultima_recep).getTime() : 0;
         const ultimaMs = Math.max(ultimaVentaMs, ultimaRecepMs);
@@ -225,11 +231,12 @@ export async function GET(request: NextRequest) {
           : null;
         const cat: FilaOut["segmento"] =
           totalHist >= 5_000_000 || c90 >= 6 ? "vip"
-          : totalHist <= 0 ? "nuevo"
+          : (cntTx <= 0) ? "nuevo"
           // 90 días, igual que "Inactivos +90 días" del explorador. Con 120
           // los dos tableros contaban dormidos distintos.
           : (diasUlt != null && diasUlt > 90) ? "dormido"
-          : "habitual";
+          : cntTx >= 3 ? "frecuente"
+          : "ocasional";
         const suc = sucPrefByCli.get(c.id) ?? null;
         const tieneV = Boolean(v?.tiene_venta);
         const tieneR = Boolean(rc?.tiene_recep);
@@ -277,7 +284,8 @@ export async function GET(request: NextRequest) {
       const kpis = {
         total: filtrados.length,
         vip: filtrados.filter((c) => c.segmento === "vip").length,
-        habitual: filtrados.filter((c) => c.segmento === "habitual").length,
+        habitual: filtrados.filter((c) => c.segmento === "frecuente").length,
+        ocasional: filtrados.filter((c) => c.segmento === "ocasional").length,
         nuevo: filtrados.filter((c) => c.segmento === "nuevo").length,
         dormido: filtrados.filter((c) => c.segmento === "dormido").length,
         solo_trae: filtrados.filter((c) => c.actividad === "solo_trae").length,

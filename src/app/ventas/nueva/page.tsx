@@ -188,7 +188,7 @@ export default function NuevaVentaPage() {
   //   Nuevo   → sin compras previas
   //   Habitual→ resto
   type ClienteSegmento = {
-    categoria: "nuevo" | "habitual" | "vip" | "dormido";
+    categoria: "nuevo" | "ocasional" | "frecuente" | "habitual" | "vip" | "dormido";
     totalHistorico: number;
     comprasUltimos90d: number;
     diasDesdeUltima: number | null;

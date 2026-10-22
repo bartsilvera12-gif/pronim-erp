@@ -23,7 +23,7 @@ import { fechaCorta } from "@/lib/fecha/mostrar";
 
 type Fila = {
   cliente_id: string; nombre: string;
-  segmento: "vip" | "habitual" | "nuevo" | "dormido";
+  segmento: "vip" | "frecuente" | "ocasional" | "nuevo" | "dormido";
   total_historico: number; compras_90d: number;
   ultima_visita: string | null; dias_desde_ultima: number | null;
   prendas_traidas_periodo: number; compras_periodo: number;
@@ -36,7 +36,7 @@ type Payload = {
   periodo: { desde: string; hasta: string };
   alcance: { es_admin: boolean; sucursal_forzada: string | null };
   kpis: {
-    total: number; vip: number; habitual: number; nuevo: number; dormido: number;
+    total: number; vip: number; habitual: number; ocasional: number; nuevo: number; dormido: number;
     solo_trae: number; solo_lleva: number; ambos: number;
     credito_disponible_total: number; prom_dias_entre_visitas: number | null;
   };
@@ -198,7 +198,7 @@ export default function DashClientes({ desde, hasta }: { desde: string; hasta: s
           panelKey="dormido" abierta={abierta} onToggle={setAbierta} />
       </div>
 
-      <PanelClientes abierta={abierta} claves={["total","vip","habitual","nuevo","dormido"]} filas={data.filas} onCerrar={() => setAbierta(null)} />
+      <PanelClientes abierta={abierta} claves={["total","vip","habitual","ocasional","nuevo","dormido"]} filas={data.filas} onCerrar={() => setAbierta(null)} />
 
       {/* Fila 2: actividad + crédito + cadencia */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
@@ -323,7 +323,8 @@ function KpiCard({ icon, tone, label, value, tip, href, panelKey, abierta, onTog
 const PANELES: Record<string, { titulo: string; filtra: (f: Fila) => boolean; verMas: string }> = {
   total:       { titulo: "Todos los clientes",        filtra: () => true,                                 verMas: "/clientes/segmentos" },
   vip:         { titulo: "Clientes VIP",              filtra: (f) => f.segmento === "vip",                verMas: "/clientes/segmentos?vip=1" },
-  habitual:    { titulo: "Clientes frecuentes",       filtra: (f) => f.segmento === "habitual",           verMas: "/clientes/segmentos" },
+  habitual:    { titulo: "Clientes frecuentes",       filtra: (f) => f.segmento === "frecuente",          verMas: "/clientes/segmentos" },
+  ocasional:   { titulo: "Clientes ocasionales",      filtra: (f) => f.segmento === "ocasional",          verMas: "/clientes/segmentos" },
   nuevo:       { titulo: "Clientes nuevos",           filtra: (f) => f.segmento === "nuevo",              verMas: "/clientes/segmentos?nuevos_mes=1" },
   dormido:     { titulo: "Clientes dormidos",         filtra: (f) => f.segmento === "dormido",            verMas: "/clientes/segmentos?inactivos_90d=1" },
   solo_trae:   { titulo: "Solo traen",                filtra: (f) => f.actividad === "solo_trae",         verMas: "/clientes/segmentos" },
