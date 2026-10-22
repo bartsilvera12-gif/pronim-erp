@@ -9,6 +9,7 @@ import {
   type DashboardViewCatalog,
 } from "@/lib/empresas/actions";
 import type { Modulo } from "@/lib/empresas/actions";
+import { normalizarSinMoverCursor } from "@/lib/ui/normalizar-sin-mover-cursor";
 
 const fLabel = "block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1";
 const fInput = "w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#4FAEB2] bg-white";
@@ -79,8 +80,10 @@ export default function EmpresaForm() {
       }));
     } else {
       let normalized = value;
-      if (name === "email" || type === "email") normalized = value.toLowerCase();
-      else if (["nombre_empresa", "nombre", "plan"].includes(name)) normalized = value.toUpperCase();
+      // Las MAYÚSCULAS se aplican al tipear, cuidando el cursor; el email no,
+      // porque en un <input type="email"> no se puede reposicionar el cursor:
+      // se pasa a minúsculas al guardar.
+      if (["nombre_empresa", "nombre", "plan"].includes(name)) normalized = normalizarSinMoverCursor(e.target, (v) => v.toUpperCase());
       setForm((prev) => ({ ...prev, [name]: normalized }));
     }
   }

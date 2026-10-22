@@ -13,6 +13,7 @@ import {
   type DashboardViewCatalog,
 } from "@/lib/empresas/actions";
 import type { Modulo, UsuarioEmpresa } from "@/lib/empresas/actions";
+import { normalizarSinMoverCursor } from "@/lib/ui/normalizar-sin-mover-cursor";
 
 const fLabel = "block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1";
 const fInput =
@@ -345,7 +346,7 @@ export default function EditarEmpresaPage() {
                 <input
                   type="text"
                   value={adminForm.nombre}
-                  onChange={(e) => setAdminForm((p) => ({ ...p, nombre: e.target.value.toUpperCase() }))}
+                  onChange={(e) => setAdminForm((p) => ({ ...p, nombre: normalizarSinMoverCursor(e.target, (v) => v.toUpperCase()) }))}
                   className={`${fInput} uppercase`}
                   placeholder="Nombre completo"
                 />
@@ -355,7 +356,8 @@ export default function EditarEmpresaPage() {
                 <input
                   type="email"
                   value={adminForm.email}
-                  onChange={(e) => setAdminForm((p) => ({ ...p, email: e.target.value.toLowerCase() }))}
+                  onChange={(e) => setAdminForm((p) => ({ ...p, email: e.target.value }))}
+                  onBlur={(e) => setAdminForm((p) => ({ ...p, email: e.target.value.trim().toLowerCase() }))}
                   className={fInput}
                   placeholder="admin@empresa.com"
                 />

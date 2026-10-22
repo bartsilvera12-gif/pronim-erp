@@ -120,7 +120,8 @@ export default function ProveedorForm({
             type="email"
             className={inputClass}
             value={values.email}
-            onChange={(e) => patch("email", e.target.value.toLowerCase())}
+            onChange={(e) => patch("email", e.target.value)}
+            onBlur={(e) => patch("email", e.target.value.trim().toLowerCase())}
             disabled={disabled}
           />
         </div>

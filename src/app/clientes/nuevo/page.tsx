@@ -28,6 +28,7 @@ import { filasTiposDesdeSistemaEstatico, fetchTiposFormCliente } from "@/lib/cli
 import type { Plan } from "@/lib/planes/types";
 import { SUPABASE_APP_SCHEMA as NEURA_CLIENT_SCHEMA } from "@/lib/supabase/schema";
 import { tt } from "@/lib/i18n/dict";
+import { normalizarSinMoverCursor } from "@/lib/ui/normalizar-sin-mover-cursor";
 
 /** Formulario de clientes simplificado (sin campos SaaS/Neura como Tipo de
  *  servicio, Plan, Facturación al contado). Aplica a instancias monocliente
@@ -213,27 +214,24 @@ function NuevoClienteForm() {
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
   ) {
     setError(null);
-    const { name, value } = e.target;
-    const type = (e.target as HTMLInputElement).type;
-    let normalized = value;
-    if (lower.includes(name) || type === "email") normalized = value.toLowerCase();
-    else if (upper.includes(name)) normalized = value.toUpperCase();
-
-    // Al cambiar mayúsculas/minúsculas, el texto que guardamos no es el que
-    // el navegador tiene escrito. React reemplaza el contenido del campo y el
-    // cursor se va al final: escribir "Prueba" sobre "@gmail.com" terminaba
-    // en "p@gmail.comrueba". Guardamos dónde estaba el cursor y lo devolvemos
-    // a su lugar después de pintar.
-    const campo = e.target as HTMLInputElement;
-    const cursor = normalized !== value ? campo.selectionStart : null;
-
+    const { name } = e.target;
+    // Las MAYÚSCULAS se aplican mientras se escribe, cuidando el cursor. Los
+    // emails NO: en un <input type="email"> el navegador no permite mover el
+    // cursor por código, así que pasan a minúsculas al salir del campo
+    // (handleBlurNormalizar) y no al tipear.
+    const normalized = upper.includes(name)
+      ? normalizarSinMoverCursor(e.target, (v) => v.toUpperCase())
+      : e.target.value;
     setForm((prev) => ({ ...prev, [name]: normalized }));
+  }
 
-    if (cursor != null) {
-      requestAnimationFrame(() => {
-        try { campo.setSelectionRange(cursor, cursor); } catch { /* select/textarea sin soporte */ }
-      });
-    }
+  /** Minúsculas del email al salir del campo: ver comentario en handleChange. */
+  function handleBlurNormalizar(e: React.FocusEvent<HTMLInputElement>) {
+    const { name, value } = e.target;
+    if (!lower.includes(name)) return;
+    const normalized = value.trim().toLowerCase();
+    if (normalized === value) return;
+    setForm((prev) => ({ ...prev, [name]: normalized }));
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -340,8 +338,8 @@ function NuevoClienteForm() {
       documento: form.documento.trim() || undefined,
       telefono: form.telefono.trim() || undefined,
       telefono_secundario: form.telefono_secundario.trim() || undefined,
-      email: form.email.trim() || undefined,
-      email_secundario: form.email_secundario.trim() || undefined,
+      email: form.email.trim().toLowerCase() || undefined,
+      email_secundario: form.email_secundario.trim().toLowerCase() || undefined,
       direccion: form.direccion.trim() || undefined,
       ciudad: form.ciudad.trim().toUpperCase() || undefined,
       pais: form.pais.trim().toUpperCase() || undefined,
@@ -536,6 +534,7 @@ function NuevoClienteForm() {
                   name="email"
                   value={form.email}
                   onChange={handleChange}
+                  onBlur={handleBlurNormalizar}
                   placeholder="contacto@empresa.com"
                   className={inputClass}
                 />
@@ -547,6 +546,7 @@ function NuevoClienteForm() {
                   name="email_secundario"
                   value={form.email_secundario}
                   onChange={handleChange}
+                  onBlur={handleBlurNormalizar}
                   placeholder="otro@empresa.com"
                   className={inputClass}
                 />

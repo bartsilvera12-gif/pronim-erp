@@ -11,6 +11,7 @@ import type { TipoIva, TipoPago, Moneda } from "@/lib/compras/types";
 import type { Proveedor } from "@/lib/proveedores/types";
 import type { MetodoValuacion, Producto } from "@/lib/inventario/types";
 import { getSucursalActivaId, useSucursalActivaId } from "@/lib/sucursales/activa";
+import { normalizarSinMoverCursor } from "@/lib/ui/normalizar-sin-mover-cursor";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -361,10 +362,13 @@ export default function NuevaCompraPage() {
   // ── Inline proveedor ─────────────────────────────────────────────────────────
   function handleProveedorInputChange(e: React.ChangeEvent<HTMLInputElement>) {
     if (e.target.name === "ruc") setErrorRuc(null);
-    const { name, value, type } = e.target;
-    let normalized = value;
-    if (name === "email" || type === "email") normalized = value.toLowerCase();
-    else if (["nombre", "contacto"].includes(name)) normalized = value.toUpperCase();
+    const { name } = e.target;
+    // Las MAYÚSCULAS se aplican al tipear, cuidando el cursor. El email no:
+    // en un <input type="email"> el navegador no permite mover el cursor por
+    // código, así que se pasa a minúsculas al guardar.
+    const normalized = ["nombre", "contacto"].includes(name)
+      ? normalizarSinMoverCursor(e.target, (v) => v.toUpperCase())
+      : e.target.value;
     setFormProveedor((prev) => ({ ...prev, [name]: normalized }));
   }
   async function handleAgregarProveedor() {
@@ -374,7 +378,7 @@ export default function NuevaCompraPage() {
     if (dup) { setErrorRuc(`RUC ya registrado para "${dup.nombre}".`); return; }
     const resultado = await createProveedor({
       nombre: formProveedor.nombre.trim().toUpperCase(), ruc: formProveedor.ruc.trim(),
-      telefono: formProveedor.telefono.trim(), email: formProveedor.email.trim(),
+      telefono: formProveedor.telefono.trim(), email: formProveedor.email.trim().toLowerCase(),
       contacto: formProveedor.contacto.trim().toUpperCase(), direccion: "", estado: "activo",
     });
     if (!resultado.ok) { setErrorRuc(resultado.error); return; }

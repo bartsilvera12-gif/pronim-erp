@@ -31,6 +31,7 @@ import { CajaControlBanner, useCajaState } from "@/lib/atencion/caja-control";
 import { tt } from "@/lib/i18n/dict";
 import { useCerrarAlClickAfuera } from "@/lib/ui/use-cerrar-al-click-afuera";
 import { useIsAdmin } from "@/lib/auth/use-is-admin";
+import { normalizarSinMoverCursor } from "@/lib/ui/normalizar-sin-mover-cursor";
 
 type ClienteSegmento = {
   categoria: "nuevo" | "ocasional" | "frecuente" | "habitual" | "vip" | "dormido";
@@ -1029,7 +1030,7 @@ export default function NuevaVentaPage() {
               </div>
             ) : (
               <div className="flex flex-wrap items-center gap-2">
-                <input type="text" value={cuponInput} onChange={(e) => setCuponInput(e.target.value.toUpperCase())}
+                <input type="text" value={cuponInput} onChange={(e) => setCuponInput(normalizarSinMoverCursor(e.target, (v) => v.toUpperCase()))}
                   placeholder={tt("Código de cupón (opcional)")}
                   className="flex-1 min-w-[140px] rounded-lg border border-fuchsia-200 px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-fuchsia-400" />
                 <button type="button" onClick={() => aplicarPromocion(cuponInput.trim() || null)} disabled={promoBuscando}

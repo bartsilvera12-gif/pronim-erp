@@ -7,6 +7,7 @@ import MontoInput from "@/components/ui/MontoInput";
 import type { Gasto, GastoInput } from "@/lib/gastos/actions";
 import { hoyAsuncionYmd } from "@/lib/fecha/asuncion";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
+import { normalizarSinMoverCursor } from "@/lib/ui/normalizar-sin-mover-cursor";
 
 const fLabel = "block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1";
 const fInput =
@@ -48,7 +49,9 @@ export default function GastoForm({ gasto, onSuccess }: Props) {
     if (type === "checkbox") {
       setForm((prev) => ({ ...prev, recurrente: (e.target as HTMLInputElement).checked }));
     } else if (name !== "monto") {
-      const normalized = ["categoria", "descripcion", "frecuencia"].includes(name) ? value.toUpperCase() : value;
+      const normalized = ["categoria", "descripcion", "frecuencia"].includes(name)
+        ? normalizarSinMoverCursor(e.target, (v) => v.toUpperCase())
+        : value;
       setForm((prev) => ({ ...prev, [name]: normalized }));
     }
   }

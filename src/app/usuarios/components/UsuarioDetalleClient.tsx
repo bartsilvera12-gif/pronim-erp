@@ -18,6 +18,7 @@ import {
 import { useSucursales } from "@/components/usuarios/useSucursales";
 import { FancySelect, type FancySelectOption } from "@/app/dashboard/proyectos/components/FancySelect";
 import type { AreaUsuario, TipoContrato } from "@/lib/usuarios/types";
+import { normalizarSinMoverCursor } from "@/lib/ui/normalizar-sin-mover-cursor";
 
 type ModuloOpt = { id: string; nombre: string; slug: string };
 
@@ -257,8 +258,10 @@ export default function UsuarioDetalleClient({
       return;
     }
     let normalized = value;
-    if (name === "email" || type === "email") normalized = value.toLowerCase();
-    else if (name === "nombre") normalized = value.toUpperCase();
+    // Las MAYÚSCULAS se aplican al tipear, cuidando el cursor; el email no,
+    // porque en un <input type="email"> no se puede reposicionar el cursor:
+    // se pasa a minúsculas al guardar.
+    if (name === "nombre") normalized = normalizarSinMoverCursor(e.target, (v) => v.toUpperCase());
     setForm((prev) => ({ ...prev, [name]: normalized } as UsuarioFormValues));
   }
 

@@ -11,6 +11,7 @@ import type { EtapaCrm } from "@/lib/crm/etapas";
 import type { Nota, Prospecto } from "@/lib/crm/types";
 import type { Plan } from "@/lib/planes/types";
 import { getBrowserSupabaseForEmpresaData } from "@/lib/supabase/browser-data-client";
+import { normalizarSinMoverCursor } from "@/lib/ui/normalizar-sin-mover-cursor";
 
 // ── Estilos ────────────────────────────────────────────────────────────────────
 
@@ -202,11 +203,12 @@ export default function EditProspectoPage() {
   ) {
     setErrorForm(null);
     const { name, value } = e.target;
-    const type = (e.target as HTMLInputElement).type;
     const upper = ["empresa", "contacto", "responsable"];
     let normalized = value;
-    if (name === "email" || type === "email") normalized = value.toLowerCase();
-    else if (upper.includes(name)) normalized = value.toUpperCase();
+    // Las MAYÚSCULAS se aplican al tipear, cuidando el cursor; el email no,
+    // porque en un <input type="email"> no se puede reposicionar el cursor:
+    // se pasa a minúsculas al guardar.
+    if (upper.includes(name)) normalized = normalizarSinMoverCursor(e.target, (v) => v.toUpperCase());
     setForm((prev) => ({ ...prev, [name]: normalized }));
   }
 
@@ -244,7 +246,7 @@ export default function EditProspectoPage() {
     const actualizado = await updateProspecto(id, {
       empresa:              form.empresa.trim().toUpperCase(),
       contacto:             form.contacto.trim().toUpperCase(),
-      email:                form.email.trim()    || undefined,
+      email:                form.email.trim().toLowerCase() || undefined,
       telefono:             form.telefono.trim() || undefined,
       servicio:             servicioTexto,
       valor_estimado:       valorEstimado,

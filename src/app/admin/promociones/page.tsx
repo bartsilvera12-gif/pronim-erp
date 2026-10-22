@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import MontoInput from "@/components/ui/MontoInput";
+import { normalizarSinMoverCursor } from "@/lib/ui/normalizar-sin-mover-cursor";
 
 type Ambito = "general" | "franja" | "sucursal" | "cliente" | "segmento";
 type SegmentoCliente = "nuevo" | "habitual" | "vip" | "dormido";
@@ -659,7 +660,7 @@ function NuevaPromocionModal({ onClose, onCreated }: { onClose: () => void; onCr
             <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
               Código de cupón (opcional)
             </label>
-            <input type="text" value={cupon} onChange={(e) => setCupon(e.target.value.toUpperCase())} placeholder="Ej: INVIERNO2026"
+            <input type="text" value={cupon} onChange={(e) => setCupon(normalizarSinMoverCursor(e.target, (v) => v.toUpperCase()))} placeholder="Ej: INVIERNO2026"
               className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]" />
             <p className="text-[11px] text-slate-400 mt-1">Si dejás vacío, la promoción se aplica automáticamente cuando corresponde. Con código, solo si la cajera lo escribe.</p>
           </div>

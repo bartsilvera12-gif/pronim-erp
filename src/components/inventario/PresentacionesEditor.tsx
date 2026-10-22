@@ -3,6 +3,7 @@ import { confirm } from "@/components/ui/dialog";
 
 import { useCallback, useEffect, useState } from "react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
+import { normalizarSinMoverCursor } from "@/lib/ui/normalizar-sin-mover-cursor";
 
 interface Presentacion {
   id: string;
@@ -360,7 +361,7 @@ export function PresentacionesEditor({ productoId, fallbackImagenUrl, onChange }
             <label className="block text-xs text-slate-600 mb-1">SKU</label>
             <input
               value={nSku}
-              onChange={(e) => setNSku(e.target.value.toUpperCase())}
+              onChange={(e) => setNSku(normalizarSinMoverCursor(e.target, (v) => v.toUpperCase()))}
               placeholder="ELE_PER_####"
               className={`${inputCls} text-sm font-mono w-full`}
             />

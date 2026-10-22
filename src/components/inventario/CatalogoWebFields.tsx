@@ -2,6 +2,7 @@
 
 import { slugifyNombre } from "@/lib/inventario/slug";
 import { CONCENTRACIONES, isConcentracionCanonica } from "@/lib/inventario/concentraciones";
+import { normalizarSinMoverCursor } from "@/lib/ui/normalizar-sin-mover-cursor";
 
 /**
  * Sección "Catálogo web" del formulario de productos del ERP.
@@ -136,7 +137,7 @@ export function CatalogoWebFields({ value, onChange, nombre, precioVenta, marcas
           <input
             type="text"
             value={value.slug_web}
-            onChange={(e) => set("slug_web", e.target.value.toLowerCase())}
+            onChange={(e) => set("slug_web", normalizarSinMoverCursor(e.target, (v) => v.toLowerCase()))}
             placeholder="oud-royale"
             className={inputClass}
           />

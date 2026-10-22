@@ -22,6 +22,7 @@ import {
 import { StickerBadge } from "@/components/ui/StickerBadge";
 import { ClienteDetalleModal } from "@/components/clientes/ClienteDetalleModal";
 import { useCerrarAlClickAfuera } from "@/lib/ui/use-cerrar-al-click-afuera";
+import { normalizarSinMoverCursor } from "@/lib/ui/normalizar-sin-mover-cursor";
 
 // ═══════════════════════════════════════════════════════════════════════
 // POS UNIFICADO — "Nueva atención"
@@ -1787,7 +1788,7 @@ export default function NuevaAtencionPage() {
                 <input
                   type="text"
                   value={cuponInput}
-                  onChange={(e) => setCuponInput(e.target.value.toUpperCase())}
+                  onChange={(e) => setCuponInput(normalizarSinMoverCursor(e.target, (v) => v.toUpperCase()))}
                   placeholder={tt("Código de cupón (opcional)")}
                   className="flex-1 min-w-[140px] rounded-lg border border-fuchsia-200 px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-fuchsia-400"
                 />

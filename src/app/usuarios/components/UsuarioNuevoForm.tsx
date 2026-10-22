@@ -11,6 +11,7 @@ import {
   type UsuarioFormValues,
 } from "@/components/usuarios/UsuarioForm";
 import { useSucursales } from "@/components/usuarios/useSucursales";
+import { normalizarSinMoverCursor } from "@/lib/ui/normalizar-sin-mover-cursor";
 
 export type UsuarioNuevoFormProps = {
   variant?: "page" | "modal";
@@ -48,8 +49,10 @@ export default function UsuarioNuevoForm({
       setForm((prev) => ({ ...prev, [name]: (e.target as HTMLInputElement).checked }));
     } else {
       let normalized = value;
-      if (name === "email" || type === "email") normalized = value.toLowerCase();
-      else if (upper.includes(name)) normalized = value.toUpperCase();
+      // Las MAYÚSCULAS se aplican al tipear, cuidando el cursor; el email no,
+      // porque en un <input type="email"> no se puede reposicionar el cursor:
+      // se pasa a minúsculas al guardar.
+      if (upper.includes(name)) normalized = normalizarSinMoverCursor(e.target, (v) => v.toUpperCase());
       setForm((prev) => ({ ...prev, [name]: normalized } as UsuarioFormValues));
     }
   }

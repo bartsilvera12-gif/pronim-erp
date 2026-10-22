@@ -3,6 +3,7 @@ import { confirm } from "@/components/ui/dialog";
 
 import { useCallback, useEffect, useState } from "react";
 import { Trash2, Plus, X, Car } from "lucide-react";
+import { normalizarSinMoverCursor } from "@/lib/ui/normalizar-sin-mover-cursor";
 
 type Vehiculo = {
   id: string;
@@ -176,7 +177,7 @@ export default function ClienteVehiculoEditor({ clienteId, onCountChange }: Prop
             <input type="text" placeholder="Motor (ej. 2.8 TDI)" value={form.motor}
               onChange={(e) => setForm((p) => ({ ...p, motor: e.target.value }))} className={inputCls} />
             <input type="text" placeholder="Chapa" value={form.chapa}
-              onChange={(e) => setForm((p) => ({ ...p, chapa: e.target.value.toUpperCase() }))} className={inputCls} />
+              onChange={(e) => setForm((p) => ({ ...p, chapa: normalizarSinMoverCursor(e.target, (v) => v.toUpperCase()) }))} className={inputCls} />
             <input type="text" placeholder="Observación" value={form.observacion}
               onChange={(e) => setForm((p) => ({ ...p, observacion: e.target.value }))} className={inputCls} />
           </div>

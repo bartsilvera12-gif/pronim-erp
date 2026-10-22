@@ -65,6 +65,7 @@ import ClienteVehiculoEditor from "@/components/clientes/ClienteVehiculoEditor";
 import PromocionClienteTab from "@/components/clientes/PromocionClienteTab";
 import { tt } from "@/lib/i18n/dict";
 import { fechaCorta } from "@/lib/fecha/mostrar";
+import { normalizarSinMoverCursor } from "@/lib/ui/normalizar-sin-mover-cursor";
 
 /** Detalle de clientes simplificado (sin campos SaaS/Neura como Tipo de
  *  servicio, Plan, Facturación al contado). Aplica a instancias monocliente
@@ -575,24 +576,23 @@ export default function ClienteDetailPage() {
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) {
     setFormError(null);
-    const { name, value } = e.target;
-    const type = (e.target as HTMLInputElement).type;
-    let normalized = value;
-    if (lower.includes(name) || type === "email") normalized = value.toLowerCase();
-    else if (upper.includes(name)) normalized = value.toUpperCase();
-
-    // El cursor se iba al final cada vez que cambiábamos mayúsculas por
-    // minúsculas: lo guardamos y lo devolvemos a su lugar.
-    const campo = e.target as HTMLInputElement;
-    const cursor = normalized !== value ? campo.selectionStart : null;
-
+    const { name } = e.target;
+    // Las MAYÚSCULAS se aplican al tipear, cuidando el cursor. Los emails no:
+    // en un <input type="email"> el navegador no permite mover el cursor por
+    // código, así que pasan a minúsculas al salir del campo.
+    const normalized = upper.includes(name)
+      ? normalizarSinMoverCursor(e.target, (v) => v.toUpperCase())
+      : e.target.value;
     setForm((prev) => ({ ...prev, [name]: normalized }));
+  }
 
-    if (cursor != null) {
-      requestAnimationFrame(() => {
-        try { campo.setSelectionRange(cursor, cursor); } catch { /* sin soporte */ }
-      });
-    }
+  /** Minúsculas del email al salir del campo: ver comentario en handleChange. */
+  function handleBlurNormalizar(e: React.FocusEvent<HTMLInputElement>) {
+    const { name, value } = e.target;
+    if (!lower.includes(name)) return;
+    const normalized = value.trim().toLowerCase();
+    if (normalized === value) return;
+    setForm((prev) => ({ ...prev, [name]: normalized }));
   }
 
   async function handleGuardar(e: React.FormEvent) {
@@ -705,8 +705,8 @@ export default function ClienteDetailPage() {
         documento:           form.documento.trim()           || undefined,
         telefono:            form.telefono.trim()            || undefined,
         telefono_secundario: form.telefono_secundario.trim() || undefined,
-        email:               form.email.trim()               || undefined,
-        email_secundario:    form.email_secundario.trim()    || undefined,
+        email:               form.email.trim().toLowerCase()            || undefined,
+        email_secundario:    form.email_secundario.trim().toLowerCase() || undefined,
         direccion:           form.direccion.trim()           || undefined,
         ciudad:              form.ciudad.trim().toUpperCase()  || undefined,
         pais:                form.pais.trim().toUpperCase()    || undefined,
@@ -1651,11 +1651,11 @@ export default function ClienteDetailPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className={labelClass}>Email principal</label>
-                    <input type="email" name="email" value={form.email} onChange={handleChange} className={inputClass} />
+                    <input type="email" name="email" value={form.email} onChange={handleChange} onBlur={handleBlurNormalizar} className={inputClass} />
                   </div>
                   <div>
                     <label className={labelClass}>Email secundario</label>
-                    <input type="email" name="email_secundario" value={form.email_secundario} onChange={handleChange} className={inputClass} />
+                    <input type="email" name="email_secundario" value={form.email_secundario} onChange={handleChange} onBlur={handleBlurNormalizar} className={inputClass} />
                   </div>
                 </div>
 

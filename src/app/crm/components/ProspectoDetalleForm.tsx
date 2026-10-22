@@ -16,6 +16,7 @@ import { getBrowserSupabaseForEmpresaData } from "@/lib/supabase/browser-data-cl
 import type { EtapaCrm } from "@/lib/crm/etapas";
 import type { Nota, Prospecto } from "@/lib/crm/types";
 import type { Plan } from "@/lib/planes/types";
+import { normalizarSinMoverCursor } from "@/lib/ui/normalizar-sin-mover-cursor";
 
 export type ProspectoDetalleFormProps = {
   id: string;
@@ -216,12 +217,14 @@ export default function ProspectoDetalleForm({
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>,
   ) {
     setErrorForm(null);
-    const { name, value } = e.target;
-    const type = (e.target as HTMLInputElement).type;
+    const { name } = e.target;
     const upper = ["empresa", "contacto", "responsable"];
-    let normalized = value;
-    if (name === "email" || type === "email") normalized = value.toLowerCase();
-    else if (upper.includes(name)) normalized = value.toUpperCase();
+    // Las MAYÚSCULAS se aplican al tipear, cuidando el cursor. El email no:
+    // en un <input type="email"> el navegador no permite mover el cursor por
+    // código, así que se pasa a minúsculas al guardar.
+    const normalized = upper.includes(name)
+      ? normalizarSinMoverCursor(e.target, (v) => v.toUpperCase())
+      : e.target.value;
     setForm((prev) => ({ ...prev, [name]: normalized }));
   }
 
@@ -256,7 +259,7 @@ export default function ProspectoDetalleForm({
       const actualizado = await updateProspecto(id, {
         empresa: form.empresa.trim().toUpperCase(),
         contacto: form.contacto.trim().toUpperCase(),
-        email: form.email.trim() || undefined,
+        email: form.email.trim().toLowerCase() || undefined,
         telefono: form.telefono.trim() || undefined,
         servicio: servicioTexto,
         valor_estimado: valorEstimado,

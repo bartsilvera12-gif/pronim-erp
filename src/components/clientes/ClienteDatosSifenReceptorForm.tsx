@@ -1,6 +1,7 @@
 "use client";
 
 import type { Cliente } from "@/lib/clientes/types";
+import { normalizarSinMoverCursor } from "@/lib/ui/normalizar-sin-mover-cursor";
 
 const inputClass =
   "w-full border border-slate-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-[#4FAEB2] focus:outline-none bg-white text-sm";
@@ -174,7 +175,7 @@ export function ClienteDatosSifenReceptorForm({ value, onChange }: Props) {
                 type="text"
                 className={`${inputClass} uppercase`}
                 value={value.sifen_codigo_pais ?? ""}
-                onChange={(e) => onChange({ sifen_codigo_pais: e.target.value.toUpperCase() })}
+                onChange={(e) => onChange({ sifen_codigo_pais: normalizarSinMoverCursor(e.target, (v) => v.toUpperCase()) })}
                 placeholder="Ej. PER"
                 maxLength={3}
               />
