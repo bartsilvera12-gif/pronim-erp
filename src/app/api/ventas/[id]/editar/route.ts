@@ -83,6 +83,9 @@ export async function POST(
             producto_id: String(it.producto_id ?? ""),
             cantidad: num(it.cantidad),
             descuento_unitario: num(it.descuento_unitario),
+            // Sin esto una entrega de obsequio volvería a cobrarse.
+            es_sin_cargo: it.es_sin_cargo === true,
+            motivo_sin_cargo: str(it.motivo_sin_cargo),
           };
         }),
         sucursalId: String(body.sucursal_id ?? ""),

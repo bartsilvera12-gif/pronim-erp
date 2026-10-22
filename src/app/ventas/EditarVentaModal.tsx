@@ -24,12 +24,31 @@ type LineaEdit = {
   cantidad: number;
   precio_unitario: number;
   descuento_unitario: number;
+  /** Entrega sin cargo (obsequio): va a precio 0 y no se recotiza. */
+  es_sin_cargo: boolean;
+  motivo_sin_cargo: string | null;
 };
 type MetodoPago = "efectivo" | "tarjeta" | "transferencia";
 
 function hoyISO(): string {
   return new Date().toLocaleDateString("sv-SE");
 }
+/**
+ * Separa el precio de lista del descuento por unidad.
+ *
+ * La venta guarda los dos: precio_venta_original es el de lista y
+ * precio_venta el que quedó después del descuento. El servidor siempre
+ * vuelve a tomar el de lista del catálogo, así que el modal tiene que
+ * mostrar lo mismo o los totales no coinciden.
+ */
+function precioYDescuento(i: { precio_venta_original?: number | string; precio_venta?: number | string }) {
+  const neto = Number(i.precio_venta) || 0;
+  const lista = Number(i.precio_venta_original) || 0;
+  // Ventas viejas pueden no tener el precio de lista guardado.
+  if (lista <= 0) return { precio_unitario: neto, descuento_unitario: 0 };
+  return { precio_unitario: lista, descuento_unitario: Math.max(0, lista - neto) };
+}
+
 function soloFecha(iso: string | null | undefined): string {
   const t = String(iso ?? "");
   return /^\d{4}-\d{2}-\d{2}/.test(t) ? t.slice(0, 10) : hoyISO();
@@ -54,8 +73,9 @@ export default function EditarVentaModal({
       producto_id: i.producto_id,
       producto_nombre: i.producto_nombre,
       cantidad: Number(i.cantidad) || 0,
-      precio_unitario: Number(i.precio_venta) || 0,
-      descuento_unitario: 0,
+      ...precioYDescuento(i),
+      es_sin_cargo: (i as { es_sin_cargo?: boolean }).es_sin_cargo === true,
+      motivo_sin_cargo: (i as { motivo_sin_cargo?: string | null }).motivo_sin_cargo ?? null,
     })),
   );
   const [fecha, setFecha] = useState(soloFecha(venta.fecha));
@@ -71,6 +91,7 @@ export default function EditarVentaModal({
   const [motivo, setMotivo] = useState("");
 
   const [agregar, setAgregar] = useState("");
+  const [avisoPrecios, setAvisoPrecios] = useState<string | null>(null);
 
   useEffect(() => {
     const qs = venta.sucursal_id ? `?sucursal_id=${encodeURIComponent(venta.sucursal_id)}` : "";
@@ -80,6 +101,26 @@ export default function EditarVentaModal({
       .catch(() => setFranjas([]))
       .finally(() => setCargando(false));
   }, [venta.sucursal_id]);
+
+  // El servidor arma la venta corregida con el precio que la franja tiene HOY.
+  // Si cambió desde la venta original, acá se muestra el nuevo y se avisa: de
+  // lo contrario el modal mostraría un total y el servidor rechazaría otro.
+  useEffect(() => {
+    if (franjas.length === 0) return;
+    const cambios: string[] = [];
+    const next = lineas.map((l) => {
+      if (l.es_sin_cargo) return l;
+      const f = franjas.find((x) => x.id === l.producto_id);
+      if (!f) return l;
+      const actual = Number(f.precio_venta) || 0;
+      if (actual <= 0 || actual === l.precio_unitario) return l;
+      cambios.push(`${l.producto_nombre}: ${fmtActive(l.precio_unitario)} → ${fmtActive(actual)}`);
+      return { ...l, precio_unitario: actual, descuento_unitario: Math.min(l.descuento_unitario, actual) };
+    });
+    if (cambios.length === 0) return;
+    setLineas(next);
+    setAvisoPrecios(`La franja cambió de precio desde esta venta: ${cambios.join(", ")}.`);
+  }, [franjas, lineas]);
 
   const subtotal = useMemo(
     () => lineas.reduce((s, l) => s + Math.max(0, l.precio_unitario - l.descuento_unitario) * l.cantidad, 0),
@@ -106,6 +147,8 @@ export default function EditarVentaModal({
         cantidad: 1,
         precio_unitario: Number(f.precio_venta) || 0,
         descuento_unitario: 0,
+        es_sin_cargo: false,
+        motivo_sin_cargo: null,
       },
     ]);
     setAgregar("");
@@ -138,6 +181,8 @@ export default function EditarVentaModal({
           items: lineas.map((l) => ({
             producto_id: l.producto_id,
             cantidad: l.cantidad,
+            es_sin_cargo: l.es_sin_cargo,
+            motivo_sin_cargo: l.motivo_sin_cargo,
             descuento_unitario: l.descuento_unitario || 0,
           })),
           // La clave es metodo_pago, no metodo: con el nombre equivocado
@@ -176,6 +221,9 @@ export default function EditarVentaModal({
         </header>
 
         <div className="flex-1 overflow-y-auto px-5 py-4">
+          {avisoPrecios && (
+            <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">{avisoPrecios}</p>
+          )}
           {error && (
             <p className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</p>
           )}
