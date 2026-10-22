@@ -140,7 +140,9 @@ export default function EditarVentaModal({
             cantidad: l.cantidad,
             descuento_unitario: l.descuento_unitario || 0,
           })),
-          pagos: total > 0 ? [{ metodo, monto: total }] : [],
+          // La clave es metodo_pago, no metodo: con el nombre equivocado
+          // llegaba null y la base rechazaba el pago.
+          pagos: total > 0 ? [{ metodo_pago: metodo, monto: total }] : [],
         }),
       });
       const j = await r.json().catch(() => ({}));

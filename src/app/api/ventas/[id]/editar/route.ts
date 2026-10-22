@@ -53,6 +53,14 @@ export async function POST(
       return Number.isFinite(n) ? n : 0;
     };
 
+    const pagosRaw = Array.isArray(body.pagos) ? body.pagos : [];
+    if (pagosRaw.some((x) => !String((x as Record<string, unknown>).metodo_pago ?? "").trim())) {
+      return NextResponse.json(
+        errorResponse("Cada pago tiene que indicar la forma de pago."),
+        { status: 400 },
+      );
+    }
+
     const schema = await fetchDataSchemaForEmpresaId(auth.empresa_id);
 
     const r = await editarVentaPg({
@@ -69,11 +77,24 @@ export async function POST(
         tipoCambio: num(body.tipo_cambio) || 1,
         tipoVenta: body.tipo_venta === "CREDITO" ? "CREDITO" : "CONTADO",
         plazoDias: body.plazo_dias == null ? null : num(body.plazo_dias),
-        items: items as never,
+        items: items.map((x) => {
+          const it = x as Record<string, unknown>;
+          return {
+            producto_id: String(it.producto_id ?? ""),
+            cantidad: num(it.cantidad),
+            descuento_unitario: num(it.descuento_unitario),
+          };
+        }),
         sucursalId: String(body.sucursal_id ?? ""),
         cajaId: str(body.caja_id),
         creditoClienteUsado: num(body.credito_cliente_usado),
-        pagosInmediatos: (Array.isArray(body.pagos) ? body.pagos : []) as never,
+        pagosInmediatos: (Array.isArray(body.pagos) ? body.pagos : [])
+          .map((x) => {
+            const p0 = x as Record<string, unknown>;
+            const metodo = String(p0.metodo_pago ?? p0.metodo ?? "").trim();
+            return { metodo_pago: metodo as never, monto: num(p0.monto) };
+          })
+          .filter((p0) => p0.metodo_pago && p0.monto > 0),
         descuentoGeneral: num(body.descuento_general),
         descuentoMotivo: str(body.descuento_motivo),
         fechaVenta: str(body.fecha),
