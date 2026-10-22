@@ -173,6 +173,16 @@ function ClienteFichaSkeleton() {
 
 export default function ClienteDetailPage() {
   const params = useParams();
+  /**
+   * Embebida dentro del modal de una venta o evaluación. En ese caso
+   * guardar NO puede navegar a /clientes: se llevaba puesta la venta a
+   * medio cargar. Se queda donde está y avisa que guardó.
+   */
+  const [embebida, setEmbebida] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setEmbebida(new URLSearchParams(window.location.search).get("embed") === "1");
+  }, []);
   const router = useRouter();
   const rawId = params?.id;
   const id =
@@ -248,6 +258,8 @@ export default function ClienteDetailPage() {
   });
 
   const [formError, setFormError] = useState<string | null>(null);
+  /** Aviso de "guardado" cuando la ficha está embebida y no navega. */
+  const [okMsg, setOkMsg] = useState<string | null>(null);
 
   // Campos de suscripción (solo cuando condicion_pago = MENSUAL en edición)
   const [formSuscEdit, setFormSuscEdit] = useState({
@@ -750,6 +762,11 @@ export default function ClienteDetailPage() {
       });
     }
 
+    if (embebida) {
+      setOkMsg("Cambios guardados.");
+      setTimeout(() => setOkMsg(null), 4000);
+      return;
+    }
     router.push("/clientes");
   }
 
@@ -2008,6 +2025,11 @@ export default function ClienteDetailPage() {
               {formError && (
                 <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
                   <span>⚠</span><span className="font-medium">{formError}</span>
+                </div>
+              )}
+              {okMsg && (
+                <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                  <span>✓</span><span className="font-medium">{okMsg}</span>
                 </div>
               )}
 

@@ -25,6 +25,7 @@ import { CajaControlBanner, useCajaState } from "@/lib/atencion/caja-control";
 import { tt } from "@/lib/i18n/dict";
 import { useCerrarAlClickAfuera } from "@/lib/ui/use-cerrar-al-click-afuera";
 import { useIsAdmin } from "@/lib/auth/use-is-admin";
+import { ClienteDetalleModal } from "@/components/clientes/ClienteDetalleModal";
 
 export default function NuevaEvaluacionPage() {
   const router = useRouter();
@@ -43,6 +44,9 @@ export default function NuevaEvaluacionPage() {
   // lo vuelve a verificar (el front nunca decide permisos).
   const [fechaEvaluacion, setFechaEvaluacion] = useState("");
   const [clienteOpen, setClienteOpen] = useState(false);
+  // Ficha del cliente sin salir de la evaluación: se podía en Venta y acá no,
+  // así que para corregir un teléfono había que abandonar la carga.
+  const [detalleClienteOpen, setDetalleClienteOpen] = useState(false);
   // Clic afuera (o Escape) cierra el buscador de clientes: antes quedaba
   // abierto tapando la pantalla hasta que elegías a alguien.
   const clienteBoxRef = useRef<HTMLDivElement>(null);
@@ -551,7 +555,14 @@ export default function NuevaEvaluacionPage() {
         {cliente ? (
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
-              <p className="font-semibold text-slate-800">{cliente.nombre}</p>
+              <button
+                type="button"
+                onClick={() => setDetalleClienteOpen(true)}
+                title={tt("Ver y editar la ficha del cliente")}
+                className="font-semibold text-slate-800 underline decoration-dotted underline-offset-2 hover:text-[#3F8E91]"
+              >
+                {cliente.nombre}
+              </button>
               <p className="text-xs text-slate-500">
                 {cliente.ruc ? `RUC ${cliente.ruc} · ` : ""}
                 Crédito actual: <span className="font-semibold text-emerald-700">{fmtGs(creditoDisponible)}</span>
@@ -865,6 +876,14 @@ export default function NuevaEvaluacionPage() {
             setClienteOpen(false);
             setNuevoClienteOpen(false);
           }}
+        />
+      )}
+
+      {detalleClienteOpen && cliente && (
+        <ClienteDetalleModal
+          clienteId={cliente.id}
+          clienteNombre={cliente.nombre}
+          onClose={() => setDetalleClienteOpen(false)}
         />
       )}
 

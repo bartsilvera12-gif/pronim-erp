@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 
 /**
@@ -11,12 +11,17 @@ import Link from "next/link";
  * cliente en la card superior — así la cajera consulta saldos, historial,
  * beneficios y notas sin salir de la caja.
  */
+type Vista = "consultas" | "ficha";
+
 export function ClienteDetalleModal(props: {
   clienteId: string;
   clienteNombre?: string;
   onClose: () => void;
 }) {
   const { clienteId, clienteNombre, onClose } = props;
+  // La ficha editable va en el mismo modal: antes, para corregir un
+  // teléfono durante una venta había que salirse de la venta.
+  const [vista, setVista] = useState<Vista>("consultas");
 
   // Cerrar con ESC
   useEffect(() => {
@@ -42,8 +47,28 @@ export function ClienteDetalleModal(props: {
             <h2 className="text-sm font-bold text-slate-800 truncate">{clienteNombre ?? "Cliente"}</h2>
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            <div className="flex rounded-lg border border-slate-200 bg-white p-0.5">
+              {(["consultas", "ficha"] as Vista[]).map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setVista(v)}
+                  className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors ${
+                    vista === v
+                      ? "bg-[#4FAEB2] text-white"
+                      : "text-slate-600 hover:bg-slate-100"
+                  }`}
+                >
+                  {v === "consultas" ? "Resumen" : "Editar ficha"}
+                </button>
+              ))}
+            </div>
+            {/* Pestaña nueva: abrirla en la misma se llevaba puesta la
+                venta o evaluación que se estaba cargando. */}
             <Link
               href={`/clientes/${clienteId}`}
+              target="_blank"
+              rel="noopener"
               className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
             >
               Abrir ficha completa ↗
@@ -60,7 +85,9 @@ export function ClienteDetalleModal(props: {
         </header>
         <div className="flex-1 min-h-0 bg-white">
           <iframe
-            src={`/clientes/${clienteId}/consultas?embed=1`}
+            src={vista === "ficha"
+              ? `/clientes/${clienteId}?embed=1`
+              : `/clientes/${clienteId}/consultas?embed=1`}
             className="w-full h-full border-0"
             title={`Detalle de ${clienteNombre ?? "cliente"}`}
           />
