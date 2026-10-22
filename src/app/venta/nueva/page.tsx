@@ -1120,9 +1120,17 @@ export default function NuevaVentaPage() {
             )}
             {aCobrar > 0 && (
               <div className="space-y-2">
-                <div className="flex items-baseline justify-between">
-                  <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Cobrar {fmtGs(Math.round(aCobrar))} en
+                <div className="flex items-baseline justify-between gap-3">
+                  <label className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    <span>Cobrar {fmtGs(Math.round(aCobrar))} en</span>
+                    {/* El total de prendas es lo que se canta en voz alta
+                        junto con el monto: va al lado y en grande. */}
+                    {totalPrendas > 0 && (
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-[#4FAEB2]/40 bg-[#4FAEB2]/10 px-3 py-1 text-sm font-bold normal-case tracking-normal text-[#3F8E91]">
+                        <span className="text-base leading-none">👕</span>
+                        {totalPrendas} {totalPrendas === 1 ? t("prenda") : t("prendas")}
+                      </span>
+                    )}
                   </label>
                   <button
                     type="button"
@@ -1276,12 +1284,6 @@ export default function NuevaVentaPage() {
           </button>
           <button type="button" onClick={() => router.push("/ventas")}
             className="text-sm text-slate-400 hover:text-slate-700">{t("Cancelar")}</button>
-          {totalPrendas > 0 && (
-            <span className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700">
-              <span className="text-base leading-none">👕</span>
-              {t("Total prendas")}: <strong className="tabular-nums text-[#3F8E91]">{totalPrendas}</strong>
-            </span>
-          )}
         </div>
       </div>
 

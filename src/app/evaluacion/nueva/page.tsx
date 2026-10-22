@@ -231,6 +231,12 @@ export default function NuevaEvaluacionPage() {
 
   // ── Cálculos ─────────────────────────────────────────────────────────
   const totalTraeSubtotal = useMemo(() => trae.reduce((s, l) => s + l.precio_unitario * l.cantidad, 0), [trae]);
+  /** Prendas que trae el cliente. Va al lado del monto final, que es el
+   *  número que se dice en voz alta junto con la cantidad. */
+  const totalPrendasTrae = useMemo(
+    () => trae.reduce((s, l) => s + (Number(l.cantidad) || 0), 0),
+    [trae],
+  );
   const totalTraeManual = useMemo(() => {
     const raw = traeMontoFinal.trim();
     if (raw === "") return null;
@@ -787,6 +793,12 @@ export default function NuevaEvaluacionPage() {
                 Otro
               </button>
               <div className="flex items-center gap-2 ml-auto">
+                {totalPrendasTrae > 0 && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-[#4FAEB2]/40 bg-[#4FAEB2]/10 px-3 py-1 text-sm font-bold text-[#3F8E91]">
+                    <span className="text-base leading-none">👕</span>
+                    {totalPrendasTrae} {totalPrendasTrae === 1 ? tt("prenda") : tt("prendas")}
+                  </span>
+                )}
                 <span className="text-xs text-slate-500">{tt("Monto final:")}</span>
                 <div className="w-40">
                   <MontoInput
