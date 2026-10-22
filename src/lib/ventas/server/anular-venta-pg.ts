@@ -33,9 +33,33 @@ export interface VentaAnulada {
 }
 
 export async function anularVentaPg(p: AnularVentaInput): Promise<VentaAnulada> {
-  const schema = assertAllowedChatDataSchema(p.schema);
   const pool = getChatPostgresPool();
   if (!pool) throw new Error("Sin conexión Postgres.");
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const r = await anularVentaEnClientePg(client, p);
+    await client.query("COMMIT");
+    return r;
+  } catch (e) {
+    await client.query("ROLLBACK").catch(() => null);
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Variante interna: usa el `PoolClient` de una transacción externa y NO abre
+ * ni comitea la suya. La necesita 'editar venta', que anula y vuelve a crear
+ * en un solo movimiento: si la creación falla, la anulación tiene que
+ * deshacerse también.
+ */
+export async function anularVentaEnClientePg(
+  client: import("pg").PoolClient,
+  p: AnularVentaInput,
+): Promise<VentaAnulada> {
+  const schema = assertAllowedChatDataSchema(p.schema);
 
   const ventasT = quoteSchemaTable(schema, "ventas");
   const itemsT = quoteSchemaTable(schema, "ventas_items");
@@ -48,10 +72,7 @@ export async function anularVentaPg(p: AnularVentaInput): Promise<VentaAnulada> 
   const eventosT = quoteSchemaTable(schema, "cliente_eventos");
   const pagosDetT = quoteSchemaTable(schema, "ventas_pagos_detalle");
 
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-
+  {
     const cab = await client.query<{
       id: string;
       numero_control: string;
@@ -279,16 +300,10 @@ export async function anularVentaPg(p: AnularVentaInput): Promise<VentaAnulada> 
       );
     } catch { /* opcional */ }
 
-    await client.query("COMMIT");
     return {
       ventaId: v.id,
       numeroControl: v.numero_control,
       estado: "anulada",
     };
-  } catch (e) {
-    await client.query("ROLLBACK").catch(() => null);
-    throw e;
-  } finally {
-    client.release();
   }
 }
