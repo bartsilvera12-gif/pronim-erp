@@ -73,6 +73,12 @@ export default function NuevaEvaluacionPage() {
   const [pagoCredito, setPagoCredito] = useState<string>("");
   const [pagoEfectivo, setPagoEfectivo] = useState<string>("");
   const [pagoTransf, setPagoTransf] = useState<string>("");
+  /**
+   * true cuando alguien editó el reparto del pago a mano. Mientras sea
+   * false, el pago sigue automáticamente al monto final: cambiabas el monto
+   * y la forma de pago se quedaba con el valor anterior.
+   */
+  const [pagoTocado, setPagoTocado] = useState(false);
   const [pagoConsign, setPagoConsign] = useState<string>("");
   const [transfEntidadId, setTransfEntidadId] = useState<string>("");
   const [transfReferencia, setTransfReferencia] = useState<string>("");
@@ -249,6 +255,17 @@ export default function NuevaEvaluacionPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [totalTraeSubtotal, divisor]);
 
+  // Sincroniza el reparto con el monto final. Cubre todos los caminos que
+  // cambian el monto (divisor, escribir a mano, agregar o quitar prendas)
+  // sin tener que acordarse de actualizar el pago en cada uno.
+  useEffect(() => {
+    if (pagoTocado) return;
+    const objetivo = totalTrae > 0 ? String(Math.round(totalTrae)) : "";
+    setPagoCredito((prev) => (prev === objetivo ? prev : objetivo));
+    setPagoEfectivo((prev) => (prev === "" ? prev : ""));
+    setPagoTransf((prev) => (prev === "" ? prev : ""));
+  }, [totalTrae, pagoTocado]);
+
   const clientesFiltrados = useMemo(() => {
     const q = clienteQuery.trim().toLowerCase();
     const qDigits = q.replace(/\D/g, "");
@@ -315,6 +332,7 @@ export default function NuevaEvaluacionPage() {
     // "Volver a hoy".
     setDivisor(2.5);
     setPagoCredito(""); setPagoEfectivo(""); setPagoTransf("");
+    setPagoTocado(false);
     setTransfEntidadId(""); setTransfReferencia("");
   }
 
@@ -733,9 +751,9 @@ export default function NuevaEvaluacionPage() {
                     setDivisor(d);
                     const nuevo = Math.round(totalTraeSubtotal / d);
                     setTraeMontoFinal(String(nuevo));
-                    // Reset: todo va a crédito por default
-                    setPagoCredito(String(nuevo));
-                    setPagoEfectivo(""); setPagoTransf("");
+                    // Elegir un divisor vuelve a dejar que el pago se
+                    // sincronice solo con el monto.
+                    setPagoTocado(false);
                   }}
                   className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
                     divisor === d
@@ -766,9 +784,8 @@ export default function NuevaEvaluacionPage() {
                     onChange={(n) => {
                       setTraeMontoFinal(n > 0 ? String(n) : "");
                       setDivisor("custom");
-                      // Al cambiar el monto final, poner todo en crédito por default
-                      setPagoCredito(n > 0 ? String(n) : "");
-                      setPagoEfectivo(""); setPagoTransf("");
+                      // Escribir el monto a mano también reengancha el pago.
+                      setPagoTocado(false);
                     }}
                     className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-semibold text-right focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]"
                   />
@@ -789,10 +806,10 @@ export default function NuevaEvaluacionPage() {
             transfEntidadId={transfEntidadId}
             transfReferencia={transfReferencia}
             entidades={entidades}
-            onCredito={setPagoCredito}
-            onEfectivo={setPagoEfectivo}
-            onTransf={setPagoTransf}
-            onConsign={setPagoConsign}
+            onCredito={(v) => { setPagoTocado(true); setPagoCredito(v); }}
+            onEfectivo={(v) => { setPagoTocado(true); setPagoEfectivo(v); }}
+            onTransf={(v) => { setPagoTocado(true); setPagoTransf(v); }}
+            onConsign={(v) => { setPagoTocado(true); setPagoConsign(v); }}
             onTransfEntidadId={setTransfEntidadId}
             onTransfReferencia={setTransfReferencia}
           />
