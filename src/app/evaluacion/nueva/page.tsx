@@ -416,8 +416,8 @@ export default function NuevaEvaluacionPage() {
       return;
     }
     // Validar reparto de pagos. Si no se tocó nada, por default va todo a
-    // crédito (backend fallback). Si escribieron algo, debe cuadrar y la
-    // transferencia debe tener entidad.
+    // crédito (backend fallback). Si escribieron algo, debe cuadrar.
+    // La entidad bancaria de la transferencia es opcional.
     const nCred = Number(pagoCredito) || 0;
     const nEfec = Number(pagoEfectivo) || 0;
     const nTran = Number(pagoTransf) || 0;
@@ -425,10 +425,6 @@ export default function NuevaEvaluacionPage() {
     const suma = nCred + nEfec + nTran + nCons;
     if (suma > 0 && Math.abs(suma - totalTrae) > 1) {
       setError(`El reparto no cuadra: asignado ${fmtGs(suma)} de ${fmtGs(totalTrae)}.`);
-      return;
-    }
-    if (nTran > 0 && !transfEntidadId) {
-      setError("Elegí una entidad bancaria para la transferencia.");
       return;
     }
     void confirmar();
@@ -1144,7 +1140,7 @@ function RepartoPago(props: {
             onChange={(e) => props.onTransfEntidadId(e.target.value)}
             className="rounded-lg border border-slate-200 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
           >
-            <option value="">— Elegir banco / billetera —</option>
+            <option value="">— Sin entidad (opcional) —</option>
             {entidades.map((ent) => (
               <option key={ent.id} value={ent.id}>{ent.nombre}{ent.tipo ? ` (${ent.tipo})` : ""}</option>
             ))}
