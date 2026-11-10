@@ -112,7 +112,7 @@ export async function GET(
            COALESCE(SUM(total), 0)::text AS total_hist,
            COUNT(*) FILTER (WHERE fecha >= now() - interval '90 days')::text AS count_90d
          FROM ${ventasT}
-         WHERE empresa_id = $1 AND cliente_id = $2`,
+         WHERE empresa_id = $1 AND cliente_id = $2 AND (estado IS NULL OR estado <> 'anulada')`,
         [empresaId, clienteId],
       );
       const vs = ventasStatsQ.rows[0];
@@ -125,7 +125,7 @@ export async function GET(
       const cadenciaQ = await client.query<{ avg_dias: string | null }>(
         `WITH ult AS (
            SELECT fecha FROM ${ventasT}
-           WHERE empresa_id = $1 AND cliente_id = $2
+           WHERE empresa_id = $1 AND cliente_id = $2 AND (estado IS NULL OR estado <> 'anulada')
            ORDER BY fecha DESC LIMIT 10
          ),
          diffs AS (
@@ -192,7 +192,7 @@ export async function GET(
       }>(
         `SELECT fecha, total::text, numero_control
          FROM ${ventasT}
-         WHERE empresa_id = $1 AND cliente_id = $2
+         WHERE empresa_id = $1 AND cliente_id = $2 AND (estado IS NULL OR estado <> 'anulada')
          ORDER BY fecha DESC LIMIT 50`,
         [empresaId, clienteId],
       );
