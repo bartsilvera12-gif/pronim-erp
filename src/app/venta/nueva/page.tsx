@@ -13,7 +13,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
-import { getSucursalActivaId, useSucursalActivaId } from "@/lib/sucursales/activa";
+import { getSucursalActivaId, useSucursalActivaId, useSucursalActiva } from "@/lib/sucursales/activa";
 import { useT, useMoney } from "@/lib/i18n/context";
 import { MetaCelebrationModal, MetaCumplidaBadge } from "@/components/metas/MetaCelebrationModal";
 import MontoInput from "@/components/ui/MontoInput";
@@ -144,6 +144,7 @@ export default function NuevaVentaPage() {
 
   // ── Sucursal en la que estoy parado ──────────────────────────────────
   const sucursalActivaId = useSucursalActivaId();
+  const sucursalSel = useSucursalActiva();
 
   // ── Comprobante a emitir ─────────────────────────────────────────────
   // Solo las sucursales con timbrado cargado pueden facturar (las de Brasil
@@ -569,6 +570,10 @@ export default function NuevaVentaPage() {
 
   function preConfirmar() {
     setError(null); setOkMsg(null);
+    if (sucursalSel.sinElegir && !sucursalSel.cargando) {
+      setError("Elegí la sucursal (selector de sucursal del menú superior) antes de registrar la venta.");
+      return;
+    }
     if (!cliente) { setError("Elegí un cliente antes de confirmar."); return; }
     if (lleva.length === 0) { setError("Cargá al menos una prenda que el cliente lleva."); return; }
     if (lleva.some((l) => l.cantidad <= 0)) { setError("Revisá las líneas: la cantidad debe ser > 0."); return; }
