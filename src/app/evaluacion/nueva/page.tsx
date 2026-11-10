@@ -279,17 +279,72 @@ export default function NuevaEvaluacionPage() {
   const clientesFiltrados = useMemo(() => {
     const q = clienteQuery.trim().toLowerCase();
     const qDigits = q.replace(/\D/g, "");
-    return clientes.filter((c) => {
+    // Palabra por palabra (igual que en Venta): nombre con doble espacio o
+    // apellido primero no se encontraba como texto corrido.
+    const palabras = q.split(/\s+/).filter(Boolean);
+    const arr = clientes.filter((c) => {
       if (!q) return true;
-      if (c.nombre.toLowerCase().includes(q)) return true;
+      const nombre = c.nombre.toLowerCase().replace(/\s+/g, " ");
+      if (palabras.every((p) => nombre.includes(p))) return true;
       if ((c.ruc ?? "").toLowerCase().includes(q)) return true;
-      if (qDigits && c.telefono) {
+      if (qDigits.length >= 3 && c.telefono) {
         const tel = String(c.telefono).replace(/\D/g, "");
         if (tel.includes(qDigits)) return true;
       }
       return false;
-    }).slice(0, 50);
+    });
+    if (q) {
+      const rank = (c: Cliente) => {
+        const n = c.nombre.toLowerCase();
+        if (n.startsWith(q)) return 0;
+        if (n.split(/\s+/).some((p) => p.startsWith(q))) return 1;
+        return 2;
+      };
+      arr.sort((a, b) => rank(a) - rank(b) || a.nombre.localeCompare(b.nombre, "es"));
+    }
+    return arr.slice(0, 100);
   }, [clienteQuery, clientes]);
+
+  // Búsqueda contra el servidor: la carga inicial trae solo las primeras
+  // fichas, así que al tipear se consulta y se suma lo encontrado (como en Venta).
+  useEffect(() => {
+    const texto = clienteQuery.trim();
+    if (texto.length < 2) return;
+    let cancel = false;
+    const tm = setTimeout(async () => {
+      try {
+        const r = await fetchWithSupabaseSession(
+          `/api/clientes?q=${encodeURIComponent(texto)}`, { cache: "no-store" },
+        );
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok || j?.success === false) {
+          console.error("[evaluacion] el servidor rechazó la búsqueda de clientes", r.status, j?.error);
+          return;
+        }
+        if (cancel || !Array.isArray(j?.data)) return;
+        const encontrados: Cliente[] = (j.data as Record<string, unknown>[]).map((c) => ({
+          id: String(c.id),
+          nombre:
+            (typeof c.empresa === "string" && c.empresa.trim())
+            || (typeof c.nombre_contacto === "string" && c.nombre_contacto.trim())
+            || (typeof c.nombre === "string" && c.nombre.trim())
+            || "Cliente",
+          empresa: typeof c.empresa === "string" ? c.empresa : null,
+          ruc: typeof c.ruc === "string" ? c.ruc : null,
+          telefono: typeof c.telefono === "string" ? c.telefono : null,
+        }));
+        setClientes((prev) => {
+          const porId = new Map(prev.map((c) => [c.id, c]));
+          let nuevos = false;
+          for (const c of encontrados) if (!porId.has(c.id)) { porId.set(c.id, c); nuevos = true; }
+          return nuevos ? [...porId.values()] : prev;
+        });
+      } catch (e) {
+        console.error("[evaluacion] búsqueda de clientes", e);
+      }
+    }, 300);
+    return () => { cancel = true; clearTimeout(tm); };
+  }, [clienteQuery]);
 
   // ── Handlers ─────────────────────────────────────────────────────────
   function agregarLinea(f: Franja) {
