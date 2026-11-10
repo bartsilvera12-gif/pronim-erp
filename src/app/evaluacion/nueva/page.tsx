@@ -626,6 +626,7 @@ export default function NuevaEvaluacionPage() {
               </button>
               <p className="text-xs text-slate-500">
                 {cliente.ruc ? `RUC ${cliente.ruc} · ` : ""}
+                {cliente.telefono ? `Tel. ${cliente.telefono} · ` : ""}
                 Crédito actual: <span className="font-semibold text-emerald-700">{fmtGs(creditoDisponible)}</span>
               </p>
             </div>
@@ -659,6 +660,7 @@ export default function NuevaEvaluacionPage() {
                     className="block w-full text-left px-3 py-2 text-sm hover:bg-slate-50">
                     <span className="font-medium text-slate-800">{c.nombre}</span>
                     {c.ruc && <span className="ml-2 text-xs text-slate-400">RUC {c.ruc}</span>}
+                    {c.telefono && <span className="ml-2 text-xs text-slate-400">{c.telefono}</span>}
                   </button>
                 ))}
               </div>
