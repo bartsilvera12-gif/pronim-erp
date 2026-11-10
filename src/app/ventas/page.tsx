@@ -15,6 +15,7 @@ import { useT } from "@/lib/i18n/context";
 import PedidosPendientesCaja from "./PedidosPendientesCaja";
 import CambioModal from "./CambioModal";
 import EditarVentaModal from "./EditarVentaModal";
+import CambiarFechaVentaModal from "./CambiarFechaVentaModal";
 import FacturaModal from "./FacturaModal";
 import { useIsAdmin } from "@/lib/auth/use-is-admin";
 import type { Venta, TipoVenta, TipoIvaVenta } from "@/lib/ventas/types";
@@ -122,6 +123,7 @@ export default function VentasPage() {
   const [pagina,     setPagina]     = useState(1);
   /** Venta que se está corrigiendo (solo admin). */
   const [editarVenta, setEditarVenta] = useState<Venta | null>(null);
+  const [fechaVenta, setFechaVenta] = useState<Venta | null>(null);
   const [avisoCorreccion, setAvisoCorreccion] = useState<string | null>(null);
   /** Venta para la que se está por emitir (o reimprimir) la factura. */
   const [facturaVenta, setFacturaVenta] = useState<Venta | null>(null);
@@ -864,6 +866,16 @@ export default function VentasPage() {
                               {puedeAnular && (
                                 <button
                                   type="button"
+                                  onClick={() => setFechaVenta(v)}
+                                  className="inline-flex items-center justify-center rounded-md border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-700 hover:bg-sky-100 transition-colors"
+                                  title={tt("Cambiar solo la fecha de esta venta (no la anula)")}
+                                >
+                                  Cambiar fecha
+                                </button>
+                              )}
+                              {puedeAnular && (
+                                <button
+                                  type="button"
                                   onClick={() => setEditarVenta(v)}
                                   className="inline-flex items-center justify-center rounded-md border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-700 hover:bg-sky-100 transition-colors"
                                   title={tt("Corregir esta venta (la anula y crea una corregida)")}
@@ -971,6 +983,17 @@ export default function VentasPage() {
             setFacturaVenta(null);
             // Refrescar: la venta ya tiene numero de factura y la columna
             // Numero tiene que mostrarlo.
+            getVentas().then(setTodas);
+          }}
+        />
+      )}
+
+      {fechaVenta && (
+        <CambiarFechaVentaModal
+          venta={fechaVenta}
+          onClose={() => setFechaVenta(null)}
+          onDone={() => {
+            setFechaVenta(null);
             getVentas().then(setTodas);
           }}
         />
