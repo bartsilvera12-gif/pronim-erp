@@ -92,7 +92,7 @@ export interface ConfirmarAtencionInput {
     descuentoMotivo?: string | null;
   } | null;
 
-  // DEVOLUCIÓN (opcional): prendas de una venta anterior (≤ 30 días). Su valor
+  // DEVOLUCIÓN (opcional): prendas de una venta anterior (≤ 90 días). Su valor
   // queda como crédito a favor (origen 'devolucion') ANTES de la venta, y
   // el frontend lo suma a `lleva.creditoUsado` para descontarlo del total.
   devolucion?: {

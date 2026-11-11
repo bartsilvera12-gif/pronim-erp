@@ -2,7 +2,7 @@
  * Devoluciones de prendas vendidas (pronimerp).
  *
  * Reglas (confirmadas por la clienta):
- *   - Se puede devolver cualquier prenda vendida hace 30 días o menos.
+ *   - Se puede devolver cualquier prenda vendida hace 90 días o menos.
  *   - Valor = precio al que se vendió (ventas_items.precio_venta).
  *   - Stock: vuelve al mismo producto, en la sucursal que recibe.
  *   - El valor queda como crédito a favor (cliente_creditos_movimientos,
@@ -13,7 +13,7 @@
 import { getChatPostgresPool, quoteSchemaTable } from "@/lib/supabase/chat-pg-pool";
 import { assertAllowedChatDataSchema } from "@/lib/supabase/chat-data-schema";
 
-export const DEVOLUCION_PLAZO_DIAS = 30;
+export const DEVOLUCION_PLAZO_DIAS = 90;
 
 export interface DevolucionItemInput {
   venta_item_id: string;

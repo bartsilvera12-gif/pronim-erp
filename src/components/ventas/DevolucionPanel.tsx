@@ -11,7 +11,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { getSucursalActivaId } from "@/lib/sucursales/activa";
 
-const PLAZO_DIAS = 30;
+const PLAZO_DIAS = 90;
 
 interface Prenda {
   venta_item_id: string;

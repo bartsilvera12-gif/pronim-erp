@@ -1022,7 +1022,7 @@ export default function NuevaVentaPage() {
         }}
       />
 
-      {/* Devolución: prendas de una venta anterior (≤ 30 días). Su valor se
+      {/* Devolución: prendas de una venta anterior (≤ 90 días). Su valor se
           descuenta del total; si sobra, queda como crédito a favor. */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 sm:p-5 space-y-3">
         <div className="flex items-center justify-between gap-2">
@@ -1036,7 +1036,7 @@ export default function NuevaVentaPage() {
           <>
             <p className="text-xs text-slate-500">
               Buscá la venta original (por cliente o número de venta) y elegí las prendas que vuelven.
-              Solo se aceptan prendas vendidas hace {30} días o menos.
+              Solo se aceptan prendas vendidas hace {90} días o menos.
             </p>
             <DevolucionPanel clienteId={cliente?.id ?? null} onChange={setDevolucion} resetKey={devolucionReset} />
           </>
