@@ -17,6 +17,7 @@ import { getSucursalActivaId, useSucursalActivaId, useSucursalActiva } from "@/l
 import { useT, useMoney } from "@/lib/i18n/context";
 import { MetaCelebrationModal, MetaCumplidaBadge } from "@/components/metas/MetaCelebrationModal";
 import MontoInput from "@/components/ui/MontoInput";
+import { DevolucionPanel, type DevolucionSeleccion } from "@/components/ventas/DevolucionPanel";
 import {
   ALERTAS_DEFAULTS, mergeConfig, resolverAlerta, segmentoKeysAplicables,
   type AlertasConfig, type BeneficioCfg,
@@ -89,6 +90,9 @@ export default function NuevaVentaPage() {
 
   // ── Ticket ────────────────────────────────────────────────────────────
   const [lleva, setLleva] = useState<Linea[]>([]);
+  const [devolucionAbierta, setDevolucionAbierta] = useState(false);
+  const [devolucion, setDevolucion] = useState<DevolucionSeleccion | null>(null);
+  const [devolucionReset, setDevolucionReset] = useState(0);
   const [aplicarCredito, setAplicarCredito] = useState<string>("");
   // Pago partido (split): Karen quiere poder cobrar en varias filas — ej.
   // 500k en tarjeta A + 300k en tarjeta B + 200k en efectivo. Cada fila
@@ -325,8 +329,14 @@ export default function NuevaVentaPage() {
     return Number.isFinite(n) && n > 0 ? Math.min(n, Math.max(0, totalLleva - descuentoPromo)) : 0;
   }, [descuentoGeneral, totalLleva, descuentoPromo]);
   const totalLlevaConDescuento = Math.max(0, totalLleva - descuentoPromo - descuentoGeneralNum);
+  // Devolución con compra: su valor se descuenta del total (el server lo
+  // registra como crédito de origen "devolución" y lo aplica a esta venta).
+  // Lo que exceda la compra queda como crédito a favor.
+  const devolucionTotal = devolucion?.total ?? 0;
+  const devolucionAplicada = Math.min(devolucionTotal, totalLlevaConDescuento);
+  const totalTrasDevolucion = Math.max(0, totalLlevaConDescuento - devolucionAplicada);
   // Tope del botón "usar el máximo": lo que el cliente tiene.
-  const creditoMaxAplicable = Math.min(creditoDisponible, totalLlevaConDescuento);
+  const creditoMaxAplicable = Math.min(creditoDisponible, totalTrasDevolucion);
   const creditoAplicadoNum = useMemo(() => {
     if (aplicarCredito.trim() === "") return creditoMaxAplicable;
     const n = Number(aplicarCredito);
@@ -335,11 +345,11 @@ export default function NuevaVentaPage() {
     // negativo a propósito mientras se termina de cargar la planilla de
     // Lillo. El único tope es el total de la venta: aplicar más que eso no
     // significaría nada.
-    return Math.max(0, Math.min(n, totalLlevaConDescuento));
-  }, [aplicarCredito, creditoMaxAplicable, totalLlevaConDescuento]);
-  const aCobrar = Math.max(0, totalLlevaConDescuento - creditoAplicadoNum);
+    return Math.max(0, Math.min(n, totalTrasDevolucion));
+  }, [aplicarCredito, creditoMaxAplicable, totalTrasDevolucion]);
+  const aCobrar = Math.max(0, totalTrasDevolucion - creditoAplicadoNum);
   // Puede dar negativo: es justamente lo que hay que mostrar.
-  const creditoRestante = creditoDisponible - creditoAplicadoNum;
+  const creditoRestante = creditoDisponible - creditoAplicadoNum + (devolucionTotal - devolucionAplicada);
   const quedaEnNegativo = creditoRestante < 0;
 
   // ── Cálculos derivados del pago partido ────────────────────────────
@@ -520,6 +530,7 @@ export default function NuevaVentaPage() {
 
   function reset() {
     setLleva([]); setAplicarCredito(""); setObservaciones("");
+    setDevolucion(null); setDevolucionAbierta(false); setDevolucionReset((k) => k + 1);
     setPagos([{ metodo: "efectivo", monto: "", referencia: "" }]);
     setPromoAplicada(null); setCuponInput(""); setPromoError(null);
     setError(null); setCliente(null); setClienteQuery(""); setClienteOpen(false);
@@ -670,7 +681,8 @@ export default function NuevaVentaPage() {
           tipo_iva: "EXENTA" as const,
           descuento_unitario: Math.max(0, Number(l.descuento_unitario) || 0),
         })),
-        credito_usado: creditoAplicadoNum,
+        // El valor de la devolución se aplica como crédito a esta venta.
+        credito_usado: creditoAplicadoNum + devolucionAplicada,
         pago_detalle,
         moneda: "GS" as const, tipo_cambio: 1,
         descuento_general: descuentoGeneralNum,
@@ -705,6 +717,9 @@ export default function NuevaVentaPage() {
           observaciones: observaciones || null,
           trae: null,
           lleva: llevaPayload,
+          devolucion: devolucion
+            ? { venta_original_id: devolucion.venta_original_id, items: devolucion.items }
+            : null,
           promocion: promoPayload,
           beneficios_credito: beneficiosCredito,
         }),
@@ -1007,12 +1022,36 @@ export default function NuevaVentaPage() {
         }}
       />
 
+      {/* Devolución: prendas de una venta anterior (≤ 30 días). Su valor se
+          descuenta del total; si sobra, queda como crédito a favor. */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 sm:p-5 space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider">Devolución</h3>
+          <button type="button" onClick={() => setDevolucionAbierta((v) => !v)}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50">
+            {devolucionAbierta ? "Ocultar devolución" : "Agregar devolución"}
+          </button>
+        </div>
+        {devolucionAbierta && (
+          <>
+            <p className="text-xs text-slate-500">
+              Buscá la venta original (por cliente o número de venta) y elegí las prendas que vuelven.
+              Solo se aceptan prendas vendidas hace {30} días o menos.
+            </p>
+            <DevolucionPanel clienteId={cliente?.id ?? null} onChange={setDevolucion} resetKey={devolucionReset} />
+          </>
+        )}
+      </div>
+
       {/* Balance + cobro */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 sm:p-5 space-y-4">
         <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider">{tt("Balance")}</h3>
 
         <div className="grid grid-cols-2 gap-3 text-sm">
           <BalanceItem label={tt("Total lleva")} value={fmtGs(totalLleva)} tone="sky" />
+          {devolucionTotal > 0 && (
+            <BalanceItem label="Devolución (a descontar)" value={fmtGs(devolucionTotal)} tone="emerald" />
+          )}
           <BalanceItem label={tt("Crédito disponible")} value={fmtGs(creditoDisponible)} tone={creditoDisponible > 0 ? "emerald" : "slate"} />
         </div>
 

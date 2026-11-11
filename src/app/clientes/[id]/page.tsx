@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
+import { DevolucionSinCompraModal } from "@/components/ventas/DevolucionPanel";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   addNotaCliente,
@@ -174,6 +175,7 @@ function ClienteFichaSkeleton() {
 
 export default function ClienteDetailPage() {
   const params = useParams();
+  const [devolucionAbierta, setDevolucionAbierta] = useState(false);
   /**
    * Embebida dentro del modal de una venta o evaluación. En ese caso
    * guardar NO puede navegar a /clientes: se llevaba puesta la venta a
@@ -1046,6 +1048,19 @@ export default function ClienteDetailPage() {
                   {tt("Cliente")}
                 </p>
                 <h1 className="text-2xl font-bold text-slate-900 leading-tight mt-1">{nombre}</h1>
+                <button
+                  type="button"
+                  onClick={() => setDevolucionAbierta(true)}
+                  className="mt-2 rounded-lg border border-[#4FAEB2] bg-white px-3 py-1 text-xs font-semibold text-[#3F8E91] hover:bg-[#E5F4F4]"
+                >
+                  Devolución sin compra
+                </button>
+                {devolucionAbierta && (
+                  <DevolucionSinCompraModal
+                    clienteId={String(params.id)}
+                    onClose={() => setDevolucionAbierta(false)}
+                  />
+                )}
                 <div className="flex items-center gap-2 mt-2 flex-wrap">
                   <span className="font-mono text-[11px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
                     {cliente.codigo_cliente}

@@ -30,6 +30,7 @@ import {
   type CreateVentaItemInput,
   type PagoDetalleVentaInput,
 } from "@/lib/ventas/server/create-venta-pg";
+import { crearDevolucionEnClientePg } from "@/lib/ventas/server/devolucion-pg";
 import {
   evaluarPromocionEnClientePg,
   type PromoEvaluada,
@@ -91,6 +92,14 @@ export interface ConfirmarAtencionInput {
     descuentoMotivo?: string | null;
   } | null;
 
+  // DEVOLUCIÓN (opcional): prendas de una venta anterior (≤ 30 días). Su valor
+  // queda como crédito a favor (origen 'devolucion') ANTES de la venta, y
+  // el frontend lo suma a `lleva.creditoUsado` para descontarlo del total.
+  devolucion?: {
+    ventaOriginalId: string;
+    items: { venta_item_id: string; cantidad: number }[];
+  } | null;
+
   // Promoción (opcional). El server RE-CALCULA descuento/cashback contra
   // pronimerp.promociones — los valores enviados por el frontend se ignoran.
   // Se pasa solo la referencia (id y/o cupón) más las líneas del carrito.
@@ -130,6 +139,7 @@ interface BeneficioConfigServer {
 export interface ConfirmarAtencionResult {
   recepcion: { id: string; numero_control: string; total_final: number } | null;
   venta: { id: string; numero_control: string; total: number } | null;
+  devolucion?: { id: string; total: number; requiere_nota_credito: boolean } | null;
   cambio: { id: string; credito_generado: number; credito_previo_usado: number;
             diferencia_pagada: number; credito_restante: number } | null;
   reutilizado: boolean; // true si fue una respuesta cacheada por idempotency
@@ -420,6 +430,29 @@ export async function confirmarAtencionEnClientePg(
       creditoUsadoVenta += promoEvaluada.descuento;
     }
 
+    // ── 4.8) DEVOLUCIÓN de una venta anterior ─────────────────────────
+    // Stock vuelve a la sucursal, el valor queda como crédito (sin
+    // vencimiento) y la venta nueva lo usa (ya viene en creditoUsado).
+    let devolucionOut: ConfirmarAtencionResult["devolucion"] = null;
+    let devolucionId: string | null = null;
+    if (p.devolucion && p.devolucion.items.length > 0) {
+      const d = await crearDevolucionEnClientePg(client, {
+        schema,
+        empresaId: p.empresaId,
+        clienteId: p.clienteId,
+        sucursalId: p.sucursalId,
+        ventaOriginalId: p.devolucion.ventaOriginalId,
+        items: p.devolucion.items,
+        observaciones: p.observaciones,
+        createdBy: p.createdBy,
+        usuarioNombre: p.usuarioNombre,
+      });
+      devolucionId = d.devolucionId;
+      devolucionOut = {
+        id: d.devolucionId, total: d.total, requiere_nota_credito: d.requiereNotaCredito,
+      };
+    }
+
     // ── 5) VENTA ──────────────────────────────────────────────────────
     let ventaOut: ConfirmarAtencionResult["venta"] = null;
     if (hayLleva) {
@@ -449,6 +482,13 @@ export async function confirmarAtencionEnClientePg(
         permitirSobregiroCredito: true,
       });
       ventaOut = { id: r.ventaId, numero_control: r.numeroControl, total: r.total };
+      if (devolucionId) {
+        await client.query(
+          `UPDATE ${quoteSchemaTable(schema, "ventas_devoluciones")}
+              SET venta_nueva_id = $1 WHERE id = $2`,
+          [r.ventaId, devolucionId],
+        );
+      }
       // Auditoría: si la venta llevó descuento manual (línea o general),
       // dejamos un evento para poder reportar quién descontó qué y por qué.
       const descGeneral = Number(v.descuentoGeneral ?? 0);
@@ -770,6 +810,7 @@ export async function confirmarAtencionEnClientePg(
     const resultado: Omit<ConfirmarAtencionResult, "reutilizado"> = {
       recepcion: recepcionOut,
       venta: ventaOut,
+      devolucion: devolucionOut,
       cambio: cambioOut,
     };
     await client.query(

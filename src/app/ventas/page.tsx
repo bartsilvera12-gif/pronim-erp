@@ -13,6 +13,7 @@ import { getVentas } from "@/lib/ventas/storage";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { useT } from "@/lib/i18n/context";
 import PedidosPendientesCaja from "./PedidosPendientesCaja";
+import { DevolucionSinCompraModal } from "@/components/ventas/DevolucionPanel";
 import CambioModal from "./CambioModal";
 import EditarVentaModal from "./EditarVentaModal";
 import CambiarFechaVentaModal from "./CambiarFechaVentaModal";
@@ -122,6 +123,7 @@ export default function VentasPage() {
   const [todas,      setTodas]      = useState<Venta[]>([]);
   const [pagina,     setPagina]     = useState(1);
   /** Venta que se está corrigiendo (solo admin). */
+  const [devolucionAbierta, setDevolucionAbierta] = useState(false);
   const [editarVenta, setEditarVenta] = useState<Venta | null>(null);
   const [fechaVenta, setFechaVenta] = useState<Venta | null>(null);
   const [avisoCorreccion, setAvisoCorreccion] = useState<string | null>(null);
@@ -480,6 +482,10 @@ export default function VentasPage() {
 
       <PedidosPendientesCaja />
 
+      {devolucionAbierta && (
+        <DevolucionSinCompraModal onClose={() => setDevolucionAbierta(false)} />
+      )}
+
       {/* ── Tabla de ventas ───────────────────────────────────────────────────── */}
       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm ring-1 ring-[#4FAEB2]/15 sm:p-5 lg:p-6">
 
@@ -491,6 +497,13 @@ export default function VentasPage() {
             </p>
           )}
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setDevolucionAbierta(true)}
+              className="inline-flex items-center gap-1.5 border border-[#4FAEB2] bg-white text-[#3F8E91] hover:bg-[#E5F4F4] px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+            >
+              Devolución sin compra
+            </button>
             <Link
               href="/explorar/ventas"
               className="inline-flex items-center gap-1.5 border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 px-3 py-2 rounded-lg text-sm font-medium transition-colors"

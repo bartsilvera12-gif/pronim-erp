@@ -226,8 +226,27 @@ async function runProcesar(
       };
     };
 
+    const parseDevolucion = (): ConfirmarAtencionInput["devolucion"] => {
+      const raw = body.devolucion as Record<string, unknown> | undefined | null;
+      if (!raw || typeof raw !== "object") return null;
+      const ventaOriginalId = typeof raw.venta_original_id === "string" ? raw.venta_original_id : "";
+      const items = (Array.isArray(raw.items) ? raw.items : [])
+        .map((x) => {
+          if (!x || typeof x !== "object") return null;
+          const r = x as Record<string, unknown>;
+          const venta_item_id = String(r.venta_item_id ?? "");
+          const cantidad = Number(r.cantidad);
+          if (!venta_item_id || !(cantidad > 0)) return null;
+          return { venta_item_id, cantidad };
+        })
+        .filter((x): x is { venta_item_id: string; cantidad: number } => !!x);
+      if (!ventaOriginalId || items.length === 0) return null;
+      return { ventaOriginalId, items };
+    };
+
     const trae = parseTrae();
     const lleva = parseLleva();
+    const devolucion = parseDevolucion();
 
     const promoRaw = body.promocion as Record<string, unknown> | undefined;
     const promocion: ConfirmarAtencionInput["promocion"] =
@@ -333,9 +352,13 @@ async function runProcesar(
       observaciones,
       trae,
       lleva,
+      devolucion,
       promocion,
       beneficiosCredito,
       requestPayloadForHash: {
+        devolucion: devolucion
+          ? { v: devolucion.ventaOriginalId, i: devolucion.items.map((i) => `${i.venta_item_id}:${i.cantidad}`) }
+          : null,
         caja_id: cajaId, cliente_id: clienteId, sucursal_id: sucursalId,
         observaciones,
         trae: trae ? {
@@ -387,7 +410,9 @@ async function runProcesar(
       msg.includes("Stock insuficiente") ||
       msg.includes("no existen") ||
       msg.includes("Cliente no encontrado") ||
-      msg.includes("La suma de las formas de pago")
+      msg.includes("La suma de las formas de pago") ||
+      msg.includes("devolver") ||
+      msg.includes("devuelta")
     ) {
       return err(400, msg, "NEGOCIO");
     }
