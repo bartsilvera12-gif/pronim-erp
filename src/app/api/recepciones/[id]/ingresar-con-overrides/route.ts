@@ -161,7 +161,13 @@ export async function POST(
           if (!p.es_franja_precio) throw new Error(`Producto ${p.nombre} no es una franja de precio válida.`);
         }
         // Costo prorrateado uniforme (mismo costo unitario para todas las unidades).
-        const costoUnitProrrateado = Math.round(totalCredito / totalUnidadesBucket);
+        // Reparto EXACTO: el total no siempre es divisible por las unidades.
+        // Todas las unidades llevan `base`, y `residuo` unidades llevan
+        // base+1, así SUM(cantidad × precio) == total_credito (sin centavos
+        // de diferencia).
+        const totalEntero = Math.round(totalCredito);
+        const costoBase = Math.floor(totalEntero / totalUnidadesBucket);
+        let residuoRestante = totalEntero - costoBase * totalUnidadesBucket;
         // Borrar items originales
         await client.query(
           `DELETE FROM ${recepItT} WHERE recepcion_id = $1`,
@@ -173,21 +179,30 @@ export async function POST(
           if (c <= 0) continue;
           const p = prodById.get(b.producto_id)!;
           const precioVenta = Number(p.precio_venta);
-          const margenPct = precioVenta > 0
-            ? ((precioVenta - costoUnitProrrateado) / precioVenta) * 100
-            : null;
-          await client.query(
-            `INSERT INTO ${recepItT} (
-               empresa_id, recepcion_id, producto_id, producto_nombre, sku,
-               cantidad, precio_compra_unitario, precio_venta_snapshot,
-               subtotal, margen_bruto_pct
-             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-            [
-              auth.empresa_id, recepcionId, p.id, p.nombre, p.sku,
-              c, costoUnitProrrateado, precioVenta,
-              costoUnitProrrateado * c, margenPct,
-            ],
-          );
+          const conExtra = Math.min(residuoRestante, c);
+          residuoRestante -= conExtra;
+          const tramos: { q: number; costo: number }[] = [
+            { q: c - conExtra, costo: costoBase },
+            { q: conExtra, costo: costoBase + 1 },
+          ];
+          for (const t of tramos) {
+            if (t.q <= 0) continue;
+            const margenPct = precioVenta > 0
+              ? ((precioVenta - t.costo) / precioVenta) * 100
+              : null;
+            await client.query(
+              `INSERT INTO ${recepItT} (
+                 empresa_id, recepcion_id, producto_id, producto_nombre, sku,
+                 cantidad, precio_compra_unitario, precio_venta_snapshot,
+                 subtotal, margen_bruto_pct
+               ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+              [
+                auth.empresa_id, recepcionId, p.id, p.nombre, p.sku,
+                t.q, t.costo, precioVenta,
+                t.costo * t.q, margenPct,
+              ],
+            );
+          }
         }
       }
 
