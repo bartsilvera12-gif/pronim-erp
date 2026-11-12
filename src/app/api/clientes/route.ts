@@ -451,13 +451,27 @@ export async function POST(request: NextRequest) {
           .select("id, nombre, nombre_contacto, empresa, telefono, ruc")
           .eq("empresa_id", auth.empresa_id)
           .is("deleted_at", null)
-          .limit(5);
+          .limit(50);
+        // Antes no se filtraba por teléfono/RUC y solo se miraban 5 clientes
+        // cualquiera, por eso el control nunca encontraba al duplicado.
+        const sinCero = telBuscado.replace(/^0+/, "");
+        const variantes = new Set<string>();
+        if (telBuscado.length >= 6) {
+          const raw = (telefono ?? "").trim();
+          for (const v of [raw, telBuscado, sinCero, "0" + sinCero]) {
+            if (v && /^[\w+ .-]+$/.test(v)) variantes.add(v.includes(" ") || v.includes("+") ? `"${v}"` : v);
+          }
+        }
+        const condiciones: string[] = [];
+        if (variantes.size > 0) condiciones.push(`telefono.in.(${[...variantes].join(",")})`);
+        if (rucBuscado && /^[\w.-]+$/.test(rucBuscado)) condiciones.push(`ruc.eq.${rucBuscado}`);
+        if (condiciones.length > 0) q = q.or(condiciones.join(","));
         if (auth.scope_clientes) q = q.eq("scope_clientes", auth.scope_clientes);
         const { data: posibles } = await q;
         const existente = (posibles ?? []).find((c) => {
           const r = c as Record<string, string | null>;
           const tel = (r.telefono ?? "").replace(/\D/g, "");
-          if (telBuscado.length >= 6 && tel.length >= 6 && tel === telBuscado) return true;
+          if (telBuscado.length >= 6 && tel.length >= 6 && tel.replace(/^0+/, "") === sinCero) return true;
           if (rucBuscado && (r.ruc ?? "").trim() === rucBuscado) return true;
           return false;
         }) as Record<string, string | null> | undefined;

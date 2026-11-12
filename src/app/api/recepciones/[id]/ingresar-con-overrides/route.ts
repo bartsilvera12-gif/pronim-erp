@@ -106,9 +106,9 @@ export async function POST(
       // Cabecera + validación tenant + estado + scope de sucursal.
       const cab = await client.query<{
         id: string; numero_control: string; estado: string; sucursal_id: string;
-        total_credito: string | number;
+        total_credito: string | number; total_compra: string | number;
       }>(
-        `SELECT id, numero_control, estado, sucursal_id, total_credito
+        `SELECT id, numero_control, estado, sucursal_id, total_credito, total_compra
          FROM ${recepT}
          WHERE id = $1 AND empresa_id = $2
          FOR UPDATE`,
@@ -134,7 +134,16 @@ export async function POST(
       //      total_credito uniformemente sobre las nuevas unidades.
       const bucketFlat = Array.isArray(body.overrides_flat) ? body.overrides_flat : [];
       if (bucketFlat.length > 0) {
-        const totalCredito = Number(rec.total_credito ?? 0);
+        // Monto pagado al cliente = total de la compra (items evaluados).
+        // OJO: total_credito es solo la parte pagada con crédito de tienda
+        // (puede ser 0 si se pagó en efectivo), NO sirve para prorratear.
+        const sumQ = await client.query<{ total: string | null }>(
+          `SELECT COALESCE(SUM(subtotal), 0)::text AS total FROM ${recepItT} WHERE recepcion_id = $1`,
+          [recepcionId],
+        );
+        const totalCredito = Number(sumQ.rows[0]?.total ?? 0) > 0
+          ? Number(sumQ.rows[0]?.total ?? 0)
+          : Number(rec.total_compra ?? 0);
         const totalUnidadesBucket = bucketFlat.reduce(
           (s, b) => s + (Number.isFinite(b.cantidad) && b.cantidad > 0 ? Math.floor(b.cantidad) : 0),
           0,
