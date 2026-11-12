@@ -9,6 +9,7 @@ import { FancySelect } from "@/components/ui/FancySelect";
 import MobileFab from "@/components/ui/MobileFab";
 import { alert, confirm } from "@/components/ui/dialog";
 import type { Compra, TipoPago } from "@/lib/compras/types";
+import { useIsAdmin } from "@/lib/auth/use-is-admin";
 import { useT } from "@/lib/i18n/context";
 import { fmtActive } from "@/lib/i18n/currency";
 
@@ -118,6 +119,24 @@ export default function ComprasPage() {
   // Método real de pago por N° de control (efectivo / transferencia / crédito
   // en productos / consignación). Vive en la recepción, no en `compras`.
   const [metodosPago, setMetodosPago] = useState<Record<string, string[]>>({});
+
+  const { isAdmin: esAdmin } = useIsAdmin();
+
+  async function cambiarMetodo(numero: string, de: string, a: string) {
+    if (de === a) return;
+    const r = await fetch("/api/compras/metodos-pago", {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ numero_control: numero, de, a }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || j?.success === false) {
+      await alert(j?.error ?? "No se pudo cambiar la forma de pago.");
+      return;
+    }
+    setRefreshKey((k) => k + 1);
+  }
 
   useEffect(() => {
     let cancel = false;
@@ -314,6 +333,20 @@ export default function ComprasPage() {
                         <td className="py-4 pr-4">
                           {(() => {
                             const ms = metodosPago[g.numero_control];
+                            if (ms && ms.length === 1 && esAdmin && (ms[0] === "efectivo" || ms[0] === "transferencia")) {
+                              return (
+                                <select
+                                  aria-label="Forma de pago"
+                                  value={ms[0]}
+                                  onClick={(e) => e.stopPropagation()}
+                                  onChange={(e) => void cambiarMetodo(g.numero_control, ms[0], e.target.value)}
+                                  className="rounded-lg border border-slate-200 px-2 py-1 text-xs"
+                                >
+                                  <option value="efectivo">Efectivo</option>
+                                  <option value="transferencia">Transferencia</option>
+                                </select>
+                              );
+                            }
                             if (ms && ms.length > 0) {
                               return (
                                 <div className="flex flex-wrap gap-1">
