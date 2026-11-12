@@ -17,6 +17,7 @@ import { DevolucionSinCompraModal } from "@/components/ventas/DevolucionPanel";
 import CambioModal from "./CambioModal";
 import EditarVentaModal from "./EditarVentaModal";
 import CambiarFechaVentaModal from "./CambiarFechaVentaModal";
+import CambiarFormaPagoModal from "@/components/pagos/CambiarFormaPagoModal";
 import FacturaModal from "./FacturaModal";
 import { useIsAdmin } from "@/lib/auth/use-is-admin";
 import type { Venta, TipoVenta, TipoIvaVenta } from "@/lib/ventas/types";
@@ -126,6 +127,7 @@ export default function VentasPage() {
   const [devolucionAbierta, setDevolucionAbierta] = useState(false);
   const [editarVenta, setEditarVenta] = useState<Venta | null>(null);
   const [fechaVenta, setFechaVenta] = useState<Venta | null>(null);
+  const [pagoVenta, setPagoVenta] = useState<Venta | null>(null);
   const [avisoCorreccion, setAvisoCorreccion] = useState<string | null>(null);
   /** Venta para la que se está por emitir (o reimprimir) la factura. */
   const [facturaVenta, setFacturaVenta] = useState<Venta | null>(null);
@@ -889,6 +891,16 @@ export default function VentasPage() {
                               {puedeAnular && (
                                 <button
                                   type="button"
+                                  onClick={() => setPagoVenta(v)}
+                                  className="inline-flex items-center justify-center rounded-md border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-700 hover:bg-sky-100 transition-colors"
+                                  title={tt("Cambiar solo la forma de pago de esta venta (no la anula)")}
+                                >
+                                  Cambiar forma de pago
+                                </button>
+                              )}
+                              {puedeAnular && (
+                                <button
+                                  type="button"
                                   onClick={() => setEditarVenta(v)}
                                   className="inline-flex items-center justify-center rounded-md border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-700 hover:bg-sky-100 transition-colors"
                                   title={tt("Corregir esta venta (la anula y crea una corregida)")}
@@ -1007,6 +1019,18 @@ export default function VentasPage() {
           onClose={() => setFechaVenta(null)}
           onDone={() => {
             setFechaVenta(null);
+            getVentas().then(setTodas);
+          }}
+        />
+      )}
+
+      {pagoVenta && (
+        <CambiarFormaPagoModal
+          titulo={`Cambiar forma de pago de la venta ${pagoVenta.numero_control}`}
+          url={`/api/ventas/${pagoVenta.id}/pagos`}
+          onClose={() => setPagoVenta(null)}
+          onDone={() => {
+            setPagoVenta(null);
             getVentas().then(setTodas);
           }}
         />

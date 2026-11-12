@@ -35,6 +35,7 @@ export async function GET(request: NextRequest) {
 
     const tR = quoteSchemaTable(schema, "cliente_recepciones");
     const tRI = quoteSchemaTable(schema, "cliente_recepciones_items");
+    const tRP = quoteSchemaTable(schema, "cliente_recepciones_pagos");
     const tS = quoteSchemaTable(schema, "sucursales");
     const tC = quoteSchemaTable(schema, "clientes");
     const tTP = quoteSchemaTable(schema, "tipos_prenda");
@@ -177,7 +178,7 @@ export async function GET(request: NextRequest) {
       usuario_id: string | null; usuario_nombre: string | null;
       estado: string | null;
       subtotal: string; ajuste: string; total: string;
-      prendas: string; valor_venta: string;
+      prendas: string; valor_venta: string; metodos_pago: string | null;
     }>(
       `SELECT r.id::text, r.numero_control, r.fecha,
               r.cliente_id::text,
@@ -202,11 +203,14 @@ export async function GET(request: NextRequest) {
                           LEFT JOIN ${tP} p ON p.id = it.producto_id
                          WHERE it.recepcion_id = r.id), 0),
                 ${hasValorStock ? "r.valor_venta_estimado" : "NULL"},
-                0)::text AS valor_venta
+                0)::text AS valor_venta,
+              (SELECT string_agg(DISTINCT pg.metodo, ', ' ORDER BY pg.metodo)
+                 FROM ${tRP} pg
+                WHERE pg.recepcion_id = r.id AND pg.reversa_de_id IS NULL) AS metodos_pago
          FROM ${from} WHERE ${condsConTipo.join(" AND ")}
         ORDER BY r.fecha DESC LIMIT 20000`,
       params,
-    ).catch(() => ({ rows: [] as Array<{ id: string; numero_control: string; fecha: string; cliente_id: string | null; cliente_nombre: string | null; sucursal_id: string | null; sucursal_nombre: string | null; usuario_id: string | null; usuario_nombre: string | null; estado: string | null; subtotal: string; ajuste: string; total: string; prendas: string; valor_venta: string }> }));
+    ).catch(() => ({ rows: [] as Array<{ id: string; numero_control: string; fecha: string; cliente_id: string | null; cliente_nombre: string | null; sucursal_id: string | null; sucursal_nombre: string | null; usuario_id: string | null; usuario_nombre: string | null; estado: string | null; subtotal: string; ajuste: string; total: string; prendas: string; valor_venta: string; metodos_pago: string | null }> }));
 
     const opSuc = await pool.query<{ id: string; nombre: string }>(
       `SELECT id::text, nombre FROM ${tS} WHERE empresa_id = $1 ORDER BY nombre`,

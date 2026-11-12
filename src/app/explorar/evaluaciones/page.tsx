@@ -6,6 +6,8 @@ import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session"
 import { useSucursalActivaId } from "@/lib/sucursales/activa";
 import { DataExplorer, type ColumnDef } from "@/components/explorer/DataExplorer";
 import { fmtGs } from "@/lib/atencion/shared";
+import { useIsAdmin } from "@/lib/auth/use-is-admin";
+import CambiarFormaPagoModal from "@/components/pagos/CambiarFormaPagoModal";
 
 type Ev = {
   id: string; numero_control: string; fecha: string;
@@ -18,6 +20,7 @@ type Ev = {
   precio_venta_prom: number | null;
   margen: number | null;
   markup_pct: number | null;
+  metodos_pago: string | null;
 };
 
 export default function ExplorarEvaluacionesPage() {
@@ -29,6 +32,9 @@ export default function ExplorarEvaluacionesPage() {
   // Explorar sigue al selector del header: si estoy parada en LILLO, todo
   // lo que veo acá es de LILLO. Sin sucursal elegida se ve la empresa.
   const sucursalActivaId = useSucursalActivaId();
+  const { isAdmin: puedeEditarPago } = useIsAdmin();
+  const [pagoEv, setPagoEv] = useState<Ev | null>(null);
+  const [recarga, setRecarga] = useState(0);
 
   useEffect(() => {
     let cancel = false;
@@ -43,7 +49,7 @@ export default function ExplorarEvaluacionesPage() {
       .catch(() => {})
       .finally(() => { if (!cancel) setCargando(false); });
     return () => { cancel = true; };
-  }, [desde, hasta, sucursalActivaId]);
+  }, [desde, hasta, sucursalActivaId, recarga]);
 
   const columns = useMemo<ColumnDef<Ev>[]>(() => {
     const sucursales = Array.from(new Set(rows.map((r) => r.sucursal_nombre).filter(Boolean))) as string[];
@@ -79,10 +85,35 @@ export default function ExplorarEvaluacionesPage() {
         get: (r) => r.markup_pct ?? 0,
         render: (r) => r.markup_pct == null ? "—" : `${r.markup_pct}%` },
       { key: "estado", label: "Estado", type: "enum", get: (r) => r.estado ?? "", enumOptions: estados.map((e) => ({ value: e, label: e })) },
+      // Forma de pago: solo el administrador ve el botón para corregirla
+      // (error de carga o renegociación con la clienta).
+      { key: "forma_pago", label: "Forma de pago", type: "text",
+        get: (r) => r.metodos_pago ?? "",
+        render: (r) => (
+          <span className="inline-flex items-center gap-2">
+            <span>{r.metodos_pago ?? "—"}</span>
+            {puedeEditarPago && r.estado !== "anulada" && (
+              <button type="button" onClick={() => setPagoEv(r)}
+                title={tt("Cambiar la forma de pago de esta evaluación")}
+                className="rounded-md border border-sky-200 bg-sky-50 px-2 py-0.5 text-[11px] font-medium text-sky-700 hover:bg-sky-100">
+                Editar pago
+              </button>
+            )}
+          </span>
+        ) },
     ];
-  }, [rows]);
+  }, [rows, puedeEditarPago]);
 
   return (
+    <>
+    {pagoEv && (
+      <CambiarFormaPagoModal
+        titulo={`Cambiar forma de pago de la evaluación ${pagoEv.numero_control}`}
+        url={`/api/recepciones/${pagoEv.id}/pagos`}
+        onClose={() => setPagoEv(null)}
+        onDone={() => { setPagoEv(null); setRecarga((n) => n + 1); }}
+      />
+    )}
     <DataExplorer<Ev>
       volverA={{ href: "/evaluacion/nueva", label: "Evaluaciones" }}
       titulo="Explorar compras / evaluaciones"
@@ -98,5 +129,6 @@ export default function ExplorarEvaluacionesPage() {
         </div>
       }
     />
+    </>
   );
 }
