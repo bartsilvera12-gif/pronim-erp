@@ -89,6 +89,9 @@ export default function EditarVentaModal({
       : "efectivo",
   );
   const [motivo, setMotivo] = useState("");
+  // Pago mixto: una parte del total con una segunda forma de pago.
+  const [metodo2, setMetodo2] = useState<MetodoPago>("transferencia");
+  const [monto2, setMonto2] = useState("");
 
   const [agregar, setAgregar] = useState("");
   const [avisoPrecios, setAvisoPrecios] = useState<string | null>(null);
@@ -159,6 +162,17 @@ export default function EditarVentaModal({
     if (lineas.length === 0) { setError("La venta tiene que llevar al menos un producto."); return; }
     if (lineas.some((l) => l.cantidad <= 0)) { setError("Hay líneas con cantidad en cero."); return; }
     if (!motivo.trim()) { setError("Escribí por qué se corrige: queda en el historial."); return; }
+    const parte2 = Number(monto2) || 0;
+    if (parte2 > 0 && parte2 >= total) { setError("El monto de la segunda forma de pago tiene que ser menor al total."); return; }
+    const pagosEnviar =
+      total <= 0
+        ? []
+        : parte2 > 0
+          ? [
+              { metodo_pago: metodo, monto: total - parte2 },
+              { metodo_pago: metodo2, monto: parte2 },
+            ]
+          : [{ metodo_pago: metodo, monto: total }];
 
     setGuardando(true);
     try {
@@ -187,7 +201,7 @@ export default function EditarVentaModal({
           })),
           // La clave es metodo_pago, no metodo: con el nombre equivocado
           // llegaba null y la base rechazaba el pago.
-          pagos: total > 0 ? [{ metodo_pago: metodo, monto: total }] : [],
+          pagos: pagosEnviar,
         }),
       });
       const j = await r.json().catch(() => ({}));
@@ -250,6 +264,29 @@ export default function EditarVentaModal({
                 className={`w-full text-right ${inputCls}`}
               />
             </div>
+          </div>
+
+          <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div>
+              <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Segunda forma de pago (pago mixto)</label>
+              <select value={metodo2} onChange={(e) => setMetodo2(e.target.value as MetodoPago)} className={`w-full ${inputCls}`}>
+                <option value="efectivo">Efectivo</option>
+                <option value="tarjeta">Tarjeta</option>
+                <option value="transferencia">Transferencia</option>
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Monto con la segunda forma</label>
+              <MontoInput
+                value={monto2}
+                decimals={false}
+                onChange={(n) => setMonto2(n > 0 ? String(n) : "")}
+                className={`w-full text-right ${inputCls}`}
+              />
+            </div>
+            <p className="self-end text-[11px] text-slate-400">
+              Dejalo vacío para cobrar todo con una sola forma. El resto del total va con la primera.
+            </p>
           </div>
 
           {/* Líneas */}
