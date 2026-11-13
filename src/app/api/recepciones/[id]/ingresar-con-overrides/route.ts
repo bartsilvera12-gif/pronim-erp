@@ -377,11 +377,12 @@ export async function POST(
           `INSERT INTO ${movT} (
              empresa_id, producto_id, producto_nombre, producto_sku,
              tipo, cantidad, costo_unitario, origen, referencia, fecha,
-             created_by, usuario_nombre
-           ) VALUES ($1,$2,$3,$4,'ENTRADA',$5,$6,'compra',$7,now(),$8,$9)`,
+             created_by, usuario_nombre, sucursal_id
+           ) VALUES ($1,$2,$3,$4,'ENTRADA',$5,$6,'compra',$7,now(),$8,$9,$10)`,
           [
             auth.empresa_id, it.producto_id, it.producto_nombre, it.sku,
             qty, costo, rec.numero_control, auth.user.id ?? null, auth.nombre ?? null,
+            rec.sucursal_id,
           ],
         );
       }

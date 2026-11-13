@@ -180,6 +180,7 @@ export default function RecibirPrendasPage() {
             total_compra: totalCompra,
             observaciones: observaciones.trim() || null,
             ingresar_ahora: ingresarAhora,
+            sucursal_id: getSucursalActivaId(),
           }),
         },
       );
@@ -237,6 +238,7 @@ export default function RecibirPrendasPage() {
             total_compra: totalCompra,
             observaciones: observaciones.trim() || null,
             ingresar_ahora: false,
+            sucursal_id: getSucursalActivaId(),
           }),
         },
       );

@@ -709,12 +709,12 @@ export async function createVentaEnClientePg(
         `INSERT INTO ${movT} (
            empresa_id, producto_id, producto_nombre, producto_sku,
            tipo, cantidad, costo_unitario, origen, referencia, fecha,
-           venta_id, created_by, usuario_nombre
-         ) VALUES ($1,$2,$3,$4,'SALIDA',$5,$6,'venta',$7,${fechaExpr},$8,$9,$10)`,
+           venta_id, created_by, usuario_nombre, sucursal_id
+         ) VALUES ($1,$2,$3,$4,'SALIDA',$5,$6,'venta',$7,${fechaExpr},$8,$9,$10,$11)`,
         [
           params.empresaId, prodId, inf.nombre, inf.sku, qty,
           Math.max(0, Number(inf.costo_promedio) || 0), numeroControl, ventaId,
-          params.createdBy ?? null, params.usuarioNombre ?? null,
+          params.createdBy ?? null, params.usuarioNombre ?? null, params.sucursalId,
         ],
       );
     }

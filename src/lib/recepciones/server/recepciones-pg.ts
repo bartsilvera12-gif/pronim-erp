@@ -877,11 +877,11 @@ async function ingresarRecepcionPgInternal(
       `INSERT INTO ${movT} (
          empresa_id, producto_id, producto_nombre, producto_sku,
          tipo, cantidad, costo_unitario, origen, referencia, fecha,
-         created_by, usuario_nombre
-       ) VALUES ($1,$2,$3,$4,'ENTRADA',$5,$6,'compra',$7,${fechaExpr},$8,$9)`,
+         created_by, usuario_nombre, sucursal_id
+       ) VALUES ($1,$2,$3,$4,'ENTRADA',$5,$6,'compra',$7,${fechaExpr},$8,$9,$10)`,
       [
         p.empresaId, it.producto_id, it.producto_nombre, it.sku,
-        qty, costo, rec.numero_control, p.actorId, p.actorNombre,
+        qty, costo, rec.numero_control, p.actorId, p.actorNombre, rec.sucursal_id,
       ],
     );
   }
