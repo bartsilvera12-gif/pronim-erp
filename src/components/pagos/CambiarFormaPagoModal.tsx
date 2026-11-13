@@ -107,7 +107,10 @@ export default function CambiarFormaPagoModal({
                   ))}
                 </select>
               ) : (
-                <span className="text-sm text-slate-500">{etiqueta(p.metodo_pago)} (no se puede cambiar)</span>
+                <span className="text-right text-sm text-slate-500">
+                  {etiqueta(p.metodo_pago)} (no se puede cambiar:
+                  {" "}genera saldo del cliente; para corregirlo hay que anular y cargar de nuevo)
+                </span>
               )}
             </div>
           ))}

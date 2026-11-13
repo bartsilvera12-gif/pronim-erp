@@ -23,6 +23,7 @@ import {
 } from "@/lib/atencion/shared";
 import { CajaControlBanner, useCajaState } from "@/lib/atencion/caja-control";
 import { tt } from "@/lib/i18n/dict";
+import { telefonoCoincide } from "@/lib/clientes/telefono-busqueda";
 import { useCerrarAlClickAfuera } from "@/lib/ui/use-cerrar-al-click-afuera";
 import { useIsAdmin } from "@/lib/auth/use-is-admin";
 import { ClienteDetalleModal } from "@/components/clientes/ClienteDetalleModal";
@@ -287,10 +288,7 @@ export default function NuevaEvaluacionPage() {
       const nombre = c.nombre.toLowerCase().replace(/\s+/g, " ");
       if (palabras.every((p) => nombre.includes(p))) return true;
       if ((c.ruc ?? "").toLowerCase().includes(q)) return true;
-      if (qDigits.length >= 3 && c.telefono) {
-        const tel = String(c.telefono).replace(/\D/g, "");
-        if (tel.includes(qDigits)) return true;
-      }
+      if (qDigits.length >= 3 && telefonoCoincide(c.telefono, q)) return true;
       return false;
     });
     if (q) {

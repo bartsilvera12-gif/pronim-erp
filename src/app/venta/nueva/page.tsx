@@ -13,6 +13,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
+import { telefonoCoincide } from "@/lib/clientes/telefono-busqueda";
 import { getSucursalActivaId, useSucursalActivaId, useSucursalActiva } from "@/lib/sucursales/activa";
 import { useT, useMoney } from "@/lib/i18n/context";
 import { MetaCelebrationModal, MetaCumplidaBadge } from "@/components/metas/MetaCelebrationModal";
@@ -382,10 +383,7 @@ export default function NuevaVentaPage() {
       const nombre = c.nombre.toLowerCase().replace(/\s+/g, " ");
       if (palabras.every((p) => nombre.includes(p))) return true;
       if ((c.ruc ?? "").toLowerCase().includes(q)) return true;
-      if (qDigits.length >= 3 && c.telefono) {
-        const tel = String(c.telefono).replace(/\D/g, "");
-        if (tel.includes(qDigits)) return true;
-      }
+      if (qDigits.length >= 3 && telefonoCoincide(c.telefono, q)) return true;
       return false;
     });
     // Primero los que EMPIEZAN con lo tipeado: buscando "vani", las Vanina

@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState , useRef } from "react";
 import { getSucursalActivaId, useSucursalActivaId } from "@/lib/sucursales/activa";
 import { useRouter } from "next/navigation";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
+import { telefonoCoincide } from "@/lib/clientes/telefono-busqueda";
 import { playCelebrationSound } from "@/lib/audio/notif-sounds";
 import { useT, useMoney } from "@/lib/i18n/context";
 import { tt } from "@/lib/i18n/dict";
@@ -755,10 +756,9 @@ export default function NuevaAtencionPage() {
       if (!q) return true;
       const nombre = c.nombre.toLowerCase().replace(/\s+/g, " ");
       const ruc = (c.ruc ?? "").toLowerCase();
-      const tel = String(c.telefono ?? "").replace(/\D/g, "");
       if (palabras.every((p) => nombre.includes(p))) return true;
       if (ruc.includes(q)) return true;
-      if (qDigits.length >= 3 && tel.includes(qDigits)) return true;
+      if (qDigits.length >= 3 && telefonoCoincide(c.telefono, q)) return true;
       return false;
     });
     // Orden por relevancia: primero los que EMPIEZAN con lo tipeado, después

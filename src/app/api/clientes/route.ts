@@ -6,6 +6,7 @@ import type { AppSupabaseClient } from "@/lib/supabase/schema";
 import { createServiceRoleClient } from "@/lib/supabase/service-admin";
 import { getClientesSupabaseFromAuthWithRol } from "@/lib/clientes/clientes-service-client";
 import { fetchPerfilTributarioActivosMap } from "@/lib/clientes/tributario-server";
+import { normalizarTelefono } from "@/lib/clientes/telefono-busqueda";
 import { ensureSemillasCatalogoTipos, tipoServicioSlugValido } from "@/lib/clientes/tipo-servicio-catalogo";
 import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema";
 import { getChatPostgresPool, quoteSchemaTable } from "@/lib/supabase/chat-pg-pool";
@@ -279,7 +280,22 @@ export async function GET(request: NextRequest) {
         .split(/\s+/)
         .filter((p) => p.length > 0)
         .slice(0, 4);
-      for (const p of palabras) {
+      // Si lo tipeado es un teléfono (solo números, con espacios, guiones, 0
+      // inicial o +595), se busca por los últimos 8 dígitos normalizados con
+      // comodines entre dígito y dígito: así encuentra "981234567",
+      // "0981234567", "981 234567" y "+595 981 234567" guardados de cualquier
+      // forma, y también los guardados sin el primer 9. Mira ambos teléfonos.
+      const soloTel = !/[a-zA-ZÀ-ÿ]/.test(buscar) && normalizarTelefono(buscar).length >= 6;
+      if (soloTel) {
+        const tail = normalizarTelefono(buscar).slice(-8).split("").join("*");
+        const campos = [
+          `telefono.ilike.*${tail}*`,
+          `telefono_secundario.ilike.*${tail}*`,
+        ];
+        for (const p of palabras) campos.push(`ruc.ilike.*${p}*`);
+        q = q.or(campos.join(","));
+      }
+      for (const p of soloTel ? [] : palabras) {
         const campos = [
           `nombre.ilike.*${p}*`,
           `nombre_contacto.ilike.*${p}*`,
