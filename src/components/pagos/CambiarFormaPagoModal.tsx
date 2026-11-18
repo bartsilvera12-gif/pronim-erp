@@ -90,7 +90,7 @@ export default function CambiarFormaPagoModal({
         <div className="mt-4 space-y-2">
           {cargando && <p className="text-sm text-slate-400">Cargando pagos…</p>}
           {!cargando && pagos.length === 0 && !error && (
-            <p className="text-sm text-slate-400">Este registro no tiene pagos para editar.</p>
+            <p className="text-sm text-slate-400">Este registro no tiene pagos registrados (pasa con los datos importados del histórico), por eso no hay una forma de pago para cambiar.</p>
           )}
           {pagos.map((p) => (
             <div key={p.id} className="flex items-center justify-between gap-3">

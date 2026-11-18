@@ -129,6 +129,16 @@ export async function GET(
         ? Math.round((totales.margen / totales.venta) * 1000) / 10
         : null;
 
+      // Monto realmente pagado al cliente. Las evaluaciones importadas
+      // (ej. FILA-xxxx del 30/09) no traen prendas cargadas: el costo
+      // es lo que se pagó (total_final), no 0.
+      const costoPagado = totales.costo > 0
+        ? totales.costo
+        : Number(cab.total_final ?? 0) > 0
+          ? Number(cab.total_final)
+          : 0;
+      const sinCantidad = items.length === 0 || totales.prendas <= 0;
+
       return NextResponse.json(successResponse({
         recepcion: {
           id: cab.id,
@@ -147,6 +157,8 @@ export async function GET(
         totales: {
           prendas: totales.prendas,
           costo_total: Math.round(totales.costo),
+          costo_pagado: Math.round(costoPagado),
+          sin_cantidad: sinCantidad,
           venta_total_esperada: Math.round(totales.venta),
           margen_bruto_esperado: Math.round(totales.margen),
           margen_pct_esperado: margen_pct,

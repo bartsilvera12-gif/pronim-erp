@@ -223,6 +223,7 @@ type PreviewPayload = {
   items: PreviewItem[];
   totales: {
     prendas: number; costo_total: number;
+    costo_pagado?: number; sin_cantidad?: boolean;
     venta_total_esperada: number; margen_bruto_esperado: number;
     margen_pct_esperado: number | null;
   };
@@ -302,7 +303,7 @@ function PreviewIngresoModal({
    */
   const vivo = useMemo(() => {
     if (!data) return null;
-    const costo = data.items.reduce((acc, it) => acc + it.costo_total, 0);
+    const costo = data.totales.costo_pagado ?? data.items.reduce((acc, it) => acc + it.costo_total, 0);
     const venta = data.items.reduce((acc, it) => {
       const sp = splits[it.id] ?? [];
       if (sp.length === 0) return acc + it.venta_unit * it.cantidad;
@@ -436,7 +437,7 @@ function PreviewIngresoModal({
                   const cantSinAsignar = Math.max(0, it.cantidad - cantOtras);
                   return total + cantSinAsignar * it.venta_unit;
                 };
-                const totalCosto = data.items.reduce((s, it) => s + it.costo_total, 0);
+                const totalCosto = data.totales.costo_pagado ?? data.items.reduce((s, it) => s + it.costo_total, 0);
                 const totalVenta = data.items.reduce((s, it) => s + ventaEsperadaItem(it), 0);
                 const totalMargen = totalVenta - totalCosto;
                 const totalMarkupPct = totalCosto > 0 ? Math.round((totalMargen / totalCosto) * 1000) / 10 : null;
@@ -634,20 +635,19 @@ function PreviewIngresoModal({
                 const totalUnidades = data.items.reduce((s, it) => s + it.cantidad, 0);
                 const asignadas = bucket.reduce((s, b) => s + b.cantidad, 0);
                 const restan = totalUnidades - asignadas;
-                const totalCosto = data.items.reduce((s, it) => s + it.costo_total, 0);
-                const totalVentaBucket = bucket.reduce((s, b) => {
+                const totalCosto = data.totales.costo_pagado ?? data.items.reduce((s, it) => s + it.costo_total, 0);
+                // Venta esperada = SOLO lo que se está ingresando (cantidad × precio
+                // de la franja). No se suman prendas "sin asignar" a un precio promedio.
+                const totalVenta = bucket.reduce((s, b) => {
                   const f = franjas.find((x) => x.id === b.franjaId);
                   return s + (f ? Number(f.precio_venta) : 0) * b.cantidad;
                 }, 0);
-                // Prendas sin asignar en el bucket todavía valen su venta original
-                const costoUnitProm = totalUnidades > 0 ? totalCosto / totalUnidades : 0;
-                const ventaOriginalProm = data.items.reduce((s, it) => s + it.venta_unit * it.cantidad, 0) / Math.max(1, totalUnidades);
-                const totalVenta = totalVentaBucket + Math.max(0, restan) * ventaOriginalProm;
                 const totalMargen = totalVenta - totalCosto;
-                const totalMarkupPct = totalCosto > 0 ? Math.round((totalMargen / totalCosto) * 1000) / 10 : null;
+                // Markup = ganancia ÷ costo. Margen bruto = ganancia ÷ venta.
+                const totalMarkupPct = totalCosto > 0 ? Math.round((totalMargen / totalCosto) * 10000) / 100 : null;
+                const totalMargenVentasPct = totalVenta > 0 ? Math.round((totalMargen / totalVenta) * 10000) / 100 : null;
                 const ventaPrevistaOriginal = data.totales.venta_total_esperada;
                 const deltaVsPrevisto = totalVenta - ventaPrevistaOriginal;
-                void costoUnitProm;
                 return (
                   <>
                     <div className={`mt-4 rounded-xl border-2 p-4 ${
@@ -668,7 +668,7 @@ function PreviewIngresoModal({
                           label="Markup %"
                           value={totalMarkupPct != null ? `${totalMarkupPct}%` : "—"}
                           valueClass={totalMarkupPct != null && totalMarkupPct >= 0 ? "text-emerald-800" : "text-rose-800"}
-                          sub="ganancia ÷ costo"
+                          sub={`ganancia ÷ costo · margen s/ventas ${totalMargenVentasPct != null ? totalMargenVentasPct + "%" : "—"}`}
                         />
                       </div>
                       {/* Info: diferencia de cantidad entre evaluación e ingreso.

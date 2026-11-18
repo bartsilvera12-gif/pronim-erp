@@ -464,7 +464,7 @@ export async function POST(request: NextRequest) {
       try {
         let q = supabase
           .from("clientes")
-          .select("id, nombre, nombre_contacto, empresa, telefono, ruc")
+          .select("id, nombre, nombre_contacto, empresa, telefono, telefono_secundario, ruc")
           .eq("empresa_id", auth.empresa_id)
           .is("deleted_at", null)
           .limit(50);
@@ -480,14 +480,23 @@ export async function POST(request: NextRequest) {
         }
         const condiciones: string[] = [];
         if (variantes.size > 0) condiciones.push(`telefono.in.(${[...variantes].join(",")})`);
+        // Mismo criterio que el buscador: últimos 8 dígitos con comodines, así
+        // el control encuentra el teléfono guardado en cualquier formato.
+        const telNorm = normalizarTelefono(telefono);
+        if (telNorm.length >= 6) {
+          const tail = telNorm.slice(-8).split("").join("*");
+          condiciones.push(`telefono.ilike.*${tail}*`, `telefono_secundario.ilike.*${tail}*`);
+        }
         if (rucBuscado && /^[\w.-]+$/.test(rucBuscado)) condiciones.push(`ruc.eq.${rucBuscado}`);
         if (condiciones.length > 0) q = q.or(condiciones.join(","));
         if (auth.scope_clientes) q = q.eq("scope_clientes", auth.scope_clientes);
         const { data: posibles } = await q;
         const existente = (posibles ?? []).find((c) => {
           const r = c as Record<string, string | null>;
-          const tel = (r.telefono ?? "").replace(/\D/g, "");
-          if (telBuscado.length >= 6 && tel.length >= 6 && tel.replace(/^0+/, "") === sinCero) return true;
+          const telN = normalizarTelefono(r.telefono);
+          const telN2 = normalizarTelefono(r.telefono_secundario);
+          const buscadoN = normalizarTelefono(telefono);
+          if (buscadoN.length >= 6 && (telN === buscadoN || telN2 === buscadoN)) return true;
           if (rucBuscado && (r.ruc ?? "").trim() === rucBuscado) return true;
           return false;
         }) as Record<string, string | null> | undefined;
