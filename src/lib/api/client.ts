@@ -116,7 +116,19 @@ export async function apiCreateCliente(data: {
   sifen_descripcion_tipo_doc?: string | null;
 }): Promise<
   | { ok: true; data: { id: string; [key: string]: unknown } }
-  | { ok: false; error: string; code?: string; hay_inactivo?: boolean; matches?: DuplicadoMatchClient[] }
+  | {
+      ok: false;
+      error: string;
+      code?: string;
+      hay_inactivo?: boolean;
+      matches?: DuplicadoMatchClient[];
+      /**
+       * Ficha existente ofrecida por el servidor cuando el 409 es por teléfono/RUC.
+       * El POST la devuelve en `data` y la UI la usa para ofrecer "Abrir ficha
+       * existente" en vez de pedirle al cajero que la busque de nuevo.
+       */
+      existente?: { id: string; nombre?: string | null; telefono?: string | null; ruc?: string | null };
+    }
 > {
   const res = await fetchWithSupabaseSession("/api/clientes", {
     method: "POST",
@@ -131,21 +143,29 @@ export async function apiCreateCliente(data: {
   }
   const body = json as {
     success?: boolean;
-    data?: { id: string; [key: string]: unknown };
+    data?: { id: string; nombre?: string | null; telefono?: string | null; ruc?: string | null; [key: string]: unknown };
     error?: string;
     code?: string;
     hay_inactivo?: boolean;
     matches?: DuplicadoMatchClient[];
   };
   if (!res.ok) {
-    // 409 Conflict: duplicado por documento o nombre principal.
-    if (res.status === 409 || body?.code === "DUPLICATE") {
+    // 409 Conflict: duplicado por documento, teléfono o nombre principal.
+    // El POST de clientes devuelve la ficha existente (`body.data`) junto con
+    // el error. Antes se descartaba y la UI mostraba solo el texto; ahora se
+    // conserva para que el formulario pueda ofrecer "Abrir ficha existente".
+    if (res.status === 409 || body?.code === "DUPLICATE" || body?.code === "CLIENTE_DUPLICADO") {
+      const d = body?.data;
+      const existente = d && typeof d.id === "string"
+        ? { id: d.id, nombre: d.nombre ?? null, telefono: d.telefono ?? null, ruc: d.ruc ?? null }
+        : undefined;
       return {
         ok: false,
-        error: body?.error ?? "Ya existe un cliente con este RUC/Cédula o nombre.",
-        code: "DUPLICATE",
+        error: body?.error ?? "Ya existe un cliente con este RUC/Cédula, teléfono o nombre.",
+        code: body?.code ?? "DUPLICATE",
         hay_inactivo: body?.hay_inactivo ?? false,
         matches: body?.matches ?? [],
+        existente,
       };
     }
     return { ok: false, error: body?.error ?? `Error ${res.status}` };

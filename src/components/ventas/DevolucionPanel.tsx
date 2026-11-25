@@ -211,7 +211,15 @@ export function DevolucionSinCompraModal({
       });
       const j = await r.json().catch(() => ({}));
       if (!r.ok || j?.success === false) throw new Error(j?.error ?? "No se pudo registrar la devolución.");
-      setOkMsg(`Devolución registrada: ${gs(sel.total)} quedan como crédito a favor, sin vencimiento.`);
+      // Si el servidor detectó que esta misma devolución recién se había
+      // registrado (doble-clic / reintento), no inserta otra y marca el flag.
+      // Se avisa suave para que el cajero sepa que su crédito ya está cargado.
+      const duplicadoEvitado = j?.data?.devolucion?.duplicadoEvitado === true;
+      setOkMsg(
+        duplicadoEvitado
+          ? `Esta devolución ya estaba registrada: ${gs(sel.total)} ya figuran como crédito a favor del cliente.`
+          : `Devolución registrada: ${gs(sel.total)} quedan como crédito a favor, sin vencimiento.`,
+      );
       setSel(null); setResetKey((k) => k + 1);
       onDone?.();
     } catch (e) {

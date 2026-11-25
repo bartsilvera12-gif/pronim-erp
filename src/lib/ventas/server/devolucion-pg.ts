@@ -41,7 +41,22 @@ export interface CrearDevolucionResult {
   ventaOriginalNumero: string;
   creditoId: string;
   requiereNotaCredito: boolean;
+  /**
+   * true cuando el servidor detectó que esta misma devolución acababa de
+   * registrarse (doble-clic / retry de red / dos pestañas) y devolvió la ya
+   * creada en vez de insertar una nueva. La UI puede mostrar un aviso suave.
+   */
+  duplicadoEvitado?: boolean;
 }
+
+/**
+ * Ventana (segundos) dentro de la cual una segunda devolución con el mismo
+ * (empresa, venta, usuario, total) se considera el MISMO intento accidental y
+ * se devuelve la ya creada. Suficiente para cubrir doble-clic, latencia de
+ * red y reintentos; corto como para no bloquear una devolución legítima
+ * separada del mismo monto por el mismo cajero poco después.
+ */
+const DEVOLUCION_IDEMPOTENCIA_SEGUNDOS = 15;
 
 const MS_DIA = 86400000;
 
@@ -169,6 +184,48 @@ export async function crearDevolucionEnClientePg(
     total += sub;
     return { ...it, cant, precio, sub };
   });
+
+  // ── Idempotencia suave ──────────────────────────────────────────────
+  // Doble-clic en "Confirmar", reintento por red lenta o dos pestañas: el
+  // FOR UPDATE sobre la venta serializa las peticiones, pero el segundo
+  // request puede pasar la validación de cantidades (si todavía queda stock
+  // para devolver) y crear otra devolución+crédito+ENTRADA de stock. Antes
+  // de insertar, se mira si acabamos de registrar la MISMA devolución
+  // (mismo cliente/venta/usuario/total) en los últimos N segundos; si sí,
+  // se devuelve esa y no se inserta nada nuevo.
+  //
+  // Esta es una idempotencia suave (sin columna idempotency_key ni UNIQUE
+  // a nivel BD). Cubre los casos reales de accidente. La versión dura
+  // requiere migración, queda como follow-up aparte.
+  if (p.createdBy) {
+    const dupQ = await client.query<{ id: string; credito_movimiento_id: string | null }>(
+      `SELECT id::text, credito_movimiento_id::text
+         FROM ${devT}
+        WHERE empresa_id = $1
+          AND venta_original_id = $2
+          AND cliente_id = $3
+          AND created_by = $4
+          AND total = $5
+          AND created_at > now() - ($6 || ' seconds')::interval
+        ORDER BY created_at DESC
+        LIMIT 1`,
+      [p.empresaId, venta.id, venta.cliente_id, p.createdBy, total, String(DEVOLUCION_IDEMPOTENCIA_SEGUNDOS)],
+    );
+    const previa = dupQ.rows[0];
+    if (previa && previa.credito_movimiento_id) {
+      // Retorno temprano. La TX se cierra sin INSERTs (la outer function hace
+      // COMMIT: el FOR UPDATE se libera y la devolución previa queda intacta).
+      return {
+        devolucionId: previa.id,
+        total,
+        clienteId: venta.cliente_id,
+        ventaOriginalNumero: venta.numero_control,
+        creditoId: previa.credito_movimiento_id,
+        requiereNotaCredito: venta.factura_numero != null,
+        duplicadoEvitado: true,
+      };
+    }
+  }
 
   const dIns = await client.query<{ id: string }>(
     `INSERT INTO ${devT} (

@@ -19,6 +19,10 @@ const etiqueta = (m: string) => ETIQUETA[m] ?? m;
  * Cambia la forma de pago de una venta o de una evaluación ya registrada.
  * Solo administrador (el servidor lo vuelve a validar). `url` es la ruta
  * /pagos del registro: GET lista los cobros y POST guarda el cambio.
+ *
+ * NOTA: para evaluaciones usar CambiarPagosRecepcionModal, que soporta
+ * redistribución total (editar monto y crédito). Este modal cubre el caso
+ * simple de permutar método entre filas de igual monto (ventas).
  */
 export default function CambiarFormaPagoModal({
   titulo,

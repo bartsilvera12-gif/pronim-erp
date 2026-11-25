@@ -243,15 +243,35 @@ export async function ensureSorteoOrderViaDirectPostgres(
 
     const deletedClause = cliCols.has("deleted_at") ? "AND deleted_at IS NULL" : "";
 
+    // Teléfono normalizado: solo dígitos, sin "595" ni "0" iniciales. Se
+    // compara por los últimos 8 dígitos contra la misma normalización sobre
+    // c.telefono (regexp_replace en SQL). Antes se usaba trim(telefono) = wa:
+    // un cliente ya cargado como "+595 981 234567" no matcheaba al entrar el
+    // sorteo con "0981234567" y se creaba una ficha nueva — fuente directa
+    // de duplicados automáticos cada vez que alguien participa por chat.
+    const waDigits = wa.replace(/\D/g, "");
+    let waNorm = waDigits;
+    if (waNorm.length > 9 && waNorm.startsWith("595")) waNorm = waNorm.slice(3);
+    waNorm = waNorm.replace(/^0+/, "");
+    const waTail = waNorm.length >= 6 ? waNorm.slice(-8) : "";
+
     const findCli = await client.query<{ id: string }>(
       `SELECT id FROM ${qsch}.clientes
        WHERE empresa_id = $1 ${deletedClause}
          AND (
            ($2::text IS NOT NULL AND $2::text <> '' AND documento IS NOT NULL AND trim(documento) = $2)
-           OR trim(telefono) = $3
+           OR (
+             $3::text <> ''
+             AND regexp_replace(
+                   regexp_replace(
+                     regexp_replace(COALESCE(telefono,''), '\\D', '', 'g'),
+                     '^595', ''),
+                   '^0+', '') LIKE '%' || $3 || '%'
+           )
          )
+       ORDER BY created_at ASC
        LIMIT 1`,
-      [input.empresaId, ce || null, wa]
+      [input.empresaId, ce || null, waTail]
     );
     if (findCli.rows[0]) {
       clienteId = findCli.rows[0].id;
