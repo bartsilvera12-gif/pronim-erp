@@ -7,11 +7,17 @@ import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema"
 import {
   cambiarPagosRecepcionPg,
   listarPagosRecepcionPg,
+  type PagoNuevoInput,
 } from "@/lib/recepciones/server/cambiar-pagos-recepcion-pg";
 
 export const dynamic = "force-dynamic";
 
-/** GET /api/recepciones/[id]/pagos — solo administrador. Lista los pagos de la evaluación. */
+/**
+ * GET /api/recepciones/[id]/pagos — solo administrador.
+ * Devuelve los pagos vigentes de la evaluación + los datos que la UI
+ * necesita para validar la nueva distribución (total objetivo, métodos
+ * permitidos, estado de la recepción).
+ */
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -24,8 +30,17 @@ export async function GET(
     }
     const { id } = await params;
     const schema = await fetchDataSchemaForEmpresaId(auth.empresa_id);
-    const pagos = await listarPagosRecepcionPg(schema, auth.empresa_id, id);
-    return NextResponse.json(successResponse({ pagos }));
+    const r = await listarPagosRecepcionPg(schema, auth.empresa_id, id);
+    return NextResponse.json(successResponse({
+      pagos: r.pagos,
+      total_final: r.totalFinal,
+      cliente_id: r.clienteId,
+      numero_control: r.numeroControl,
+      sucursal_id: r.sucursalId,
+      estado: r.estado,
+      cambio_id: r.cambioId,
+      metodos_permitidos: r.metodosPermitidos,
+    }));
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Error inesperado.";
     console.error("[recepciones/pagos GET]", msg);
@@ -33,7 +48,16 @@ export async function GET(
   }
 }
 
-/** POST /api/recepciones/[id]/pagos — solo administrador. Cambia la forma de pago. */
+/**
+ * POST /api/recepciones/[id]/pagos — solo administrador.
+ * Cuerpo esperado:
+ *   { pagos_nuevos: [{metodo, monto, entidad_bancaria_id?}, ...],
+ *     motivo: string }
+ *
+ * Reversa las filas actuales (append-only) y crea las nuevas.
+ * El total no cambia (lo valida el backend). Compensa el crédito en el
+ * ledger con SALIDAs/ENTRADAs según corresponda.
+ */
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -52,18 +76,28 @@ export async function POST(
     try { body = (await request.json()) as Record<string, unknown>; }
     catch { return NextResponse.json(errorResponse("JSON inválido."), { status: 400 }); }
 
-    const cambios = (Array.isArray(body.pagos) ? body.pagos : []).map((x) => {
-      const o = x as Record<string, unknown>;
-      return { id: String(o.id ?? ""), metodo_pago: String(o.metodo_pago ?? "") };
+    const motivo = typeof body.motivo === "string" ? body.motivo : null;
+    const pagosNuevosRaw = Array.isArray(body.pagos_nuevos) ? body.pagos_nuevos : [];
+    const pagosNuevos: PagoNuevoInput[] = pagosNuevosRaw.map((x) => {
+      const o = (x ?? {}) as Record<string, unknown>;
+      return {
+        metodo: String(o.metodo ?? "").trim(),
+        monto: Number(o.monto),
+        entidad_bancaria_id:
+          typeof o.entidad_bancaria_id === "string" && o.entidad_bancaria_id.trim()
+            ? o.entidad_bancaria_id.trim()
+            : null,
+      };
     });
-    const motivo = typeof body.motivo === "string" && body.motivo.trim() ? body.motivo.trim() : null;
+
     const schema = await fetchDataSchemaForEmpresaId(auth.empresa_id);
     const r = await cambiarPagosRecepcionPg({
       schema,
       empresaId: auth.empresa_id,
       recepcionId: id,
-      cambios,
+      pagosNuevos,
       motivo,
+      actorId: auth.user?.id ?? null,
       actorNombre: auth.nombre ?? null,
     });
     return NextResponse.json(successResponse(r));

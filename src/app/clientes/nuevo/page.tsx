@@ -61,6 +61,10 @@ function NuevoClienteForm() {
 
   const [crmBanner,  setCrmBanner]  = useState<string | null>(null);
   const [error,      setError]      = useState<string | null>(null);
+  // Si el servidor rechaza el alta por duplicado, devuelve la ficha existente.
+  // Se guarda para ofrecer "Abrir ficha existente" en vez de pedirle al cajero
+  // que la busque de nuevo (lo que ya estaba fallando — ver PASO 1).
+  const [duplicado,  setDuplicado]  = useState<{ id: string; nombre?: string | null } | null>(null);
   const [guardando,  setGuardando]  = useState(false);
   const [planes,     setPlanes]     = useState<Plan[]>([]);
   const [usuariosEmpresa, setUsuariosEmpresa] = useState<UsuarioEmpresa[]>([]);
@@ -356,8 +360,10 @@ function NuevoClienteForm() {
 
     if (creado.ok !== true) {
       setGuardando(false);
+      setDuplicado(creado.existente ? { id: creado.existente.id, nombre: creado.existente.nombre } : null);
       return setError(creado.error || "Error al guardar. Revisá la consola.");
     }
+    setDuplicado(null);
     const clienteId = creado.data.id;
 
     if (gestionTributariaEmpresa && formTributario.perfil_activo) {
@@ -924,8 +930,18 @@ function NuevoClienteForm() {
 
           {/* Error */}
           {error && (
-            <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
-              <span>⚠</span><span className="font-medium">{error}</span>
+            <div className="flex flex-wrap items-center gap-3 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
+              <span>⚠</span>
+              <span className="font-medium flex-1 min-w-0">{error}</span>
+              {duplicado && (
+                <button
+                  type="button"
+                  onClick={() => router.push(`/clientes/${duplicado.id}`)}
+                  className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-700"
+                >
+                  {tt("Abrir ficha existente")}
+                </button>
+              )}
             </div>
           )}
 

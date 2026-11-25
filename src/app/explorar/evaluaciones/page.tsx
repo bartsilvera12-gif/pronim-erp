@@ -7,7 +7,7 @@ import { useSucursalActivaId } from "@/lib/sucursales/activa";
 import { DataExplorer, type ColumnDef } from "@/components/explorer/DataExplorer";
 import { fmtGs } from "@/lib/atencion/shared";
 import { useIsAdmin } from "@/lib/auth/use-is-admin";
-import CambiarFormaPagoModal from "@/components/pagos/CambiarFormaPagoModal";
+import CambiarPagosRecepcionModal from "@/components/pagos/CambiarPagosRecepcionModal";
 
 type Ev = {
   id: string; numero_control: string; fecha: string;
@@ -107,9 +107,9 @@ export default function ExplorarEvaluacionesPage() {
   return (
     <>
     {pagoEv && (
-      <CambiarFormaPagoModal
-        titulo={`Cambiar forma de pago de la evaluación ${pagoEv.numero_control}`}
-        url={`/api/recepciones/${pagoEv.id}/pagos`}
+      <CambiarPagosRecepcionModal
+        recepcionId={pagoEv.id}
+        numeroControl={pagoEv.numero_control}
         onClose={() => setPagoEv(null)}
         onDone={() => { setPagoEv(null); setRecarga((n) => n + 1); }}
       />

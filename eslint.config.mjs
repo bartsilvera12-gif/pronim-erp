@@ -1,12 +1,15 @@
 import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
+import reactHooks from "eslint-plugin-react-hooks";
+import react from "eslint-plugin-react";
 
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
   /** Reglas muy estrictas de React 19 / hooks: el repo tiene patrones legacy; warning no bloquea CI. */
   {
+    plugins: { "react-hooks": reactHooks, react },
     rules: {
       "react-hooks/set-state-in-effect": "warn",
       "react-hooks/rules-of-hooks": "warn",
@@ -29,6 +32,9 @@ const eslintConfig = defineConfig([
     "**/package/dist/**",
     // Scripts one-off (CommonJS, herramientas locales): no bloquean lint del producto
     "scripts/**",
+    "supabase/import/**",
+    "_tmp-*.mjs",
+    "_tmp-*.cjs",
   ]),
 ]);
 

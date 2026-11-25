@@ -6,6 +6,7 @@ import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session"
 import { VistasGuardadasBar } from "@/components/reportes/VistasGuardadasBar";
 import { DataExplorer, type ColumnDef } from "@/components/explorer/DataExplorer";
 import { tt } from "@/lib/i18n/dict";
+import { normalizarTelefono } from "@/lib/clientes/telefono-busqueda";
 
 type SegmentoSlug =
   | "vip" | "destacado" | "con_credito" | "con_cashback"
@@ -253,7 +254,20 @@ export default function ClientesSegmentosPage() {
 
   const columns = useMemo<ColumnDef<ClienteSeg>[]>(() => [
     { key: "nombre", label: tt("Nombre"), type: "text", required: true, get: (c) => c.nombre },
-    { key: "telefono", label: tt("Teléfono"), type: "text", get: (c) => c.telefono ?? "" },
+    {
+      key: "telefono", label: tt("Teléfono"), type: "text",
+      get: (c) => c.telefono ?? "",
+      // El teléfono se guarda de muchas formas ("+595 981 234567", "0981234567",
+      // "981 234567"). Para que el buscador encuentre al cliente escriba como
+      // escriba el cajero, el matching también prueba la versión normalizada
+      // (solo dígitos, sin 595 inicial ni 0 inicial). Sin esto, un cliente
+      // existe pero no aparece y al querer crearlo sale "ya existe".
+      searchText: (c) => {
+        const raw = c.telefono ?? "";
+        const norm = normalizarTelefono(raw);
+        return norm ? [raw, norm] : [raw];
+      },
+    },
     { key: "ruc", label: tt("RUC"), type: "text", get: (c) => c.ruc ?? "" },
     {
       key: "cartera",

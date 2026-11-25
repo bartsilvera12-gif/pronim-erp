@@ -40,7 +40,21 @@ export type ColumnDef<T> = {
   defaultVisible?: boolean; // default true
   required?: boolean;       // no se puede ocultar
   align?: "left" | "right" | "center";
+  /**
+   * Tokens extra para la búsqueda global y el filtro de texto. Si está
+   * definido, reemplaza a get() para esos dos usos (no cambia qué se muestra
+   * ni cómo se exporta). Sirve para que un teléfono guardado como
+   * "+595 981 234567" también matchee al tipear "0981234567": la función
+   * devuelve ambos — el crudo y el normalizado — y el buscador prueba todos.
+   */
+  searchText?: (row: T) => string | string[] | null | undefined;
 };
+
+/** Quita tildes/diacríticos para comparar "nathalia" con "Natalia" sin falso negativo. */
+function foldAccents(s: string): string {
+  // Rango U+0300–U+036F = marcas diacríticas combinantes (lo que deja NFD).
+  return s.normalize("NFD").replace(/[̀-ͯ]/g, "");
+}
 
 type NumOp = ">" | "<" | "=" | ">=" | "<=" | "between";
 type FilterState = {
@@ -158,16 +172,30 @@ export function DataExplorer<T>(props: {
 
   // ── Aplicar filtros + búsqueda global ──────────────────────────────
   const filtradas = useMemo(() => {
-    const qLower = q.trim().toLowerCase();
+    // Se pliegan tildes además de pasar a minúsculas: "nathalia" encuentra
+    // "Natalia" y "cafe" encuentra "café". La búsqueda ya no era insensible a
+    // acentos y se perdían clientes por eso.
+    const qLower = foldAccents(q.trim().toLowerCase());
+    // Columnas con searchText devuelven una lista de representaciones que
+    // también se chequean: por ejemplo un teléfono crudo + el mismo normalizado.
+    function matches(c: ColumnDef<T>, row: T, needle: string): boolean {
+      if (c.searchText) {
+        const extra = c.searchText(row);
+        const arr = extra == null ? [] : Array.isArray(extra) ? extra : [extra];
+        for (const s of arr) {
+          if (s != null && foldAccents(String(s).toLowerCase()).includes(needle)) return true;
+        }
+        return false;
+      }
+      const v = c.get(row);
+      return v != null && foldAccents(String(v).toLowerCase()).includes(needle);
+    }
     return rows.filter((row) => {
       // Búsqueda global sobre TODAS las columnas, visibles o no. Si dependiera
       // de las visibles, prender o apagar una columna cambiaría las filas que
       // se ven sin que el usuario haya tocado el buscador.
       if (qLower) {
-        const hit = columns.some((c) => {
-          const v = c.get(row);
-          return v != null && String(v).toLowerCase().includes(qLower);
-        });
+        const hit = columns.some((c) => matches(c, row, qLower));
         if (!hit) return false;
       }
       // Filtros por columna.
@@ -177,7 +205,8 @@ export function DataExplorer<T>(props: {
         const raw = c.get(row);
         if (c.type === "text") {
           if (f.text && f.text.trim()) {
-            if (raw == null || !String(raw).toLowerCase().includes(f.text.trim().toLowerCase())) return false;
+            const needle = foldAccents(f.text.trim().toLowerCase());
+            if (!matches(c, row, needle)) return false;
           }
         } else if (c.type === "number" || c.type === "money") {
           const n = Number(raw);

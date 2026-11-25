@@ -324,11 +324,41 @@ export async function GET(request: NextRequest) {
       whereParts.push(`c.scope_clientes = $${params.length}`);
     }
     if (q) {
-      params.push(`%${q}%`);
-      const p = `$${params.length}`;
-      whereParts.push(`(LOWER(COALESCE(c.empresa, c.nombre_contacto, c.nombre, '')) LIKE ${p}
-                        OR LOWER(COALESCE(c.telefono, '')) LIKE ${p}
-                        OR LOWER(COALESCE(c.email, '')) LIKE ${p})`);
+      // Si lo tipeado parece un teléfono (solo dígitos y separadores), se
+      // compara normalizando ambos lados por los últimos 8 dígitos: la BD con
+      // regexp_replace (saca no-dígitos, 595 inicial, 0 inicial) y el input
+      // con la misma regla. Antes se usaba LIKE crudo sobre c.telefono y un
+      // número guardado como "+595 981 234567" no matcheaba al buscar
+      // "0981234567" — el cliente existía, no aparecía, y al crearlo igual
+      // salía "ya existe" porque la validación de duplicados sí normaliza.
+      const esTel = /^[0-9+\s().-]+$/.test(q) && q.replace(/\D/g, "").length >= 3;
+      if (esTel) {
+        let tel = q.replace(/\D/g, "");
+        if (tel.length > 9 && tel.startsWith("595")) tel = tel.slice(3);
+        tel = tel.replace(/^0+/, "");
+        const tail = tel.slice(-8);
+        params.push(`%${tail}%`);
+        const p = `$${params.length}`;
+        const normCol = (col: string) =>
+          `regexp_replace(regexp_replace(regexp_replace(COALESCE(${col},''),'\\D','','g'),'^595',''),'^0+','')`;
+        const parts = [`${normCol("c.telefono")} LIKE ${p}`];
+        if (cliCols.has("telefono_secundario")) {
+          parts.push(`${normCol("c.telefono_secundario")} LIKE ${p}`);
+        }
+        whereParts.push(`(${parts.join(" OR ")})`);
+      } else {
+        // translate() pliega tildes sin depender de la extensión unaccent (puede
+        // no estar instalada en el schema). "nathalia" encuentra "Natalia" y
+        // viceversa; antes LOWER() solo bajaba mayúsculas y los acentos partían
+        // la búsqueda en dos.
+        const accent = "áéíóúÁÉÍÓÚàèìòùÀÈÌÒÙäëïöüÄËÏÖÜâêîôûÂÊÎÔÛñÑ";
+        const plain  = "aeiouAEIOUaeiouAEIOUaeiouAEIOUaeiouAEIOUnN";
+        const qPlain = q.normalize("NFD").replace(/[̀-ͯ]/g, "");
+        params.push(`%${qPlain}%`);
+        const p = `$${params.length}`;
+        whereParts.push(`(LOWER(translate(COALESCE(c.empresa, c.nombre_contacto, c.nombre, ''),'${accent}','${plain}')) LIKE ${p}
+                          OR LOWER(COALESCE(c.email, '')) LIKE ${p})`);
+      }
     }
     // Filtro por rango de última compra (fecha).
     if (fechaOk(desde)) {
